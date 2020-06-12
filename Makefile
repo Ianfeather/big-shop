@@ -1,0 +1,3 @@
+build:
+	npm run build && npm run export
+	GOBIN=${PWD}/netlify-functions go install ./...

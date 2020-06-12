@@ -1,3 +1,4 @@
 [build]
-  command = "npm run build && npm run export"
-  publish = "out"
+  command = "make build"
+  functions = "netlify-functions"
+  publish = "site"

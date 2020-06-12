@@ -11,7 +11,7 @@ const Index = ({ title, description, ...props }) => {
 export default Index
 
 export async function getStaticProps() {
-  const configData = (await import(`../siteconfig.json`)).default;
+  const configData = (await import(`../../siteconfig.json`)).default;
 
   return {
     props: {

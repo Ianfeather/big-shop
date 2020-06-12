@@ -24,20 +24,16 @@ func barHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func init() {
-	fmt.Printf("GMux Cold Start")
+	base := "/.netlify/functions"
 
 	r := mux.NewRouter()
-	r.HandleFunc("/", fooHandler)
-	r.HandleFunc("/.netlify/functions/recipes", fooHandler)
-	r.HandleFunc("/.netlify/functions/recipes/", fooHandler)
-	r.HandleFunc("/.netlify/functions/recipes/bar", barHandler)
-	r.HandleFunc("/bar", barHandler)
+	r.HandleFunc(base+"/recipes", fooHandler)
+	r.HandleFunc(base+"/bar", barHandler)
 
 	muxLambda = gorillamux.New(r)
 }
 
 func handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	fmt.Println(req)
 	return muxLambda.ProxyWithContext(ctx, req)
 }
 

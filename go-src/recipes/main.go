@@ -12,6 +12,8 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/awslabs/aws-lambda-go-api-proxy/gorillamux"
+
+	_ "github.com/go-sql-driver/mysql"
 )
 
 var muxLambda *gorillamux.GorillaMuxAdapter

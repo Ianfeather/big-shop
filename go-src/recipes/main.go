@@ -28,7 +28,7 @@ func init() {
 
 	r := mux.NewRouter()
 	r.HandleFunc(base+"/recipes", fooHandler)
-	r.HandleFunc(base+"/bar", barHandler)
+	r.HandleFunc(base+"/recipes/bar", barHandler)
 
 	muxLambda = gorillamux.New(r)
 }

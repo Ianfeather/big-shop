@@ -28,6 +28,9 @@ func init() {
 
 	r := mux.NewRouter()
 	r.HandleFunc("/", fooHandler)
+	r.HandleFunc("/.netlify/functions/recipes", fooHandler)
+	r.HandleFunc("/.netlify/functions/recipes/", fooHandler)
+	r.HandleFunc("/.netlify/functions/recipes/bar", barHandler)
 	r.HandleFunc("/bar", barHandler)
 
 	muxLambda = gorillamux.New(r)

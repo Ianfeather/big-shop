@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
+
+	"big-shop/go-src/internal/pkg/app"
+	"big-shop/go-src/internal/pkg/common"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/awslabs/aws-lambda-go-api-proxy/gorillamux"
-	"github.com/gorilla/mux"
 )
 
 var muxLambda *gorillamux.GorillaMuxAdapter
@@ -24,11 +27,28 @@ func barHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func init() {
-	base := "/.netlify/functions"
 
-	r := mux.NewRouter()
-	r.HandleFunc(base+"/recipes", fooHandler)
-	r.HandleFunc(base+"/recipes/bar", barHandler)
+	db, err := sql.Open("mysql", "recipe_app@tcp(127.0.0.1:3306)/shoppinglist")
+
+	if err != nil {
+		fmt.Println("Failed to connect to database")
+		panic(err.Error())
+	}
+
+	env := &common.Env{DB: db}
+
+	application, err := app.NewApp(env)
+
+	if err != nil {
+		fmt.Println("Failed to create application")
+		fmt.Println(err)
+	}
+
+	r, err := application.GetRouter("/.netlify/functions")
+	if err != nil {
+		fmt.Println("Failed to get application router")
+		fmt.Println(err)
+	}
 
 	muxLambda = gorillamux.New(r)
 }

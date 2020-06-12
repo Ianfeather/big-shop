@@ -15,7 +15,7 @@ export async function getStaticProps() {
 
   return {
     props: {
-      title: configData.title,
+      title: "Edit Recipe",
       description: configData.description,
     },
   }

@@ -22,6 +22,7 @@ func (a *App) recipeHandler(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, "Recipe not found", http.StatusNotFound)
 			return
 		}
+		fmt.Println(err)
 		http.Error(w, "Failed to parse recipe from db", http.StatusInternalServerError)
 		return
 	}

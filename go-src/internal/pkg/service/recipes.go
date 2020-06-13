@@ -1,20 +1,24 @@
 package service
 
 import (
-	"big-shop/go-src/internal/pkg/common"
-
 	"database/sql"
 )
 
+// Recipe is a lightweight recipe type w/o ingredients
+type Recipe struct {
+	Name string `json:"name"`
+	ID   int    `json:"id"`
+}
+
 // GetAllRecipes returns all recipes in the recipe table
-func GetAllRecipes(db *sql.DB) ([]common.Recipe, error) {
+func GetAllRecipes(db *sql.DB) ([]Recipe, error) {
 	recipesQuery := "SELECT id, name FROM recipe;"
 	results, err := db.Query(recipesQuery)
 
-	recipes := make([]common.Recipe, 0)
+	recipes := make([]Recipe, 0)
 
 	for results.Next() {
-		r := common.Recipe{}
+		r := Recipe{}
 		err = results.Scan(&r.ID, &r.Name)
 		if err != nil {
 			return nil, err

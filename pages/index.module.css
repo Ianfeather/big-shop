@@ -1,0 +1,52 @@
+.grid {
+  display: grid;
+  grid-template-columns: 250px 1fr;
+  grid-gap: 1rem;
+}
+
+.grid>div {
+  padding: 20px;
+}
+
+.recipeList ul, .shoppingList {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.recipeList li {
+  border: 1px solid #5ebe92;
+  margin-bottom: 5px;
+}
+
+.recipeList li.checked {
+  background-color: #5ebe92;
+  color: white;
+}
+
+.recipeList label {
+  padding: 20px;
+  display: block;
+}
+
+.recipeList input {
+  width: 20px;
+  height: 20px;
+}
+
+.hidden {
+  display: none;
+}
+
+.item {
+  display: flex;
+  border-bottom: 1px solid #a4cab8;
+  padding: 15px 0;
+}
+
+.itemName {
+  flex: 1;
+}
+.itemUnit {
+  margin-left: 10px;
+}

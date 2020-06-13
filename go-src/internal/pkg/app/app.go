@@ -37,6 +37,7 @@ func loggingMiddleware(next http.Handler) http.Handler {
 func (a *App) GetRouter(base string) (*mux.Router, error) {
 	router := mux.NewRouter()
 	router.HandleFunc(base+"/health", healthHandler).Methods("GET")
+	router.HandleFunc(base+"/recipes", a.recipesHandler).Methods("GET")
 	router.HandleFunc(base+"/recipe/{slug}", a.recipeHandler).Methods("GET")
 	router.HandleFunc(base+"/recipe", a.addRecipeHandler).Methods("POST")
 	router.HandleFunc(base+"/shopping-list", a.getListHandler).Methods("GET")

@@ -5,23 +5,12 @@ import Layout from '@components/Layout'
 
 const Index = ({ title, description, ...props }) => {
 
-  let [recipes, setRecipes] = useState([
-    {
-      "name": "Shepherds Pie",
-      "id": 1,
-      "ingredients": null
-    },
-    {
-      "name": "Spaghetti Bolognese",
-      "id": 2,
-      "ingredients": null
-    }
-  ]);
+  let [recipes, setRecipes] = useState([]);
 
-  let shoppingList12 = {"recipes":[{"name":"Shepherds Pie","id":1,"ingredients":[{"name":"potato","unit":"kilogram","quantity":"1"},{"name":"minced beef","unit":"gram","quantity":"800"},{"name":"onion","unit":"","quantity":"1"},{"name":"carrot","unit":"","quantity":"1"},{"name":"garlic","unit":"clove","quantity":"2"},{"name":"Worcestershire Sauce","unit":"tablespoon","quantity":"2"},{"name":"Tomato Puree","unit":"tablespoon","quantity":"1"},{"name":"Thyme","unit":"","quantity":"1"},{"name":"Rosemary","unit":"","quantity":"1"},{"name":"Chicken Stock","unit":"millilitre","quantity":"300"}]},{"name":"Spaghetti Bolognese","id":2,"ingredients":[{"name":"Spaghetti","unit":"gram","quantity":"200"},{"name":"minced beef","unit":"gram","quantity":"500"},{"name":"Tinned Tomatoes","unit":"","quantity":"1"},{"name":"onion","unit":"","quantity":"1"},{"name":"garlic","unit":"clove","quantity":"3"},{"name":"Tomato Puree","unit":"tablespoon","quantity":"2"},{"name":"Beef Stock","unit":"millilitre","quantity":"200"},{"name":"Mushrooms","unit":"gram","quantity":"150"}]}],"list":{"Beef Stock":{"unit":"millilitre","quantity":200},"Chicken Stock":{"unit":"millilitre","quantity":300},"Mushrooms":{"unit":"gram","quantity":150},"Rosemary":{"unit":"","quantity":1},"Spaghetti":{"unit":"gram","quantity":200},"Thyme":{"unit":"","quantity":1},"Tinned Tomatoes":{"unit":"","quantity":1},"Tomato Puree":{"unit":"tablespoon","quantity":3},"Worcestershire Sauce":{"unit":"tablespoon","quantity":2},"carrot":{"unit":"","quantity":1},"garlic":{"unit":"clove","quantity":5},"minced beef":{"unit":"kilogram","quantity":1.3},"onion":{"unit":"","quantity":2},"potato":{"unit":"kilogram","quantity":1}}}
+  // let shoppingList12 = {"recipes":[{"name":"Shepherds Pie","id":1,"ingredients":[{"name":"potato","unit":"kilogram","quantity":"1"},{"name":"minced beef","unit":"gram","quantity":"800"},{"name":"onion","unit":"","quantity":"1"},{"name":"carrot","unit":"","quantity":"1"},{"name":"garlic","unit":"clove","quantity":"2"},{"name":"Worcestershire Sauce","unit":"tablespoon","quantity":"2"},{"name":"Tomato Puree","unit":"tablespoon","quantity":"1"},{"name":"Thyme","unit":"","quantity":"1"},{"name":"Rosemary","unit":"","quantity":"1"},{"name":"Chicken Stock","unit":"millilitre","quantity":"300"}]},{"name":"Spaghetti Bolognese","id":2,"ingredients":[{"name":"Spaghetti","unit":"gram","quantity":"200"},{"name":"minced beef","unit":"gram","quantity":"500"},{"name":"Tinned Tomatoes","unit":"","quantity":"1"},{"name":"onion","unit":"","quantity":"1"},{"name":"garlic","unit":"clove","quantity":"3"},{"name":"Tomato Puree","unit":"tablespoon","quantity":"2"},{"name":"Beef Stock","unit":"millilitre","quantity":"200"},{"name":"Mushrooms","unit":"gram","quantity":"150"}]}],"list":{"Beef Stock":{"unit":"millilitre","quantity":200},"Chicken Stock":{"unit":"millilitre","quantity":300},"Mushrooms":{"unit":"gram","quantity":150},"Rosemary":{"unit":"","quantity":1},"Spaghetti":{"unit":"gram","quantity":200},"Thyme":{"unit":"","quantity":1},"Tinned Tomatoes":{"unit":"","quantity":1},"Tomato Puree":{"unit":"tablespoon","quantity":3},"Worcestershire Sauce":{"unit":"tablespoon","quantity":2},"carrot":{"unit":"","quantity":1},"garlic":{"unit":"clove","quantity":5},"minced beef":{"unit":"kilogram","quantity":1.3},"onion":{"unit":"","quantity":2},"potato":{"unit":"kilogram","quantity":1}}}
 
   let [recipeList, setRecipeList] = useState({});
-  let [shoppingList, setShoppingList] = useState(shoppingList12.list);
+  let [shoppingList, setShoppingList] = useState({});
 
   const handleRecipeSelect = (e) => {
     const newList = { ...recipeList,
@@ -30,7 +19,7 @@ const Index = ({ title, description, ...props }) => {
     setRecipeList(newList);
   };
 
-  // const { get, response, loading, error } = useFetch('/.netlify/functions/big-shop')
+  const { get, response, loading, error } = useFetch('/.netlify/functions/big-shop')
 
   async function getRecipes() {
     const recipes = await get('/recipes')
@@ -43,8 +32,8 @@ const Index = ({ title, description, ...props }) => {
     if (response.ok) setShoppingList(list)
   };
 
-  // useEffect(() => { getRecipes() }, []);
-  // useEffect(() => { getShoppingList() }, [recipeList]);
+  useEffect(() => { getRecipes() }, []);
+  useEffect(() => { getShoppingList() }, [recipeList]);
 
   return (
     <Layout pageTitle={title} description={description}>
@@ -75,7 +64,7 @@ const Index = ({ title, description, ...props }) => {
                 Object.keys(shoppingList).map(name => {
                   const { unit, quantity } = shoppingList[name];
                   return (
-                    <li className={styles.item}>
+                    <li className={styles.item} key={name}>
                       <span className={styles.itemName}>{name}</span>
                       <span className={styles.itemQuantity}>{quantity}</span>
                       <span className={styles.itemUnit}>{unit}</span>

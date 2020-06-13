@@ -6,7 +6,8 @@ import (
 	"database/sql"
 )
 
-func getAllRecipes(db *sql.DB) ([]common.Recipe, error) {
+// GetAllRecipes returns all recipes in the recipe table
+func GetAllRecipes(db *sql.DB) ([]common.Recipe, error) {
 	recipesQuery := "SELECT id, name FROM recipe;"
 	results, err := db.Query(recipesQuery)
 

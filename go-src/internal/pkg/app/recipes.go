@@ -1,6 +1,8 @@
 package app
 
 import (
+	"big-shop/go-src/internal/pkg/service"
+
 	"database/sql"
 	"encoding/json"
 	"fmt"

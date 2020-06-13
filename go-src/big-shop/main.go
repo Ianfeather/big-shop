@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"os"
 
 	"big-shop/go-src/internal/pkg/app"
 	"big-shop/go-src/internal/pkg/common"
@@ -29,8 +30,9 @@ func barHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func init() {
-
-	db, err := sql.Open("mysql", "recipe_app@tcp(127.0.0.1:3306)/shoppinglist")
+	pass := os.Getenv("DB_PASSWORD")
+	dbHost := os.Getenv("DB_HOST")
+	db, err := sql.Open("mysql", fmt.Sprintf("admin:%s@tcp(%s:3306)/bigshop", pass, dbHost))
 
 	if err != nil {
 		fmt.Println("Failed to connect to database")

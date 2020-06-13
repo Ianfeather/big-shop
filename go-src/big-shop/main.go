@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"net/http"
 	"os"
 
 	"big-shop/go-src/internal/pkg/app"
@@ -18,16 +17,6 @@ import (
 )
 
 var muxLambda *gorillamux.GorillaMuxAdapter
-
-func fooHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "Hello FOO")
-}
-
-func barHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "Hello BAR")
-}
 
 func init() {
 	pass := os.Getenv("DB_PASSWORD")

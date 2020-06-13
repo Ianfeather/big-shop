@@ -27,7 +27,7 @@ const Index = ({ title, description, ...props }) => {
   };
 
   async function getShoppingList() {
-    const recipeIds = Object.keys(recipeList).join(',');
+    const recipeIds = Object.keys(recipeList).filter(k => !!recipeList[k]).join(',');
     const { list } = await get(`/shopping-list?recipes=${recipeIds}`);
     if (response.ok) setShoppingList(list)
   };

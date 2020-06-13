@@ -23,16 +23,13 @@ const Index = ({ title, description, ...props }) => {
   };
 
   async function getShoppingList() {
-    console.log("getShoppingList")
     const selectedRecipes = Object.keys(recipeList).filter(k => !!recipeList[k]);
-    console.log(selectedRecipes)
     if (selectedRecipes.length) {
       const recipeIds = selectedRecipes.join(',');
       const { list } = await get(`/shopping-list?recipes=${recipeIds}`);
       if (response.ok) setShoppingList(list);
       if (response.error || error) setShoppingList({});
     } else {
-      console.log('reset');
       setShoppingList({});
     }
   };

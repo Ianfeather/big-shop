@@ -1,0 +1,27 @@
+body {
+  padding: 0;
+  margin: 0;
+  font-family: 'SF Pro Text', 'SF Pro Icons', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+}
+
+.header {
+  background-color: #28c17b;
+  padding: 40px 20px;
+}
+
+.header .title {
+  margin-top: 0;
+  text-align: center;
+  color: white;
+  font-size: 40px;
+}
+
+.nav {
+  display: flex;
+  justify-content: center;
+}
+.nav a {
+  color: white;
+  text-decoration: none;
+  padding: 0 10px;
+}

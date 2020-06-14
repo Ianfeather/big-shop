@@ -41,6 +41,7 @@ func (a *App) GetRouter(base string) (*mux.Router, error) {
 	router.HandleFunc(base+"/recipe/{slug}", a.recipeHandler).Methods("GET")
 	router.HandleFunc(base+"/recipe", a.addRecipeHandler).Methods("POST")
 	router.HandleFunc(base+"/shopping-list", a.getListHandler).Methods("GET")
+	router.HandleFunc(base+"/units", a.getUnitsHandler).Methods("GET")
 	router.Use(loggingMiddleware)
 	return router, nil
 }

@@ -1,6 +1,6 @@
 import Layout from '@components/Layout'
 
-const Index = ({ title, description, ...props }) => {
+const EditRecipe = ({ title, description, ...props }) => {
   return (
     <Layout pageTitle={title} description={description}>
       <h1 className="title">{title}</h1>
@@ -8,7 +8,7 @@ const Index = ({ title, description, ...props }) => {
   )
 }
 
-export default Index
+export default EditRecipe
 
 export async function getStaticProps() {
   const configData = (await import(`../../siteconfig.json`)).default;

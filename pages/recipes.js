@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link'
 import Layout from '@components/Layout'
 
-const Index = ({ title, description, ...props }) => {
+const Recipes = ({ title, description, ...props }) => {
   let [recipes, setRecipes] = useState([]);
 
   const { get, response, loading, error } = useFetch('/.netlify/functions/big-shop')
@@ -47,7 +47,7 @@ const Index = ({ title, description, ...props }) => {
   )
 }
 
-export default Index
+export default Recipes
 
 export async function getStaticProps() {
   const configData = (await import(`../siteconfig.json`)).default;

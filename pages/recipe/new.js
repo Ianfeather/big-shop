@@ -1,14 +1,16 @@
+import Form from '@components/recipe-form/Form';
 import Layout from '@components/Layout'
 
-const Index = ({ title, description, ...props }) => {
+const NewRecipe = ({ title, description, ...props }) => {
   return (
     <Layout pageTitle={title} description={description}>
       <h1 className="title">{title}</h1>
+      <Form />
     </Layout>
   )
 }
 
-export default Index
+export default NewRecipe
 
 export async function getStaticProps() {
   const configData = (await import(`../../siteconfig.json`)).default;

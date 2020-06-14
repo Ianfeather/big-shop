@@ -100,7 +100,7 @@ export default function Form() {
         ))
       }
       <button className={`${styles.button} ${loading ? styles.loading : ''}`} onClick={submitRecipe}>Store Recipe</button>
-      { saved && <div>Saved!</div> }
+      { saved && <div className={styles.stored}>Stored!</div> }
     </form>
     </>
   )

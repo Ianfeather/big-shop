@@ -52,5 +52,9 @@ func (a *App) addRecipeHandler(w http.ResponseWriter, req *http.Request) {
 		fmt.Println(err.Error())
 	}
 
+	w.WriteHeader(http.StatusCreated)
+	encoder := json.NewEncoder(w)
+	err = encoder.Encode("ok")
+
 	fmt.Printf("Stored %s", recipe.Name)
 }

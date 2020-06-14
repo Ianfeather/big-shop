@@ -96,8 +96,6 @@ func AddRecipe(recipe common.Recipe, db *sql.DB) error {
 		return err
 	}
 
-	// insert the connection
-
 	partsQuery := "INSERT INTO part (recipe_id, ingredient_id, unit_id, quantity) VALUES "
 	for idx, ingredient := range recipe.Ingredients {
 		partsQuery += fmt.Sprintf("(%d, ", recipeID)

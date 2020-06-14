@@ -6,8 +6,9 @@ import (
 
 // Recipe is a lightweight recipe type w/o ingredients
 type Recipe struct {
-	Name string `json:"name"`
-	ID   int    `json:"id"`
+	Name      string `json:"name"`
+	ID        int    `json:"id"`
+	RemoteURL string `json:"remoteUrl"`
 }
 
 // GetAllRecipes returns all recipes in the recipe table

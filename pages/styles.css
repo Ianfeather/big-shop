@@ -4,6 +4,10 @@ body {
   font-family: 'SF Pro Text', 'SF Pro Icons', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
 }
 
+* {
+  box-sizing: border-box;
+}
+
 .header {
   background-color: #28c17b;
   padding: 40px 20px;
@@ -20,6 +24,7 @@ body {
   display: flex;
   justify-content: center;
 }
+
 .nav a {
   color: white;
   text-decoration: none;

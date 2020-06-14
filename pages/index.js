@@ -1,7 +1,7 @@
 import styles from './index.module.css';
 import useFetch from 'use-http'
 import { useState, useEffect } from 'react';
-import Layout from '@components/Layout'
+import Layout from '@components/layout'
 
 const Index = ({ title, description, ...props }) => {
   let [recipes, setRecipes] = useState([]);

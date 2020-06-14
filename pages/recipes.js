@@ -2,7 +2,7 @@ import styles from './index.module.css';
 import useFetch from 'use-http'
 import { useState, useEffect } from 'react';
 import Link from 'next/link'
-import Layout from '@components/Layout'
+import Layout from '@components/layout'
 
 const Recipes = ({ title, description, ...props }) => {
   let [recipes, setRecipes] = useState([]);

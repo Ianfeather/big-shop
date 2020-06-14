@@ -1,0 +1,73 @@
+.form label {
+  display: block;
+  margin-bottom: 10px;
+  font-weight: bold;
+}
+
+.form input {
+  display: block;
+  width: 100%;
+  padding: 10px 0;
+  font-size: 16px;
+  text-indent: 10px;
+}
+
+.ingredientGroup {
+  display: flex;
+}
+
+.ingredientGroup div {
+  margin-right: 10px;
+}
+
+.ingredientGroup div:last-child {
+  margin-right: 0;
+}
+
+.unit {
+  min-width: 80px;
+}
+
+.ingredientUnit {
+  height: 40px;
+  width: 100%;
+}
+
+.group, .ingredientGroup {
+  margin-bottom: 30px;
+}
+
+.ingredientName {
+  flex: 1;
+}
+
+.button {
+  border: 0;
+  background-color: #2897c1;
+  color: white;
+  padding: 15px 40px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.button.loading {
+  background-color: #94c3ae;
+}
+
+.trash {
+  color: white;
+  font-size: 30px;
+  border: none;
+  width: 100%;
+  background-color: #28c1b3;
+  padding: 5px;
+  border-radius: 3px;
+  line-height: 1;
+}
+
+.stored {
+  display: inline-block;
+  margin-left: 30px;
+  color: #28c17b;
+  font-size: 18px;
+}

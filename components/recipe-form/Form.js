@@ -6,7 +6,7 @@ export default function Form() {
   let [recipe, setRecipe] = useState({});
   let [saved, setSaved] = useState(false);
 
-  const bareIngredient = { name: null, quantity: null, unit: null };
+  const bareIngredient = { name: '', quantity: '', unit: '' };
   let [ingredients, setIngredients] = useState([bareIngredient]);
   let [units, setUnits] = useState([{name:'g', id:1}, {name:'kg', id:2}]);
 
@@ -42,50 +42,66 @@ export default function Form() {
     }
   }
 
+  function deleteIngredient(e) {
+    e.preventDefault();
+    console.log(e.target.id)
+    const newIngredients = ingredients.filter((_, idx) => {
+      console.log(idx, e.target.id)
+      return idx !== Number(e.target.id)
+    });
+    console.log(newIngredients);
+    setIngredients(newIngredients);
+  }
+
   return (
     <>
-    <form>
+    <form className={styles.form}>
       <div className={styles.group}>
         <label htmlFor="recipe-name">Recipe Name</label>
-        <input type="text" id="recipe-name" onChange={(e) => updateRecipe('name', e.target.value)}/>
+        <input autoComplete="off" type="text" id="recipe-name" onChange={(e) => updateRecipe('name', e.target.value)}/>
       </div>
       <div className={styles.group}>
-        <label htmlFor="recipe-remote-url">Import from url</label>
-        <input type="text" id="recipe-remote-url" onChange={(e) => updateRecipe('remote_url', e.target.value)}/>
+        <label htmlFor="recipe-remote-url">URL (to the recipe site, optional)</label>
+        <input autoComplete="off" type="text" id="recipe-remote-url" onChange={(e) => updateRecipe('remote_url', e.target.value)}/>
       </div>
 
       <h2>Ingredients</h2>
       {
         ingredients.map((ingredient, i) => (
           <div className={styles.ingredientGroup} key={i}>
-            <div>
-              <label htmlFor="ingredient-name">Ingredient</label>
-              <input type="text" id="ingredient-name" onChange={(e) => updateIngredient(i, 'name', e.target.value)}/>
+            <div className={styles.ingredientName}>
+              <label htmlFor="ingredient-name">Ingredient Name</label>
+              <input value={ingredient.name} autoComplete="off" type="text" id="ingredient-name" onChange={(e) => updateIngredient(i, 'name', e.target.value)}/>
             </div>
             <div>
               <label htmlFor="ingredient-quantity">Quantity</label>
-              <input type="text" id="ingredient-quantity" onChange={(e) => updateIngredient(i, 'quantity', e.target.value)} />
+              <input value={ingredient.quantity} autoComplete="off" type="text" id="ingredient-quantity" onChange={(e) => updateIngredient(i, 'quantity', e.target.value)} />
             </div>
-            <div>
+            <div className={styles.unit}>
               <label htmlFor="ingredient-unit">Unit</label>
-              <select onChange={(e) => updateIngredient(i, 'unit', e.target.value)} value={ingredient.unit}>
+              <select className={styles.ingredientUnit} onChange={(e) => updateIngredient(i, 'unit', e.target.value)} value={ingredient.unit}>
                 {
                   units.map(({ id, name}) => (
-                    <option id={id}>{name}</option>
+                    <option key={id} id={id}>{name}</option>
                   ))
                 }
               </select>
             </div>
+            {
+
+              i > 0 && (
+                <div>
+                  <label htmlFor="ingredient-delete">Delete</label>
+                  <button className={styles.trash} aria-label="trash" id={i} onClick={deleteIngredient}>×</button>
+                </div>
+              )
+            }
           </div>
         ))
       }
-      <button onClick={submitRecipe}>Store Recipe</button>
-      { loading && <div>Loading...</div> }
+      <button className={`${styles.button} ${loading ? styles.loading : ''}`} onClick={submitRecipe}>Store Recipe</button>
       { saved && <div>Saved!</div> }
-      { error && <div>Error :(</div> }
     </form>
-    <div>{JSON.stringify(recipe)}</div>
-    <div>{JSON.stringify(ingredients)}</div>
     </>
   )
 }

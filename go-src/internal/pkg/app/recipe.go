@@ -45,6 +45,8 @@ func (a *App) addRecipeHandler(w http.ResponseWriter, req *http.Request) {
 
 	_, err = a.db.Query(fmt.Sprintf("INSERT INTO recipe (name, slug) VALUES ('%s', '%s')", recipe.Name, common.Slugify(recipe.Name)))
 
+	// TODO: insert all ingredients
+
 	if err != nil {
 		fmt.Println("could not insert recipe")
 		fmt.Println(err.Error())

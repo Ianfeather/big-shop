@@ -33,7 +33,8 @@ export default function Form() {
     setIngredients(newIngredients);
   }
 
-  async function submitRecipe() {
+  async function submitRecipe(e) {
+    e.preventDefault();
     const completeRecipe = { ...recipe, ingredients: ingredients.filter(({name}) => !!name)};
     const result = await post('/recipe', completeRecipe)
     if (response.ok) {

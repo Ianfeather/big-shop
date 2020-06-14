@@ -43,12 +43,10 @@ func (a *App) addRecipeHandler(w http.ResponseWriter, req *http.Request) {
 		w.Write([]byte("Error decoding json body"))
 	}
 
-	_, err = a.db.Query(fmt.Sprintf("INSERT INTO recipe (name, slug) VALUES ('%s', '%s')", recipe.Name, common.Slugify(recipe.Name)))
-
-	// TODO: insert all ingredients
+	err = service.AddRecipe(recipe, a.db)
 
 	if err != nil {
-		fmt.Println("could not insert recipe")
+		fmt.Println("could not insert ingredients")
 		fmt.Println(err.Error())
 	}
 

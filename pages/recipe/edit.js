@@ -14,7 +14,7 @@ const EditRecipe = ({ title, description, ...props }) => {
     const id = params.get('id')
     if (id) {
       const recipe = await get(`/recipe/${id}`)
-      if (response.ok) setRecipe(foo)
+      if (response.ok) setRecipe(recipe)
     } else {
       Router.push('/recipe/new');
     }

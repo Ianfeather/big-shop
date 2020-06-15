@@ -6,7 +6,7 @@ import Layout from '@components/layout';
 import SingleColumnLayout from '@components/layout/single-column';
 
 const EditRecipe = ({ title, description, ...props }) => {
-  let [recipe, setRecipe] = useState(null);
+  let [recipe, setRecipe] = useState({});
   const { get, response, loading, error } = useFetch('/.netlify/functions/big-shop')
 
   async function getRecipe() {

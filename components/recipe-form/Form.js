@@ -12,7 +12,7 @@ export default function Form({initialRecipe = {}}) {
   const { get, post, put, response, loading, error } = useFetch('/.netlify/functions/big-shop')
 
   useEffect(() => {
-    if (initialRecipe) {
+    if (initialRecipe.name) {
       setRecipe(initialRecipe);
       setIngredients([ ...initialRecipe.ingredients, bareIngredient]);
     }

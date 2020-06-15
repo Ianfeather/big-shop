@@ -2,15 +2,15 @@ import styles from './form.module.css';
 import { useState, useEffect } from 'react';
 import useFetch from 'use-http'
 
-export default function Form() {
-  let [recipe, setRecipe] = useState({});
+export default function Form({initialRecipe = {}}) {
+  let [recipe, setRecipe] = useState(initialRecipe);
   let [saved, setSaved] = useState(false);
 
   const bareIngredient = { name: '', quantity: '', unit: '' };
   let [ingredients, setIngredients] = useState([bareIngredient]);
   let [units, setUnits] = useState([{name:'g', id:1}, {name:'kg', id:2}]);
 
-  const { get, post, response, loading, error } = useFetch('/.netlify/functions/big-shop')
+  const { get, post, put, response, loading, error } = useFetch('/.netlify/functions/big-shop')
 
   async function getUnits() {
     const units = await get('/units')
@@ -36,7 +36,12 @@ export default function Form() {
   async function submitRecipe(e) {
     e.preventDefault();
     const completeRecipe = { ...recipe, ingredients: ingredients.filter(({name}) => !!name)};
-    const result = await post('/recipe', completeRecipe)
+    let result;
+    if (recipe.id) {
+      result = await put('/recipe', completeRecipe)
+    } else {
+      result = await post('/recipe', completeRecipe)
+    }
     if (response.ok) {
       setSaved(true);
     }
@@ -44,13 +49,9 @@ export default function Form() {
 
   function deleteIngredient(e) {
     e.preventDefault();
-    console.log(e.target.id)
     const newIngredients = ingredients.filter((_, idx) => {
-      console.log(idx, e.target.id)
       return idx !== Number(e.target.id)
     });
-    console.log(newIngredients);
-    setIngredients(newIngredients);
   }
 
   return (

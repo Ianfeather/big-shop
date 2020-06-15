@@ -1,9 +1,31 @@
-import Layout from '@components/layout'
+import useFetch from 'use-http'
+import Router from 'next/router'
+import { useState, useEffect } from 'react';
+import Form from '@components/recipe-form/Form';
+import Layout from '@components/layout';
+import SingleColumnLayout from '@components/layout/single-column';
 
 const EditRecipe = ({ title, description, ...props }) => {
+  let [recipe, setRecipe] = useState(null);
+  const { get, response, loading, error } = useFetch('/.netlify/functions/big-shop')
+
+  useEffect(async() => {
+    const params = new URLSearchParams(document.location.query);
+    let id = params.get('id')
+    if (id) {
+      const recipe = await get(`/recipe/${id}`)
+      if (response.ok) setRecipe(recipe)
+    } else {
+      Router.push('/recipe/new');
+    }
+  }, []);
+
   return (
     <Layout pageTitle={title} description={description}>
-      <h1 className="title">{title}</h1>
+      <SingleColumnLayout>
+        <h1 className="title">{title}</h1>
+        <Form initialRecipe={recipe}/>
+      </SingleColumnLayout>
     </Layout>
   )
 }

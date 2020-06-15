@@ -9,16 +9,18 @@ const EditRecipe = ({ title, description, ...props }) => {
   let [recipe, setRecipe] = useState(null);
   const { get, response, loading, error } = useFetch('/.netlify/functions/big-shop')
 
-  useEffect(async() => {
+  async function getRecipe() {
     const params = new URLSearchParams(document.location.search);
     const id = params.get('id')
     if (id) {
       const recipe = await get(`/recipe/${id}`)
-      if (response.ok) setRecipe(recipe)
+      if (response.ok) setRecipe(foo)
     } else {
       Router.push('/recipe/new');
     }
-  }, []);
+  };
+
+  useEffect(() => { getRecipe() }, []);
 
   return (
     <Layout pageTitle={title} description={description}>

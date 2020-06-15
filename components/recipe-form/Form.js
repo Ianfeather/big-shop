@@ -3,14 +3,20 @@ import { useState, useEffect } from 'react';
 import useFetch from 'use-http'
 
 export default function Form({initialRecipe = {}}) {
+  const bareIngredient = { name: '', quantity: '', unit: '' };
   let [recipe, setRecipe] = useState(initialRecipe);
   let [saved, setSaved] = useState(false);
-
-  const bareIngredient = { name: '', quantity: '', unit: '' };
   let [ingredients, setIngredients] = useState([bareIngredient]);
   let [units, setUnits] = useState([{name:'g', id:1}, {name:'kg', id:2}]);
 
   const { get, post, put, response, loading, error } = useFetch('/.netlify/functions/big-shop')
+
+  useEffect(() => {
+    if (initialRecipe) {
+      setRecipe(initialRecipe);
+      setIngredients([ ...initialRecipe.ingredients, bareIngredient]);
+    }
+  }, [initialRecipe]);
 
   async function getUnits() {
     const units = await get('/units')
@@ -59,11 +65,11 @@ export default function Form({initialRecipe = {}}) {
     <form className={styles.form}>
       <div className={styles.group}>
         <label htmlFor="recipe-name">Recipe Name</label>
-        <input autoComplete="off" type="text" id="recipe-name" onChange={(e) => updateRecipe('name', e.target.value)}/>
+        <input value={recipe.name} autoComplete="off" type="text" id="recipe-name" onChange={(e) => updateRecipe('name', e.target.value)}/>
       </div>
       <div className={styles.group}>
         <label htmlFor="recipe-remote-url">URL (to the recipe site, optional)</label>
-        <input autoComplete="off" type="text" id="recipe-remote-url" onChange={(e) => updateRecipe('remote_url', e.target.value)}/>
+        <input value={recipe.remoteUrl} autoComplete="off" type="text" id="recipe-remote-url" onChange={(e) => updateRecipe('remote_url', e.target.value)}/>
       </div>
 
       <h2>Ingredients</h2>

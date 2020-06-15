@@ -69,7 +69,7 @@ export default function Form({initialRecipe = {}}) {
       </div>
       <div className={styles.group}>
         <label htmlFor="recipe-remote-url">URL (to the recipe site, optional)</label>
-        <input value={recipe.remoteUrl} autoComplete="off" type="text" id="recipe-remote-url" onChange={(e) => updateRecipe('remote_url', e.target.value)}/>
+        <input value={recipe.remoteUrl} autoComplete="off" type="text" id="recipe-remote-url" onChange={(e) => updateRecipe('remoteUrl', e.target.value)}/>
       </div>
 
       <h2>Ingredients</h2>

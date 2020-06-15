@@ -56,3 +56,29 @@ func (a *App) addRecipeHandler(w http.ResponseWriter, req *http.Request) {
 
 	fmt.Printf("Stored %s", recipe.Name)
 }
+
+func (a *App) editRecipeHandler(w http.ResponseWriter, req *http.Request) {
+	recipe := common.Recipe{}
+	err := json.NewDecoder(req.Body).Decode(&recipe)
+	encoder := json.NewEncoder(w)
+
+	if err != nil {
+		w.Write([]byte("Error decoding json body"))
+	}
+
+	if recipe.ID == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Error: missing id"))
+	}
+
+	err = service.EditRecipe(recipe, a.db)
+
+	if err != nil {
+		fmt.Println("could not update recipe")
+		fmt.Println(err.Error())
+	}
+
+	w.WriteHeader(http.StatusOK)
+	err = encoder.Encode("ok")
+	fmt.Printf("Updated %s", recipe.Name)
+}

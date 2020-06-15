@@ -10,8 +10,8 @@ const EditRecipe = ({ title, description, ...props }) => {
   const { get, response, loading, error } = useFetch('/.netlify/functions/big-shop')
 
   useEffect(async() => {
-    const params = new URLSearchParams(document.location.query);
-    let id = params.get('id')
+    const params = new URLSearchParams(document.location.search);
+    const id = params.get('id')
     if (id) {
       const recipe = await get(`/recipe/${id}`)
       if (response.ok) setRecipe(recipe)

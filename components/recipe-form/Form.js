@@ -2,15 +2,21 @@ import styles from './form.module.css';
 import { useState, useEffect } from 'react';
 import useFetch from 'use-http'
 
-export default function Form() {
-  let [recipe, setRecipe] = useState({});
-  let [saved, setSaved] = useState(false);
-
+export default function Form({initialRecipe = {}}) {
   const bareIngredient = { name: '', quantity: '', unit: '' };
+  let [recipe, setRecipe] = useState(initialRecipe);
+  let [saved, setSaved] = useState(false);
   let [ingredients, setIngredients] = useState([bareIngredient]);
   let [units, setUnits] = useState([{name:'g', id:1}, {name:'kg', id:2}]);
 
-  const { get, post, response, loading, error } = useFetch('/.netlify/functions/big-shop')
+  const { get, post, put, response, loading, error } = useFetch('/.netlify/functions/big-shop')
+
+  useEffect(() => {
+    if (initialRecipe.name) {
+      setRecipe(initialRecipe);
+      setIngredients([ ...initialRecipe.ingredients, bareIngredient]);
+    }
+  }, [initialRecipe]);
 
   async function getUnits() {
     const units = await get('/units')
@@ -36,7 +42,12 @@ export default function Form() {
   async function submitRecipe(e) {
     e.preventDefault();
     const completeRecipe = { ...recipe, ingredients: ingredients.filter(({name}) => !!name)};
-    const result = await post('/recipe', completeRecipe)
+    let result;
+    if (recipe.id) {
+      result = await put('/recipe', completeRecipe)
+    } else {
+      result = await post('/recipe', completeRecipe)
+    }
     if (response.ok) {
       setSaved(true);
     }
@@ -44,13 +55,9 @@ export default function Form() {
 
   function deleteIngredient(e) {
     e.preventDefault();
-    console.log(e.target.id)
     const newIngredients = ingredients.filter((_, idx) => {
-      console.log(idx, e.target.id)
       return idx !== Number(e.target.id)
     });
-    console.log(newIngredients);
-    setIngredients(newIngredients);
   }
 
   return (
@@ -58,11 +65,11 @@ export default function Form() {
     <form className={styles.form}>
       <div className={styles.group}>
         <label htmlFor="recipe-name">Recipe Name</label>
-        <input autoComplete="off" type="text" id="recipe-name" onChange={(e) => updateRecipe('name', e.target.value)}/>
+        <input value={recipe.name} autoComplete="off" type="text" id="recipe-name" onChange={(e) => updateRecipe('name', e.target.value)}/>
       </div>
       <div className={styles.group}>
         <label htmlFor="recipe-remote-url">URL (to the recipe site, optional)</label>
-        <input autoComplete="off" type="text" id="recipe-remote-url" onChange={(e) => updateRecipe('remote_url', e.target.value)}/>
+        <input value={recipe.remoteUrl} autoComplete="off" type="text" id="recipe-remote-url" onChange={(e) => updateRecipe('remoteUrl', e.target.value)}/>
       </div>
 
       <h2>Ingredients</h2>

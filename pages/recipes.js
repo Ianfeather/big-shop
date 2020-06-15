@@ -27,7 +27,7 @@ const Recipes = ({ title, description, ...props }) => {
                 recipes.map(({id, name}) => {
                   return (
                     <li key={id}>
-                      <Link href={`/recipe/edit?recipe=${id}`}>
+                      <Link href={`/recipe/edit?id=${id}`}>
                         <a>{name}</a>
                       </Link>
                     </li>

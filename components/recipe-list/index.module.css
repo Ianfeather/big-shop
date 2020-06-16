@@ -1,0 +1,43 @@
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.list li {
+  margin-bottom: 20px;
+}
+
+.list a {
+  color: #525050;
+  text-decoration: none;
+  padding: 20px;
+  display: block;
+  border-radius: 3px;
+  border: 1px solid #beecd7;
+  transition: all ease 0.1s
+}
+
+.list a:visited {
+  color: #525050;
+}
+
+.list a:hover {
+  color: #525050;
+  background-color: #beecd7;
+}
+
+.button {
+  border: 0;
+  background-color: #2897c1;
+  color: white;
+  padding: 15px 40px;
+  font-size: 16px;
+  cursor: pointer;
+  display: inline-block;
+  text-decoration: none;
+}
+
+.button:hover {
+  background-color: #58c8f3;
+}

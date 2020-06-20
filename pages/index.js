@@ -16,6 +16,13 @@ const Index = ({ title, description, ...props }) => {
     setRecipeList(newList);
   };
 
+  const handleCheckedIngredients = (name) => {
+    const newList = { ...checkedIngredients,
+      [name]: !checkedIngredients[name]
+    };
+    setCheckedIngredients(newList);
+  }
+
   const { get, response, loading, error } = useFetch('/.netlify/functions/big-shop')
 
   async function getRecipes() {

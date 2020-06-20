@@ -7,6 +7,7 @@ const Index = ({ title, description, ...props }) => {
   let [recipes, setRecipes] = useState([]);
   let [recipeList, setRecipeList] = useState({});
   let [shoppingList, setShoppingList] = useState({});
+  let [checkedIngredients, setCheckedIngredients] = useState({});
 
   const handleRecipeSelect = (e) => {
     const newList = { ...recipeList,
@@ -65,8 +66,9 @@ const Index = ({ title, description, ...props }) => {
               {
                 Object.keys(shoppingList).map(name => {
                   const { unit, quantity } = shoppingList[name];
+                  const isChecked = !!checkedIngredients[name];
                   return (
-                    <li className={styles.item} key={name}>
+                    <li className={`${styles.item} ${isChecked ? styles.checked : ''}`} key={name} onClick={() => handleCheckedIngredients(name)}>
                       <span className={styles.itemName}>{name}</span>
                       <span className={styles.itemQuantity}>{quantity}</span>
                       <span className={styles.itemUnit}>{unit}</span>

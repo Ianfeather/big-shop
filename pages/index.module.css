@@ -49,6 +49,10 @@
   padding: 15px 0;
 }
 
+.item.checked {
+  text-decoration: line-through;
+}
+
 .itemName {
   flex: 1;
 }

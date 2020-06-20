@@ -1,0 +1,10 @@
+Garlic -> Garlic Clove (and no unit)
+
+Parse recipe ingredients
+- Not bad: https://github.com/mackenziefernandez/recipe-parser/blob/master/src/units.ts
+
+
+Autocomplete for ingredients
+A button which says "Add another recipe"
+Order Units in dropdown
+Items need to be tickable

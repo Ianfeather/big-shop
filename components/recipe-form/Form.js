@@ -94,7 +94,7 @@ export default function Form({initialRecipe = {}}) {
       {
         recipe.ingredients.map((ingredient, i) => {
           console.log("ingredient")
-          console.log(ingredient)
+          console.log(ingredient);
           return (
           <div className={styles.ingredientGroup} key={i}>
             <div className={styles.ingredientName}>
@@ -131,7 +131,7 @@ export default function Form({initialRecipe = {}}) {
             }
           </div>
           )
-        ))
+        })
       }
       <button className={`${styles.button} ${loading ? styles.loading : ''}`} onClick={submitRecipe}>
         { recipe.id ? 'Update Recipe' : 'Store Recipe'}

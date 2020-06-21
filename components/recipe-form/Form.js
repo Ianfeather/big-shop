@@ -42,6 +42,7 @@ export default function Form({initialRecipe = {}}) {
   }
 
   function updateIngredient(i, key, value) {
+    console.log("Updating: ", value);
     let newIngredients = [...recipe.ingredients];
     newIngredients[i][key] = value;
     if (i === recipe.ingredients.length - 1) {
@@ -91,12 +92,14 @@ export default function Form({initialRecipe = {}}) {
 
       <h2>Ingredients</h2>
       {
-        recipe.ingredients.map((ingredient, i) => (
+        recipe.ingredients.map((ingredient, i) => {
+          console.log("ingredient")
+          console.log(ingredient)
+          return (
           <div className={styles.ingredientGroup} key={i}>
             <div className={styles.ingredientName}>
               <label htmlFor="ingredient-name">Ingredient Name</label>
               <Typeahead
-                id="ingredient-name"
                 options={ingredients}
                 maxVisible={3}
                 value={ingredient.name}
@@ -127,6 +130,7 @@ export default function Form({initialRecipe = {}}) {
               )
             }
           </div>
+          )
         ))
       }
       <button className={`${styles.button} ${loading ? styles.loading : ''}`} onClick={submitRecipe}>

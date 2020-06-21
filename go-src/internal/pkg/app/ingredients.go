@@ -1,11 +1,11 @@
 package app
 
 import (
+	"big-shop/go-src/internal/pkg/service"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"recipes/internal/pkg/service"
 )
 
 func (a *App) ingredientsHandler(w http.ResponseWriter, req *http.Request) {

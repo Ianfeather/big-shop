@@ -12,7 +12,7 @@ type Unit struct {
 
 // GetAllUnits returns all unit types
 func GetAllUnits(db *sql.DB) ([]Unit, error) {
-	query := "SELECT id, name FROM unit;"
+	query := "SELECT id, name FROM unit order by lower(name);"
 	results, err := db.Query(query)
 
 	units := make([]Unit, 0)

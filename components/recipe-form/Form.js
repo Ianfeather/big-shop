@@ -4,11 +4,11 @@ import useFetch from 'use-http'
 import { Typeahead } from 'react-typeahead';
 
 
-export default function Form({initialRecipe}) {
+export default function Form({initialRecipe = {}}) {
   const bareIngredient = { name: '', quantity: '', unit: '' };
   const bareRecipe = { ingredients: [bareIngredient]};
 
-  let [recipe, setRecipe] = useState(initialRecipe || bareRecipe);
+  let [recipe, setRecipe] = useState(initialRecipe.name ? initialRecipe : bareRecipe);
   let [saved, setSaved] = useState(false);
   let [units, setUnits] = useState([]);
   let [ingredients, setIngredients] = useState([]);
@@ -16,7 +16,7 @@ export default function Form({initialRecipe}) {
   const { get, post, put, response, loading, error } = useFetch('/.netlify/functions/big-shop')
 
   useEffect(() => {
-    if (initialRecipe && initialRecipe.name) {
+    if (initialRecipe.name) {
       setRecipe({
         ...initialRecipe,
         ingredients: [ ...initialRecipe.ingredients, bareIngredient ]

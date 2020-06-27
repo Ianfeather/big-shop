@@ -4,11 +4,11 @@ import useFetch from 'use-http'
 import { Typeahead } from 'react-typeahead';
 
 
-export default function Form({initialRecipe = {}}) {
+export default function Form({initialRecipe = {}, mode = 'new'}) {
   const bareIngredient = { name: '', quantity: '', unit: '' };
-  const bareRecipe = { ingredients: [bareIngredient]};
+  const bareRecipe = { name: '', remoteUrl: '', ingredients: [bareIngredient]};
 
-  let [recipe, setRecipe] = useState(initialRecipe.name ? initialRecipe : bareRecipe);
+  let [recipe, setRecipe] = useState(initialRecipe.id ? initialRecipe : bareRecipe);
   let [saved, setSaved] = useState(false);
   let [units, setUnits] = useState([]);
   let [ingredients, setIngredients] = useState([]);
@@ -33,6 +33,7 @@ export default function Form({initialRecipe = {}}) {
       setUnits(_units)
       setIngredients(_ingredients.map(i => i.name))
     }
+
   };
   useEffect(() => { getUnitsAndIngredients() }, []);
 
@@ -42,7 +43,6 @@ export default function Form({initialRecipe = {}}) {
   }
 
   function updateIngredient(i, key, value) {
-    console.log("Updating: ", value);
     let newIngredients = [...recipe.ingredients];
     newIngredients[i][key] = value;
     if (i === recipe.ingredients.length - 1) {
@@ -58,7 +58,7 @@ export default function Form({initialRecipe = {}}) {
     e.preventDefault();
     const completeRecipe = { ...recipe, ingredients: recipe.ingredients.filter(({name}) => !!name)};
     let result;
-    if (recipe.id) {
+    if (mode === 'edit') {
       result = await put('/recipe', completeRecipe)
     } else {
       result = await post('/recipe', completeRecipe)
@@ -78,6 +78,10 @@ export default function Form({initialRecipe = {}}) {
     })
   }
 
+  if (mode === 'edit' && !recipe.id) {
+    return false;
+  }
+
   return (
     <>
     <form className={styles.form}>
@@ -93,52 +97,51 @@ export default function Form({initialRecipe = {}}) {
       <h2>Ingredients</h2>
       {
         recipe.ingredients.map((ingredient, i) => {
-          console.log("ingredient")
-          console.log(ingredient);
           return (
-          <div className={styles.ingredientGroup} key={i}>
-            <div className={styles.ingredientName}>
-              <label htmlFor="ingredient-name">Ingredient Name</label>
-              <Typeahead
-                options={ingredients}
-                maxVisible={3}
-                value={ingredient.name}
-                onChange={(e) => updateIngredient(i, 'name', e.target.value)}
-                onOptionSelected={(value) => updateIngredient(i, 'name', value)} />
-            </div>
-            <div>
-              <label htmlFor="ingredient-quantity">Quantity</label>
-              <input value={ingredient.quantity} autoComplete="off" type="text" id="ingredient-quantity" onChange={(e) => updateIngredient(i, 'quantity', e.target.value)} />
-            </div>
-            <div className={styles.unit}>
-              <label htmlFor="ingredient-unit">Unit</label>
-              <select className={styles.ingredientUnit} onChange={(e) => updateIngredient(i, 'unit', e.target.value)} value={ingredient.unit}>
-                {
-                  units.map(({ id, name}) => (
-                    <option key={id} id={id}>{name}</option>
-                  ))
-                }
-              </select>
-            </div>
-            {
+            <div className={styles.ingredientGroup} key={i}>
+              <div className={styles.ingredientName}>
+                <label htmlFor={`ingredient-name-${i}`}>Ingredient Name</label>
+                <Typeahead
+                  options={ingredients}
+                  maxVisible={3}
+                  id={`ingredient-name-${i}`}
+                  value={ingredient.name}
+                  onChange={(e) => updateIngredient(i, 'name', e.target.value)}
+                  onOptionSelected={(value) => updateIngredient(i, 'name', value)} />
+              </div>
+              <div>
+                <label htmlFor={`ingredient-quantity-${i}`}>Quantity</label>
+                <input value={ingredient.quantity} autoComplete="off" type="text" id={`ingredient-quantity-${i}`} onChange={(e) => updateIngredient(i, 'quantity', e.target.value)} />
+              </div>
+              <div className={styles.unit}>
+                <label htmlFor={`ingredient-unit-${i}`}>Unit</label>
+                <select id={`ingredient-unit-${i}`} className={styles.ingredientUnit} onChange={(e) => updateIngredient(i, 'unit', e.target.value)} value={ingredient.unit}>
+                  {
+                    units.map(({ id, name}) => (
+                      <option key={id} id={id}>{name}</option>
+                    ))
+                  }
+                </select>
+              </div>
+              {
 
-              i > 0 && (
-                <div>
-                  <label htmlFor="ingredient-delete">Delete</label>
-                  <button className={styles.trash} aria-label="trash" id={i} onClick={deleteIngredient}>×</button>
-                </div>
-              )
-            }
-          </div>
+                i > 0 && (
+                  <div>
+                    <label>Delete</label>
+                    <button className={styles.trash} aria-label="trash" id={i} onClick={deleteIngredient}>×</button>
+                  </div>
+                )
+              }
+            </div>
           )
         })
       }
       <button className={`${styles.button} ${loading ? styles.loading : ''}`} onClick={submitRecipe}>
-        { recipe.id ? 'Update Recipe' : 'Store Recipe'}
+        { mode === 'edit' ? 'Update Recipe' : 'Store Recipe'}
       </button>
       { saved && (
         <div className={styles.stored}>
-          { recipe.id ? 'Updated!' : 'Stored!'}
+          { mode === 'edit' ? 'Updated!' : 'Stored!'}
         </div>
       )}
     </form>

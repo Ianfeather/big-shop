@@ -15,3 +15,5 @@ Store recipe button should say update recipe when it already exists
 There's some caching going on which needs purging or lowering
 
 lowercase everything going into the db
+
+Real-time updates when shopping together

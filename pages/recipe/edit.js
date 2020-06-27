@@ -26,7 +26,7 @@ const EditRecipe = ({ title, description, ...props }) => {
     <Layout pageTitle={title} description={description}>
       <SingleColumnLayout>
         <h1 className="title">{title}</h1>
-        <Form initialRecipe={recipe}/>
+        <Form initialRecipe={recipe} mode="edit" />
       </SingleColumnLayout>
     </Layout>
   )

@@ -1,7 +1,7 @@
 package app
 
 import (
-	"recipes/internal/pkg/common"
+	"big-shop/go-src/internal/pkg/common"
 	"testing"
 )
 

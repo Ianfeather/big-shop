@@ -1,29 +1,41 @@
 import styles from './form.module.css';
 import { useState, useEffect } from 'react';
 import useFetch from 'use-http'
+import { Typeahead } from 'react-typeahead';
 
-export default function Form({initialRecipe = {}}) {
+
+export default function Form({initialRecipe = {}, mode = 'new'}) {
   const bareIngredient = { name: '', quantity: '', unit: '' };
-  let [recipe, setRecipe] = useState(initialRecipe);
+  const bareRecipe = { name: '', remoteUrl: '', ingredients: [bareIngredient]};
+
+  let [recipe, setRecipe] = useState(initialRecipe.id ? initialRecipe : bareRecipe);
   let [saved, setSaved] = useState(false);
-  let [ingredients, setIngredients] = useState([bareIngredient]);
-  let [units, setUnits] = useState([{name:'g', id:1}, {name:'kg', id:2}]);
+  let [units, setUnits] = useState([]);
+  let [ingredients, setIngredients] = useState([]);
 
   const { get, post, put, response, loading, error } = useFetch('/.netlify/functions/big-shop')
 
   useEffect(() => {
     if (initialRecipe.name) {
-      setRecipe(initialRecipe);
-      setIngredients([ ...initialRecipe.ingredients, bareIngredient]);
+      setRecipe({
+        ...initialRecipe,
+        ingredients: [ ...initialRecipe.ingredients, bareIngredient ]
+      });
     }
   }, [initialRecipe]);
 
-  async function getUnits() {
-    const units = await get('/units')
-    if (response.ok) setUnits(units)
-  };
+  async function getUnitsAndIngredients() {
+    const [_units, _ingredients] = await Promise.all([
+      get('/units'),
+      get('/ingredients')
+    ]);
+    if (response.ok) {
+      setUnits(_units)
+      setIngredients(_ingredients.map(i => i.name))
+    }
 
-  useEffect(() => { getUnits() }, []);
+  };
+  useEffect(() => { getUnitsAndIngredients() }, []);
 
   function updateRecipe(key, value) {
     const updatedRecipe = { ...recipe, [key]: value};
@@ -31,19 +43,22 @@ export default function Form({initialRecipe = {}}) {
   }
 
   function updateIngredient(i, key, value) {
-    let newIngredients = [...ingredients];
+    let newIngredients = [...recipe.ingredients];
     newIngredients[i][key] = value;
-    if (i === ingredients.length - 1) {
+    if (i === recipe.ingredients.length - 1) {
       newIngredients.push(bareIngredient);
     }
-    setIngredients(newIngredients);
+    setRecipe({
+      ...recipe,
+      ingredients: newIngredients
+    });
   }
 
   async function submitRecipe(e) {
     e.preventDefault();
-    const completeRecipe = { ...recipe, ingredients: ingredients.filter(({name}) => !!name)};
+    const completeRecipe = { ...recipe, ingredients: recipe.ingredients.filter(({name}) => !!name)};
     let result;
-    if (recipe.id) {
+    if (mode === 'edit') {
       result = await put('/recipe', completeRecipe)
     } else {
       result = await post('/recipe', completeRecipe)
@@ -55,9 +70,16 @@ export default function Form({initialRecipe = {}}) {
 
   function deleteIngredient(e) {
     e.preventDefault();
-    const newIngredients = ingredients.filter((_, idx) => {
-      return idx !== Number(e.target.id)
-    });
+    setRecipe({
+      ...recipe,
+      ingredients: recipe.ingredients.filter((_, idx) => {
+        return idx !== Number(e.target.id)
+      })
+    })
+  }
+
+  if (mode === 'edit' && !recipe.id) {
+    return false;
   }
 
   return (
@@ -74,40 +96,54 @@ export default function Form({initialRecipe = {}}) {
 
       <h2>Ingredients</h2>
       {
-        ingredients.map((ingredient, i) => (
-          <div className={styles.ingredientGroup} key={i}>
-            <div className={styles.ingredientName}>
-              <label htmlFor="ingredient-name">Ingredient Name</label>
-              <input value={ingredient.name} autoComplete="off" type="text" id="ingredient-name" onChange={(e) => updateIngredient(i, 'name', e.target.value)}/>
-            </div>
-            <div>
-              <label htmlFor="ingredient-quantity">Quantity</label>
-              <input value={ingredient.quantity} autoComplete="off" type="text" id="ingredient-quantity" onChange={(e) => updateIngredient(i, 'quantity', e.target.value)} />
-            </div>
-            <div className={styles.unit}>
-              <label htmlFor="ingredient-unit">Unit</label>
-              <select className={styles.ingredientUnit} onChange={(e) => updateIngredient(i, 'unit', e.target.value)} value={ingredient.unit}>
-                {
-                  units.map(({ id, name}) => (
-                    <option key={id} id={id}>{name}</option>
-                  ))
-                }
-              </select>
-            </div>
-            {
+        recipe.ingredients.map((ingredient, i) => {
+          return (
+            <div className={styles.ingredientGroup} key={i}>
+              <div className={styles.ingredientName}>
+                <label htmlFor={`ingredient-name-${i}`}>Ingredient Name</label>
+                <Typeahead
+                  options={ingredients}
+                  maxVisible={3}
+                  id={`ingredient-name-${i}`}
+                  value={ingredient.name}
+                  onChange={(e) => updateIngredient(i, 'name', e.target.value)}
+                  onOptionSelected={(value) => updateIngredient(i, 'name', value)} />
+              </div>
+              <div>
+                <label htmlFor={`ingredient-quantity-${i}`}>Quantity</label>
+                <input value={ingredient.quantity} autoComplete="off" type="text" id={`ingredient-quantity-${i}`} onChange={(e) => updateIngredient(i, 'quantity', e.target.value)} />
+              </div>
+              <div className={styles.unit}>
+                <label htmlFor={`ingredient-unit-${i}`}>Unit</label>
+                <select id={`ingredient-unit-${i}`} className={styles.ingredientUnit} onChange={(e) => updateIngredient(i, 'unit', e.target.value)} value={ingredient.unit}>
+                  {
+                    units.map(({ id, name}) => (
+                      <option key={id} id={id}>{name}</option>
+                    ))
+                  }
+                </select>
+              </div>
+              {
 
-              i > 0 && (
-                <div>
-                  <label htmlFor="ingredient-delete">Delete</label>
-                  <button className={styles.trash} aria-label="trash" id={i} onClick={deleteIngredient}>×</button>
-                </div>
-              )
-            }
-          </div>
-        ))
+                i > 0 && (
+                  <div>
+                    <label>Delete</label>
+                    <button className={styles.trash} aria-label="trash" id={i} onClick={deleteIngredient}>×</button>
+                  </div>
+                )
+              }
+            </div>
+          )
+        })
       }
-      <button className={`${styles.button} ${loading ? styles.loading : ''}`} onClick={submitRecipe}>Store Recipe</button>
-      { saved && <div className={styles.stored}>Stored!</div> }
+      <button className={`${styles.button} ${loading ? styles.loading : ''}`} onClick={submitRecipe}>
+        { mode === 'edit' ? 'Update Recipe' : 'Store Recipe'}
+      </button>
+      { saved && (
+        <div className={styles.stored}>
+          { mode === 'edit' ? 'Updated!' : 'Stored!'}
+        </div>
+      )}
     </form>
     </>
   )

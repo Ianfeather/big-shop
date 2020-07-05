@@ -1,3 +1,10 @@
+:root {
+  --purple: #b870eb;
+  --pink: #eb70a4;
+  --yellow: #ebd270;
+  --green: #a4eb70;
+}
+
 body {
   padding: 0;
   margin: 0;
@@ -36,6 +43,10 @@ body {
   color: white;
   text-decoration: none;
   padding: 0 10px;
+}
+
+.content {
+  background: #f5ecfb;
 }
 
 .typeahead {

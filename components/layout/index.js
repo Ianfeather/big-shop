@@ -9,6 +9,8 @@ export default function Layout({ children, pageTitle, description, ...props }) {
         <meta charSet="utf-8" />
         <meta name="Description" content={description}></meta>
         <title>{pageTitle}</title>
+        <link rel="manifest" href="/manifest.json" />
+        <link rel="shortcut icon" crossOrigin="" href="/favicon.ico" type="image/x-icon" />
       </Head>
       <section className="layout">
         <Header title={pageTitle}/>

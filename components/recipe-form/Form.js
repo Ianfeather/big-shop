@@ -3,6 +3,9 @@ import { useState, useEffect } from 'react';
 import useFetch from 'use-http'
 import { Typeahead } from 'react-typeahead';
 
+const capitalize = ([first, ...rest]) => {
+  return [first.toUpperCase(), ...rest].join('');
+}
 
 export default function Form({initialRecipe = {}, mode = 'new'}) {
   const bareIngredient = { name: '', quantity: '', unit: '' };
@@ -30,8 +33,8 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
       get('/ingredients')
     ]);
     if (response.ok) {
-      setUnits(_units)
-      setIngredients(_ingredients.map(i => i.name))
+      setUnits(_units).map(unit => ({...unit, name: capitalize(unit.name)}))
+      setIngredients(_ingredients.map(i => capitalize(i.name)))
     }
 
   };

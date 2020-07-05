@@ -1,19 +1,31 @@
-Garlic -> Garlic Clove (and no unit)
-Tinned Tomatoes -> Chopped Tomatoes + tin
+# data work
+
+
+# app work
 
 Parse recipe ingredients
 - Not bad: https://github.com/mackenziefernandez/recipe-parser/blob/master/src/units.ts
-
 A button which says "Add another recipe"
 Order Units in dropdown
-Items need to be tickable
-
 Order items by section of shop
-
-Store recipe button should say update recipe when it already exists
-
 There's some caching going on which needs purging or lowering
-
-lowercase everything going into the db
-
 Real-time updates when shopping together
+Add househould items section
+Add identity/auth
+Add PWA stuff + logo
+
+# infra work
+Move go app to serverless
+Allow cors from localhost
+Separate stage and prod DBs
+
+
+https://material-ui.com/components/autocomplete/
+https://github.com/moroshko/react-autosuggest
+
+
+https://zestfuldata.com/docs/
+http://www.nltk.org/book/
+https://mtlynch.io/resurrecting-1/
+https://github.com/mtlynch/ingredient-phrase-tagger
+https://blog.kitchenpc.com/2011/07/06/chef-watson/

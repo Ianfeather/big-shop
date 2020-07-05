@@ -84,50 +84,52 @@ const Index = ({ title, description, ...props }) => {
           </div>
           <div>
             <h2>Your shopping list</h2>
-            <ul className={styles.shoppingList}>
+            <div className={styles.shoppingList}>
+              <ul>
+                {
+                  Object.keys(shoppingList)
+                    .filter((name => !checkedIngredients[name]))
+                    .map(name => {
+                    const { unit, quantity } = shoppingList[name];
+                    return (
+                      <li className={styles.item} key={name} onClick={() => handleCheckedIngredients(name)}>
+                        <span className={styles.itemName}>{name}</span>
+                        <span className={styles.itemQuantity}>{quantity}</span>
+                        <span className={styles.itemUnit}>{unit}</span>
+                      </li>
+                    )
+                  })
+                }
+              </ul>
+              <div>
+                <label className={styles.extraListLabel} htmlFor="extra-list-item">Add non-recipe items:</label>
+                <input className={styles.extraListInput} autoComplete="off" type="text" id="extra-list-item" onKeyPress={addListItem} />
+              </div>
               {
-                Object.keys(shoppingList)
-                  .filter((name => !checkedIngredients[name]))
-                  .map(name => {
-                  const { unit, quantity } = shoppingList[name];
-                  return (
-                    <li className={styles.item} key={name} onClick={() => handleCheckedIngredients(name)}>
-                      <span className={styles.itemName}>{name}</span>
-                      <span className={styles.itemQuantity}>{quantity}</span>
-                      <span className={styles.itemUnit}>{unit}</span>
-                    </li>
-                  )
-                })
+                Object.keys(shoppingList).length > 0 && (
+                  <>
+                    <h2>Already bought</h2>
+                    <ul className={styles.shoppingList}>
+                      {
+                        Object.keys(shoppingList)
+                          .filter((name => !!checkedIngredients[name]))
+                          .map(name => {
+                            const { unit, quantity } = shoppingList[name];
+                            const isChecked = !!checkedIngredients[name];
+                            return (
+                              <li className={`${styles.item} ${styles.checked}`} key={name} onClick={() => handleCheckedIngredients(name)}>
+                                <span className={styles.itemName}>{name}</span>
+                                <span className={styles.itemQuantity}>{quantity}</span>
+                                <span className={styles.itemUnit}>{unit}</span>
+                              </li>
+                            )
+                          })
+                      }
+                    </ul>
+                  </>
+                )
               }
-            </ul>
-            <div>
-              <label className={styles.extraListLabel} htmlFor="extra-list-item">Add non-recipe items:</label>
-              <input className={styles.extraListInput} autoComplete="off" type="text" id="extra-list-item" onKeyPress={addListItem} />
             </div>
-            {
-              Object.keys(shoppingList).length > 0 && (
-                <>
-                  <h2>Already bought</h2>
-                  <ul className={styles.shoppingList}>
-                    {
-                      Object.keys(shoppingList)
-                        .filter((name => !!checkedIngredients[name]))
-                        .map(name => {
-                          const { unit, quantity } = shoppingList[name];
-                          const isChecked = !!checkedIngredients[name];
-                          return (
-                            <li className={`${styles.item} ${styles.checked}`} key={name} onClick={() => handleCheckedIngredients(name)}>
-                              <span className={styles.itemName}>{name}</span>
-                              <span className={styles.itemQuantity}>{quantity}</span>
-                              <span className={styles.itemUnit}>{unit}</span>
-                            </li>
-                          )
-                        })
-                    }
-                  </ul>
-                </>
-              )
-            }
           </div>
         </div>
       </section>

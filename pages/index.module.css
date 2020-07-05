@@ -20,12 +20,14 @@
 }
 
 .recipeList li {
-  border: 1px solid #5ebe92;
+  box-shadow: 0px 1px 1px 1px rgba(235, 112, 164, 0.1);
+  background: white;
   margin-bottom: 5px;
+  cursor: pointer;
 }
 
 .recipeList li.checked {
-  background-color: #5ebe92;
+  background-color: var(--pink);
   color: white;
 }
 
@@ -43,10 +45,21 @@
   display: none;
 }
 
+.shoppingList {
+  background-color: white;
+  padding: 5px 20px;
+  border-radius: 6px;
+}
+
 .item {
   display: flex;
-  border-bottom: 1px solid #a4cab8;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(235, 112, 164, 0.5);
   padding: 15px 0;
+}
+
+.item:last-child {
+  border-bottom: none;
 }
 
 .item.checked {

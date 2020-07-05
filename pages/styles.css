@@ -3,12 +3,14 @@
   --pink: #eb70a4;
   --yellow: #ebd270;
   --green: #a4eb70;
+  --light-purple: #f7f2fb;
 }
 
 body {
   padding: 0;
   margin: 0;
   font-family: 'SF Pro Text', 'SF Pro Icons', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+  background: var(--light-purple)
 }
 
 * {
@@ -16,7 +18,7 @@ body {
 }
 
 .header {
-  background-color: #b870eb;
+  background-color: var(--purple);
   padding: 40px 20px;
 }
 
@@ -45,10 +47,6 @@ body {
   padding: 0 10px;
 }
 
-.content {
-  background: #f5ecfb;
-}
-
 .typeahead {
   position: relative;
 }
@@ -70,7 +68,7 @@ body {
 }
 
 .typeahead-selector li:hover {
-  background: #28c1b3;
+  background: var(--pink);
   color: white;
 }
 

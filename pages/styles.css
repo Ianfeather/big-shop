@@ -6,11 +6,51 @@
   --light-purple: #f7f2fb;
 }
 
+@font-face {
+  font-family: 'quicksand';
+  src: url('/static/fonts/quicksand-variablefont_wght-webfont.woff2') format('woff2'), url('/static/fonts/quicksand-variablefont_wght-webfont.woff') format('woff');
+  font-weight: 200;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'quicksand';
+  src: url('/static/fonts/quicksand-bold-webfont.woff2') format('woff2'), url('/static/fonts/quicksand-bold-webfont.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'quicksand';
+  src: url('/static/fonts/quicksand-regular-webfont.woff2') format('woff2'), url('/static/fonts/quicksand-regular-webfont.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'opensans';
+  src: url('/static/fonts/OpenSans-Regular-webfont.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'opensans';
+  src: url('/static/fonts/OpenSans-Bold-webfont.woff') format('woff');
+  font-weight: bold;
+  font-style: normal;
+}
+
 body {
   padding: 0;
   margin: 0;
-  font-family: 'SF Pro Text', 'SF Pro Icons', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+  font-family: 'opensans', 'SF Pro Text', 'SF Pro Icons', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
   background: var(--light-purple)
+}
+
+h1, h2, h3, h4 {
+  font-family: quicksand;
+  font-weight: normal;
 }
 
 * {
@@ -23,6 +63,9 @@ body {
 }
 
 .header .title {
+  font-family: quicksand;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.05em;
   margin-top: 0;
   margin-bottom: 0;
   text-align: center;

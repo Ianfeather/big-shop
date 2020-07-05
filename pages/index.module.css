@@ -60,3 +60,16 @@
 .itemUnit {
   margin-left: 10px;
 }
+
+.extraListLabel {
+  display: block;
+  margin: 20px 0 10px;
+  font-weight: bold;
+}
+
+.extraListInput {
+  display: block;
+  width: 100%;
+  padding: 15px 5px;
+  border: 1px solid #a4cab8;
+}

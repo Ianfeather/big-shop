@@ -71,11 +71,12 @@ const Index = ({ title, description, ...props }) => {
             <h2>Your shopping list</h2>
             <ul className={styles.shoppingList}>
               {
-                Object.keys(shoppingList).map(name => {
+                Object.keys(shoppingList)
+                  .filter((name => !checkedIngredients[name]))
+                  .map(name => {
                   const { unit, quantity } = shoppingList[name];
-                  const isChecked = !!checkedIngredients[name];
                   return (
-                    <li className={`${styles.item} ${isChecked ? styles.checked : ''}`} key={name} onClick={() => handleCheckedIngredients(name)}>
+                    <li className={styles.item} key={name} onClick={() => handleCheckedIngredients(name)}>
                       <span className={styles.itemName}>{name}</span>
                       <span className={styles.itemQuantity}>{quantity}</span>
                       <span className={styles.itemUnit}>{unit}</span>
@@ -84,6 +85,30 @@ const Index = ({ title, description, ...props }) => {
                 })
               }
             </ul>
+            {
+              Object.keys(shoppingList).length > 0 && (
+                <>
+                  <h2>Already bought</h2>
+                  <ul className={styles.shoppingList}>
+                    {
+                      Object.keys(shoppingList)
+                        .filter((name => !!checkedIngredients[name]))
+                        .map(name => {
+                          const { unit, quantity } = shoppingList[name];
+                          const isChecked = !!checkedIngredients[name];
+                          return (
+                            <li className={`${styles.item} ${styles.checked}`} key={name} onClick={() => handleCheckedIngredients(name)}>
+                              <span className={styles.itemName}>{name}</span>
+                              <span className={styles.itemQuantity}>{quantity}</span>
+                              <span className={styles.itemUnit}>{unit}</span>
+                            </li>
+                          )
+                        })
+                    }
+                  </ul>
+                </>
+              )
+            }
           </div>
         </div>
       </section>

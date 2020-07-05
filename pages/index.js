@@ -85,6 +85,11 @@ const Index = ({ title, description, ...props }) => {
           <div>
             <h2>Your shopping list</h2>
             <div className={styles.shoppingList}>
+              {
+                Object.keys(shoppingList).length == 0 && (
+                  <p className={styles.emptyList}>Select a recipe from the list to get started.</p>
+                )
+              }
               <ul>
                 {
                   Object.keys(shoppingList)

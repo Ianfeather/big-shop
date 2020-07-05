@@ -42,6 +42,21 @@ const Index = ({ title, description, ...props }) => {
     }
   };
 
+  function addListItem(e) {
+    if (e.which !== 13) {
+      return;
+    }
+    const newList = {
+      ...shoppingList,
+      [e.target.value]: {
+        quantity: '',
+        unit: ''
+      }
+    };
+    setShoppingList(newList);
+    e.target.value = '';
+  }
+
   useEffect(() => { getRecipes() }, []);
   useEffect(() => { getShoppingList() }, [recipeList]);
 
@@ -85,6 +100,10 @@ const Index = ({ title, description, ...props }) => {
                 })
               }
             </ul>
+            <div>
+              <label className={styles.extraListLabel} htmlFor="extra-list-item">Add non-recipe items:</label>
+              <input className={styles.extraListInput} autoComplete="off" type="text" id="extra-list-item" onKeyPress={addListItem} />
+            </div>
             {
               Object.keys(shoppingList).length > 0 && (
                 <>

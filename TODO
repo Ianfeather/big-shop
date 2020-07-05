@@ -2,23 +2,30 @@
 
 
 # app work
+Add PWA stuff + logo
+Work on design
+- logo
+- font
+- shopping list + module styles
 
-Parse recipe ingredients
-- Not bad: https://github.com/mackenziefernandez/recipe-parser/blob/master/src/units.ts
-A button which says "Add another recipe"
-Order Units in dropdown
+Add identity/auth + persistent state for shopping list
+
+
 Order items by section of shop
 There's some caching going on which needs purging or lowering
 Real-time updates when shopping together
 Add househould items section
-Add identity/auth
-Add PWA stuff + logo
+A button which says "Add another recipe"
+
 
 # infra work
 Move go app to serverless
 Allow cors from localhost
 Separate stage and prod DBs
 
+
+Parse recipe ingredients
+- Not bad: https://github.com/mackenziefernandez/recipe-parser/blob/master/src/units.ts
 
 https://material-ui.com/components/autocomplete/
 https://github.com/moroshko/react-autosuggest

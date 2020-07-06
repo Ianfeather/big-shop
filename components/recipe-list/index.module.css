@@ -9,12 +9,13 @@
 }
 
 .list a {
+  background: white;
   color: #525050;
   text-decoration: none;
   padding: 20px;
   display: block;
   border-radius: 3px;
-  border: 1px solid #beecd7;
+  box-shadow: 0px 1px 1px 1px rgba(235, 112, 164, 0.1);
   transition: all ease 0.1s
 }
 
@@ -23,13 +24,13 @@
 }
 
 .list a:hover {
-  color: #525050;
-  background-color: #beecd7;
+  color: white;
+  background-color: var(--pink);
 }
 
 .button {
   border: 0;
-  background-color: #2897c1;
+  background-color: var(--green);
   color: white;
   padding: 15px 40px;
   font-size: 16px;
@@ -39,5 +40,6 @@
 }
 
 .button:hover {
-  background-color: #58c8f3;
+  color: white;
+  background-color: var(--dark-green);
 }

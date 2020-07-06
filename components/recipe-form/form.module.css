@@ -1,14 +1,21 @@
 .form label {
   display: block;
   margin-bottom: 10px;
-  font-weight: bold;
+  font-size: 14px;
+}
+
+@media (min-width: 500px) {
+  .form label {
+    font-size: 16px;
+  }
 }
 
 .form input {
   display: block;
   width: 100%;
-  padding: 10px 0 !important;
-  border: 1px solid #999;
+  padding: 16px 0 !important;
+  border: none;
+  box-shadow: 0px 1px 1px 1px rgba(235, 112, 164, 0.1);
   font-size: 16px;
   text-indent: 10px;
 }
@@ -25,21 +32,48 @@
   margin-right: 0;
 }
 
-.unit {
-  min-width: 80px;
-}
-
 .ingredientUnit {
-  height: 40px;
+  height: 54px;
   width: 100%;
+  border: none;
+  box-shadow: 0px 1px 1px 1px rgba(235, 112, 164, 0.1);
+  -webkit-appearance: none;
+  padding: 0 20px;
+  text-align: left;
 }
 
-.group, .ingredientGroup {
+.group {
   margin-bottom: 30px;
 }
 
+.ingredientGroup {
+  margin-bottom: 8px;
+}
+
 .ingredientName {
+  flex: 2;
+}
+
+.ingredientQuantity {
   flex: 1;
+}
+
+.unit {
+  flex: 1;
+  min-width: 70px;
+}
+
+@media (min-width: 500px) {
+  .ingredientName {
+    flex: 1;
+  }
+  .ingredientQuantity {
+    flex: none;
+  }
+  .unit {
+    flex: none;
+    min-width: 80px;
+  }
 }
 
 .button {
@@ -56,14 +90,16 @@
 }
 
 .trash {
-  color: white;
+  color: var(--pink);
   font-size: 30px;
   border: none;
   width: 100%;
-  background-color: #28c1b3;
+  background-color: var(--light-purple);
   padding: 5px;
   border-radius: 3px;
   line-height: 1;
+  height: 38px;
+  margin-top: 8px;
 }
 
 .stored {
@@ -71,4 +107,21 @@
   margin-left: 30px;
   color: #28c17b;
   font-size: 18px;
+}
+
+.srOnly {
+  position: absolute;
+  left: -10000px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.deleteColumn {
+  min-width: 28px;
+}
+
+.heading {
+  font-weight: bold;
 }

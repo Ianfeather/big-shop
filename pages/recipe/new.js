@@ -6,7 +6,7 @@ const NewRecipe = ({ title, description, ...props }) => {
   return (
     <Layout pageTitle={title} description={description}>
       <SingleColumnLayout>
-        <h1 className="title">{title}</h1>
+        <h1 className="title bold">{title}</h1>
         <Form />
       </SingleColumnLayout>
     </Layout>

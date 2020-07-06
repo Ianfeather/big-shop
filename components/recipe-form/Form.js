@@ -97,27 +97,30 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
         <input value={recipe.remoteUrl} autoComplete="off" type="text" id="recipe-remote-url" onChange={(e) => updateRecipe('remoteUrl', e.target.value)}/>
       </div>
 
-      <h2>Ingredients</h2>
+      <h2 className={styles.heading}>Ingredients</h2>
       {
         recipe.ingredients.map((ingredient, i) => {
           return (
             <div className={styles.ingredientGroup} key={i}>
               <div className={styles.ingredientName}>
-                <label htmlFor={`ingredient-name-${i}`}>Ingredient Name</label>
+                <label htmlFor={`ingredient-name-${i}`} className={i != 0 && styles.srOnly}>Name</label>
                 <Typeahead
                   options={ingredients}
                   maxVisible={3}
+                  placeholder="Name"
                   id={`ingredient-name-${i}`}
                   value={ingredient.name}
                   onChange={(e) => updateIngredient(i, 'name', e.target.value)}
                   onOptionSelected={(value) => updateIngredient(i, 'name', value)} />
               </div>
-              <div>
-                <label htmlFor={`ingredient-quantity-${i}`}>Quantity</label>
-                <input value={ingredient.quantity} autoComplete="off" type="text" id={`ingredient-quantity-${i}`} onChange={(e) => updateIngredient(i, 'quantity', e.target.value)} />
+
+              <div className={styles.ingredientQuantity}>
+                <label htmlFor={`ingredient-quantity-${i}`} className={i != 0 && styles.srOnly}>Quantity</label>
+                <input placeholder="Unit" value={ingredient.quantity} autoComplete="off" type="text" id={`ingredient-quantity-${i}`} onChange={(e) => updateIngredient(i, 'quantity', e.target.value)} />
               </div>
+
               <div className={styles.unit}>
-                <label htmlFor={`ingredient-unit-${i}`}>Unit</label>
+                <label htmlFor={`ingredient-unit-${i}`} className={i != 0 && styles.srOnly}>Unit</label>
                 <select id={`ingredient-unit-${i}`} className={styles.ingredientUnit} onChange={(e) => updateIngredient(i, 'unit', e.target.value)} value={ingredient.unit}>
                   {
                     units.map(({ id, name}) => (
@@ -126,15 +129,18 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
                   }
                 </select>
               </div>
-              {
 
-                i > 0 && (
-                  <div>
-                    <label>Delete</label>
-                    <button className={styles.trash} aria-label="trash" id={i} onClick={deleteIngredient}>×</button>
-                  </div>
-                )
-              }
+              <div className={styles.deleteColumn}>
+                {
+                  i > 0 && (
+                    <>
+                      <label className={i != 0 && styles.srOnly}>Delete</label>
+                      <button className={styles.trash} aria-label="trash" id={i} onClick={deleteIngredient}>×</button>
+                    </>
+                  )
+                }
+              </div>
+
             </div>
           )
         })

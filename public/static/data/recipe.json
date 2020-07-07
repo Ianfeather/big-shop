@@ -1,0 +1,57 @@
+{
+  "name": "Shepherds Pie",
+  "id": 1,
+  "remoteUrl": "https://www.thecoast.net.nz/life/food-recipes/gordon-ramsay-s-shepherds-pie/",
+  "ingredients": [
+    {
+      "name": "potato",
+      "unit": "kilogram",
+      "quantity": "1"
+    },
+    {
+      "name": "minced beef",
+      "unit": "gram",
+      "quantity": "800"
+    },
+    {
+      "name": "onion",
+      "unit": "",
+      "quantity": "1"
+    },
+    {
+      "name": "carrot",
+      "unit": "",
+      "quantity": "1"
+    },
+    {
+      "name": "Garlic Clove",
+      "unit": "",
+      "quantity": "2"
+    },
+    {
+      "name": "Worcestershire Sauce",
+      "unit": "tablespoon",
+      "quantity": "2"
+    },
+    {
+      "name": "Tomato Puree",
+      "unit": "tablespoon",
+      "quantity": "1"
+    },
+    {
+      "name": "Thyme",
+      "unit": "",
+      "quantity": "1"
+    },
+    {
+      "name": "Rosemary",
+      "unit": "",
+      "quantity": "1"
+    },
+    {
+      "name": "Chicken Stock",
+      "unit": "millilitre",
+      "quantity": "300"
+    }
+  ]
+}

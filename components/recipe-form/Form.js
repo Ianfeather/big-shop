@@ -3,7 +3,11 @@ import { useState, useEffect } from 'react';
 import useFetch from 'use-http'
 import { Typeahead } from 'react-typeahead';
 
-const capitalize = ([first, ...rest]) => {
+const capitalize = (str) => {
+  if (!str) {
+    return str;
+  }
+  const [first, ...rest] = str;
   return [first.toUpperCase(), ...rest].join('');
 }
 

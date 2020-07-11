@@ -13,7 +13,7 @@ type Recipe struct {
 
 // GetAllRecipes returns all recipes in the recipe table
 func GetAllRecipes(db *sql.DB) ([]Recipe, error) {
-	recipesQuery := "SELECT id, name FROM recipe;"
+	recipesQuery := "SELECT id, name FROM recipe ORDER BY lower(name);"
 	results, err := db.Query(recipesQuery)
 
 	recipes := make([]Recipe, 0)

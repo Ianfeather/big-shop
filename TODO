@@ -1,10 +1,10 @@
 # data work
 
 # app work
-Work on design
-- shopping list + module styles
+turn off autocomplete
+multiply ingredients per person
 
-Add identity/auth + persistent state for shopping list
+Add identity/auth for shopping list
 
 
 Order items by section of shop

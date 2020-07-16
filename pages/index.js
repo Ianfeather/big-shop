@@ -7,6 +7,7 @@ const Index = ({ title, description, ...props }) => {
   let [recipes, setRecipes] = useState([]);
   let [recipeList, setRecipeList] = useState({});
   let [shoppingList, setShoppingList] = useState({});
+  let [extras, setExtras] = useState({});
   let [checkedIngredients, setCheckedIngredients] = useState({});
 
   const handleRecipeSelect = (e) => {
@@ -16,14 +17,15 @@ const Index = ({ title, description, ...props }) => {
     setRecipeList(newList);
   };
 
-  const handleCheckedIngredients = (name) => {
-    const newList = { ...checkedIngredients,
-      [name]: !checkedIngredients[name]
-    };
-    setCheckedIngredients(newList);
-  }
+  const { get, post, patch, del, response, loading, error } = useFetch('/.netlify/functions/big-shop')
 
-  const { get, response, loading, error } = useFetch('/.netlify/functions/big-shop')
+  async function handleCheckedIngredients(name) {
+    const isBought = !checkedIngredients[name];
+    const newList = { ...checkedIngredients, [name]: isBought };
+    setCheckedIngredients(newList);
+    // fire and forget
+    patch('/shopping-list/buy', { name, isBought });
+  }
 
   async function getRecipes() {
     const recipes = await get('/recipes')
@@ -33,27 +35,46 @@ const Index = ({ title, description, ...props }) => {
   async function getShoppingList() {
     const selectedRecipes = Object.keys(recipeList).filter(k => !!recipeList[k]);
     if (selectedRecipes.length) {
-      const recipeIds = selectedRecipes.join(',');
-      const { list } = await get(`/shopping-list?recipes=${recipeIds}`);
-      if (response.ok) setShoppingList(list);
+      const { list, extras } = await post('/shopping-list', [ selectedRecipes ]);
+      if (response.ok) {
+        setShoppingList(list);
+        setExtras(extras);
+      }
       if (response.error || error) setShoppingList({});
     } else {
       setShoppingList({});
+      setExtras(extras);
     }
   };
+
+  async function clearList() {
+    setShoppingList({});
+    setExtras({});
+    setCheckedIngredients({});
+    del('/shopping-list/clear');
+    // TODO: handle sync fail
+  }
 
   function addListItem(e) {
     if (e.which !== 13) {
       return;
     }
     const newList = {
-      ...shoppingList,
+      ...extras,
       [e.target.value]: {
         quantity: '',
         unit: ''
       }
     };
-    setShoppingList(newList);
+    setExtras(newList);
+    // fire and forget
+    post('/shopping-list/extra', {
+      name: e.target.value,
+      isBought: false
+    });
+    if (response.error || error) {
+      // TODO: handle sync fail
+    };
     e.target.value = '';
   }
 
@@ -105,10 +126,23 @@ const Index = ({ title, description, ...props }) => {
                     )
                   })
                 }
+                {
+                  Object.keys(extras)
+                    .filter((name => !checkedIngredients[name]))
+                    .map(name => (
+                      <li className={styles.item} key={name} onClick={() => handleCheckedIngredients(name)}>
+                        <span className={styles.itemName}>{name}</span>
+                        <span className={styles.itemQuantity}></span>
+                        <span className={styles.itemUnit}></span>
+                      </li>
+                    )
+                  )
+                }
               </ul>
               <div>
                 <label className={styles.extraListLabel} htmlFor="extra-list-item">Add non-recipe items:</label>
                 <input className={styles.extraListInput} autoComplete="off" type="text" id="extra-list-item" onKeyPress={addListItem} />
+                {/* TODO: Add button */}
               </div>
               {
                 Object.keys(shoppingList).length > 0 && (
@@ -120,7 +154,6 @@ const Index = ({ title, description, ...props }) => {
                           .filter((name => !!checkedIngredients[name]))
                           .map(name => {
                             const { unit, quantity } = shoppingList[name];
-                            const isChecked = !!checkedIngredients[name];
                             return (
                               <li className={`${styles.item} ${styles.checked}`} key={name} onClick={() => handleCheckedIngredients(name)}>
                                 <span className={styles.itemName}>{name}</span>
@@ -130,8 +163,25 @@ const Index = ({ title, description, ...props }) => {
                             )
                           })
                       }
+                      {
+                        Object.keys(extras)
+                          .filter((name => !!checkedIngredients[name]))
+                          .map(name => (
+                              <li className={`${styles.item} ${styles.checked}`} key={name} onClick={() => handleCheckedIngredients(name)}>
+                                <span className={styles.itemName}>{name}</span>
+                                <span className={styles.itemQuantity}></span>
+                                <span className={styles.itemUnit}></span>
+                              </li>
+                            )
+                          )
+                      }
                     </ul>
                   </>
+                )
+              }
+              {
+                Object.keys(shoppingList).length > 0 && (
+                  <button className={styles.button} onClick={() => clearList()}>Clear list</button>
                 )
               }
             </div>

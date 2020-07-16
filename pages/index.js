@@ -35,7 +35,7 @@ const Index = ({ title, description, ...props }) => {
   async function getShoppingList() {
     const selectedRecipes = Object.keys(recipeList).filter(k => !!recipeList[k]);
     if (selectedRecipes.length) {
-      const { list, extras } = await post('/shopping-list', [ selectedRecipes ]);
+      const { list, extras } = await post('/shopping-list', selectedRecipes);
       if (response.ok) {
         setShoppingList(list);
         setExtras(extras);

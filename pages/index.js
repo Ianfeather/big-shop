@@ -36,7 +36,7 @@ const Index = ({ title, description, ...props }) => {
     const selectedRecipes = Object.keys(recipeList).filter(k => !!recipeList[k]);
     const { recipes, ingredients, extras } = await (selectedRecipes.length ?
       post('/shopping-list', selectedRecipes) :
-      get('/shopping-list', selectedRecipes));
+      get('/shopping-list'));
 
       if (response.ok) {
         setShoppingList(ingredients);

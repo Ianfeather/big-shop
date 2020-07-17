@@ -41,7 +41,9 @@ const Index = ({ title, description, ...props }) => {
       if (response.ok) {
         setShoppingList(ingredients);
         setExtras(extras);
-        setRecipeList(recipes);
+        setRecipeList(recipes.map(r => ({
+          [r]: true
+        })));
       }
       if (response.error || error) {
         setShoppingList({});

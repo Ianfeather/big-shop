@@ -34,17 +34,19 @@ const Index = ({ title, description, ...props }) => {
 
   async function getShoppingList() {
     const selectedRecipes = Object.keys(recipeList).filter(k => !!recipeList[k]);
-    if (selectedRecipes.length) {
-      const { ingredients, extras } = await post('/shopping-list', selectedRecipes);
+    const { recipes, ingredients, extras } = await (selectedRecipes.length ?
+      post('/shopping-list', selectedRecipes) :
+      get('/shopping-list', selectedRecipes));
+
       if (response.ok) {
         setShoppingList(ingredients);
         setExtras(extras);
+        setRecipeList(recipes);
       }
-      if (response.error || error) setShoppingList({});
-    } else {
-      setShoppingList({});
-      setExtras(extras);
-    }
+      if (response.error || error) {
+        setShoppingList({});
+        setExtras({});
+      };
   };
 
   async function clearList() {

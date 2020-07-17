@@ -32,4 +32,5 @@ type ListIngredient struct {
 	Unit     string  `json:"unit"`
 	Quantity float64 `json:"quantity"`
 	IsBought bool    `json:"isBought"`
+	RecipeID int     `json:"recipe_id"`
 }

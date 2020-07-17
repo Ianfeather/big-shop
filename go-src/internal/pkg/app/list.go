@@ -11,7 +11,7 @@ import (
 
 // ResponseObject is the json response
 type ResponseObject struct {
-	Recipes     []common.Recipe                   `json:"recipes"`
+	Recipes     []string                          `json:"recipes"`
 	Ingredients map[string]*common.ListIngredient `json:"ingredients"`
 	Extras      map[string]*common.ListIngredient `json:"extras"`
 }
@@ -48,6 +48,7 @@ func CombineIngredients(r []common.Recipe) map[string]*common.ListIngredient {
 						Unit:     ingredient.Unit,
 						Quantity: q,
 						IsBought: false,
+						RecipeID: recipe.ID,
 					}
 					ingredientList[ingredient.Name] = &newIngredient
 				}
@@ -68,6 +69,31 @@ func CombineIngredients(r []common.Recipe) map[string]*common.ListIngredient {
 	return ingredientList
 }
 
+func (a *App) getListHandler(w http.ResponseWriter, req *http.Request) {
+	userID := 1
+
+	recipes, err := service.GetRecipesFromList(userID, a.db)
+	ingredients, err := service.GetIngredientListItems(userID, a.db)
+	extras, err := service.GetExtraListItems(userID, a.db)
+
+	if err != nil {
+		w.Write([]byte("Error Fetching List Items"))
+	}
+
+	response := &ResponseObject{
+		Recipes:     recipes,
+		Ingredients: ingredients,
+		Extras:      extras,
+	}
+
+	encoder := json.NewEncoder(w)
+	err = encoder.Encode(response)
+	if err != nil {
+		http.Error(w, "Error encoding json", http.StatusInternalServerError)
+		return
+	}
+}
+
 func (a *App) createListHandler(w http.ResponseWriter, req *http.Request) {
 	// TODO: Identity
 	userID := 1
@@ -80,6 +106,7 @@ func (a *App) createListHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	response := &ResponseObject{}
+	recipes := make([]common.Recipe, 0)
 
 	for i := 0; i < len(recipeIDs); i++ {
 		id, err := strconv.Atoi(recipeIDs[i])
@@ -90,15 +117,16 @@ func (a *App) createListHandler(w http.ResponseWriter, req *http.Request) {
 		if err != nil {
 			fmt.Println(err)
 		}
-		response.Recipes = append(response.Recipes, *recipe)
+		recipes = append(recipes, *recipe)
 	}
 
-	combinedIngredients := CombineIngredients(response.Recipes)
+	combinedIngredients := CombineIngredients(recipes)
 
 	service.RemoveIngredientListItems(userID, a.db)
 	service.AddIngredientListItems(userID, combinedIngredients, a.db)
 
 	// Return the new items + extras
+	response.Recipes = recipeIDs
 	response.Ingredients = combinedIngredients
 	response.Extras, err = service.GetExtraListItems(userID, a.db)
 

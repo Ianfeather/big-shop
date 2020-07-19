@@ -91,7 +91,7 @@ const Index = ({ title, description, ...props }) => {
       return;
     }
     const newList = {
-...extras,
+      ...extras,
       [e.target.value]: {
         quantity: '',
         unit: ''
@@ -187,7 +187,7 @@ const Index = ({ title, description, ...props }) => {
                           .map(name => {
                             const { unit, quantity } = shoppingList[name];
                             return (
-                              <li className={`${styles.item} ${styles.checked}`} key={name} onClick={() => buyIngredients(name, 'ingredient')}>
+                              <li className={styles.item} key={name} onClick={() => buyIngredients(name, 'ingredient')}>
                                 <span className={styles.itemName}>{name}</span>
                                 <span className={styles.itemQuantity}>{quantity}</span>
                                 <span className={styles.itemUnit}>{unit}</span>
@@ -199,7 +199,7 @@ const Index = ({ title, description, ...props }) => {
                         Object.keys(extras)
                           .filter((name => extras[name].isBought))
                           .map(name => (
-                              <li className={`${styles.item} ${styles.checked}`} key={name} onClick={() => buyIngredients(name, 'extra')}>
+                              <li className={styles.item} key={name} onClick={() => buyIngredients(name, 'extra')}>
                                 <span className={styles.itemName}>{name}</span>
                                 <span className={styles.itemQuantity}></span>
                                 <span className={styles.itemUnit}></span>

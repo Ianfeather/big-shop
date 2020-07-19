@@ -38,6 +38,7 @@ func (a *App) GetRouter(base string) (*mux.Router, error) {
 	router := mux.NewRouter()
 	router.HandleFunc(base+"/health", healthHandler).Methods("GET")
 	router.HandleFunc(base+"/recipes", a.recipesHandler).Methods("GET")
+	router.HandleFunc(base+"/ingredients", a.ingredientsHandler).Methods("GET")
 	router.HandleFunc(base+"/recipe/{slug:[a-zA-Z-]+}", a.recipeHandlerBySlug).Methods("GET")
 	router.HandleFunc(base+"/recipe/{id:[0-9]+}", a.recipeHandlerByID).Methods("GET")
 	router.HandleFunc(base+"/recipe", a.addRecipeHandler).Methods("POST")

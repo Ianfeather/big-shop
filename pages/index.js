@@ -81,7 +81,7 @@ const Index = ({ title, description, ...props }) => {
   async function clearList() {
     setShoppingList({});
     setExtras({});
-    setRecipes([]);
+    setRecipeList([]);
     del('/shopping-list/clear');
     // TODO: handle sync fail
   }

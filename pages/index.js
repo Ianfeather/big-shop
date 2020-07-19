@@ -9,6 +9,7 @@ const Index = ({ title, description, ...props }) => {
   let [shoppingList, setShoppingList] = useState({});
   let [extras, setExtras] = useState({});
   let [checkedIngredients, setCheckedIngredients] = useState({});
+  let [hydrateFlag, setHydrateFlag] = useState(false);
 
   const handleRecipeSelect = (e) => {
     const newList = { ...recipeList,
@@ -32,24 +33,41 @@ const Index = ({ title, description, ...props }) => {
     if (response.ok) setRecipes(recipes)
   };
 
-  async function getShoppingList() {
-    const selectedRecipes = Object.keys(recipeList).filter(k => !!recipeList[k]);
-    const { recipes, ingredients, extras } = await (selectedRecipes.length ?
-      post('/shopping-list', selectedRecipes) :
-      get('/shopping-list'));
+  // This will only run once on load
+  async function hydrateShoppingList() {
+    const { recipes, ingredients, extras } = await get('/shopping-list');
+    if (response.ok && recipes.length) {
+      console.log('setting hydrated data');
+      setHydrateFlag(true);
+      setRecipeList(recipes.reduce((acc, recipe) => {
+        acc[recipe] = true;
+        return acc;
+      }, {}));
+      setShoppingList(ingredients);
+      setExtras(extras);
+    }
+  }
 
-      if (response.ok) {
-        setShoppingList(ingredients);
-        setExtras(extras);
-        setRecipeList(recipes.reduce((acc, recipe) => {
-          acc[recipe] = true;
-          return acc;
-        }, {}));
-      }
-      if (response.error || error) {
-        setShoppingList({});
-        setExtras({});
-      };
+  async function getShoppingList() {
+    if (hydrateFlag) {
+      console.log('returning');
+      setHydrateFlag(false);
+      return;
+    }
+    const selectedRecipes = Object.keys(recipeList).filter(k => !!recipeList[k]);
+    console.log("in getShoppingList");
+    if (!selectedRecipes.length) {
+      return;
+    }
+    const { recipes, ingredients, extras } = await post('/shopping-list', selectedRecipes);
+    if (response.ok) {
+      setShoppingList(ingredients);
+      setExtras(extras);
+      setRecipeList(recipes.reduce((acc, recipe) => {
+        acc[recipe] = true;
+        return acc;
+      }, {}));
+    }
   };
 
   async function clearList() {
@@ -83,6 +101,7 @@ const Index = ({ title, description, ...props }) => {
     e.target.value = '';
   }
 
+  useEffect(() => { hydrateShoppingList() }, []);
   useEffect(() => { getRecipes() }, []);
   useEffect(() => { getShoppingList() }, [recipeList]);
 

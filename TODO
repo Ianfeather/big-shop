@@ -1,6 +1,6 @@
 recipeList is a effect prop for fetching more recipes
 but we're trying to update it on success
-so we hit a loop, but maybe that won't change if it's identical
+so the post request happens straight after but doesn't include isBought so we lose track of those items
 
 
 # data work

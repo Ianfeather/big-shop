@@ -63,10 +63,6 @@ const Index = ({ title, description, ...props }) => {
     if (response.ok) {
       setShoppingList(ingredients);
       setExtras(extras);
-      setRecipeList(recipes.reduce((acc, recipe) => {
-        acc[recipe] = true;
-        return acc;
-      }, {}));
     }
   };
 

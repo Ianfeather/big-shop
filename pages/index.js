@@ -8,7 +8,6 @@ const Index = ({ title, description, ...props }) => {
   let [recipeList, setRecipeList] = useState({});
   let [shoppingList, setShoppingList] = useState({});
   let [extras, setExtras] = useState({});
-  let [checkedIngredients, setCheckedIngredients] = useState({});
   let [hydrateFlag, setHydrateFlag] = useState(false);
 
   const handleRecipeSelect = (e) => {
@@ -20,10 +19,20 @@ const Index = ({ title, description, ...props }) => {
 
   const { get, post, patch, del, response, loading, error } = useFetch('/.netlify/functions/big-shop')
 
-  async function handleCheckedIngredients(name) {
-    const isBought = !checkedIngredients[name];
-    const newList = { ...checkedIngredients, [name]: isBought };
-    setCheckedIngredients(newList);
+  async function buyIngredients(name, type) {
+    const list = type === 'ingredient' ? shoppingList : extras;
+    const newList = {
+      ...list,
+      [name]: {
+        ...list[name],
+        isBought: !list[name].isBought
+      }
+    };
+    if (type === 'ingredient') {
+      setShoppingList(newList);
+    } else {
+      setExtras(newList);
+    }
     // fire and forget
     patch('/shopping-list/buy', { name, isBought });
   }
@@ -69,7 +78,6 @@ const Index = ({ title, description, ...props }) => {
   async function clearList() {
     setShoppingList({});
     setExtras({});
-    setCheckedIngredients({});
     del('/shopping-list/clear');
     // TODO: handle sync fail
   }
@@ -134,23 +142,23 @@ const Index = ({ title, description, ...props }) => {
               <ul>
                 {
                   Object.keys(shoppingList)
-                    .filter((name => !checkedIngredients[name]))
+                    .filter((name => !shoppingList[name].isBought))
                     .map(name => {
-                    const { unit, quantity } = shoppingList[name];
-                    return (
-                      <li className={styles.item} key={name} onClick={() => handleCheckedIngredients(name)}>
-                        <span className={styles.itemName}>{name}</span>
-                        <span className={styles.itemQuantity}>{quantity}</span>
-                        <span className={styles.itemUnit}>{unit}</span>
-                      </li>
-                    )
-                  })
+                      const { unit, quantity } = shoppingList[name];
+                      return (
+                        <li className={styles.item} key={name} onClick={() => buyIngredients(name, 'ingredient')}>
+                          <span className={styles.itemName}>{name}</span>
+                          <span className={styles.itemQuantity}>{quantity}</span>
+                          <span className={styles.itemUnit}>{unit}</span>
+                        </li>
+                      )
+                    })
                 }
                 {
                   Object.keys(extras)
-                    .filter((name => !checkedIngredients[name]))
+                    .filter((name => !extras[name].isBought))
                     .map(name => (
-                      <li className={styles.item} key={name} onClick={() => handleCheckedIngredients(name)}>
+                      <li className={styles.item} key={name} onClick={() => buyIngredients(name, 'extra')}>
                         <span className={styles.itemName}>{name}</span>
                         <span className={styles.itemQuantity}></span>
                         <span className={styles.itemUnit}></span>
@@ -171,11 +179,11 @@ const Index = ({ title, description, ...props }) => {
                     <ul className={styles.shoppingList}>
                       {
                         Object.keys(shoppingList)
-                          .filter((name => !!checkedIngredients[name]))
+                          .filter((name => shoppingList[name].isBought))
                           .map(name => {
                             const { unit, quantity } = shoppingList[name];
                             return (
-                              <li className={`${styles.item} ${styles.checked}`} key={name} onClick={() => handleCheckedIngredients(name)}>
+                              <li className={`${styles.item} ${styles.checked}`} key={name} onClick={() => buyIngredients(name, 'ingredient')}>
                                 <span className={styles.itemName}>{name}</span>
                                 <span className={styles.itemQuantity}>{quantity}</span>
                                 <span className={styles.itemUnit}>{unit}</span>
@@ -185,9 +193,9 @@ const Index = ({ title, description, ...props }) => {
                       }
                       {
                         Object.keys(extras)
-                          .filter((name => !!checkedIngredients[name]))
+                          .filter((name => extras[name].isBought))
                           .map(name => (
-                              <li className={`${styles.item} ${styles.checked}`} key={name} onClick={() => handleCheckedIngredients(name)}>
+                              <li className={`${styles.item} ${styles.checked}`} key={name} onClick={() => buyIngredients(name, 'extra')}>
                                 <span className={styles.itemName}>{name}</span>
                                 <span className={styles.itemQuantity}></span>
                                 <span className={styles.itemUnit}></span>

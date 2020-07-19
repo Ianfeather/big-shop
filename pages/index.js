@@ -34,7 +34,7 @@ const Index = ({ title, description, ...props }) => {
       setExtras(newList);
     }
     // fire and forget
-    patch('/shopping-list/buy', { name, isBought });
+    patch('/shopping-list/buy', { name, isBought: newList[name].isBought });
   }
 
   async function getRecipes() {

@@ -113,6 +113,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
                   maxVisible={3}
                   placeholder="Name"
                   id={`ingredient-name-${i}`}
+                  autoComplete="off"
                   value={ingredient.name}
                   onChange={(e) => updateIngredient(i, 'name', e.target.value)}
                   onOptionSelected={(value) => updateIngredient(i, 'name', value)} />

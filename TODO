@@ -1,27 +1,24 @@
-recipeList is a effect prop for fetching more recipes
-but we're trying to update it on success
-so the post request happens straight after but doesn't include isBought so we lose track of those items
-
-
 # data work
 
-# app work
-turn off autocomplete
+
+
+# Backend work
 multiply ingredients per person
-
+Calculate weekly cost of shoppinglist
+Calculate weekly macros of shoppinglist
 Add identity/auth for shopping list
-
-
 Order items by section of shop
-There's some caching going on which needs purging or lowering
-Real-time updates when shopping together
-Add househould items section
+Make it easier to import new recipes
+
+# Frontend work
+Periodically refresh list updates when shopping together
 A button which says "Add another recipe"
 
 
 # infra work
+There's some caching going on which needs purging or lowering
 Move go app to serverless
-Allow cors from localhost
+Get a local env setup properly
 Separate stage and prod DBs
 
 

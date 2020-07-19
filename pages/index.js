@@ -37,6 +37,7 @@ const Index = ({ title, description, ...props }) => {
     patch('/shopping-list/buy', { name, isBought: newList[name].isBought });
   }
 
+  // This will only run once on load
   async function getRecipes() {
     const recipes = await get('/recipes')
     if (response.ok) setRecipes(recipes)
@@ -46,7 +47,6 @@ const Index = ({ title, description, ...props }) => {
   async function hydrateShoppingList() {
     const { recipes, ingredients, extras } = await get('/shopping-list');
     if (response.ok && recipes.length) {
-      console.log('setting hydrated data');
       setHydrateFlag(true);
       setRecipeList(recipes.reduce((acc, recipe) => {
         acc[recipe] = true;
@@ -58,13 +58,16 @@ const Index = ({ title, description, ...props }) => {
   }
 
   async function getShoppingList() {
+    // This isn't an ideal way of handling the interaction between this function and hydrateShoppingList
+    // The problem is that hydrating will often lead to a change in the recipes which this fn depends on
+    // However the way the shoppinglist calculation works is based on recipe id only so calling this function
+    // without an actual recipe change will lead to `isBought` data being deleted.
+    // Long term it would be nice to find a way to merge `isBought` data server side.
     if (hydrateFlag) {
-      console.log('returning');
       setHydrateFlag(false);
       return;
     }
     const selectedRecipes = Object.keys(recipeList).filter(k => !!recipeList[k]);
-    console.log("in getShoppingList");
     if (!selectedRecipes.length) {
       return;
     }
@@ -78,6 +81,7 @@ const Index = ({ title, description, ...props }) => {
   async function clearList() {
     setShoppingList({});
     setExtras({});
+    setRecipes([]);
     del('/shopping-list/clear');
     // TODO: handle sync fail
   }
@@ -87,7 +91,7 @@ const Index = ({ title, description, ...props }) => {
       return;
     }
     const newList = {
-      ...extras,
+...extras,
       [e.target.value]: {
         quantity: '',
         unit: ''

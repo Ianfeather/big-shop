@@ -7,23 +7,23 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 )
 
 // ResponseObject is the json response
 type ResponseObject struct {
-	Recipes []common.Recipe        `json:"recipes"`
-	List    map[string]*Ingredient `json:"list"`
+	Recipes     []string                          `json:"recipes"`
+	Ingredients map[string]*common.ListIngredient `json:"ingredients"`
+	Extras      map[string]*common.ListIngredient `json:"extras"`
 }
 
-// Ingredient is a subset of shopping List
-type Ingredient struct {
-	Unit     string  `json:"unit"`
-	Quantity float64 `json:"quantity"`
+// ListItem is used for updating items in the DB
+type ListItem struct {
+	IsBought bool
+	Name     string
 }
 
 // CombineIngredients creates combined values/units
-func CombineIngredients(r []common.Recipe) map[string]*Ingredient {
+func CombineIngredients(r []common.Recipe) map[string]*common.ListIngredient {
 	parentUnit := map[string]string{
 		"gram":       "kilogram",
 		"millilitre": "litre",
@@ -33,7 +33,7 @@ func CombineIngredients(r []common.Recipe) map[string]*Ingredient {
 		"litre":    "millilitre",
 	}
 
-	ingredientList := make(map[string]*Ingredient)
+	ingredientList := make(map[string]*common.ListIngredient)
 	for _, recipe := range r {
 		for _, ingredient := range recipe.Ingredients {
 			if q, err := strconv.ParseFloat(ingredient.Quantity, 64); err == nil {
@@ -44,9 +44,11 @@ func CombineIngredients(r []common.Recipe) map[string]*Ingredient {
 				if existingIngredient, exists := ingredientList[ingredient.Name]; exists {
 					existingIngredient.Quantity = existingIngredient.Quantity + q
 				} else {
-					newIngredient := Ingredient{
+					newIngredient := common.ListIngredient{
 						Unit:     ingredient.Unit,
 						Quantity: q,
+						IsBought: false,
+						RecipeID: recipe.ID,
 					}
 					ingredientList[ingredient.Name] = &newIngredient
 				}
@@ -68,10 +70,43 @@ func CombineIngredients(r []common.Recipe) map[string]*Ingredient {
 }
 
 func (a *App) getListHandler(w http.ResponseWriter, req *http.Request) {
-	qs := req.URL.Query()
-	recipeIDs := strings.Split(qs.Get("recipes"), ",")
+	userID := 1
+
+	recipes, err := service.GetRecipesFromList(userID, a.db)
+	ingredients, err := service.GetIngredientListItems(userID, a.db)
+	extras, err := service.GetExtraListItems(userID, a.db)
+
+	if err != nil {
+		w.Write([]byte("Error Fetching List Items"))
+	}
+
+	response := &ResponseObject{
+		Recipes:     recipes,
+		Ingredients: ingredients,
+		Extras:      extras,
+	}
+
+	encoder := json.NewEncoder(w)
+	err = encoder.Encode(response)
+	if err != nil {
+		http.Error(w, "Error encoding json", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (a *App) createListHandler(w http.ResponseWriter, req *http.Request) {
+	// TODO: Identity
+	userID := 1
+
+	recipeIDs := make([]string, 0)
+	err := json.NewDecoder(req.Body).Decode(&recipeIDs)
+
+	if err != nil {
+		w.Write([]byte("Error decoding json body"))
+	}
 
 	response := &ResponseObject{}
+	recipes := make([]common.Recipe, 0)
 
 	for i := 0; i < len(recipeIDs); i++ {
 		id, err := strconv.Atoi(recipeIDs[i])
@@ -82,16 +117,94 @@ func (a *App) getListHandler(w http.ResponseWriter, req *http.Request) {
 		if err != nil {
 			fmt.Println(err)
 		}
-		response.Recipes = append(response.Recipes, *recipe)
+		recipes = append(recipes, *recipe)
 	}
 
-	response.List = CombineIngredients(response.Recipes)
+	combinedIngredients := CombineIngredients(recipes)
 
+	service.RemoveIngredientListItems(userID, a.db)
+	service.AddIngredientListItems(userID, combinedIngredients, a.db)
+
+	// Return the new items + extras
+	response.Recipes = recipeIDs
+	response.Ingredients = combinedIngredients
+	response.Extras, err = service.GetExtraListItems(userID, a.db)
+
+	encoder := json.NewEncoder(w)
+	err = encoder.Encode(response)
+	if err != nil {
+		http.Error(w, "Error encoding json", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (a *App) addExtraListItem(w http.ResponseWriter, req *http.Request) {
+	userID := 1
+
+	var extraItem ListItem
+	err := json.NewDecoder(req.Body).Decode(&extraItem)
+
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Error decoding json body"))
+		return
+	}
+
+	if extraItem.Name == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Missing item name"))
+		return
+	}
+
+	err = service.AddExtraListItem(userID, extraItem.Name, extraItem.IsBought, a.db)
+	encoder := json.NewEncoder(w)
+	err = encoder.Encode(&common.SimpleResponse{Status: "ok"})
+	if err != nil {
+		http.Error(w, "Error encoding json", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (a *App) buyListItemHandler(w http.ResponseWriter, req *http.Request) {
+	userID := 1
+
+	var listItem ListItem
+	err := json.NewDecoder(req.Body).Decode(&listItem)
+
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Error decoding json body"))
+		return
+	}
+
+	if listItem.Name == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Missing item name"))
+		return
+	}
+
+	err = service.BuyListItem(userID, listItem.Name, listItem.IsBought, a.db)
+	if err != nil {
+		http.Error(w, "Error marking item as bought", http.StatusInternalServerError)
+		return
+	}
+	encoder := json.NewEncoder(w)
+	err = encoder.Encode(listItem)
+	if err != nil {
+		http.Error(w, "Error encoding json", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (a *App) clearListHandler(w http.ResponseWriter, req *http.Request) {
+	userID := 1
+	service.RemoveAllListItems(userID, a.db)
+
+	response := &ResponseObject{}
 	encoder := json.NewEncoder(w)
 	err := encoder.Encode(response)
 	if err != nil {
 		http.Error(w, "Error encoding json", http.StatusInternalServerError)
 		return
 	}
-
 }

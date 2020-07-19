@@ -5,6 +5,7 @@
   --green: #a4eb70;
   --dark-green: #8bd455;
   --light-purple: #f7f2fb;
+  --red: #eb7070;
 }
 
 @font-face {
@@ -62,6 +63,7 @@ input, select {
   font-family: inherit;
   font-size: 16px;
 }
+
 .header {
   background-color: var(--purple);
   padding: 20px 20px 30px;

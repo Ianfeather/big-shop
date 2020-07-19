@@ -9,7 +9,7 @@ func TestCombineIngredients(t *testing.T) {
 	tests := []struct {
 		name   string
 		a      []common.Ingredient
-		expect Ingredient
+		expect common.ListIngredient
 	}{
 		{
 			name: "no addition",
@@ -20,7 +20,7 @@ func TestCombineIngredients(t *testing.T) {
 					Unit:     "gram",
 				},
 			},
-			expect: Ingredient{
+			expect: common.ListIngredient{
 				Unit:     "gram",
 				Quantity: 1,
 			},
@@ -39,7 +39,7 @@ func TestCombineIngredients(t *testing.T) {
 					Unit:     "gram",
 				},
 			},
-			expect: Ingredient{
+			expect: common.ListIngredient{
 				Unit:     "gram",
 				Quantity: 3,
 			},
@@ -58,7 +58,7 @@ func TestCombineIngredients(t *testing.T) {
 					Unit:     "gram",
 				},
 			},
-			expect: Ingredient{
+			expect: common.ListIngredient{
 				Unit:     "kilogram",
 				Quantity: 1.1,
 			},
@@ -77,7 +77,7 @@ func TestCombineIngredients(t *testing.T) {
 					Unit:     "millilitre",
 				},
 			},
-			expect: Ingredient{
+			expect: common.ListIngredient{
 				Unit:     "litre",
 				Quantity: 1.1,
 			},
@@ -101,7 +101,7 @@ func TestCombineIngredients(t *testing.T) {
 					Unit:     "gram",
 				},
 			},
-			expect: Ingredient{
+			expect: common.ListIngredient{
 				Unit:     "kilogram",
 				Quantity: 1.7,
 			},
@@ -125,7 +125,7 @@ func TestCombineIngredients(t *testing.T) {
 					Unit:     "millilitre",
 				},
 			},
-			expect: Ingredient{
+			expect: common.ListIngredient{
 				Unit:     "litre",
 				Quantity: 1.7,
 			},
@@ -144,7 +144,7 @@ func TestCombineIngredients(t *testing.T) {
 					Unit:     "litre",
 				},
 			},
-			expect: Ingredient{
+			expect: common.ListIngredient{
 				Unit:     "litre",
 				Quantity: 6,
 			},

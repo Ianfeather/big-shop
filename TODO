@@ -1,8 +1,17 @@
-# data work
+# Bugs
+The units don't show up on the edit page
+Add a big margin bottom to the recipe form
+Removing the ingredients when creating isn't working right
+clear list doesn't clear extras
+
+Only show clear list button when everything is bought
+
 
 
 
 # Backend work
+removing recipes doesn't work
+
 multiply ingredients per person
 Calculate weekly cost of shoppinglist
 Calculate weekly macros of shoppinglist
@@ -13,6 +22,7 @@ Make it easier to import new recipes
 # Frontend work
 Periodically refresh list updates when shopping together
 A button which says "Add another recipe"
+search recipes butto
 
 
 # infra work

@@ -107,11 +107,11 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
           return (
             <div className={styles.ingredientGroup} key={i}>
               <div className={styles.ingredientName}>
-                <label htmlFor={`ingredient-name-${i}`} className={i != 0 && styles.srOnly}>Name</label>
+                <label htmlFor={`ingredient-name-${i}`} className={i != 0 && styles.srOnly}>Ingredient</label>
                 <Typeahead
                   options={ingredients}
                   maxVisible={3}
-                  placeholder="Name"
+                  placeholder="Ingredient"
                   id={`ingredient-name-${i}`}
                   autoComplete="off"
                   value={ingredient.name}

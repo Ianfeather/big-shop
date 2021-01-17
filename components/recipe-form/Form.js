@@ -121,7 +121,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
 
               <div className={styles.ingredientQuantity}>
                 <label htmlFor={`ingredient-quantity-${i}`} className={i != 0 && styles.srOnly}>Quantity</label>
-                <input placeholder="Unit" value={ingredient.quantity} autoComplete="off" type="text" id={`ingredient-quantity-${i}`} onChange={(e) => updateIngredient(i, 'quantity', e.target.value)} />
+                <input placeholder="Quantity" value={ingredient.quantity} autoComplete="off" type="text" id={`ingredient-quantity-${i}`} onChange={(e) => updateIngredient(i, 'quantity', e.target.value)} />
               </div>
 
               <div className={styles.unit}>

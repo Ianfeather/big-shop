@@ -85,6 +85,11 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
     })
   }
 
+  function resetForm(e) {
+    e.preventDefault();
+    setRecipe(bareRecipe);
+  }
+
   if (mode === 'edit' && !recipe.id) {
     return false;
   }
@@ -107,7 +112,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
           return (
             <div className={styles.ingredientGroup} key={i}>
               <div className={styles.ingredientName}>
-                <label htmlFor={`ingredient-name-${i}`} className={i != 0 && styles.srOnly}>Ingredient</label>
+                <label htmlFor={`ingredient-name-${i}`} className={i != 0 ? styles.srOnly: ''}>Ingredient</label>
                 <Typeahead
                   options={ingredients}
                   maxVisible={3}
@@ -120,12 +125,12 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
               </div>
 
               <div className={styles.ingredientQuantity}>
-                <label htmlFor={`ingredient-quantity-${i}`} className={i != 0 && styles.srOnly}>Quantity</label>
+                <label htmlFor={`ingredient-quantity-${i}`} className={i != 0 ? styles.srOnly : ''}>Quantity</label>
                 <input placeholder="Quantity" value={ingredient.quantity} autoComplete="off" type="text" id={`ingredient-quantity-${i}`} onChange={(e) => updateIngredient(i, 'quantity', e.target.value)} />
               </div>
 
               <div className={styles.unit}>
-                <label htmlFor={`ingredient-unit-${i}`} className={i != 0 && styles.srOnly}>Unit</label>
+                <label htmlFor={`ingredient-unit-${i}`} className={i != 0 ? styles.srOnly : ''}>Unit</label>
                 <select id={`ingredient-unit-${i}`} className={styles.ingredientUnit} onChange={(e) => updateIngredient(i, 'unit', e.target.value)} value={ingredient.unit}>
                   {
                     units.map(({ id, name}) => (
@@ -139,7 +144,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
                 {
                   i > 0 && (
                     <>
-                      <label className={i != 0 && styles.srOnly}>Delete</label>
+                      <label className={i != 0 ? styles.srOnly : ''}>Delete</label>
                       <button className={styles.trash} aria-label="trash" id={i} onClick={deleteIngredient}>×</button>
                     </>
                   )
@@ -154,9 +159,18 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
         { mode === 'edit' ? 'Update Recipe' : 'Store Recipe'}
       </button>
       { saved && (
-        <div className={styles.stored}>
-          { mode === 'edit' ? 'Updated!' : 'Stored!'}
-        </div>
+        <>
+          <div className={styles.stored}>
+            { mode === 'edit' ? 'Updated!' : 'Stored!'}
+          </div>
+          { mode === 'new' &&
+            <div>
+              <button className={`${styles.button} ${styles.addAnotherRecipe}`} onClick={resetForm}>
+                Add another recipe
+              </button>
+            </div>
+          }
+        </>
       )}
     </form>
     </>

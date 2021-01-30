@@ -17,7 +17,7 @@ const Index = ({ title, description, ...props }) => {
     setRecipeList(newList);
   };
 
-  const { get, post, patch, del, response, loading, error } = useFetch('/.netlify/functions/big-shop')
+  const { get, post, patch, del, response, loading, error } = useFetch('https://pleeyu7yrd.execute-api.us-east-1.amazonaws.com/prod')
 
   async function buyIngredients(name, type) {
     const list = type === 'ingredient' ? shoppingList : extras;

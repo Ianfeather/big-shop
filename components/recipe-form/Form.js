@@ -20,7 +20,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
   let [units, setUnits] = useState([]);
   let [ingredients, setIngredients] = useState([]);
 
-  const { get, post, put, response, loading, error } = useFetch('/.netlify/functions/big-shop')
+  const { get, post, put, response, loading, error } = useFetch('https://pleeyu7yrd.execute-api.us-east-1.amazonaws.com/prod')
 
   useEffect(() => {
     if (initialRecipe.name) {

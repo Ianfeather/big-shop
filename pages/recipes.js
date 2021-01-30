@@ -8,7 +8,7 @@ import SingleColumnLayout from '@components/layout/single-column';
 const Recipes = ({ title, description, ...props }) => {
   let [recipes, setRecipes] = useState([]);
 
-  const { get, response, loading, error } = useFetch('/.netlify/functions/big-shop')
+  const { get, response, loading, error } = useFetch('https://pleeyu7yrd.execute-api.us-east-1.amazonaws.com/prod')
 
   async function getRecipes() {
     const recipes = await get('/recipes')

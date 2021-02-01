@@ -8,8 +8,9 @@ const Index = ({ title, description, ...props }) => {
   let [recipeList, setRecipeList] = useState({});
   let [shoppingList, setShoppingList] = useState({});
   let [extras, setExtras] = useState({});
+  let [extraItem, setExtraItem] = useState('');
   let [hydrateFlag, setHydrateFlag] = useState(false);
-
+  let [sidebarFilter, setSidebarFilter] = useState('');
   const handleRecipeSelect = (e) => {
     const newList = { ...recipeList,
       [e.target.id]: !recipeList[e.target.id]
@@ -17,7 +18,7 @@ const Index = ({ title, description, ...props }) => {
     setRecipeList(newList);
   };
 
-  const { get, post, patch, del, response, loading, error } = useFetch('https://pleeyu7yrd.execute-api.us-east-1.amazonaws.com/prod')
+  const { get, post, patch, del, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST);
 
   async function buyIngredients(name, type) {
     const list = type === 'ingredient' ? shoppingList : extras;
@@ -86,13 +87,13 @@ const Index = ({ title, description, ...props }) => {
     // TODO: handle sync fail
   }
 
-  function addListItem(e) {
-    if (e.which !== 13) {
+  function addExtraItem() {
+    if (!extraItem) {
       return;
     }
     const newList = {
       ...extras,
-      [e.target.value]: {
+      [extraItem]: {
         quantity: '',
         unit: ''
       }
@@ -100,13 +101,20 @@ const Index = ({ title, description, ...props }) => {
     setExtras(newList);
     // fire and forget
     post('/shopping-list/extra', {
-      name: e.target.value,
+      name: extraItem,
       isBought: false
     });
     if (response.error || error) {
       // TODO: handle sync fail
     };
-    e.target.value = '';
+    setExtraItem('');
+  }
+
+  function addExtraItemOnEnter(e) {
+    if (e.which !== 13) {
+      return;
+    }
+    addExtraItem();
   }
 
   useEffect(() => { hydrateShoppingList() }, []);
@@ -117,23 +125,28 @@ const Index = ({ title, description, ...props }) => {
     <Layout pageTitle={title} description={description}>
       <section>
         <div className={styles.grid}>
-          <div className={styles.recipeList}>
+          <div>
             <h2>Recipes</h2>
-            <ul>
-              {
-                recipes.map(({id, name}) => {
-                  let checked = recipeList[id];
-                  return (
-                    <li key={id} className={checked ? styles.checked : ''}>
-                      <label htmlFor={id}>
-                        {name}
-                        <input type="checkbox" id={id} className={styles.hidden} onChange={handleRecipeSelect}/>
-                      </label>
-                    </li>
-                  );
-                })
-              }
-            </ul>
+            <input className={styles.filterInput} placeholder="Filter recipes..." type="text" onChange={(e) => setSidebarFilter(e.target.value)} value={sidebarFilter} />
+            <div className={styles.recipeList}>
+              <ul>
+                {
+                  recipes
+                    .filter(({ name }) => name.toLowerCase().includes(sidebarFilter.toLowerCase()))
+                    .map(({id, name}) => {
+                      let checked = recipeList[id];
+                      return (
+                        <li key={id} className={checked ? styles.checked : ''}>
+                          <label htmlFor={id}>
+                            {name}
+                            <input type="checkbox" id={id} className={styles.hidden} onChange={handleRecipeSelect}/>
+                          </label>
+                        </li>
+                      );
+                    })
+                }
+              </ul>
+            </div>
           </div>
           <div>
             <h2>Your shopping list</h2>
@@ -173,8 +186,10 @@ const Index = ({ title, description, ...props }) => {
               </ul>
               <div>
                 <label className={styles.extraListLabel} htmlFor="extra-list-item">Add non-recipe items:</label>
-                <input className={styles.extraListInput} autoComplete="off" type="text" id="extra-list-item" onKeyPress={addListItem} />
-                {/* TODO: Add button */}
+                <div className={styles.extraListContainer}>
+                  <input className={styles.extraListInput} autoComplete="off" type="text" id="extra-list-item" value={extraItem} onKeyPress={addExtraItemOnEnter} onChange={(e) => setExtraItem(e.target.value)} />
+                  <button onClick={addExtraItem} className={styles.button}>Add</button>
+                </div>
               </div>
               {
                 Object.keys(shoppingList).length > 0 && (

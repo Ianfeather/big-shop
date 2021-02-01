@@ -8,6 +8,7 @@ const Index = ({ title, description, ...props }) => {
   let [recipeList, setRecipeList] = useState({});
   let [shoppingList, setShoppingList] = useState({});
   let [extras, setExtras] = useState({});
+  let [extraItem, setExtraItem] = useState('');
   let [hydrateFlag, setHydrateFlag] = useState(false);
 
   const handleRecipeSelect = (e) => {
@@ -86,13 +87,13 @@ const Index = ({ title, description, ...props }) => {
     // TODO: handle sync fail
   }
 
-  function addListItem(e) {
-    if (e.which !== 13) {
+  function addExtraItem() {
+    if (!extraItem) {
       return;
     }
     const newList = {
       ...extras,
-      [e.target.value]: {
+      [extraItem]: {
         quantity: '',
         unit: ''
       }
@@ -100,13 +101,20 @@ const Index = ({ title, description, ...props }) => {
     setExtras(newList);
     // fire and forget
     post('/shopping-list/extra', {
-      name: e.target.value,
+      name: extraItem,
       isBought: false
     });
     if (response.error || error) {
       // TODO: handle sync fail
     };
-    e.target.value = '';
+    setExtraItem('');
+  }
+
+  function addExtraItemOnEnter(e) {
+    if (e.which !== 13) {
+      return;
+    }
+    addExtraItem();
   }
 
   useEffect(() => { hydrateShoppingList() }, []);
@@ -173,8 +181,10 @@ const Index = ({ title, description, ...props }) => {
               </ul>
               <div>
                 <label className={styles.extraListLabel} htmlFor="extra-list-item">Add non-recipe items:</label>
-                <input className={styles.extraListInput} autoComplete="off" type="text" id="extra-list-item" onKeyPress={addListItem} />
-                {/* TODO: Add button */}
+                <div className={styles.extraListContainer}>
+                  <input className={styles.extraListInput} autoComplete="off" type="text" id="extra-list-item" value={extraItem} onKeyPress={addExtraItemOnEnter} onChange={(e) => setExtraItem(e.target.value)} />
+                  <button onClick={addExtraItem} className={styles.button}>Add</button>
+                </div>
               </div>
               {
                 Object.keys(shoppingList).length > 0 && (

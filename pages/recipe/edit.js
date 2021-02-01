@@ -7,7 +7,7 @@ import SingleColumnLayout from '@components/layout/single-column';
 
 const EditRecipe = ({ title, description, ...props }) => {
   let [recipe, setRecipe] = useState({});
-  const { get, response, loading, error } = useFetch('https://pleeyu7yrd.execute-api.us-east-1.amazonaws.com/prod')
+  const { get, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST);
 
   async function getRecipe() {
     const params = new URLSearchParams(document.location.search);

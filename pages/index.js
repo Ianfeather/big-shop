@@ -132,7 +132,7 @@ const Index = ({ title, description, ...props }) => {
               <ul>
                 {
                   recipes
-                    .filter(({ name }) => name.includes(sidebarFilter))
+                    .filter(({ name }) => name.toLowerCase().includes(sidebarFilter.toLowerCase()))
                     .map(({id, name}) => {
                       let checked = recipeList[id];
                       return (

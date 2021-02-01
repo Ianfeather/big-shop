@@ -10,7 +10,7 @@ const Index = ({ title, description, ...props }) => {
   let [extras, setExtras] = useState({});
   let [extraItem, setExtraItem] = useState('');
   let [hydrateFlag, setHydrateFlag] = useState(false);
-
+  let [sidebarFilter, setSidebarFilter] = useState('');
   const handleRecipeSelect = (e) => {
     const newList = { ...recipeList,
       [e.target.id]: !recipeList[e.target.id]
@@ -125,23 +125,28 @@ const Index = ({ title, description, ...props }) => {
     <Layout pageTitle={title} description={description}>
       <section>
         <div className={styles.grid}>
-          <div className={styles.recipeList}>
+          <div>
             <h2>Recipes</h2>
-            <ul>
-              {
-                recipes.map(({id, name}) => {
-                  let checked = recipeList[id];
-                  return (
-                    <li key={id} className={checked ? styles.checked : ''}>
-                      <label htmlFor={id}>
-                        {name}
-                        <input type="checkbox" id={id} className={styles.hidden} onChange={handleRecipeSelect}/>
-                      </label>
-                    </li>
-                  );
-                })
-              }
-            </ul>
+            <input className={styles.filterInput} placeholder="Filter recipes..." type="text" onChange={(e) => setSidebarFilter(e.target.value)} value={sidebarFilter} />
+            <div className={styles.recipeList}>
+              <ul>
+                {
+                  recipes
+                    .filter(({ name }) => name.includes(sidebarFilter))
+                    .map(({id, name}) => {
+                      let checked = recipeList[id];
+                      return (
+                        <li key={id} className={checked ? styles.checked : ''}>
+                          <label htmlFor={id}>
+                            {name}
+                            <input type="checkbox" id={id} className={styles.hidden} onChange={handleRecipeSelect}/>
+                          </label>
+                        </li>
+                      );
+                    })
+                }
+              </ul>
+            </div>
           </div>
           <div>
             <h2>Your shopping list</h2>

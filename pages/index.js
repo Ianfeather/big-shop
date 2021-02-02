@@ -228,7 +228,7 @@ const Index = ({ title, description, ...props }) => {
               }
               {
                 Object.keys(shoppingList).length > 0 && (
-                  <button className={styles.button} onClick={() => clearList()}>Clear list</button>
+                  <button className={`${styles.button} ${styles.clearList}`} onClick={() => clearList()}>Clear list</button>
                 )
               }
             </div>

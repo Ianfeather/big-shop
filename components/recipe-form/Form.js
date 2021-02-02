@@ -19,8 +19,9 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
   let [saved, setSaved] = useState(false);
   let [units, setUnits] = useState([]);
   let [ingredients, setIngredients] = useState([]);
+  let [deleted, setDeleted] = useState(false);
 
-  const { get, post, put, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST);
+  const { get, post, put, del, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST);
 
   useEffect(() => {
     if (initialRecipe.name) {
@@ -72,6 +73,14 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
     }
     if (response.ok) {
       setSaved(true);
+    }
+  }
+
+  async function deleteRecipe(e) {
+    e.preventDefault();
+    await del('/recipe', { id: recipe.id })
+    if (response.ok) {
+      setDeleted(true);
     }
   }
 
@@ -172,6 +181,16 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
           }
         </>
       )}
+      {
+        mode === 'edit' && (
+          <div>
+            <button className={`${styles.button} ${styles.delete}`} onClick={deleteRecipe}>Delete Recipe</button>
+            {
+              deleted && <span>Deleted</span>
+            }
+          </div>
+        )
+      }
     </form>
     </>
   )

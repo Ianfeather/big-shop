@@ -93,6 +93,11 @@
 .button.loading {
   background-color: #94c3ae;
 }
+.button.delete {
+  background-color: var(--red);
+  margin-top: 40px;
+  margin-right: 10px;
+}
 
 .trash {
   color: var(--pink);

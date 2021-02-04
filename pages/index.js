@@ -160,6 +160,14 @@ const Index = ({ title, description, ...props }) => {
                 {
                   Object.keys(shoppingList)
                     .filter((name => !shoppingList[name].isBought))
+                    .sort((_a, _b) => {
+                      // Sort by department
+                      let a = shoppingList[_a];
+                      let b = shoppingList[_b];
+                      if (a.department === b.department) return 0
+                      if (b.department === 'vegetables') return 1
+                      if (!b.department || a.department === 'vegetables') return -1
+                    })
                     .map(name => {
                       const { unit, quantity } = shoppingList[name];
                       return (

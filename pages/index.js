@@ -160,6 +160,27 @@ const Index = ({ title, description, ...props }) => {
                 {
                   Object.keys(shoppingList)
                     .filter((name => !shoppingList[name].isBought))
+                    .sort((_a, _b) => {
+                      let a = shoppingList[_a];
+                      let b = shoppingList[_b];
+                      if (a.department === b.department) {
+                        console.log(`${_a} === ${_b} - skipping`)
+                        return 0;
+                      }
+                      if (!b.department) {
+                        console.log(`${_b} has no deparment - lowering`)
+                        return -1;
+                      }
+                      if (b.department === 'vegetables') {
+                        console.log(`${b.department} (${_b}) is vegetables - promoting`)
+                        return 1;
+                      }
+                      if (a.department === 'vegetables') {
+                        console.log(`${b.department} (${_b}) is not vegetables - demoting`)
+                        return -1;
+                      }
+                      console.log("no match");
+                    })
                     .map(name => {
                       const { unit, quantity } = shoppingList[name];
                       return (

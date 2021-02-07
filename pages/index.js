@@ -2,6 +2,8 @@ import styles from './index.module.css';
 import useFetch from 'use-http'
 import { useState, useEffect } from 'react';
 import Layout from '@components/layout'
+import { useAuth0 } from "@auth0/auth0-react";
+import Logout from '@components/identity/logout';
 
 const Index = ({ title, description, ...props }) => {
   let [recipes, setRecipes] = useState([]);
@@ -124,6 +126,7 @@ const Index = ({ title, description, ...props }) => {
   return (
     <Layout pageTitle={title} description={description}>
       <section>
+        <Logout />
         <div className={styles.grid}>
           <div>
             <h2>Recipes</h2>

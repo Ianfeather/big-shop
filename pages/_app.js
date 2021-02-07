@@ -40,7 +40,7 @@ export default function App({ Component, pageProps }) {
       domain={domain}
       clientId={clientId}
       audience={audience}
-      redirectUri='http://localhost:3000'>
+      redirectUri={process.env.NEXT_PUBLIC_HOST}>
         <InnerApp Component={Component} pageProps={pageProps} />
     </Auth0Provider>
   )

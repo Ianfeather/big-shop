@@ -7,7 +7,7 @@ const Logout = () => {
       className="btn btn-danger btn-block"
       onClick={() =>
         logout({
-          returnTo: 'http://localhost:3000',
+          returnTo: process.env.NEXT_PUBLIC_HOST,
         })
       }
     >

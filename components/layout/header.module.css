@@ -1,0 +1,20 @@
+.logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.bigShopIcon {
+  fill: none;
+  stroke: #fff;
+  stroke-miterlimit: 10;
+  stroke-width: 5px;
+  width: 70px;
+}
+
+@media (min-width: 500px) {
+  .bigShopIcon {
+    width: 120px;
+  }
+}

@@ -141,10 +141,10 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
 
               <div className={styles.unit}>
                 <label htmlFor={`ingredient-unit-${i}`} className={i != 0 ? styles.srOnly : ''}>Unit</label>
-                <select id={`ingredient-unit-${i}`} className={styles.ingredientUnit} onChange={(e) => updateIngredient(i, 'unit', e.target.value)} value={ingredient.unit}>
+                <select id={`ingredient-unit-${i}`} className={styles.ingredientUnit} onChange={(e) => updateIngredient(i, 'unit', e.target.value)} value={ingredient.unit.toLowerCase()}>
                   {
                     units.map(({ id, name}) => (
-                      <option key={id} id={id}>{name}</option>
+                      <option key={id} id={id} value={name.toLowerCase()}>{name}</option>
                     ))
                   }
                 </select>

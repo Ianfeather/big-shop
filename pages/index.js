@@ -50,8 +50,9 @@ const Index = ({ title, description, ...props }) => {
 
   // This will only run once on load
   async function hydrateShoppingList() {
-    const { recipes, ingredients, extras } = await get('/shopping-list');
+    const result = await get('/shopping-list');
     if (response.ok && recipes.length) {
+      const { recipes, ingredients, extras } = result;
       setHydrateFlag(true);
       setRecipeList(recipes.reduce((acc, recipe) => {
         acc[recipe] = true;
@@ -76,10 +77,10 @@ const Index = ({ title, description, ...props }) => {
     if (!selectedRecipes.length) {
       return;
     }
-    const { recipes, ingredients, extras } = await post('/shopping-list', selectedRecipes);
+    const result = await post('/shopping-list', selectedRecipes);
     if (response.ok) {
-      setShoppingList(ingredients);
-      setExtras(extras);
+      setShoppingList(result.ingredients);
+      setExtras(result.extras);
     }
   };
 

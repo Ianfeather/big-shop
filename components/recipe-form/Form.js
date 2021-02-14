@@ -20,7 +20,9 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
   let [units, setUnits] = useState([]);
   let [ingredients, setIngredients] = useState([]);
   let [deleted, setDeleted] = useState(false);
-  const { get, post, put, del, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST);
+  const { get, post, put, del, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
+    cachePolicy: 'no-cache'
+  });
 
   useEffect(() => {
     if (initialRecipe.name) {

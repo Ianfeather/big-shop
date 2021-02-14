@@ -7,7 +7,9 @@ import SingleColumnLayout from '@components/layout/single-column';
 
 const EditRecipe = ({ title, description, ...props }) => {
   let [recipe, setRecipe] = useState({});
-  const { get, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST);
+  const { get, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
+    cachePolicy: 'no-cache'
+  });
 
   async function getRecipe() {
     const params = new URLSearchParams(document.location.search);

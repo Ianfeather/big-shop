@@ -8,7 +8,9 @@ import SingleColumnLayout from '@components/layout/single-column';
 const Recipes = ({ title, description, ...props }) => {
   let [recipes, setRecipes] = useState([]);
 
-  const { get, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST);
+  const { get, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
+    cachePolicy: 'no-cache'
+  });
 
   async function getRecipes() {
     const recipes = await get('/recipes')

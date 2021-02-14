@@ -20,7 +20,9 @@ const Index = ({ title, description, ...props }) => {
     setRecipeList(newList);
   };
 
-  const { get, post, patch, del, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST);
+  const { get, post, patch, del, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
+    cachePolicy: 'no-cache'
+  });
 
   async function buyIngredients(name, type) {
     const list = type === 'ingredient' ? shoppingList : extras;

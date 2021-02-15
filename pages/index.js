@@ -2,6 +2,7 @@ import styles from './index.module.css';
 import useFetch from 'use-http'
 import { useState, useEffect } from 'react';
 import Layout from '@components/layout'
+import Tabs from '@components/layout/Tabs'
 import Logout from '@components/identity/logout';
 import RecipeList from '@components/shopping-list/Recipes';
 import ShoppingList from '@components/shopping-list/ShoppingList';
@@ -112,13 +113,13 @@ const Index = () => {
     <Layout>
       <section>
         <Logout />
-        <div className={styles.grid}>
-          <RecipeList recipeList={recipeList} recipes={recipes} handleRecipeSelect={handleRecipeSelect}/>
-          <div>
+        <Tabs className={styles.grid} maxWidth={800}>
+          <div name="To Buy">
             <h2>Your shopping list</h2>
             <ShoppingList shoppingList={shoppingList} extras={extras} addExtraItem={addExtraItem} buyIngredient={buyIngredient} clearList={clearList} />
           </div>
-        </div>
+          <RecipeList name="Create List" recipeList={recipeList} recipes={recipes} handleRecipeSelect={handleRecipeSelect}/>
+        </Tabs>
       </section>
     </Layout>
   )

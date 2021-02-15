@@ -5,7 +5,6 @@ const RecipeList = ({ recipes, recipeList, handleRecipeSelect }) => {
   let [sidebarFilter, setSidebarFilter] = useState('');
   return (
     <div>
-      <h2>Recipes</h2>
       <input className={styles.filterInput} placeholder="Filter recipes..." type="text" onChange={(e) => setSidebarFilter(e.target.value)} value={sidebarFilter} />
       <div className={styles.recipeList}>
         <ul>

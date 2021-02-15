@@ -2,17 +2,49 @@
   display: grid;
 }
 
-@media( min-width: 800px) {
-  .grid {
-    grid-template-columns: 250px 1fr;
-    grid-gap: 1rem;
-  }
-}
-
 .grid>div {
   padding: 20px;
 }
 
-.hidden {
-  display: none;
+.shoppingListContainer {
+  background-color: white;
+  margin: 0 10px;
+  border-radius: 6px;
+  min-height: 100vh;
+}
+
+.logOut {
+  position: absolute;
+  left: 20px;
+  bottom: 20px;
+}
+
+.tabButtons button {
+  background: none;
+  border: none;
+  font-size: 16px;
+  width: 50%;
+  padding: 20px 0;
+  outline: none;
+  cursor: pointer;
+  color: black;
+}
+
+.tabButtons button:first-child {
+  border-right: 1px solid var(--light-purple);
+}
+
+.tabButtons button:not(:disabled) {
+  color: #cbb5dc;
+  border-bottom: 1px solid var(--light-purple);
+}
+
+@media( min-width: 800px) {
+  .grid {
+    grid-template-columns: 1fr 250px;
+    grid-gap: 1rem;
+  }
+  .shoppingListContainer {
+    background-color: transparent;
+  }
 }

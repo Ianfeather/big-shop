@@ -111,16 +111,15 @@ const Index = () => {
 
   return (
     <Layout>
-      <section>
-        <Logout />
-        <Tabs className={styles.grid} maxWidth={800}>
-          <div name="To Buy">
-            <h2>Your shopping list</h2>
+      <section className={styles.shoppingListContainer}>
+        <Tabs className={styles.grid} buttonsClassName={styles.tabButtons}maxWidth={800}>
+          <div name="Shopping List">
             <ShoppingList shoppingList={shoppingList} extras={extras} addExtraItem={addExtraItem} buyIngredient={buyIngredient} clearList={clearList} />
           </div>
           <RecipeList name="Create List" recipeList={recipeList} recipes={recipes} handleRecipeSelect={handleRecipeSelect}/>
         </Tabs>
       </section>
+      <Logout className={styles.logOut} />
     </Layout>
   )
 }

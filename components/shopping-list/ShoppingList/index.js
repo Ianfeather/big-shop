@@ -17,7 +17,7 @@ const ShoppingList = ({ shoppingList, extras, addExtraItem, buyIngredient, clear
       if (b.department === 'vegetables') return 1
       if (!b.department || a.department === 'vegetables') return -1
     });
-
+  // <h2>Your shopping list</h2>
   return (
     <div className={styles.shoppingList}>
       { !hasListItems && (

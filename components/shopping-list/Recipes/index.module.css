@@ -1,6 +1,16 @@
-.recipeList {
-  padding-top: 10px;
-  border-top: 1px solid var(--purple);
+.heading {
+  border-bottom: 1px solid var(--purple);
+  text-transform: uppercase;
+  font-size: 15px;
+  padding-bottom: 5px;
+}
+
+.module {
+  margin-bottom: 30px;
+}
+
+.recipeListContainer {
+  padding: 20px;
 }
 
 .recipeList ul {
@@ -9,28 +19,43 @@
   list-style: none;
 }
 
-.filterInput {
+.input {
   margin-bottom: 10px;
-  padding: 10px;
+  padding: 5px;
   width: 100%;
-  border: 1px solid #d7b1f3;
+  outline: none;
+  border: none;
+  border-left: 1px solid #d7b1f3;
+  background: transparent;
 }
 
-.recipeList li {
-  box-shadow: 0px 1px 1px 1px rgba(235, 112, 164, 0.1);
-  background: white;
-  margin-bottom: 5px;
+.addButton {
+  background: var(--purple);
+  border: none;
+  color: white;
+  padding: 0 10px;
+  height: 30px;
+  border-radius: 2px;
   cursor: pointer;
 }
 
+.input:focus {
+  border-left: 1px solid var(--purple);
+}
+
+.recipeList li {
+  margin-bottom: 5px;
+}
+
 .recipeList li.checked {
-  background-color: var(--pink);
-  color: white;
+  position: relative;
+  font-weight: bold;
 }
 
 .recipeList label {
-  padding: 20px;
+  padding: 12px 0;
   display: block;
+  cursor: pointer;
 }
 
 .recipeList input {
@@ -40,4 +65,42 @@
 
 .hidden {
   display: none;
+}
+
+.extraListContainer {
+  display: flex;
+  margin-bottom: 20px;
+}
+
+.extraListInput {
+  flex: 1;
+  padding: 15px 5px;
+  border: 1px solid rgba(235, 112, 164, 0.1);
+  margin-right: 10px;
+}
+
+.clearList {
+  border: 0;
+  background-color: var(--red);
+  color: white;
+  padding: 12px 0;
+  font-size: 16px;
+  cursor: pointer;
+  display: block;
+  width: 100%;
+  border-radius: 2px;
+  outline: none;
+}
+
+@media( min-width: 800px) {
+  .recipeListContainer {
+    margin-top: 70px;
+  }
+  .recipeList ul {
+    max-height: 500px;
+    overflow-y: scroll;
+  }
+  .module {
+    margin-bottom: 50px;
+  }
 }

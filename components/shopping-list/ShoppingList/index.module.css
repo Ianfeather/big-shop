@@ -1,3 +1,10 @@
+.shoppingListContainer {
+  background-color: white;
+  padding: 20px;
+  border-radius: 6px 6px 0 0;
+  min-height: 100vh;
+}
+
 .shoppingList ul {
   padding: 0;
   margin: 0;
@@ -5,9 +12,16 @@
 }
 
 .shoppingList {
-  background-color: white;
-  padding: 5px 20px 20px;
-  border-radius: 6px;
+  padding: 0px;
+}
+
+.boughtContainer {
+  margin-top: 50px;
+}
+
+.heading {
+  font-size: 30px;
+  /* todo: new serif font family */
 }
 
 .item {
@@ -30,37 +44,7 @@
   margin-left: 10px;
 }
 
-.extraListLabel {
-  display: block;
-  margin: 20px 0 10px;
-  font-weight: bold;
-}
-
-.extraListContainer {
-  display: flex;
-  margin-bottom: 20px;
-}
-
-.extraListInput {
-  flex: 1;
-  padding: 15px 5px;
-  border: 1px solid rgba(235, 112, 164, 0.1);
-  margin-right: 10px;
-}
-
 .emptyList {
   margin-top: 20px;
 }
 
-.button {
-  border: 0;
-  background-color: var(--red);
-  color: white;
-  padding: 15px 40px;
-  font-size: 16px;
-  cursor: pointer;
-}
-
-.clearList {
-  margin-top: 40px;
-}

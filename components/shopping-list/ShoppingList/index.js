@@ -1,8 +1,10 @@
 import styles from './index.module.css'
 import Item from './Item';
-import AddExtra from './AddExtra';
+import useViewport from '../../hooks/useViewport';
 
-const ShoppingList = ({ shoppingList, extras, addExtraItem, buyIngredient, clearList }) => {
+const ShoppingList = ({ shoppingList, extras, buyIngredient }) => {
+  const { width } = useViewport();
+
   const boughtItems = Object.keys(shoppingList).filter((name => shoppingList[name].isBought));
   const boughtExtras = Object.keys(extras).filter((name => extras[name].isBought));
   const hasListItems = !!Object.keys(shoppingList).length || !!Object.keys(extras).length;
@@ -19,11 +21,12 @@ const ShoppingList = ({ shoppingList, extras, addExtraItem, buyIngredient, clear
     });
 
   return (
-    <div className={styles.shoppingList}>
+    <div className={styles.shoppingListContainer}>
+      { width > 800 && <h2 className={styles.heading}>Your shopping list</h2>}
       { !hasListItems && (
           <p className={styles.emptyList}>Select a recipe from the list to get started.</p>
       )}
-      <ul>
+      <ul className={styles.shoppingList}>
         { ingredients.map((name, i) => (
           <Item type='ingredient' name={name} item={shoppingList[name]} handleClick={buyIngredient} key={i}/>
         ))}
@@ -31,10 +34,9 @@ const ShoppingList = ({ shoppingList, extras, addExtraItem, buyIngredient, clear
           <Item type='extra' name={name} handleClick={buyIngredient} key={i}/>
         ))}
       </ul>
-      <AddExtra onAdd={addExtraItem} />
       {
         hasBoughtItems && (
-          <>
+          <div className={styles.boughtContainer}>
             <h2>Already bought</h2>
             <ul className={styles.shoppingList}>
               { boughtItems.map((name, i) => (
@@ -44,12 +46,10 @@ const ShoppingList = ({ shoppingList, extras, addExtraItem, buyIngredient, clear
                 <Item type='extra' name={name} handleClick={buyIngredient} key={i}/>
               ))}
             </ul>
-          </>
+          </div>
         )
       }
-      { hasListItems && (
-        <button className={`${styles.button} ${styles.clearList}`} onClick={() => clearList()}>Clear list</button>
-      )}
+
     </div>
   )
 }

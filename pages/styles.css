@@ -4,7 +4,7 @@
   --yellow: #ebd270;
   --green: #a4eb70;
   --dark-green: #8bd455;
-  --light-purple: #f7f2fb;
+  --light-purple: #e6deec;
   --red: #eb7070;
 }
 
@@ -47,7 +47,16 @@ body {
   padding: 0;
   margin: 0;
   font-family: 'opensans', 'SF Pro Text', 'SF Pro Icons', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
-  background: var(--light-purple)
+  background: linear-gradient(180deg, var(--purple) 0%, var(--purple) 220px, var(--light-purple) 221px, var(--light-purple) 100%) no-repeat;
+}
+
+button {
+  font-family: 'opensans', 'SF Pro Text', 'SF Pro Icons', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+}
+
+.header {
+  padding: 20px 20px 30px;
+  height: 190px;
 }
 
 h1, h2, h3, h4 {
@@ -62,11 +71,6 @@ h1, h2, h3, h4 {
 input, select {
   font-family: inherit;
   font-size: 16px;
-}
-
-.header {
-  background-color: var(--purple);
-  padding: 20px 20px 30px;
 }
 
 .header .title {

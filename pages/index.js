@@ -114,9 +114,9 @@ const Index = () => {
       <section className={styles.shoppingListContainer}>
         <Tabs className={styles.grid} buttonsClassName={styles.tabButtons}maxWidth={800}>
           <div name="Shopping List">
-            <ShoppingList shoppingList={shoppingList} extras={extras} addExtraItem={addExtraItem} buyIngredient={buyIngredient} clearList={clearList} />
+            <ShoppingList shoppingList={shoppingList} extras={extras} buyIngredient={buyIngredient} />
           </div>
-          <RecipeList name="Create List" recipeList={recipeList} recipes={recipes} handleRecipeSelect={handleRecipeSelect}/>
+          <RecipeList name="Create & Edit" recipeList={recipeList} addExtraItem={addExtraItem} clearList={clearList} recipes={recipes} handleRecipeSelect={handleRecipeSelect}/>
         </Tabs>
       </section>
       <Logout className={styles.logOut} />

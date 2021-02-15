@@ -1,9 +1,8 @@
 import styles from './index.module.css'
 import Item from './Item';
-import AddExtra from './AddExtra';
 import useViewport from '../../hooks/useViewport';
 
-const ShoppingList = ({ shoppingList, extras, addExtraItem, buyIngredient, clearList }) => {
+const ShoppingList = ({ shoppingList, extras, buyIngredient }) => {
   const { width } = useViewport();
 
   const boughtItems = Object.keys(shoppingList).filter((name => shoppingList[name].isBought));
@@ -35,10 +34,9 @@ const ShoppingList = ({ shoppingList, extras, addExtraItem, buyIngredient, clear
           <Item type='extra' name={name} handleClick={buyIngredient} key={i}/>
         ))}
       </ul>
-      <AddExtra onAdd={addExtraItem} />
       {
         hasBoughtItems && (
-          <>
+          <div className={styles.boughtContainer}>
             <h2>Already bought</h2>
             <ul className={styles.shoppingList}>
               { boughtItems.map((name, i) => (
@@ -48,12 +46,10 @@ const ShoppingList = ({ shoppingList, extras, addExtraItem, buyIngredient, clear
                 <Item type='extra' name={name} handleClick={buyIngredient} key={i}/>
               ))}
             </ul>
-          </>
+          </div>
         )
       }
-      { hasListItems && (
-        <button className={`${styles.button} ${styles.clearList}`} onClick={() => clearList()}>Clear list</button>
-      )}
+
     </div>
   )
 }

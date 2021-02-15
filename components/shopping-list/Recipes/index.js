@@ -1,11 +1,11 @@
 import styles from './index.module.css';
 import { useState } from 'react';
-import useViewport from '../../hooks/useViewport';
+import AddExtra from './AddExtra';
 
-const RecipeList = ({ recipes, recipeList, handleRecipeSelect }) => {
+const RecipeList = ({ recipes, recipeList, handleRecipeSelect, addExtraItem, clearList }) => {
   let [sidebarFilter, setSidebarFilter] = useState('');
-  const { width } = useViewport();
   const hasSelectedRecipes = Object.keys(recipeList).length > 0;
+
 
   const ListItem = ({ id, name}) => {
     let checked = recipeList[id];
@@ -22,8 +22,8 @@ const RecipeList = ({ recipes, recipeList, handleRecipeSelect }) => {
   return (
     <div className={styles.recipeListContainer}>
       {
-        width > 800 && hasSelectedRecipes && (
-          <div className={styles.recipeList}>
+        hasSelectedRecipes && (
+          <div className={`${styles.recipeList} ${styles.module}`}>
             <h4 className={styles.heading}>Selected Recipes</h4>
             <ul>
               {
@@ -34,20 +34,29 @@ const RecipeList = ({ recipes, recipeList, handleRecipeSelect }) => {
           </div>
         )
       }
-      {
-        width > 800 && <h4 className={styles.heading}>All Recipes</h4>
-      }
-      <input className={styles.filterInput} placeholder="Search..." type="text" onChange={(e) => setSidebarFilter(e.target.value)} value={sidebarFilter} />
-      <div className={styles.recipeList}>
-        <ul>
-          {
-            recipes
-              .filter(({id}) => !recipeList[id])
-              .filter(({ name }) => name.toLowerCase().includes(sidebarFilter.toLowerCase()))
-              .map(recipe => <ListItem {...recipe} key={recipe.id} />)
-          }
-        </ul>
+      <div className={styles.module}>
+        <AddExtra onAdd={addExtraItem} />
       </div>
+      <div className={styles.module}>
+        <h4 className={styles.heading}>All Recipes</h4>
+        <input className={styles.input} placeholder="Search..." type="text" onChange={(e) => setSidebarFilter(e.target.value)} value={sidebarFilter} />
+        <div className={styles.recipeList}>
+          <ul>
+            {
+              recipes
+                .filter(({id}) => !recipeList[id])
+                .filter(({ name }) => name.toLowerCase().includes(sidebarFilter.toLowerCase()))
+                .map(recipe => <ListItem {...recipe} key={recipe.id} />)
+            }
+          </ul>
+        </div>
+      </div>
+
+      { true && (
+        <div className={styles.module}>
+          <button className={styles.clearList} onClick={() => clearList()}>Clear list</button>
+        </div>
+      )}
     </div>
   )
 };

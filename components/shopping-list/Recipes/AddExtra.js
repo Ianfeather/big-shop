@@ -18,10 +18,10 @@ const AddExtra = ({ onAdd }) => {
 
   return  (
     <div>
-      <label className={styles.extraListLabel} htmlFor="extra-list-item">Add non-recipe items:</label>
+      <h4 className={styles.heading} htmlFor="extra-list-item">Non-recipe items</h4>
       <div className={styles.extraListContainer}>
-        <input className={styles.extraListInput} autoComplete="off" type="text" id="extra-list-item" value={extraItem} onKeyPress={addExtraItemOnEnter} onChange={(e) => setExtraItem(e.target.value)} />
-        <button onClick={addExtra} className={styles.button}>Add</button>
+        <input className={styles.input} placeholder="beer, snacks..." autoComplete="off" type="text" id="extra-list-item" value={extraItem} onKeyPress={addExtraItemOnEnter} onChange={(e) => setExtraItem(e.target.value)} />
+        <button onClick={addExtra} className={styles.addButton}>Add</button>
       </div>
     </div>
   );

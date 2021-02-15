@@ -2,12 +2,11 @@ import styles from './index.module.css';
 import useFetch from 'use-http'
 import { useState, useEffect } from 'react';
 import Layout from '@components/layout'
-import { useAuth0 } from "@auth0/auth0-react";
 import Logout from '@components/identity/logout';
 import RecipeList from '@components/shopping-list/Recipes';
 import ShoppingList from '@components/shopping-list/ShoppingList';
 
-const Index = ({ title, description, ...props }) => {
+const Index = () => {
   let [recipes, setRecipes] = useState([]);
   let [recipeList, setRecipeList] = useState({});
   let [shoppingList, setShoppingList] = useState({});
@@ -21,7 +20,7 @@ const Index = ({ title, description, ...props }) => {
     setRecipeList(newList);
   };
 
-  const { get, post, patch, del, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
+  const { get, post, patch, del, response } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
     cachePolicy: 'no-cache'
   });
 
@@ -47,7 +46,7 @@ const Index = ({ title, description, ...props }) => {
   async function getRecipes() {
     const recipes = await get('/recipes')
     if (response.ok) setRecipes(recipes)
-  };
+  }
 
   // This will only run once on load
   async function hydrateShoppingList() {
@@ -83,7 +82,7 @@ const Index = ({ title, description, ...props }) => {
       setShoppingList(result.ingredients);
       setExtras(result.extras);
     }
-  };
+  }
 
   async function clearList() {
     setShoppingList({});
@@ -110,7 +109,7 @@ const Index = ({ title, description, ...props }) => {
   useEffect(() => { getShoppingList() }, [recipeList]);
 
   return (
-    <Layout pageTitle={title} description={description}>
+    <Layout>
       <section>
         <Logout />
         <div className={styles.grid}>
@@ -126,14 +125,3 @@ const Index = ({ title, description, ...props }) => {
 }
 
 export default Index
-
-export async function getStaticProps() {
-  const configData = (await import(`../siteconfig.json`)).default;
-
-  return {
-    props: {
-      title: configData.title,
-      description: configData.description,
-    },
-  }
-}

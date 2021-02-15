@@ -9,7 +9,7 @@ const  InnerApp = ({ Component, pageProps }) => {
 
   const fetchOptions = {
     interceptors: {
-      request: async ({ options, url, path, route }) => {
+      request: async ({ options }) => {
         const token = await getAccessTokenSilently();
         options.headers.Authorization = `Bearer ${token}`
         return options

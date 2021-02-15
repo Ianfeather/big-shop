@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "export": "next export"
+    "export": "next export",
+    "lint": "eslint .",
+    "package": "npm run lint && npm run build && npm run export"
   },
   "dependencies": {
     "@auth0/auth0-react": "^1.2.0",
@@ -16,5 +18,9 @@
     "react-dom": "16.13.1",
     "react-typeahead": "^2.0.0-alpha.8",
     "use-http": "^1.0.13"
+  },
+  "devDependencies": {
+    "eslint": "^7.20.0",
+    "eslint-plugin-react": "^7.22.0"
   }
 }

@@ -1,13 +1,13 @@
 import Head from 'next/head'
 import Header from './Header'
 
-export default function Layout({ children, pageTitle, description, ...props }) {
+export default function Layout({ children, pageTitle = 'Big Shop' }) {
   return (
     <>
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta charSet="utf-8" />
-        <meta name="Description" content={description}></meta>
+        <meta name="Description" content='Generate your own weekly shopping list'></meta>
         <meta name="mobile-web-app-capable" content="yes"/>
         <meta name="theme-color" content="#b870eb" />
         <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -18,7 +18,7 @@ export default function Layout({ children, pageTitle, description, ...props }) {
         <link href="/static/icon512.png" rel="apple-touch-startup-image" />
       </Head>
       <section className="layout">
-        <Header title={pageTitle}/>
+        <Header />
         <div className="content">{children}</div>
       </section>
     </>

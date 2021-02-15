@@ -2,10 +2,6 @@
   display: grid;
 }
 
-.grid>div {
-  padding: 20px;
-}
-
 .shoppingListContainer {
   background-color: white;
   margin: 0 10px;
@@ -46,5 +42,7 @@
   }
   .shoppingListContainer {
     background-color: transparent;
+    max-width: 1200px;
+    margin: 0 auto;
   }
 }

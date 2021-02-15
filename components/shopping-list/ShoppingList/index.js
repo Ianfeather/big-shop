@@ -1,8 +1,11 @@
 import styles from './index.module.css'
 import Item from './Item';
 import AddExtra from './AddExtra';
+import useViewport from '../../hooks/useViewport';
 
 const ShoppingList = ({ shoppingList, extras, addExtraItem, buyIngredient, clearList }) => {
+  const { width } = useViewport();
+
   const boughtItems = Object.keys(shoppingList).filter((name => shoppingList[name].isBought));
   const boughtExtras = Object.keys(extras).filter((name => extras[name].isBought));
   const hasListItems = !!Object.keys(shoppingList).length || !!Object.keys(extras).length;
@@ -17,13 +20,14 @@ const ShoppingList = ({ shoppingList, extras, addExtraItem, buyIngredient, clear
       if (b.department === 'vegetables') return 1
       if (!b.department || a.department === 'vegetables') return -1
     });
-  // <h2>Your shopping list</h2>
+
   return (
-    <div className={styles.shoppingList}>
+    <div className={styles.shoppingListContainer}>
+      { width > 800 && <h2 className={styles.heading}>Your shopping list</h2>}
       { !hasListItems && (
           <p className={styles.emptyList}>Select a recipe from the list to get started.</p>
       )}
-      <ul>
+      <ul className={styles.shoppingList}>
         { ingredients.map((name, i) => (
           <Item type='ingredient' name={name} item={shoppingList[name]} handleClick={buyIngredient} key={i}/>
         ))}

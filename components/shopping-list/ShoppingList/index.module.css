@@ -1,3 +1,9 @@
+.shoppingListContainer {
+  background-color: white;
+  padding: 20px;
+  border-radius: 6px 6px 0 0;
+}
+
 .shoppingList ul {
   padding: 0;
   margin: 0;
@@ -5,9 +11,12 @@
 }
 
 .shoppingList {
-  background-color: white;
-  padding: 5px 0 20px;
-  border-radius: 6px;
+  padding: 0px;
+}
+
+.heading {
+  font-size: 30px;
+  /* todo: new serif font family */
 }
 
 .item {

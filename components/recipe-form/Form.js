@@ -20,7 +20,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
   let [units, setUnits] = useState([]);
   let [ingredients, setIngredients] = useState([]);
   let [deleted, setDeleted] = useState(false);
-  const { get, post, put, del, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
+  const { get, post, put, del, response, loading } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
     cachePolicy: 'no-cache'
   });
 
@@ -43,7 +43,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
       setIngredients(_ingredients.map(i => capitalize(i.name)));
     }
 
-  };
+  }
   useEffect(() => { getUnitsAndIngredients() }, []);
 
   function updateRecipe(key, value) {
@@ -66,11 +66,10 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
   async function submitRecipe(e) {
     e.preventDefault();
     const completeRecipe = { ...recipe, ingredients: recipe.ingredients.filter(({name}) => !!name)};
-    let result;
     if (mode === 'edit') {
-      result = await put('/recipe', completeRecipe)
+      await put('/recipe', completeRecipe)
     } else {
-      result = await post('/recipe', completeRecipe)
+      await post('/recipe', completeRecipe)
     }
     if (response.ok) {
       setSaved(true);

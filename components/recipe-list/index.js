@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import styles from './index.module.css';
 
-export default function ({ recipes }) {
+const RecipeList = ({ recipes }) => {
   return (
     <>
       <ul className={styles.list}>
@@ -15,7 +15,6 @@ export default function ({ recipes }) {
 
           ))
         }
-
       </ul>
       <Link href={`/recipe/new`}>
         <a className={styles.button}>Add new recipe</a>
@@ -23,3 +22,5 @@ export default function ({ recipes }) {
     </>
   )
 }
+
+export default RecipeList;

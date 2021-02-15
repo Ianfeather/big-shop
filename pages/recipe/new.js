@@ -2,9 +2,10 @@ import Form from '@components/recipe-form/Form';
 import Layout from '@components/layout';
 import SingleColumnLayout from '@components/layout/single-column';
 
-const NewRecipe = ({ title, description, ...props }) => {
+const NewRecipe = () => {
+  const title = 'Add New Recipe';
   return (
-    <Layout pageTitle={title} description={description}>
+    <Layout pageTitle={title}>
       <SingleColumnLayout>
         <h1 className="title bold">{title}</h1>
         <Form />
@@ -14,14 +15,3 @@ const NewRecipe = ({ title, description, ...props }) => {
 }
 
 export default NewRecipe
-
-export async function getStaticProps() {
-  const configData = (await import(`../../siteconfig.json`)).default;
-
-  return {
-    props: {
-      title: "Add New Recipe",
-      description: configData.description,
-    },
-  }
-}

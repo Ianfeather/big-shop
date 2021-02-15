@@ -5,11 +5,12 @@ import Form from '@components/recipe-form/Form';
 import Layout from '@components/layout';
 import SingleColumnLayout from '@components/layout/single-column';
 
-const EditRecipe = ({ title, description, ...props }) => {
+const EditRecipe = () => {
   let [recipe, setRecipe] = useState({});
-  const { get, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
+  const { get, response } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
     cachePolicy: 'no-cache'
   });
+  const title = 'Edit Recipe';
 
   async function getRecipe() {
     const params = new URLSearchParams(document.location.search);
@@ -20,12 +21,12 @@ const EditRecipe = ({ title, description, ...props }) => {
     } else {
       Router.push('/recipe/new');
     }
-  };
+  }
 
   useEffect(() => { getRecipe() }, []);
 
   return (
-    <Layout pageTitle={title} description={description}>
+    <Layout pageTitle={title}>
       <SingleColumnLayout>
         <h1 className="title bold">{title}</h1>
         <Form initialRecipe={recipe} mode="edit" />
@@ -35,14 +36,3 @@ const EditRecipe = ({ title, description, ...props }) => {
 }
 
 export default EditRecipe
-
-export async function getStaticProps() {
-  const configData = (await import(`../../siteconfig.json`)).default;
-
-  return {
-    props: {
-      title: "Edit Recipe",
-      description: configData.description,
-    },
-  }
-}

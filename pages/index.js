@@ -2,17 +2,17 @@ import styles from './index.module.css';
 import useFetch from 'use-http'
 import { useState, useEffect } from 'react';
 import Layout from '@components/layout'
-import { useAuth0 } from "@auth0/auth0-react";
 import Logout from '@components/identity/logout';
+import RecipeList from '@components/shopping-list/Recipes';
+import ShoppingList from '@components/shopping-list/ShoppingList';
 
-const Index = ({ title, description, ...props }) => {
+const Index = () => {
   let [recipes, setRecipes] = useState([]);
   let [recipeList, setRecipeList] = useState({});
   let [shoppingList, setShoppingList] = useState({});
   let [extras, setExtras] = useState({});
-  let [extraItem, setExtraItem] = useState('');
   let [hydrateFlag, setHydrateFlag] = useState(false);
-  let [sidebarFilter, setSidebarFilter] = useState('');
+
   const handleRecipeSelect = (e) => {
     const newList = { ...recipeList,
       [e.target.id]: !recipeList[e.target.id]
@@ -20,11 +20,11 @@ const Index = ({ title, description, ...props }) => {
     setRecipeList(newList);
   };
 
-  const { get, post, patch, del, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
+  const { get, post, patch, del, response } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
     cachePolicy: 'no-cache'
   });
 
-  async function buyIngredients(name, type) {
+  async function buyIngredient(name, type) {
     const list = type === 'ingredient' ? shoppingList : extras;
     const newList = {
       ...list,
@@ -46,12 +46,13 @@ const Index = ({ title, description, ...props }) => {
   async function getRecipes() {
     const recipes = await get('/recipes')
     if (response.ok) setRecipes(recipes)
-  };
+  }
 
   // This will only run once on load
   async function hydrateShoppingList() {
-    const { recipes, ingredients, extras } = await get('/shopping-list');
-    if (response.ok && recipes.length) {
+    const result = await get('/shopping-list');
+    if (response.ok && result.recipes.length) {
+      const { recipes, ingredients, extras } = result;
       setHydrateFlag(true);
       setRecipeList(recipes.reduce((acc, recipe) => {
         acc[recipe] = true;
@@ -76,49 +77,31 @@ const Index = ({ title, description, ...props }) => {
     if (!selectedRecipes.length) {
       return;
     }
-    const { recipes, ingredients, extras } = await post('/shopping-list', selectedRecipes);
+    const result = await post('/shopping-list', selectedRecipes);
     if (response.ok) {
-      setShoppingList(ingredients);
-      setExtras(extras);
+      setShoppingList(result.ingredients);
+      setExtras(result.extras);
     }
-  };
+  }
 
   async function clearList() {
     setShoppingList({});
     setExtras({});
     setRecipeList([]);
     del('/shopping-list/clear');
-    // TODO: handle sync fail
   }
 
-  function addExtraItem() {
-    if (!extraItem) {
-      return;
-    }
+  function addExtraItem(extraItem) {
+    if (!extraItem) { return; }
     const newList = {
       ...extras,
-      [extraItem]: {
-        quantity: '',
-        unit: ''
-      }
+      [extraItem]: { quantity: '', unit: '' }
     };
     setExtras(newList);
-    // fire and forget
     post('/shopping-list/extra', {
       name: extraItem,
       isBought: false
     });
-    if (response.error || error) {
-      // TODO: handle sync fail
-    };
-    setExtraItem('');
-  }
-
-  function addExtraItemOnEnter(e) {
-    if (e.which !== 13) {
-      return;
-    }
-    addExtraItem();
   }
 
   useEffect(() => { hydrateShoppingList() }, []);
@@ -126,125 +109,14 @@ const Index = ({ title, description, ...props }) => {
   useEffect(() => { getShoppingList() }, [recipeList]);
 
   return (
-    <Layout pageTitle={title} description={description}>
+    <Layout>
       <section>
         <Logout />
         <div className={styles.grid}>
-          <div>
-            <h2>Recipes</h2>
-            <input className={styles.filterInput} placeholder="Filter recipes..." type="text" onChange={(e) => setSidebarFilter(e.target.value)} value={sidebarFilter} />
-            <div className={styles.recipeList}>
-              <ul>
-                {
-                  recipes
-                    .filter(({ name }) => name.toLowerCase().includes(sidebarFilter.toLowerCase()))
-                    .map(({id, name}) => {
-                      let checked = recipeList[id];
-                      return (
-                        <li key={id} className={checked ? styles.checked : ''}>
-                          <label htmlFor={id}>
-                            {name}
-                            <input type="checkbox" id={id} className={styles.hidden} onChange={handleRecipeSelect}/>
-                          </label>
-                        </li>
-                      );
-                    })
-                }
-              </ul>
-            </div>
-          </div>
+          <RecipeList recipeList={recipeList} recipes={recipes} handleRecipeSelect={handleRecipeSelect}/>
           <div>
             <h2>Your shopping list</h2>
-            <div className={styles.shoppingList}>
-              {
-                Object.keys(shoppingList).length == 0 && (
-                  <p className={styles.emptyList}>Select a recipe from the list to get started.</p>
-                )
-              }
-              <ul>
-                {
-                  Object.keys(shoppingList)
-                    .filter((name => !shoppingList[name].isBought))
-                    .sort((_a, _b) => {
-                      // Sort by department
-                      let a = shoppingList[_a];
-                      let b = shoppingList[_b];
-                      if (a.department === b.department) return 0
-                      if (b.department === 'vegetables') return 1
-                      if (!b.department || a.department === 'vegetables') return -1
-                    })
-                    .map(name => {
-                      const { unit, quantity } = shoppingList[name];
-                      return (
-                        <li className={styles.item} key={name} onClick={() => buyIngredients(name, 'ingredient')}>
-                          <span className={styles.itemName}>{name}</span>
-                          <span className={styles.itemQuantity}>{quantity}</span>
-                          <span className={styles.itemUnit}>{unit}</span>
-                        </li>
-                      )
-                    })
-                }
-                {
-                  Object.keys(extras)
-                    .filter((name => !extras[name].isBought))
-                    .map(name => (
-                      <li className={styles.item} key={name} onClick={() => buyIngredients(name, 'extra')}>
-                        <span className={styles.itemName}>{name}</span>
-                        <span className={styles.itemQuantity}></span>
-                        <span className={styles.itemUnit}></span>
-                      </li>
-                    )
-                  )
-                }
-              </ul>
-              <div>
-                <label className={styles.extraListLabel} htmlFor="extra-list-item">Add non-recipe items:</label>
-                <div className={styles.extraListContainer}>
-                  <input className={styles.extraListInput} autoComplete="off" type="text" id="extra-list-item" value={extraItem} onKeyPress={addExtraItemOnEnter} onChange={(e) => setExtraItem(e.target.value)} />
-                  <button onClick={addExtraItem} className={styles.button}>Add</button>
-                </div>
-              </div>
-              {
-                Object.keys(shoppingList).length > 0 && (
-                  <>
-                    <h2>Already bought</h2>
-                    <ul className={styles.shoppingList}>
-                      {
-                        Object.keys(shoppingList)
-                          .filter((name => shoppingList[name].isBought))
-                          .map(name => {
-                            const { unit, quantity } = shoppingList[name];
-                            return (
-                              <li className={styles.item} key={name} onClick={() => buyIngredients(name, 'ingredient')}>
-                                <span className={styles.itemName}>{name}</span>
-                                <span className={styles.itemQuantity}>{quantity}</span>
-                                <span className={styles.itemUnit}>{unit}</span>
-                              </li>
-                            )
-                          })
-                      }
-                      {
-                        Object.keys(extras)
-                          .filter((name => extras[name].isBought))
-                          .map(name => (
-                              <li className={styles.item} key={name} onClick={() => buyIngredients(name, 'extra')}>
-                                <span className={styles.itemName}>{name}</span>
-                                <span className={styles.itemQuantity}></span>
-                                <span className={styles.itemUnit}></span>
-                              </li>
-                            )
-                          )
-                      }
-                    </ul>
-                  </>
-                )
-              }
-              {
-                Object.keys(shoppingList).length > 0 && (
-                  <button className={`${styles.button} ${styles.clearList}`} onClick={() => clearList()}>Clear list</button>
-                )
-              }
-            </div>
+            <ShoppingList shoppingList={shoppingList} extras={extras} addExtraItem={addExtraItem} buyIngredient={buyIngredient} clearList={clearList} />
           </div>
         </div>
       </section>
@@ -253,14 +125,3 @@ const Index = ({ title, description, ...props }) => {
 }
 
 export default Index
-
-export async function getStaticProps() {
-  const configData = (await import(`../siteconfig.json`)).default;
-
-  return {
-    props: {
-      title: configData.title,
-      description: configData.description,
-    },
-  }
-}

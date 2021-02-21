@@ -1,8 +1,9 @@
 import styles from './index.module.css';
 import AddExtra from './AddExtra';
-import Recipes from '../../recipe-list';
-import ListItem from '../../sidebar-item';
-import Heading from '../../sidebar-heading';
+import Recipes from '@components/recipe-list';
+import ListItem from '@components/sidebar-item';
+import Heading from '@components/sidebar-heading';
+import Button from '@components/button';
 
 const RecipeList = ({ recipes, recipeList, handleRecipeSelect, addExtraItem, clearList, className = '' }) => {
   const hasSelectedRecipes = Object.keys(recipeList).length > 0;
@@ -31,7 +32,7 @@ const RecipeList = ({ recipes, recipeList, handleRecipeSelect, addExtraItem, cle
 
       { true && (
         <div className={styles.module}>
-          <button className={styles.clearList} onClick={() => clearList()}>Clear list</button>
+          <Button style="red" icon="cross" onClick={() => clearList()}>Clear list</Button>
         </div>
       )}
     </div>

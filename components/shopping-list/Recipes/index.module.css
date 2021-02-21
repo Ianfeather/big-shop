@@ -21,19 +21,6 @@
   margin-bottom: 20px;
 }
 
-.clearList {
-  border: 0;
-  background-color: var(--red);
-  color: white;
-  padding: 12px 0;
-  font-size: 16px;
-  cursor: pointer;
-  display: block;
-  width: 100%;
-  border-radius: 2px;
-  outline: none;
-}
-
 @media( min-width: 800px) {
   .sideBarContainer {
     margin-top: 70px;

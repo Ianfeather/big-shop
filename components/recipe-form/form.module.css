@@ -19,6 +19,15 @@
   margin-bottom: 60px;
 }
 
+.ingredientsGroup {
+  margin-bottom: 30px;
+}
+
+.buttonContainer {
+  display: flex;
+  justify-content: space-between;
+}
+
 .form input {
   width: 100%;
   padding: 8px 0;
@@ -103,12 +112,6 @@
 
 .loading {
   background-color: #94c3ae;
-}
-
-.delete {
-  background-color: var(--red);
-  margin-top: 40px;
-  margin-right: 10px;
 }
 
 .stored {

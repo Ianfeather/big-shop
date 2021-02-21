@@ -120,85 +120,86 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
         </div>
       </div>
 
-      {
-        recipe.ingredients.map((ingredient, i) => {
-          return (
-            <div className={styles.ingredientGroup} key={i}>
-              <div className={styles.ingredientName}>
-                <label htmlFor={`ingredient-name-${i}`} className={i != 0 ? styles.srOnly: ''}>Ingredient</label>
-                <Typeahead
-                  options={ingredients}
-                  maxVisible={3}
-                  placeholder="Ingredient"
-                  id={`ingredient-name-${i}`}
-                  autoComplete="off"
-                  value={ingredient.name}
-                  onChange={(e) => updateIngredient(i, 'name', e.target.value)}
-                  onOptionSelected={(value) => updateIngredient(i, 'name', value)} />
-              </div>
+      <div className={styles.ingredientsGroup}>
+        {
+          recipe.ingredients.map((ingredient, i) => {
+            return (
+              <div className={styles.ingredientGroup} key={i}>
+                <div className={styles.ingredientName}>
+                  <label htmlFor={`ingredient-name-${i}`} className={i != 0 ? styles.srOnly: ''}>Ingredient</label>
+                  <Typeahead
+                    options={ingredients}
+                    maxVisible={3}
+                    placeholder="Ingredient"
+                    id={`ingredient-name-${i}`}
+                    autoComplete="off"
+                    value={ingredient.name}
+                    onChange={(e) => updateIngredient(i, 'name', e.target.value)}
+                    onOptionSelected={(value) => updateIngredient(i, 'name', value)} />
+                </div>
 
-              <div className={styles.ingredientQuantity}>
-                <label htmlFor={`ingredient-quantity-${i}`} className={i != 0 ? styles.srOnly : ''}>Quantity</label>
-                <input placeholder="Quantity" value={ingredient.quantity} autoComplete="off" type="text" id={`ingredient-quantity-${i}`} onChange={(e) => updateIngredient(i, 'quantity', e.target.value)} />
-              </div>
+                <div className={styles.ingredientQuantity}>
+                  <label htmlFor={`ingredient-quantity-${i}`} className={i != 0 ? styles.srOnly : ''}>Quantity</label>
+                  <input placeholder="Quantity" value={ingredient.quantity} autoComplete="off" type="text" id={`ingredient-quantity-${i}`} onChange={(e) => updateIngredient(i, 'quantity', e.target.value)} />
+                </div>
 
-              <div className={styles.unit}>
-                <label htmlFor={`ingredient-unit-${i}`} className={i != 0 ? styles.srOnly : ''}>Unit</label>
-                <select id={`ingredient-unit-${i}`} className={styles.ingredientUnit} onChange={(e) => updateIngredient(i, 'unit', e.target.value)} value={ingredient.unit.toLowerCase()}>
+                <div className={styles.unit}>
+                  <label htmlFor={`ingredient-unit-${i}`} className={i != 0 ? styles.srOnly : ''}>Unit</label>
+                  <select id={`ingredient-unit-${i}`} className={styles.ingredientUnit} onChange={(e) => updateIngredient(i, 'unit', e.target.value)} value={ingredient.unit.toLowerCase()}>
+                    {
+                      units.map(({ id, name}) => (
+                        <option key={id} id={id} value={name.toLowerCase()}>{name}</option>
+                      ))
+                    }
+                  </select>
+                </div>
+
+                <div className={styles.deleteColumn}>
                   {
-                    units.map(({ id, name}) => (
-                      <option key={id} id={id} value={name.toLowerCase()}>{name}</option>
-                    ))
+                    i > 0 && (
+                      <>
+                        <label className={i != 0 ? styles.srOnly : ''}>Delete</label>
+                        <button className={styles.trash} aria-label="trash" id={i} onClick={deleteIngredient}>×</button>
+                      </>
+                    )
                   }
-                </select>
-              </div>
+                </div>
 
-              <div className={styles.deleteColumn}>
-                {
-                  i > 0 && (
-                    <>
-                      <label className={i != 0 ? styles.srOnly : ''}>Delete</label>
-                      <button className={styles.trash} aria-label="trash" id={i} onClick={deleteIngredient}>×</button>
-                    </>
-                  )
-                }
               </div>
+            )
+          })
+        }
+      </div>
+      <div className={styles.buttonContainer}>
+        <Button style="green" icon="tick" className={`${loading ? styles.loading : ''}`} onClick={submitRecipe}>
+          { mode === 'edit' ? 'Update Recipe' : 'Store Recipe'}
+        </Button>
 
+        { saved && (
+          <>
+            <div className={styles.stored}>
+              { mode === 'edit' ? 'Updated!' : 'Stored!'}
+            </div>
+            { mode === 'new' &&
+              <div>
+                <Button className={`${styles.addAnotherRecipe}`} onClick={resetForm}>
+                  Add another recipe
+                </Button>
+              </div>
+            }
+          </>
+        )}
+        {
+          mode === 'edit' && (
+            <div>
+              <Button style="red" icon="trash" onClick={deleteRecipe}>Delete Recipe</Button>
+              {
+                deleted && <span>Deleted</span>
+              }
             </div>
           )
-        })
-      }
-      <Button className={`${loading ? styles.loading : ''}`} onClick={submitRecipe}>
-        { mode === 'edit' ? 'Update Recipe' : 'Store Recipe'}
-      </Button>
-
-      { saved && (
-        <>
-          <div className={styles.stored}>
-            { mode === 'edit' ? 'Updated!' : 'Stored!'}
-          </div>
-          { mode === 'new' &&
-            <div>
-              <Button className={`${styles.addAnotherRecipe}`} onClick={resetForm}>
-                Add another recipe
-              </Button>
-            </div>
-          }
-        </>
-      )}
-      {
-        mode === 'edit' && (
-          <div>
-            <Link href={`/recipes/${recipe.id}`}>
-              <a>Cancel Edits</a>
-            </Link>
-            <Button className={`${styles.delete}`} onClick={deleteRecipe}>Delete Recipe</Button>
-            {
-              deleted && <span>Deleted</span>
-            }
-          </div>
-        )
-      }
+        }
+      </div>
     </form>
     </>
   )

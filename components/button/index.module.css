@@ -1,9 +1,42 @@
 .button {
   border: 0;
-  background-color: #2897c1;
-  color: white;
-  padding: 15px 40px;
+  padding: 6px 12px;
   font-size: 16px;
   cursor: pointer;
-  display: inline-block;
+  display: inline-flex;
+  text-decoration: none;
+  border-radius: 3px;
+  align-items: center;
+  color: white;
+}
+
+.button.blue {
+  background: var(--blue);
+}
+
+.button.green {
+  background: var(--darker-green);
+}
+
+.button.red {
+  background: var(--red);
+}
+
+.button.outline {
+  border: 1px solid var(--blue);
+  color: var(--blue);
+  background-color: transparent;
+}
+
+.button.outline path {
+  fill: var(--blue);
+}
+
+.svg {
+  width: 16px;
+  margin-right: 6px;
+}
+
+.svg path {
+  fill: white;
 }

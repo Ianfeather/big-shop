@@ -1,4 +1,11 @@
 .title {
   font-size: 36px;
   margin: 10px 0;
+  width: 85%;
+}
+
+.topRightButton {
+  position: absolute;
+  top: 30px;
+  right: 20px;
 }

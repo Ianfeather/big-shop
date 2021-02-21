@@ -4,8 +4,10 @@
   --yellow: #ebd270;
   --green: #a4eb70;
   --dark-green: #8bd455;
+  --darker-green: #42c540;
   --light-purple: #f0ebf4;
   --red: #eb7070;
+  --blue: #2897c1;
 }
 
 @font-face {
@@ -48,6 +50,7 @@ body {
   margin: 0;
   font-family: 'opensans', 'SF Pro Text', 'SF Pro Icons', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
   background: linear-gradient(180deg, var(--purple) 0%, var(--purple) 220px, var(--light-purple) 221px, var(--light-purple) 100%) no-repeat;
+  -webkit-font-smoothing: antialiased;
 }
 
 button {

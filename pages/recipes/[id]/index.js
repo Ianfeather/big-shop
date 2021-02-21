@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { useState } from 'react';
 import Layout, { Grid, MainContent, Sidebar } from '@components/layout'
 import RecipeList from '@components/recipe-list'
@@ -22,10 +21,8 @@ const Recipes = () => {
       <Grid>
         <MainContent>
           <h1 className={styles.title}>{recipe.name}</h1>
+          <Button href={`/recipes/${id}/edit`} icon="pencil" style="outline" className={styles.topRightButton}>Edit</Button>
           <Recipe recipe={recipe} />
-          <Link href={`/recipes/${id}/edit`}>
-            <a>Edit Recipe</a>
-          </Link>
         </MainContent>
         <Sidebar>
           <RecipeList recipes={recipes} />

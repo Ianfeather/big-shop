@@ -1,5 +1,7 @@
 import styles from './index.module.css';
 import { useState } from 'react';
+import SidebarInput from '../../sidebar-input';
+import SidebarHeading from '../../sidebar-heading';
 
 const AddExtra = ({ onAdd }) => {
   let [extraItem, setExtraItem] = useState('');
@@ -18,9 +20,9 @@ const AddExtra = ({ onAdd }) => {
 
   return  (
     <div>
-      <h4 className={styles.heading} htmlFor="extra-list-item">Non-recipe items</h4>
+      <SidebarHeading>Non-recipe items</SidebarHeading>
       <div className={styles.extraListContainer}>
-        <input className={styles.input} placeholder="beer, snacks..." autoComplete="off" type="text" id="extra-list-item" value={extraItem} onKeyPress={addExtraItemOnEnter} onChange={(e) => setExtraItem(e.target.value)} />
+        <SidebarInput placeholder="beer, snacks..." id="extra-list-item" value={extraItem} onKeyPress={addExtraItemOnEnter} onChange={(e) => setExtraItem(e.target.value)} />
         <button onClick={addExtra} className={styles.addButton}>Add</button>
       </div>
     </div>

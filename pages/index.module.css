@@ -1,14 +1,3 @@
-.grid {
-  display: grid;
-}
-
-.shoppingListContainer {
-  background-color: white;
-  margin: 0 10px;
-  border-radius: 6px;
-  min-height: 100vh;
-}
-
 .logOut {
   position: absolute;
   left: 20px;
@@ -35,14 +24,3 @@
   border-bottom: 1px solid var(--light-purple);
 }
 
-@media( min-width: 800px) {
-  .grid {
-    grid-template-columns: 1fr 250px;
-    grid-gap: 1rem;
-  }
-  .shoppingListContainer {
-    background-color: transparent;
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-}

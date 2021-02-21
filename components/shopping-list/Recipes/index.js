@@ -1,34 +1,22 @@
 import styles from './index.module.css';
-import { useState } from 'react';
 import AddExtra from './AddExtra';
+import Recipes from '../../recipe-list';
+import ListItem from '../../sidebar-item';
+import Heading from '../../sidebar-heading';
 
-const RecipeList = ({ recipes, recipeList, handleRecipeSelect, addExtraItem, clearList }) => {
-  let [sidebarFilter, setSidebarFilter] = useState('');
+const RecipeList = ({ recipes, recipeList, handleRecipeSelect, addExtraItem, clearList, className = '' }) => {
   const hasSelectedRecipes = Object.keys(recipeList).length > 0;
 
-
-  const ListItem = ({ id, name}) => {
-    let checked = recipeList[id];
-    return (
-      <li key={id} className={checked ? styles.checked : ''}>
-        <label htmlFor={id}>
-          {name}
-          <input type="checkbox" id={id} className={styles.hidden} onChange={handleRecipeSelect}/>
-        </label>
-      </li>
-    );
-  };
-
   return (
-    <div className={styles.recipeListContainer}>
+    <div className={className}>
       {
         hasSelectedRecipes && (
           <div className={`${styles.recipeList} ${styles.module}`}>
-            <h4 className={styles.heading}>Selected Recipes</h4>
+            <Heading>Selected Recipes</Heading>
             <ul>
               {
                 recipes.filter(({id}) => recipeList[id])
-                  .map(recipe => <ListItem {...recipe} key={recipe.id} />)
+                  .map(recipe => <ListItem {...recipe} key={recipe.id} checked={true} onClick={handleRecipeSelect} />)
               }
             </ul>
           </div>
@@ -38,18 +26,7 @@ const RecipeList = ({ recipes, recipeList, handleRecipeSelect, addExtraItem, cle
         <AddExtra onAdd={addExtraItem} />
       </div>
       <div className={styles.module}>
-        <h4 className={styles.heading}>All Recipes</h4>
-        <input className={styles.input} placeholder="Search..." type="text" onChange={(e) => setSidebarFilter(e.target.value)} value={sidebarFilter} />
-        <div className={styles.recipeList}>
-          <ul>
-            {
-              recipes
-                .filter(({id}) => !recipeList[id])
-                .filter(({ name }) => name.toLowerCase().includes(sidebarFilter.toLowerCase()))
-                .map(recipe => <ListItem {...recipe} key={recipe.id} />)
-            }
-          </ul>
-        </div>
+        <Recipes filterFn={({id}) => !recipeList[id]} handleRecipeSelect={handleRecipeSelect} />
       </div>
 
       { true && (

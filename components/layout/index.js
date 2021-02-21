@@ -1,5 +1,6 @@
 import Head from 'next/head'
 import Header from './Header'
+import styles from './index.module.css';
 
 export default function Layout({ children, pageTitle = 'Big Shop' }) {
   return (
@@ -19,8 +20,17 @@ export default function Layout({ children, pageTitle = 'Big Shop' }) {
       </Head>
       <section className="layout">
         <Header />
-        <div className="content">{children}</div>
+        <div className="content">
+          <section className={styles.container}>
+            {children}
+          </section>
+        </div>
       </section>
     </>
   )
 }
+
+export const Grid = ({children, ...props}) => <div className={styles.grid} {...props}>{children}</div>
+export const MainContent = ({children, ...props}) => <div className={styles.mainContentContainer} {...props}>{children}</div>
+export const Sidebar = ({children, ...props}) => <div className={styles.sideBarContainer} {...props}>{children}</div>
+

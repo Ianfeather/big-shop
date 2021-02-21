@@ -1,0 +1,13 @@
+.input {
+  margin-bottom: 10px;
+  padding: 5px;
+  width: 100%;
+  outline: none;
+  border: none;
+  border-left: 1px solid #d7b1f3;
+  background: transparent;
+}
+
+.input:focus {
+  border-left: 1px solid var(--purple);
+}

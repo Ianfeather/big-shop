@@ -1,0 +1,18 @@
+.hidden {
+  display: none;
+}
+
+.checked {
+  position: relative;
+  font-weight: bold;
+}
+
+.listItem {
+  margin-bottom: 5px;
+}
+
+.listItem label {
+  padding: 12px 0;
+  display: block;
+  cursor: pointer;
+}

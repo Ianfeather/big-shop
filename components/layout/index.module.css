@@ -3,9 +3,43 @@
   padding: 20px
 }
 
+.grid {
+  display: grid;
+}
+
+.container {
+  background-color: white;
+  margin: 0 10px;
+  border-radius: 6px;
+  min-height: 100vh;
+}
+
+.mainContentContainer {
+  background-color: white;
+  padding: 20px;
+  border-radius: 6px 6px 0 0;
+  min-height: 100vh;
+}
+
+.sideBarContainer {
+  padding: 20px;
+}
+
 @media (min-width: 800px) {
   .singleColumn {
     max-width: 800px;
     margin: 0 auto;
+  }
+  .container {
+    background-color: transparent;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .grid {
+    grid-template-columns: 1fr 250px;
+    grid-gap: 1rem;
+  }
+  .sideBarContainer {
+    margin-top: 70px;
   }
 }

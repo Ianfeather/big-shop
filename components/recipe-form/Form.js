@@ -1,7 +1,10 @@
+import Link from 'next/link';
 import styles from './form.module.css';
 import { useState, useEffect } from 'react';
 import useFetch from 'use-http'
 import { Typeahead } from 'react-typeahead';
+import Button from '@components/button';
+import SidebarInput from '@components/sidebar-input';
 
 const capitalize = (str) => {
   if (!str) {
@@ -106,16 +109,17 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
   return (
     <>
     <form className={styles.form}>
-      <div className={styles.group}>
-        <label htmlFor="recipe-name">Recipe Name</label>
-        <input value={recipe.name} autoComplete="off" type="text" id="recipe-name" onChange={(e) => updateRecipe('name', e.target.value)}/>
-      </div>
-      <div className={styles.group}>
-        <label htmlFor="recipe-remote-url">URL (to the recipe site, optional)</label>
-        <input value={recipe.remoteUrl} autoComplete="off" type="text" id="recipe-remote-url" onChange={(e) => updateRecipe('remoteUrl', e.target.value)}/>
+      <div className={styles.metaGroup}>
+        <div className={styles.group}>
+          <label htmlFor="recipe-name">Recipe Name</label>
+          <input placeholder="Shepherds Pie" value={recipe.name} autoComplete="off" type="text" id="recipe-name" onChange={(e) => updateRecipe('name', e.target.value)}/>
+        </div>
+        <div className={styles.group}>
+          <label htmlFor="recipe-remote-url">URL (to the recipe site, optional)</label>
+          <input placeholder="https://" value={recipe.remoteUrl} autoComplete="off" type="text" id="recipe-remote-url" onChange={(e) => updateRecipe('remoteUrl', e.target.value)}/>
+        </div>
       </div>
 
-      <h2 className={styles.heading}>Ingredients</h2>
       {
         recipe.ingredients.map((ingredient, i) => {
           return (
@@ -164,9 +168,10 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
           )
         })
       }
-      <button className={`${styles.button} ${loading ? styles.loading : ''}`} onClick={submitRecipe}>
+      <Button className={`${loading ? styles.loading : ''}`} onClick={submitRecipe}>
         { mode === 'edit' ? 'Update Recipe' : 'Store Recipe'}
-      </button>
+      </Button>
+
       { saved && (
         <>
           <div className={styles.stored}>
@@ -174,9 +179,9 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
           </div>
           { mode === 'new' &&
             <div>
-              <button className={`${styles.button} ${styles.addAnotherRecipe}`} onClick={resetForm}>
+              <Button className={`${styles.addAnotherRecipe}`} onClick={resetForm}>
                 Add another recipe
-              </button>
+              </Button>
             </div>
           }
         </>
@@ -184,7 +189,10 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
       {
         mode === 'edit' && (
           <div>
-            <button className={`${styles.button} ${styles.delete}`} onClick={deleteRecipe}>Delete Recipe</button>
+            <Link href={`/recipes/${recipe.id}`}>
+              <a>Cancel Edits</a>
+            </Link>
+            <Button className={`${styles.delete}`} onClick={deleteRecipe}>Delete Recipe</Button>
             {
               deleted && <span>Deleted</span>
             }

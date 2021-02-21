@@ -1,14 +1,15 @@
 import styles from './index.module.css';
 import useFetch from 'use-http'
 import { useState, useEffect } from 'react';
-import Layout from '@components/layout'
+import Layout, { MainContent, Sidebar } from '@components/layout'
 import Tabs from '@components/layout/Tabs'
 import Logout from '@components/identity/logout';
-import RecipeList from '@components/shopping-list/Recipes';
+import RecipeSidebar from '@components/shopping-list/Recipes';
 import ShoppingList from '@components/shopping-list/ShoppingList';
+import useRecipes from '@hooks/use-recipes';
 
 const Index = () => {
-  let [recipes, setRecipes] = useState([]);
+  const [recipes] = useRecipes();
   let [recipeList, setRecipeList] = useState({});
   let [shoppingList, setShoppingList] = useState({});
   let [extras, setExtras] = useState({});
@@ -41,12 +42,6 @@ const Index = () => {
     }
     // fire and forget
     patch('/shopping-list/buy', { name, isBought: newList[name].isBought });
-  }
-
-  // This will only run once on load
-  async function getRecipes() {
-    const recipes = await get('/recipes')
-    if (response.ok) setRecipes(recipes)
   }
 
   // This will only run once on load
@@ -106,19 +101,18 @@ const Index = () => {
   }
 
   useEffect(() => { hydrateShoppingList() }, []);
-  useEffect(() => { getRecipes() }, []);
   useEffect(() => { getShoppingList() }, [recipeList]);
 
   return (
     <Layout>
-      <section className={styles.shoppingListContainer}>
-        <Tabs className={styles.grid} buttonsClassName={styles.tabButtons}maxWidth={800}>
-          <div name="Shopping List">
-            <ShoppingList shoppingList={shoppingList} extras={extras} buyIngredient={buyIngredient} />
-          </div>
-          <RecipeList name="Create & Edit" recipeList={recipeList} addExtraItem={addExtraItem} clearList={clearList} recipes={recipes} handleRecipeSelect={handleRecipeSelect}/>
-        </Tabs>
-      </section>
+      <Tabs buttonsClassName={styles.tabButtons} maxWidth={800}>
+        <MainContent name="Shopping List">
+          <ShoppingList shoppingList={shoppingList} extras={extras} buyIngredient={buyIngredient} />
+        </MainContent>
+        <Sidebar name="Create & Edit">
+          <RecipeSidebar recipeList={recipeList} addExtraItem={addExtraItem} clearList={clearList} recipes={recipes} handleRecipeSelect={handleRecipeSelect}/>
+        </Sidebar>
+      </Tabs>
       <Logout className={styles.logOut} />
     </Layout>
   )

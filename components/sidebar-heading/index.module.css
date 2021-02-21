@@ -1,0 +1,6 @@
+.heading {
+  border-bottom: 1px solid var(--purple);
+  text-transform: uppercase;
+  font-size: 15px;
+  padding-bottom: 5px;
+}

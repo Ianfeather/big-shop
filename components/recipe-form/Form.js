@@ -1,10 +1,8 @@
-import Link from 'next/link';
 import styles from './form.module.css';
 import { useState, useEffect } from 'react';
 import useFetch from 'use-http'
 import { Typeahead } from 'react-typeahead';
 import Button from '@components/button';
-import SidebarInput from '@components/sidebar-input';
 
 const capitalize = (str) => {
   if (!str) {

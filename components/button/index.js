@@ -2,7 +2,7 @@ import Link from 'next/link';
 import icons from '@components/svg';
 import styles from './index.module.css';
 
-const Button = ({ className = '', onClick, children, href, icon, style, ...props}) => {
+const Button = ({ className = '', onClick, children, href, icon, style }) => {
   const classes = `${styles.button} ${className} ${styles[style]}`;
   const IconElement = icon && icons[icon];
 

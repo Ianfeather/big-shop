@@ -2,7 +2,7 @@ import styles from './index.module.css'
 import Item from './Item';
 import useViewport from '@hooks/use-viewport';
 
-const ShoppingList = ({ shoppingList, extras, buyIngredient, className }) => {
+const ShoppingList = ({ shoppingList, extras, buyIngredient }) => {
   const { width } = useViewport();
 
   const boughtItems = Object.keys(shoppingList).filter((name => shoppingList[name].isBought));

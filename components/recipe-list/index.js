@@ -13,7 +13,7 @@ const RecipeList = ({ handleRecipeSelect, filterFn = () => true }) => {
 
   const onClick = handleRecipeSelect || function (e) {
     e.preventDefault();
-    router.push(`/recipes/${e.target.id}`);
+    router.push(`/recipes/${e.target.id}`)
   }
 
   return (

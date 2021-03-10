@@ -12,7 +12,7 @@ const useRecipe = (id) => {
     if (response.ok) setRecipe(recipe)
   }
 
-  useEffect(() => { getRecipe() }, []);
+  useEffect(() => { getRecipe() }, [id]);
 
   return [recipe, setRecipe];
 }

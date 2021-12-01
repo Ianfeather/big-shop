@@ -6,6 +6,7 @@ A nextjs static site and a go api
 ```
 npm run dev
 ```
+Requires node 14+
 
 ## connecting to the API
 In another shell you can run the recipes app (https://github.com/Ianfeather/recipes) and this app will automatically connect to it via the .env.development configuration.

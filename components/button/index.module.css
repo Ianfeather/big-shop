@@ -22,14 +22,23 @@
   background: var(--red);
 }
 
-.button.outline {
+.button.pink {
+  background: var(--pink);
+}
+
+.button.outline.blue {
   border: 1px solid var(--blue);
   color: var(--blue);
   background-color: transparent;
 }
-
-.button.outline path {
+.button.outline.blue path {
   fill: var(--blue);
+}
+
+.button.outline.pink {
+  border: 1px solid var(--pink);
+  color: var(--pink);
+  background-color: transparent;
 }
 
 .svg {

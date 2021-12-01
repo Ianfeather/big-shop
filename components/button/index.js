@@ -2,8 +2,11 @@ import Link from 'next/link';
 import icons from '@components/svg';
 import styles from './index.module.css';
 
-const Button = ({ className = '', onClick, children, href, icon, style }) => {
-  const classes = `${styles.button} ${className} ${styles[style]}`;
+const Button = ({ className = '', onClick, children, href, icon, style, outline = false }) => {
+  let classes = `${styles.button} ${className} ${styles[style]}`;
+  if (outline) {
+    classes += ` ${styles['outline']}`
+  }
   const IconElement = icon && icons[icon];
 
   if (href) {

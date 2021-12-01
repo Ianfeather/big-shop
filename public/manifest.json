@@ -1,7 +1,7 @@
 {
   "name": "Big Shop",
   "short_name": "Big Shop",
-  "start_url": "/",
+  "start_url": "/list",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#b870eb",

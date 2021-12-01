@@ -31,6 +31,9 @@ export default function Layout({ children, pageTitle = 'Big Shop' }) {
 }
 
 export const Grid = ({children, ...props}) => <div className={styles.grid} {...props}>{children}</div>
-export const MainContent = ({children, ...props}) => <div className={styles.mainContentContainer} {...props}>{children}</div>
 export const Sidebar = ({children, ...props}) => <div className={styles.sideBarContainer} {...props}>{children}</div>
 
+export const MainContent = ({children, fullHeight=true, ...props}) => {
+  const className = `${styles.mainContentContainer} ${fullHeight ? styles.fullHeight : ''}`;
+  return <div className={className} {...props}>{children}</div>
+}

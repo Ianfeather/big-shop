@@ -1,9 +1,11 @@
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import styles from './header.module.css'
+import { useAuth0 } from "@auth0/auth0-react";
 
 export default function Header() {
   const router = useRouter();
+  const { isAuthenticated } = useAuth0();
 
   const getClassName = (path) => path === router.pathname ? styles.activeLink : '';
 
@@ -15,14 +17,19 @@ export default function Header() {
           <h1 className={styles.title}>Big Shop</h1>
         </a>
       </Link>
-      <nav className={styles.nav} role="navigation" aria-label="main navigation">
-        <Link href="/">
-          <a className={getClassName("/")}>Shopping List</a>
-        </Link>
-        <Link href="/recipes">
-          <a className={getClassName("/recipes")}>Your Recipes</a>
-        </Link>
-      </nav>
+      {
+        isAuthenticated && (
+          <nav className={styles.nav} role="navigation" aria-label="main navigation">
+            <Link href="/">
+              <a className={getClassName("/")}>Shopping List</a>
+            </Link>
+            <Link href="/recipes">
+              <a className={getClassName("/recipes")}>Your Recipes</a>
+            </Link>
+          </nav>
+        )
+      }
+
     </header>
   )
 }

@@ -30,10 +30,11 @@ const  InnerApp = ({ Component, pageProps }) => {
   )
 }
 
-export default function App({ Component, pageProps }) {
+export default function App({ Component, pageProps, router }) {
   const domain = process.env.NEXT_PUBLIC_AUTH0_DOMAIN;
   const clientId = process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID;
   const audience = process.env.NEXT_PUBLIC_AUTH0_AUDIENCE;
+  const behindAuth = router.route !== '/';
 
   return (
     <Auth0Provider
@@ -41,7 +42,11 @@ export default function App({ Component, pageProps }) {
       clientId={clientId}
       audience={audience}
       redirectUri={process.env.NEXT_PUBLIC_HOST}>
-        <InnerApp Component={Component} pageProps={pageProps} />
+        {
+          behindAuth ?
+          <InnerApp Component={Component} pageProps={pageProps} /> :
+          <Component />
+        }
     </Auth0Provider>
   )
 }

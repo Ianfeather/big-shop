@@ -24,3 +24,24 @@
   border-bottom: 1px solid var(--light-purple);
 }
 
+.landingPage {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.landingHeading {
+  font-size: 36px;
+  text-align: center;
+  margin-bottom: 0;
+}
+
+.landingSubHeading {
+  font-size: 18px;
+  text-align: center;
+  line-height: 1.7;
+  margin-bottom: 40px;
+}

@@ -19,7 +19,7 @@ const Recipes = () => {
       <Grid>
         <MainContent>
           <h1 className={styles.title}>{recipe.name}</h1>
-          <Button href={`/recipes/${id}/edit`} icon="pencil" style="outline" className={styles.topRightButton}>Edit</Button>
+          <Button href={`/recipes/${id}/edit`} icon="pencil" style="blue" outline={true} className={styles.topRightButton}>Edit</Button>
           <Recipe recipe={recipe} />
         </MainContent>
         <Sidebar>

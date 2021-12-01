@@ -1,0 +1,9 @@
+.container {
+  display: flex;
+  justify-content: center;
+  padding-top: 50px;
+}
+
+.clear {
+  margin-right: 15px;
+}

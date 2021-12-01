@@ -1,8 +1,9 @@
 import styles from './index.module.css'
 import Item from './Item';
 import useViewport from '@hooks/use-viewport';
+import ClearList from './clear-list';
 
-const ShoppingList = ({ shoppingList, extras, buyIngredient }) => {
+const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList }) => {
   const { width } = useViewport();
 
   const boughtItems = Object.keys(shoppingList).filter((name => shoppingList[name].isBought));
@@ -49,6 +50,7 @@ const ShoppingList = ({ shoppingList, extras, buyIngredient }) => {
           </div>
         )
       }
+      { hasListItems && <ClearList onClick={clearList} />}
 
     </>
   )

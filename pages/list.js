@@ -106,10 +106,10 @@ const List = () => {
     <Layout>
       <Tabs buttonsClassName={styles.tabButtons} maxWidth={800}>
         <MainContent name="Shopping List">
-          <ShoppingList shoppingList={shoppingList} extras={extras} buyIngredient={buyIngredient} />
+          <ShoppingList clearList={clearList} shoppingList={shoppingList} extras={extras} buyIngredient={buyIngredient} />
         </MainContent>
         <Sidebar name="Create & Edit">
-          <RecipeSidebar recipeList={recipeList} addExtraItem={addExtraItem} clearList={clearList} recipes={recipes} handleRecipeSelect={handleRecipeSelect}/>
+          <RecipeSidebar recipeList={recipeList} addExtraItem={addExtraItem} recipes={recipes} handleRecipeSelect={handleRecipeSelect}/>
         </Sidebar>
       </Tabs>
     </Layout>

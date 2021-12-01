@@ -25,10 +25,6 @@
   .sideBarContainer {
     margin-top: 70px;
   }
-  .recipeList ul {
-    max-height: 500px;
-    overflow-y: scroll;
-  }
   .module {
     margin-bottom: 50px;
   }

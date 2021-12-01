@@ -3,9 +3,8 @@ import AddExtra from './AddExtra';
 import Recipes from '@components/recipe-list';
 import ListItem from '@components/sidebar-item';
 import Heading from '@components/sidebar-heading';
-import Button from '@components/button';
 
-const RecipeList = ({ recipes, recipeList, handleRecipeSelect, addExtraItem, clearList, className = '' }) => {
+const RecipeList = ({ recipes, recipeList, handleRecipeSelect, addExtraItem, className = '' }) => {
   const hasSelectedRecipes = Object.keys(recipeList).length > 0;
 
   return (
@@ -29,12 +28,6 @@ const RecipeList = ({ recipes, recipeList, handleRecipeSelect, addExtraItem, cle
       <div className={styles.module}>
         <Recipes filterFn={({id}) => !recipeList[id]} handleRecipeSelect={handleRecipeSelect} />
       </div>
-
-      { true && (
-        <div className={styles.module}>
-          <Button style="red" icon="cross" onClick={() => clearList()}>Clear list</Button>
-        </div>
-      )}
     </div>
   )
 };

@@ -35,6 +35,24 @@
   fill: var(--blue);
 }
 
+.button.outline.red {
+  border: 1px solid var(--red);
+  color: var(--red);
+  background-color: transparent;
+}
+.button.outline.red:hover {
+  color: white;
+  background-color: var(--red);
+}
+
+.button.outline.red path {
+  fill: var(--red);
+}
+
+.button.outline.red:hover path {
+  fill: white;
+}
+
 .button.outline.pink {
   border: 1px solid var(--pink);
   color: var(--pink);

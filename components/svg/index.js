@@ -5,7 +5,7 @@ import PencilIcon from './pencil';
 import TrashIcon from './trash';
 import TickIcon from './tick';
 
-export default {
+const icons = {
   back: BackIcon,
   cross: CrossIcon,
   edit: EditIcon,
@@ -13,3 +13,5 @@ export default {
   trash: TrashIcon,
   tick: TickIcon
 }
+
+export default icons;

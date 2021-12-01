@@ -4,6 +4,8 @@ import useFetch from 'use-http'
 import { Typeahead } from 'react-typeahead';
 import Button from '@components/button';
 
+const bareIngredient = { name: '', quantity: '', unit: '' };
+
 const capitalize = (str) => {
   if (!str) {
     return str;
@@ -13,7 +15,6 @@ const capitalize = (str) => {
 }
 
 export default function Form({initialRecipe = {}, mode = 'new'}) {
-  const bareIngredient = { name: '', quantity: '', unit: '' };
   const bareRecipe = { name: '', remoteUrl: '', ingredients: [bareIngredient]};
 
   let [recipe, setRecipe] = useState(initialRecipe.id ? initialRecipe : bareRecipe);
@@ -45,7 +46,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
     }
 
   }
-  useEffect(() => { getUnitsAndIngredients() }, []);
+  useEffect(() => { getUnitsAndIngredients() }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function updateRecipe(key, value) {
     const updatedRecipe = { ...recipe, [key]: value};

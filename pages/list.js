@@ -99,8 +99,8 @@ const List = () => {
     });
   }
 
-  useEffect(() => { hydrateShoppingList() }, []);
-  useEffect(() => { getShoppingList() }, [recipeList]);
+  useEffect(() => { hydrateShoppingList() }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { getShoppingList() }, [recipeList]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Layout>

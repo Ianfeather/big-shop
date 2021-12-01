@@ -3,7 +3,6 @@ import useFetch from 'use-http'
 import { useState, useEffect } from 'react';
 import Layout, { MainContent, Sidebar } from '@components/layout'
 import Tabs from '@components/layout/Tabs'
-import Logout from '@components/identity/logout';
 import RecipeSidebar from '@components/shopping-list/Recipes';
 import ShoppingList from '@components/shopping-list/ShoppingList';
 import useRecipes from '@hooks/use-recipes';
@@ -113,7 +112,6 @@ const List = () => {
           <RecipeSidebar recipeList={recipeList} addExtraItem={addExtraItem} clearList={clearList} recipes={recipes} handleRecipeSelect={handleRecipeSelect}/>
         </Sidebar>
       </Tabs>
-      <Logout className={styles.logOut} />
     </Layout>
   )
 }

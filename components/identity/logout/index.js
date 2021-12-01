@@ -11,7 +11,7 @@ const Logout = ({ className }) => {
         })
       }
     >
-      Log Out
+      Sign out
     </button>
   );
 }

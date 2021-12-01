@@ -29,7 +29,16 @@
   justify-content: center;
 }
 
-.nav a {
+.logout {
+  border: none;
+  background: none;
+  font-size: inherit;
+  padding: 0;
+  position: relative;
+  top: -1px;
+}
+
+.nav a, .logout {
   color: white;
   text-decoration: none;
   margin: 0 10px;

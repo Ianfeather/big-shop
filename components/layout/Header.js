@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/router'
 import styles from './header.module.css'
 import { useAuth0 } from "@auth0/auth0-react";
+import Logout from '../identity/logout';
 
 export default function Header() {
   const router = useRouter();
@@ -20,12 +21,13 @@ export default function Header() {
       {
         isAuthenticated && (
           <nav className={styles.nav} role="navigation" aria-label="main navigation">
-            <Link href="/">
-              <a className={getClassName("/")}>Shopping List</a>
+            <Link href="/list">
+              <a className={getClassName("/list")}>Shopping List</a>
             </Link>
             <Link href="/recipes">
               <a className={getClassName("/recipes")}>Your Recipes</a>
             </Link>
+            <Logout className={styles.logout} />
           </nav>
         )
       }

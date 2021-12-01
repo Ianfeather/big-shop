@@ -6,7 +6,7 @@ import { LoginButton } from '@components/identity/login';
 import { CreateAccountButton } from '@components/identity/create';
 
 const LoggedInState = () => (
-  <Button type="link" href="/list">Go to shopping list</Button>
+  <Button type="link" href="/list" style="blue" outline={true}>Click here to start building your shopping list</Button>
 )
 
 const LoggedOutState = () => (

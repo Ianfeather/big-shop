@@ -24,7 +24,7 @@ const ShoppingList = ({ shoppingList, extras, buyIngredient }) => {
     <>
       { width > 800 && <h2 className={styles.heading}>Your shopping list</h2>}
       { !hasListItems && (
-          <p className={styles.emptyList}>Select a recipe from the list to get started.</p>
+          <p className={styles.emptyList}>Looks like you don't need to go shopping! Select a recipe from the list to start building a new list.</p>
       )}
       <ul className={styles.shoppingList}>
         { ingredients.map((name, i) => (

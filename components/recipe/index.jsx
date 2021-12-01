@@ -1,11 +1,17 @@
 import styles from './index.module.css';
 
-const Recipe = ({ recipe }) => {
+const RecipeLink = ({ link }) => {
+  if (!link) return false;
+  if (link.match(/^http/)) {
+    return <a target="_blank" rel="noreferrer" href={link}>View original recipe</a>;
+  }
+  return <span>Taken from {link}</span>;
+}
 
+const Recipe = ({ recipe }) => {
   return (
     <>
-      <a href={recipe.remoteUrl}>Original recipe</a>
-
+      <RecipeLink link={recipe.remoteUrl} />
       <div className={styles.ingredients}>
         <h3 className={styles.heading}>Ingredients</h3>
         <ul>

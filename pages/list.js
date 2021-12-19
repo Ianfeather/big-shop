@@ -1,6 +1,7 @@
 import styles from './index.module.css';
 import useFetch from 'use-http'
 import { useState, useEffect } from 'react';
+import { useAuth0 } from "@auth0/auth0-react";
 import Layout, { MainContent, Sidebar } from '@components/layout'
 import Tabs from '@components/layout/Tabs'
 import RecipeSidebar from '@components/shopping-list/Recipes';
@@ -13,6 +14,7 @@ const List = () => {
   let [shoppingList, setShoppingList] = useState({});
   let [extras, setExtras] = useState({});
   let [hydrateFlag, setHydrateFlag] = useState(false);
+  const { user } = useAuth0();
 
   const handleRecipeSelect = (e) => {
     const newList = { ...recipeList,
@@ -99,9 +101,19 @@ const List = () => {
     });
   }
 
+  function addUserAccount() {
+    const appState = localStorage.getItem('app_state');
+    if (!appState) return;
+    if (appState === 'login') {
+      let { name, email } = user;
+      post('/user', { name, email });
+      localStorage.removeItem('app_state');
+    }
+  }
+
   useEffect(() => { hydrateShoppingList() }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { getShoppingList() }, [recipeList]); // eslint-disable-line react-hooks/exhaustive-deps
-
+  useEffect(() => { addUserAccount() }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <Layout>
       <Tabs buttonsClassName={styles.tabButtons} maxWidth={800}>

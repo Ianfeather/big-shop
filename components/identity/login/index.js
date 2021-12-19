@@ -2,15 +2,18 @@ import { useAuth0 } from "@auth0/auth0-react";
 import Button from '../../button';
 import styles from '../index.module.css';
 
-export const LoginButton = ({destination}) => {
-  let redirectOps = {};
-  if (destination) {
-    redirectOps.redirect_uri = `${process.env.NEXT_PUBLIC_HOST}${destination}`;
+export const LoginButton = () => {
+  const { loginWithRedirect } = useAuth0();
+
+  const handleClick = () => {
+    localStorage.setItem('app_state', 'login');
+    loginWithRedirect({
+      redirectUri: `${process.env.NEXT_PUBLIC_HOST}/list`
+    });
   }
 
-  const { loginWithRedirect } = useAuth0();
   return (
-    <Button className={styles.authButton} style='pink' onClick={() => loginWithRedirect(redirectOps)}>Log In</Button>
+    <Button className={styles.authButton} style='pink' onClick={() => handleClick()}>Log In</Button>
   );
 };
 

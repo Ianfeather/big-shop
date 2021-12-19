@@ -11,8 +11,8 @@ const LoggedInState = () => (
 
 const LoggedOutState = () => (
   <>
-  <LoginButton destination="/list" />
-  <CreateAccountButton destination="/list" />
+    <LoginButton />
+    <CreateAccountButton />
   </>
 );
 

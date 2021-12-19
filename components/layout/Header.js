@@ -6,7 +6,7 @@ import Logout from '../identity/logout';
 
 export default function Header() {
   const router = useRouter();
-  const { isAuthenticated } = useAuth0();
+  const { isAuthenticated, user } = useAuth0();
 
   const getClassName = (path) => path === router.pathname ? styles.activeLink : '';
 

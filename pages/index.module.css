@@ -39,3 +39,9 @@
   line-height: 1.7;
   margin-bottom: 40px;
 }
+
+.accountModule {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--purple)
+}

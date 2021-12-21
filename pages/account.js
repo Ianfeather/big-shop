@@ -51,7 +51,7 @@ const List = () => {
           { !!invites.length && (
             <div className={styles.accountModule}>
                 <>
-                  <h3 className={styles.moduleHeading}>You've been invited to join another user's account</h3>
+                  <h3 className={styles.moduleHeading}>You have been invited to join another user&apos;s account</h3>
                   {
                     invites.map(invite => (
                       <Invite {...invite}
@@ -66,7 +66,7 @@ const List = () => {
           )}
           <div className={styles.accountModule}>
             <h3 className={styles.moduleHeading}>Invite someone to share your account.</h3>
-            <p>Sharing an account with someone means you'll have access to the same recipes and shopping list. </p>
+            <p>Sharing an account with someone means you will have access to the same recipes and shopping list. </p>
             <div className={styles.inviteForm}>
               <input className={styles.input} type="text" value={invitee} onChange={(e) => setInvitee(e.target.value)} />
               <Button style="green" icon="tick" onClick={handleInvite}>Invite</Button>

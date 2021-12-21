@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/router'
 import styles from './header.module.css'
 import { useAuth0 } from "@auth0/auth0-react";
-import Logout from '../identity/logout';
+import UserMenu from '@components/user-menu';
 
 export default function Header() {
   const router = useRouter();
@@ -27,11 +27,10 @@ export default function Header() {
             <Link href="/recipes">
               <a className={getClassName("/recipes")}>Your Recipes</a>
             </Link>
-            <Logout className={styles.logout} />
           </nav>
         )
       }
-
+      <UserMenu user={user}/>
     </header>
   )
 }

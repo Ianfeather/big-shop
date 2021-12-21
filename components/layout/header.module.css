@@ -1,6 +1,7 @@
 .header {
   padding: 20px 20px 30px;
   height: 190px;
+  position: relative;
 }
 
 .header .title {
@@ -27,15 +28,6 @@
 .nav {
   display: flex;
   justify-content: center;
-}
-
-.logout {
-  border: none;
-  background: none;
-  font-size: inherit;
-  padding: 0;
-  position: relative;
-  top: -1px;
 }
 
 .nav a, .logout {

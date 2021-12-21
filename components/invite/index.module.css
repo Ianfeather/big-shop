@@ -1,0 +1,11 @@
+.invite {
+  display: flex;
+  width: 80%;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.invite button {
+  margin-left: 10px;
+}

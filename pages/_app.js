@@ -21,6 +21,7 @@ const  InnerApp = ({ Component, pageProps }) => {
     return false;
   }
   if (!isAuthenticated) {
+    // TODO: Redirect here instead of showing the form
     return <Login />
   }
   return (

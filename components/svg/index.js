@@ -4,6 +4,7 @@ import EditIcon from './edit';
 import PencilIcon from './pencil';
 import TrashIcon from './trash';
 import TickIcon from './tick';
+import UserIcon from './user';
 
 const icons = {
   back: BackIcon,
@@ -11,7 +12,8 @@ const icons = {
   edit: EditIcon,
   pencil: PencilIcon,
   trash: TrashIcon,
-  tick: TickIcon
+  tick: TickIcon,
+  user: UserIcon
 }
 
 export default icons;

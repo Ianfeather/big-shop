@@ -1,4 +1,4 @@
-import styles from './index.module.css';
+import styles from './account.module.css';
 import useFetch from 'use-http'
 import { useState, useEffect } from 'react';
 import Invite from '@components/invite';
@@ -46,30 +46,35 @@ const List = () => {
   return (
     <Layout>
       <MainContent name="Shopping List">
-        <h1>{user.email}</h1>
-        <div className={styles.accountModule}>
+        <h1>Hi {user.name}! You can use this page to customize your account.</h1>
+        <div className={styles.twoColumnGrid}>
           { !!invites.length && (
-            <>
-              <h2>You've been invited to join another user's account</h2>
-              {
-                invites.map(invite => (
-                  <Invite {...invite}
-                    key={invite.token}
-                    onAccept={() => handleAccept(invite.token)}
-                    onReject={() => handleReject(invite.token)}
-                  />
-                ))
-              }
-            </>
+            <div className={styles.accountModule}>
+                <>
+                  <h3 className={styles.moduleHeading}>You've been invited to join another user's account</h3>
+                  {
+                    invites.map(invite => (
+                      <Invite {...invite}
+                        key={invite.token}
+                        onAccept={() => handleAccept(invite.token)}
+                        onReject={() => handleReject(invite.token)}
+                      />
+                    ))
+                  }
+                </>
+            </div>
           )}
-          <h3>Invite someone to share your account.</h3>
-          <div>
-            <input type="text" value={invitee} onChange={(e) => setInvitee(e.target.value)} />
-            <Button style="green" icon="tick" onClick={handleInvite}>Invite</Button>
+          <div className={styles.accountModule}>
+            <h3 className={styles.moduleHeading}>Invite someone to share your account.</h3>
+            <p>Sharing an account with someone means you'll have access to the same recipes and shopping list. </p>
+            <div className={styles.inviteForm}>
+              <input className={styles.input} type="text" value={invitee} onChange={(e) => setInvitee(e.target.value)} />
+              <Button style="green" icon="tick" onClick={handleInvite}>Invite</Button>
+            </div>
+            { successMessage && (
+              <h3>{successMessage}</h3>
+            )}
           </div>
-          { successMessage && (
-            <h3>{successMessage}</h3>
-          )}
         </div>
       </MainContent>
     </Layout>

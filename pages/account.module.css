@@ -1,0 +1,47 @@
+.accountModule {
+  margin-top: 20px;
+  padding-top: 20px;
+  border: 1px solid var(--purple);
+  padding: 30px;
+  border-radius: 20px;
+  background: var(--light-purple);
+}
+
+.moduleHeading {
+  margin-top: 0;
+  font-weight: bold;
+}
+
+.input {
+  height: 34px;
+  margin-bottom: 10px;
+  border: 1px solid var(--purple);
+  padding: 0 10px;
+}
+
+.inviteForm {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 500px) {
+  .inviteForm {
+    flex-direction: row;
+  }
+  .input {
+    margin-right: 10px;
+    margin-bottom: 0;
+  }
+}
+
+.twoColumnGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 500px) {
+  .twoColumnGrid {
+    grid-template-columns: 1fr 1fr;
+    grid-gap: 1rem;
+  }
+}

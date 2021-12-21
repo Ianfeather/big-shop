@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@auth0/auth0-react": "^1.2.0",
-    "@sendgrid/mail": "^7.6.0",
     "@zeit/next-source-maps": "0.0.3",
     "express": "^4.17.2",
     "express-openid-connect": "^2.5.2",

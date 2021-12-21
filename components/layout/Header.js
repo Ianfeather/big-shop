@@ -20,17 +20,20 @@ export default function Header() {
       </Link>
       {
         isAuthenticated && (
-          <nav className={styles.nav} role="navigation" aria-label="main navigation">
-            <Link href="/list">
-              <a className={getClassName("/list")}>Shopping List</a>
-            </Link>
-            <Link href="/recipes">
-              <a className={getClassName("/recipes")}>Your Recipes</a>
-            </Link>
-          </nav>
+          <>
+            <nav className={styles.nav} role="navigation" aria-label="main navigation">
+              <Link href="/list">
+                <a className={getClassName("/list")}>Shopping List</a>
+              </Link>
+              <Link href="/recipes">
+                <a className={getClassName("/recipes")}>Your Recipes</a>
+              </Link>
+            </nav>
+            <UserMenu user={user}/>
+          </>
         )
       }
-      <UserMenu user={user}/>
+
     </header>
   )
 }

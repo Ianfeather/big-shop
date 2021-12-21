@@ -4,6 +4,7 @@
   right: 0;
   width: 250px;
   height: 150px;
+  pointer-events: none;
 }
 
 .userBackground {
@@ -38,6 +39,7 @@
   right: 20px;
   top: 20px;
   cursor: pointer;
+  pointer-events: all;
 }
 
 .userMenuContainer {
@@ -53,6 +55,7 @@
   line-height: 1.75;
   text-decoration: none;
   color: var(--purple);
+  pointer-events: all;
 }
 
 .link:hover {

@@ -21,7 +21,7 @@ const  InnerApp = ({ Component, pageProps }) => {
   };
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated && !isLoading) {
       return router.push('/')
     }
   }, [isAuthenticated, router]);

@@ -2,10 +2,13 @@ import './styles.css'
 import { Auth0Provider, useAuth0 } from "@auth0/auth0-react";
 import Login from '@components/identity/login';
 import { Provider as FetchProvider } from 'use-http';
+import { useRouter } from 'next/router';
+import { useEffect } from 'react';
 
 
 const  InnerApp = ({ Component, pageProps }) => {
   const { isAuthenticated, isLoading, getAccessTokenSilently } = useAuth0();
+  const router = useRouter();
 
   const fetchOptions = {
     interceptors: {
@@ -17,13 +20,16 @@ const  InnerApp = ({ Component, pageProps }) => {
     }
   };
 
-  if (isLoading) {
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return router.push('/')
+    }
+  }, [isAuthenticated, router]);
+
+  if (isLoading || !isAuthenticated) {
     return false;
   }
-  if (!isAuthenticated) {
-    // TODO: Redirect here instead of showing the form
-    return <Login />
-  }
+
   return (
     <FetchProvider url={process.env.NEXT_PUBLIC_API_HOST} options={fetchOptions}>
       <Component {...pageProps} />

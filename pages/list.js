@@ -57,11 +57,12 @@ const List = () => {
       setListState(result.ingredients, result.extras);
       return result;
     }
+    return {};
   }
 
   // This will only run once on load
   async function hydrateShoppingList() {
-    const { recipes } = await getListState();
+    const { recipes = [] } = await getListState();
     setHydrateFlag(true);
     setRecipeList(recipes.reduce((acc, recipe) => {
       acc[recipe] = true;
@@ -80,9 +81,6 @@ const List = () => {
       return;
     }
     const selectedRecipes = Object.keys(recipeList).filter(k => !!recipeList[k]);
-    if (!selectedRecipes.length) {
-      return;
-    }
     const result = await post('/shopping-list', selectedRecipes);
     if (response.ok) {
       setListState(result.ingredients, result.extras);

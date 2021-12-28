@@ -81,6 +81,9 @@ const List = () => {
       return;
     }
     const selectedRecipes = Object.keys(recipeList).filter(k => !!recipeList[k]);
+    if (!selectedRecipes.length) {
+      return;
+    }
     const result = await post('/shopping-list', selectedRecipes);
     if (response.ok) {
       setListState(result.ingredients, result.extras);

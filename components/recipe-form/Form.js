@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import useFetch from 'use-http'
 import { Typeahead } from 'react-typeahead';
 import Button from '@components/button';
+import partition from 'just-partition';
 
 const bareIngredient = { name: '', quantity: '', unit: '' };
 
@@ -24,7 +25,12 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
   let [deleted, setDeleted] = useState(false);
   let [showIngredients, setShowIngredients] = useState(mode != 'new');
   let [autoIngredients, setAutoIngredients] = useState(mode === 'new');
+  let [unmatchedIngredients, setUnmatchedIngredients] = useState([]);
   const { get, post, put, del, response, loading } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
+    cachePolicy: 'no-cache'
+  });
+
+  const { get: getNextAPI, response: nextAPIResponse, loading: nextAPILoading } = useFetch(process.env.NEXT_PUBLIC_HOST, {
     cachePolicy: 'no-cache'
   });
 
@@ -103,9 +109,23 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
     setRecipe(bareRecipe);
   }
 
-  function onNext(e) {
+  async function onNext(e) {
     e.preventDefault();
-    // fetch the api ingredients
+    if (recipe.remoteUrl && autoIngredients) {
+      const ingredients = await getNextAPI(`/api/get-ingredients?url=${encodeURIComponent(recipe.remoteUrl)}`);
+      if (nextAPIResponse.ok) {
+        const [matched, unmatched] = partition(ingredients, ingredient => {
+          if (!(ingredient.name && ingredient.quantity)) return false;
+          if (!ingredient.unit) return true; // we're fine with null units
+          return units.some(unit => unit.name.toLowerCase() === ingredient.unit.toLowerCase())
+        });
+        setRecipe({
+          ...recipe,
+          ingredients: [...matched, bareIngredient]
+        });
+        setUnmatchedIngredients(unmatched);
+      }
+    }
     setShowIngredients(true);
   }
 
@@ -139,6 +159,15 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
       {
         showIngredients ? (
           <>
+            { autoIngredients && !!unmatchedIngredients.length && (
+              <div className={styles.unmatchedIngredients}>
+                <div className={styles.unmatchedHeading}>The following ingredients were also found which you should add manually to avoid mistakes.</div>
+                <ul>
+                  { unmatchedIngredients.map((ig, i) => <li key={i}>{ig.text}</li>) }
+                </ul>
+              </div>
+            )}
+
             <div className={styles.ingredientsGroup}>
               {
                 recipe.ingredients.map((ingredient, i) => {
@@ -221,7 +250,12 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
             </div>
           </>
         ) :
-        <Button style="green" onClick={onNext}>Next: Add Ingredients</Button>
+        (
+          <>
+            <Button style="green" onClick={onNext}>Next: Add Ingredients</Button>
+            { !!nextAPILoading && <span>Loading...</span>}
+          </>
+        )
       }
     </form>
     </>

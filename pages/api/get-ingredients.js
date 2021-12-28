@@ -18,11 +18,11 @@ function getList(html, backend) {
 function parseList(list, backend) {
   return list.map(li => {
     const result = li.match(backend.regex);
-    const { quantity, unit, ingredient } = result?.groups || {};
+    const { quantity, unit = '', ingredient } = result?.groups || {};
     // TODO: handle missing ones? Tidy up the response
     return {
       text: li,
-      ingredient,
+      name: ingredient,
       quantity,
       unit: unitMap[unit] || unit
     }

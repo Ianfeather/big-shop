@@ -9,6 +9,13 @@
   font-weight: bold;
 }
 
+.checkboxContainer label {
+  display: inline;
+  margin: 0 0 0 10px;
+  font-size: 14px;
+  font-weight: normal;
+}
+
 @media (min-width: 500px) {
   .form label {
     font-size: 18px;
@@ -16,7 +23,7 @@
 }
 
 .metaGroup {
-  margin-bottom: 60px;
+  margin-bottom: 30px;
 }
 
 .ingredientsGroup {
@@ -28,20 +35,21 @@
   justify-content: space-between;
 }
 
-.form input {
+.form input:not([type='checkbox']), .form textarea {
   width: 100%;
   padding: 8px 0;
   border: none;
   outline: none;
   border-bottom: 1px solid #d7b1f3;
   font-size: 16px;
+  font-family: inherit;
 }
 
-.form input:focus {
+.form input:focus, .form textarea:focus {
   border-bottom: 2px solid var(--purple);
 }
 
-.form input::placeholder {
+.form input::placeholder, .form textarea::placeholder {
   color: #d2d0d0;
   -webkit-font-smoothing: antialiased;
 }

@@ -15,7 +15,7 @@ const capitalize = (str) => {
 }
 
 export default function Form({initialRecipe = {}, mode = 'new'}) {
-  const bareRecipe = { name: '', remoteUrl: '', ingredients: [bareIngredient]};
+  const bareRecipe = { name: '', remoteUrl: '', notes: '', ingredients: [bareIngredient]};
 
   let [recipe, setRecipe] = useState(initialRecipe.id ? initialRecipe : bareRecipe);
   let [saved, setSaved] = useState(false);
@@ -23,6 +23,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
   let [ingredients, setIngredients] = useState([]);
   let [deleted, setDeleted] = useState(false);
   let [showIngredients, setShowIngredients] = useState(mode != 'new');
+  let [autoIngredients, setAutoIngredients] = useState(mode === 'new');
   const { get, post, put, del, response, loading } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
     cachePolicy: 'no-cache'
   });
@@ -121,9 +122,18 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
           <input placeholder="Shepherds Pie" value={recipe.name} autoComplete="off" type="text" id="recipe-name" onChange={(e) => updateRecipe('name', e.target.value)}/>
         </div>
         <div className={styles.group}>
-          <label htmlFor="recipe-remote-url">URL (to the recipe site, optional)</label>
+          <label htmlFor="recipe-remote-url">Link to the original recipe (optional)</label>
           <input placeholder="https://" value={recipe.remoteUrl} autoComplete="off" type="text" id="recipe-remote-url" onChange={(e) => updateRecipe('remoteUrl', e.target.value)}/>
         </div>
+        <div className={styles.group}>
+          <label htmlFor="recipe-remote-url">Notes (optional)</label>
+          <textarea placeholder="A mum classic" value={recipe.notes} autoComplete="off" id="recipe-notes" rows="5" onChange={(e) => updateRecipe('notes', e.target.value)}/>
+        </div>
+        <div className={styles.checkboxContainer}>
+          <input type="checkbox" checked={autoIngredients} id="recipe-auto-ingredients" onChange={(e) => setAutoIngredients(!autoIngredients)}/>
+          <label htmlFor="recipe-auto-ingredients">Auto-fill Ingredients (where possible)</label>
+        </div>
+
       </div>
 
       {
@@ -211,7 +221,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
             </div>
           </>
         ) :
-        <Button style="green" onClick={onNext}>Next</Button>
+        <Button style="green" onClick={onNext}>Next: Add Ingredients</Button>
       }
     </form>
     </>

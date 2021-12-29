@@ -1,13 +1,18 @@
 import { parse } from 'node-html-parser';
 import getBackend from './third-parties';
 
+// https://regex101.com/r/of2WLE/2
+// Maybe we need to list out all the units in the regex?
+// including plurals
+const regex = /(?<quantity>[\d|\/]+)(?:\s)?(?:(?<unit>[a-zA-Z\.]{1,5})?) (?<ingredient>[\p{L}\p{M}\-| ]+)/u
+
 const unitMap = {
   g: 'gram',
   kg: 'kilogram',
   tbsp: 'tablespoon',
   ml: 'millilitre',
   l: 'litre',
-  tsp: 'teaspoon'
+  tsp: 'teaspoon',
 };
 
 function getList(html, backend) {
@@ -17,9 +22,9 @@ function getList(html, backend) {
 
 function parseList(list, backend) {
   return list.map(li => {
-    const result = li.match(backend.regex);
-    const { quantity, unit = '', ingredient } = result?.groups || {};
-    // TODO: handle missing ones? Tidy up the response
+    const result = li.match(backend.regex || regex);
+    let { quantity, unit = '', ingredient } = result?.groups || {};
+    unit = unit.toLowerCase().replace('.', '');
     return {
       text: li,
       name: ingredient,

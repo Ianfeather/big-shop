@@ -1,32 +1,22 @@
+import defaultScraper from './default';
 import BBCGoodFood from './bbc-good-food';
-
-// Ideally this becomes a best guess implementation that provides *some* value
-// Looong term maybe we can replace all of this with a word2vec style implementation
-const defaultScraper = {
-  getList(document) {
-    return []
-  },
-  regex: /(?<quantity>\d+)(?: )?(?:(?<unit>[a-zA-Z]{1,4})?) (?<ingredient>[\w| ]+)/
-}
-
-// TODO:
-// bbc food https://www.bbc.co.uk/food/recipes/chickenandmushroompi_89034
-// channel4.com
-// great british chefs
-// kwestia smaku
-// seriouseats
-// recipetineats
-// simplyrecipes
-// allrecipes
-// thefoodnetwork
-// epicurious
-// tasty
-// delish
-// yummly
-// one of the blogging platforms
+import greatBritishChefs from './great-british-chefs';
+import seriousEats from './serious-eats';
+import simplyRecipes from './simply-recipes';
+import foodNetwork from './food-network';
+import epicurious from './epicurious';
+import delish from './delish';
 
 const hostnameMap = {
-  'www.bbcgoodfood.com': BBCGoodFood
+  'www.bbcgoodfood.com': BBCGoodFood,
+  'www.greatbritishchefs.com': greatBritishChefs,
+  'www.seriouseats.com': seriousEats,
+  'www.allrecipes.com': seriousEats,
+  'www.simplyrecipes.com': simplyRecipes,
+  'foodnetwork.com': foodNetwork, // returns 403
+  'foodnetwork.co.uk': foodNetwork, // returns 403
+  'www.epicurious.com': epicurious,
+  'www.delish.com': delish,
 }
 
 const getImplementation = (hostname) => {

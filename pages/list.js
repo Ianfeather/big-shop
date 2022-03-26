@@ -15,6 +15,7 @@ const List = () => {
   let [shoppingList, setShoppingList] = useState({});
   let [extras, setExtras] = useState({});
   let [hydrateFlag, setHydrateFlag] = useState(false);
+  let [dirtyState, setDirtyState] = useState(false);
   const { user } = useAuth0();
 
   const handleRecipeSelect = (e) => {
@@ -27,6 +28,11 @@ const List = () => {
   const { get, post, patch, del, response } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
     cachePolicy: 'no-cache'
   });
+
+  const setListState = (ingredients, extras) => {
+    setShoppingList(ingredients);
+    setExtras(extras);
+  }
 
   async function buyIngredient(name, type) {
     const list = type === 'ingredient' ? shoppingList : extras;
@@ -42,19 +48,26 @@ const List = () => {
     } else {
       setExtras(newList);
     }
-    // fire and forget
-    patch('/shopping-list/buy', { name, isBought: newList[name].isBought });
-  }
 
-  const setListState = (ingredients, extras) => {
-    setShoppingList(ingredients);
-    setExtras(extras);
+    setDirtyState(true);
+    try {
+      const result = await patch('/shopping-list/buy', { name, isBought: newList[name].isBought });
+      if (response.ok && result.recipes.length) {
+        setListState(result.ingredients, result.extras);
+      }
+    } catch (e) {
+      // todo: move the bought item back into not-bought
+      console.error(e);
+    }
+    setDirtyState(false);
   }
 
   const getListState = async () => {
     const result = await get('/shopping-list');
     if (response.ok && result.recipes.length) {
-      setListState(result.ingredients, result.extras);
+      if (!dirtyState) {
+        setListState(result.ingredients, result.extras);
+      }
       return result;
     }
     return {};

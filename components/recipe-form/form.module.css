@@ -140,6 +140,10 @@
   background-color: #94c3ae;
 }
 
+.loadingIngredients {
+  margin-left: 10px;
+}
+
 .stored {
   display: inline-block;
   margin-left: 30px;

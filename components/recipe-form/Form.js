@@ -4,6 +4,7 @@ import useFetch from 'use-http'
 import { Typeahead } from 'react-typeahead';
 import Button from '@components/button';
 import partition from 'just-partition';
+import Spinner from './spinner';
 
 const bareIngredient = { name: '', quantity: '', unit: '' };
 
@@ -257,8 +258,10 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
         ) :
         (
           <>
-            <Button style="green" onClick={onNext}>Next: Add Ingredients</Button>
-            { !!nextAPILoading && <span>Loading...</span>}
+            <Button style="green" onClick={onNext}>
+              Next: Add Ingredients
+              { !!nextAPILoading && <Spinner className={styles.loadingIngredients}>Loading...</Spinner>}
+            </Button>
           </>
         )
       }

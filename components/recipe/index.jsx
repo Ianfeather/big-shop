@@ -12,6 +12,7 @@ const Recipe = ({ recipe }) => {
   return (
     <>
       <RecipeLink link={recipe.remoteUrl} />
+      <p>{recipe.notes}</p>
       <div className={styles.ingredients}>
         <h3 className={styles.heading}>Ingredients</h3>
         <ul>

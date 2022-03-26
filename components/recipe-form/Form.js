@@ -138,21 +138,26 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
     <form className={styles.form}>
       <div className={styles.metaGroup}>
         <div className={styles.group}>
-          <label htmlFor="recipe-name">Recipe Name</label>
+          <label htmlFor="recipe-name">Recipe Name <span className={styles.required}>*</span></label>
           <input placeholder="Shepherds Pie" value={recipe.name} autoComplete="off" type="text" id="recipe-name" onChange={(e) => updateRecipe('name', e.target.value)}/>
         </div>
         <div className={styles.group}>
-          <label htmlFor="recipe-remote-url">Link to the original recipe (optional)</label>
+          <label htmlFor="recipe-remote-url">Link to the original recipe</label>
           <input placeholder="https://" value={recipe.remoteUrl} autoComplete="off" type="text" id="recipe-remote-url" onChange={(e) => updateRecipe('remoteUrl', e.target.value)}/>
         </div>
         <div className={styles.group}>
-          <label htmlFor="recipe-remote-url">Notes (optional)</label>
-          <textarea placeholder="A mum classic" value={recipe.notes} autoComplete="off" id="recipe-notes" rows="5" onChange={(e) => updateRecipe('notes', e.target.value)}/>
+          <label htmlFor="recipe-remote-url">Notes</label>
+          <textarea placeholder="Go heavy on the pepper" value={recipe.notes} autoComplete="off" id="recipe-notes" rows="3" onChange={(e) => updateRecipe('notes', e.target.value)}/>
         </div>
-        <div className={styles.checkboxContainer}>
-          <input type="checkbox" checked={autoIngredients} id="recipe-auto-ingredients" onChange={(e) => setAutoIngredients(!autoIngredients)}/>
-          <label htmlFor="recipe-auto-ingredients">Auto-fill Ingredients (where possible)</label>
-        </div>
+        {
+          recipe.remoteUrl && (
+            <div className={styles.checkboxContainer}>
+                <input type="checkbox" checked={autoIngredients} id="recipe-auto-ingredients" onChange={(e) => setAutoIngredients(!autoIngredients)}/>
+                <label htmlFor="recipe-auto-ingredients">Attempt to auto-fill ingredients</label>
+              </div>
+          )
+        }
+
 
       </div>
 

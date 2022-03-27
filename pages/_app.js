@@ -24,7 +24,7 @@ const  InnerApp = ({ Component, pageProps }) => {
     if (!isAuthenticated && !isLoading) {
       return router.push('/')
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, router, isLoading]);
 
   if (isLoading || !isAuthenticated) {
     return false;

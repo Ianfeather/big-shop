@@ -17,7 +17,7 @@ const capitalize = (str) => {
 }
 
 export default function Form({initialRecipe = {}, mode = 'new'}) {
-  const bareRecipe = { name: '', remoteUrl: '', notes: '', ingredients: [bareIngredient]};
+  const bareRecipe = { name: '', remoteUrl: '', notes: '', ingredients: [{...bareIngredient}]};
 
   let [recipe, setRecipe] = useState(initialRecipe.id ? initialRecipe : bareRecipe);
   let [saved, setSaved] = useState(false);
@@ -39,7 +39,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
     if (initialRecipe.name) {
       setRecipe({
         ...initialRecipe,
-        ingredients: [ ...initialRecipe.ingredients, bareIngredient ]
+        ingredients: [ ...initialRecipe.ingredients, {...bareIngredient} ]
       });
     }
   }, [initialRecipe]);
@@ -66,7 +66,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
     let newIngredients = [...recipe.ingredients];
     newIngredients[i][key] = value;
     if (i === recipe.ingredients.length - 1) {
-      newIngredients.push(bareIngredient);
+      newIngredients.push({...bareIngredient});
     }
     setRecipe({
       ...recipe,
@@ -122,7 +122,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
         });
         setRecipe({
           ...recipe,
-          ingredients: [...matched, bareIngredient]
+          ingredients: [...matched, {...bareIngredient}]
         });
         setUnmatchedIngredients(unmatched);
       }

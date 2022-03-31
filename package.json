@@ -12,7 +12,7 @@
   "dependencies": {
     "@auth0/auth0-react": "^1.2.0",
     "express": "^4.17.2",
-    "express-openid-connect": "^2.5.2",
+    "express-openid-connect": "^2.7.2",
     "html-entities": "^2.3.2",
     "just-partition": "^2.0.1",
     "next": "^12.0.4",

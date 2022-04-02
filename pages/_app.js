@@ -48,7 +48,9 @@ export default function App({ Component, pageProps, router }) {
       domain={domain}
       clientId={clientId}
       audience={audience}
-      redirectUri={process.env.NEXT_PUBLIC_HOST}>
+      redirectUri={process.env.NEXT_PUBLIC_HOST}
+      useRefreshTokens={true}
+      cacheLocation="localstorage">
         {
           behindAuth ?
           <InnerApp Component={Component} pageProps={pageProps} /> :

@@ -111,6 +111,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
   function resetForm(e) {
     e.preventDefault();
     setRecipe(bareRecipe);
+    setUnmatchedIngredients([]);
   }
 
   async function onNext(e) {

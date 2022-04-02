@@ -1,6 +1,7 @@
 import styles from './form.module.css';
 import { useState, useEffect } from 'react';
 import useFetch from 'use-http'
+import { useRouter } from 'next/router'
 import { Typeahead } from 'react-typeahead';
 import Button from '@components/button';
 import partition from 'just-partition';
@@ -27,6 +28,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
   let [showIngredients, setShowIngredients] = useState(mode != 'new');
   let [autoIngredients, setAutoIngredients] = useState(mode === 'new');
   let [unmatchedIngredients, setUnmatchedIngredients] = useState([]);
+  const router = useRouter();
   const { get, post, put, del, response, loading } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
     cachePolicy: 'no-cache'
   });
@@ -92,6 +94,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
     await del('/recipe', { id: recipe.id })
     if (response.ok) {
       setDeleted(true);
+      return router.push('/recipes')
     }
   }
 

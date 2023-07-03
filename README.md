@@ -8,11 +8,46 @@ npm run dev
 ```
 Requires node 14+
 
-## connecting to the API
-In another shell you can run the recipes app (https://github.com/Ianfeather/recipes) and this app will automatically connect to it via the .env.development configuration.
-
 ## backlog
 https://trello.com/b/LnaGkQyG/bigshop
 
 ## deploying
 This is handled automatically by netlify.
+
+The lambda connects to planetscale DB.
+
+### local setup
+
+Lots to do here.
+- Setup netlify-lambda package for local dev
+- Configure the app to connect to a local db
+- local env vars
+
+
+### local db
+To enter the mysql workspace:
+```
+mysql -u root
+use bigshop;
+```
+
+- db user
+```
+CREATE USER 'admin'@'localhost' IDENTIFIED BY 'admin';
+GRANT ALL PRIVILEGES ON bigshop.* TO 'admin'@'localhost';
+```
+
+#### Auth
+The API is behind auth and I haven't come up with a nice way of configuring that yet for use via curl/postman. Via the app it's fine. For now I copy an authorization token from the application requests and use that in the auth header. Big todo.
+
+## runnning db migrations
+I haven't created a decent workflow for this yet :(
+
+What I've been doing is switching the RDS instance to be publicly accessible then accessing it via mysql workbench and running the migrations ad-hoc.
+
+I've also been using workbench for dumping the db from prod to local.
+
+## useful links
+- [netlify](https://app.netlify.com/sites/big-shop/overview)
+- [PlanetScale DB](https://app.planetscale.com/ianfeather/bigshop)
+- [Auth0 (for managing user)](https://manage.auth0.com/dashboard/eu/dev-x-n37k6b/applications/HxkTOH3ZYxjbsgrVI4ii1CV2TQx7hk9G/settings)

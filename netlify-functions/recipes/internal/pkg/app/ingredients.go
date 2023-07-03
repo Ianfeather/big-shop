@@ -1,0 +1,29 @@
+package app
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"recipes/internal/pkg/service"
+)
+
+func (a *App) ingredientsHandler(w http.ResponseWriter, req *http.Request) {
+	encoder := json.NewEncoder(w)
+	ingredients, err := service.GetAllIngredients(a.db)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Ingredients not found", http.StatusNotFound)
+			err = encoder.Encode(make([]string, 0))
+			return
+		}
+		fmt.Println(err)
+		http.Error(w, "Failed to get ingredients from db", http.StatusInternalServerError)
+		return
+	}
+
+	if err = encoder.Encode(ingredients); err != nil {
+		http.Error(w, "Error encoding json", http.StatusInternalServerError)
+	}
+}

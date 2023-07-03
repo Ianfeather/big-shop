@@ -122,6 +122,8 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, error) {
 				panic(err.Error())
 			}
 			result, _ := jwt.ParseRSAPublicKeyFromPEM([]byte(cert))
+			fmt.Println("valid token:")
+			fmt.Println(result)
 			return result, nil
 		},
 		SigningMethod: jwt.SigningMethodRS256,
@@ -164,6 +166,8 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, error) {
 	n.Use(negroni.HandlerFunc(jwtMiddleware.HandlerWithNext))
 	n.Use(negroni.HandlerFunc(userMiddleware))
 	n.UseHandler(router)
+
+	fmt.Println("ADDED ROUTES")
 
 	return n, nil
 }

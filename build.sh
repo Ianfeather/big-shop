@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
 
-npm run package
+set -e
 
-# rm -rf netlify-functions/recipes
-# mkdir -p netlify-functions/recipes
-# cd recipe-app
-# go fmt ./...
-# go test ./... -v
-# GOOS=linux GOARCH=amd64 go build -o ../netlify-functions/recipes/main cmd/main.go
-# ls -la ../netlify-functions/recipes
+npm run package
+cd netlify-functions/recipes
+go fmt ./...
+go test ./... -v

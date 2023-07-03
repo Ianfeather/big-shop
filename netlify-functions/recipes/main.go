@@ -43,7 +43,7 @@ func init() {
 		fmt.Println(err)
 	}
 
-	router, err = application.GetRouter(".netlify/functions/recipes")
+	router, err = application.GetRouter("/.netlify/functions/recipes")
 	if err != nil {
 		fmt.Println("Failed to get application router")
 		fmt.Println(err)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"database/sql"
 	"fmt"
 	"log"
@@ -15,6 +16,7 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	negroniadapter "github.com/awslabs/aws-lambda-go-api-proxy/negroni"
+	"github.com/go-sql-driver/mysql"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/urfave/negroni"
 )
@@ -23,6 +25,11 @@ var negroniLambda *negroniadapter.NegroniAdapter
 var router *negroni.Negroni
 
 func init() {
+	mysql.RegisterTLSConfig("tidb", &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		ServerName: "gateway01.eu-central-1.prod.aws.tidbcloud.com",
+	})
+
 	db, err := sql.Open("mysql", os.Getenv("DSN"))
 
 	if err != nil {

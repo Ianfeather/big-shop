@@ -14,7 +14,7 @@ https://trello.com/b/LnaGkQyG/bigshop
 ## deploying
 This is handled automatically by netlify.
 
-The lambda connects to planetscale DB.
+The lambda used to connect to planetscale DB. Since they dropped the free tier is connects to TiDB.
 
 ### local setup
 
@@ -42,8 +42,6 @@ The API is behind auth and I haven't come up with a nice way of configuring that
 
 ## runnning db migrations
 I haven't created a decent workflow for this yet :(
-
-What I've been doing is switching the RDS instance to be publicly accessible then accessing it via mysql workbench and running the migrations ad-hoc.
 
 I've also been using workbench for dumping the db from prod to local.
 

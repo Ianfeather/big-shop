@@ -19,7 +19,8 @@ func getIngredientsByRecipeID(id int, db *sql.DB) ([]common.Ingredient, error) {
 			part
 			INNER JOIN ingredient on ingredient_id = ingredient.id
 			INNER JOIN unit on unit_id = unit.id
-			LEFT JOIN department on department.id = (select department_id from ingredient_department where ingredient_department.ingredient_id = ingredient.id LIMIT 1)
+			LEFT JOIN ingredient_department on ingredient_department.ingredient_id = ingredient.id
+			LEFT JOIN department on department.id = ingredient_department.department_id
 		WHERE
 		recipe_id = ?;
 	`

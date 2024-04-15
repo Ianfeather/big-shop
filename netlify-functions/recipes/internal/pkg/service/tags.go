@@ -4,10 +4,9 @@ import (
 	"database/sql"
 )
 
-// Tag is used to constrain ingredients
+// Tag is used to relate meals
 type Tag struct {
 	Name string `json:"name"`
-	ID   int    `json:"id"`
 }
 
 // GetAllTags returns all tags
@@ -22,7 +21,7 @@ func GetAllTags(db *sql.DB) ([]Tag, error) {
 
 	for results.Next() {
 		r := Tag{}
-		err = results.Scan(&r.ID, &r.Name)
+		err = results.Scan(&r.Name)
 		if err != nil {
 			return nil, err
 		}

@@ -55,7 +55,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
     ]);
     if (response.ok) {
       setUnits(_units.map(unit => ({...unit, name: capitalize(unit.name)})));
-      setTags(tags);
+      setTags(_tags);
       setIngredients(_ingredients.map(i => capitalize(i.name)));
     }
 

@@ -22,7 +22,7 @@ func GetAllRecipes(db *sql.DB, userID string) ([]Recipe, error) {
 	}
 
 	recipesQuery := `
-		SELECT id, name, tag_name FROM recipe
+		SELECT recipe.id, name, tag_name FROM recipe
 			LEFT JOIN recipe_tag on recipe.id = recipe_tag.recipe_id
 			WHERE account_id = ?
 			ORDER BY lower(recipe.name);

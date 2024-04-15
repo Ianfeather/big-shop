@@ -145,6 +145,7 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, error) {
 	router.HandleFunc(base+"/shopping-list/extra", a.addExtraListItem).Methods("POST")
 	router.HandleFunc(base+"/shopping-list/clear", a.clearListHandler).Methods("DELETE")
 	router.HandleFunc(base+"/units", a.getUnitsHandler).Methods("GET")
+	router.HandleFunc(base+"/tags", a.getTagsHandler).Methods("GET")
 	router.HandleFunc(base+"/account", a.getAccount).Methods("GET")
 	router.HandleFunc(base+"/account/add", a.addUserToAccount).Methods("POST")
 	router.HandleFunc(base+"/account/remove", a.removeUserFromAccount).Methods("DELETE")
@@ -166,8 +167,6 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, error) {
 	n.Use(negroni.HandlerFunc(jwtMiddleware.HandlerWithNext))
 	n.Use(negroni.HandlerFunc(userMiddleware))
 	n.UseHandler(router)
-
-	fmt.Println("ADDED ROUTES")
 
 	return n, nil
 }

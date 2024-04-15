@@ -2,6 +2,7 @@ package service
 
 import (
 	"recipes/internal/pkg/common"
+	"strings"
 
 	"database/sql"
 	"fmt"
@@ -155,6 +156,9 @@ func AddRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 	if err = insertParts(recipe, db); err != nil {
 		return err
 	}
+	if err = insertTags(recipe, db); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -194,6 +198,10 @@ func EditRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 		log.Println(err)
 		return err
 	}
+
+	if err = insertTags(recipe, db); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -214,6 +222,11 @@ func DeleteRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 
 	// Delete the existing relationships between recipe & ingredients
 	if _, err := db.Exec("DELETE FROM part WHERE recipe_id=?;", recipe.ID); err != nil {
+		return err
+	}
+
+	// Delete the existing relationships between recipe & tags
+	if _, err := db.Exec("DELETE FROM tag WHERE recipe_id=?;", recipe.ID); err != nil {
 		return err
 	}
 
@@ -263,6 +276,31 @@ func insertParts(recipe common.Recipe, db *sql.DB) error {
 	_, err := db.Exec(partsQuery)
 	if err != nil {
 		fmt.Println("could not insert part")
+		return err
+	}
+
+	return nil
+}
+
+func insertTags(recipe common.Recipe, db *sql.DB) error {
+	removeQuery := "DELETE FROM recipe_tag WHERE recipe_id = ?;"
+	_, err := db.Exec(removeQuery, recipe.ID)
+	if err != nil {
+		fmt.Println("could not remove tags")
+		return err
+	}
+
+	placeholders := []string{}
+	placeholderValues := []interface{}{}
+
+	addQuery := "INSERT INTO recipe_tag (recipe_id, tag_name) VALUES (%s);"
+	for _, tag := range recipe.Tags {
+		placeholders = append(placeholders, "(?,?)")
+		placeholderValues = append(placeholderValues, recipe.ID, tag.Name)
+	}
+	_, err = db.Exec(fmt.Sprintf(addQuery, strings.Join(placeholders, ",")), placeholderValues...)
+	if err != nil {
+		fmt.Println("could not add tags")
 		return err
 	}
 

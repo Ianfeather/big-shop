@@ -23,6 +23,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
   let [recipe, setRecipe] = useState(initialRecipe.id ? initialRecipe : bareRecipe);
   let [saved, setSaved] = useState(false);
   let [units, setUnits] = useState([]);
+  let [tags, setTags] = useState([]);
   let [ingredients, setIngredients] = useState([]);
   let [deleted, setDeleted] = useState(false);
   let [showIngredients, setShowIngredients] = useState(mode != 'new');
@@ -46,21 +47,35 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
     }
   }, [initialRecipe]);
 
-  async function getUnitsAndIngredients() {
-    const [_units, _ingredients] = await Promise.all([
+  async function getUnitsTagsAndIngredients() {
+    const [_units, _tags, _ingredients] = await Promise.all([
       get('/units'),
+      get('/tags'),
       get('/ingredients')
     ]);
     if (response.ok) {
       setUnits(_units.map(unit => ({...unit, name: capitalize(unit.name)})));
+      setTags(tags);
       setIngredients(_ingredients.map(i => capitalize(i.name)));
     }
 
   }
-  useEffect(() => { getUnitsAndIngredients() }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { getUnitsTagsAndIngredients() }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function updateRecipe(key, value) {
     const updatedRecipe = { ...recipe, [key]: value};
+    setRecipe(updatedRecipe)
+  }
+
+  function updateRecipeTags(value) {
+    const exists = recipe.tags.some(tag => tag.name === value);
+    let newTags;
+    if (exists) {
+      newTags = recipe.tags.filter(tag => tag.name != value)
+    } else {
+      newTags = [...recipe.tags, tags.find(t => t.name === value)]
+    }
+    const updatedRecipe = { ...recipe, tags: newTags};
     setRecipe(updatedRecipe)
   }
 
@@ -149,6 +164,23 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
         <div className={styles.group}>
           <label htmlFor="recipe-remote-url">Link to the original recipe</label>
           <input placeholder="https://" value={recipe.remoteUrl} autoComplete="off" type="text" id="recipe-remote-url" onChange={(e) => updateRecipe('remoteUrl', e.target.value)}/>
+        </div>
+        <div className={styles.group}>
+          <label htmlFor="recipe-remote-url">Tags</label>
+          {
+            tags.map((tag, idx) => (
+              <div key={tag.name}>
+                <input
+                  type="checkbox"
+                  value={tag.name.toLowerCase()}
+                  id={`tag-${idx}`}
+                  checked={recipe.tags.some(t => t.name === tag.name)}
+                  onChange={(e) => updateRecipeTags(e.target.value)}
+                  />
+                <label for={`tag-${idx}`}>{tag.name}</label>
+              </div>
+            ))
+          }
         </div>
         <div className={styles.group}>
           <label htmlFor="recipe-remote-url">Notes</label>

@@ -27,6 +27,11 @@ type Ingredient struct {
 	Department string `json:"department"`
 }
 
+// Tag contains tag fields
+type Tag struct {
+	Name string `json:"name"`
+}
+
 // Recipe contains recipe fields
 type Recipe struct {
 	Name        string       `json:"name"`
@@ -34,6 +39,7 @@ type Recipe struct {
 	RemoteURL   string       `json:"remoteUrl"`
 	Notes       string       `json:"notes"`
 	Ingredients []Ingredient `json:"ingredients"`
+	Tags        []Tag        `json:"tags"`
 }
 
 // ListIngredient is a subset of shopping List

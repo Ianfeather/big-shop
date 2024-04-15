@@ -43,7 +43,7 @@ const RecipeList = ({ handleRecipeSelect, filterFn = () => true }) => {
             recipes
               .filter(filterFn)
               .filter(({ name }) => name.toLowerCase().includes(sidebarFilter.toLowerCase()))
-              .filter(({ recipeTags }) => {
+              .filter(({ tags: recipeTags }) => {
                 if (tagsFilter === '') {
                   return true;
                 }

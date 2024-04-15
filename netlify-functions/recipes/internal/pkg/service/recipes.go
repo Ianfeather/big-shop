@@ -37,7 +37,7 @@ func GetAllRecipes(db *sql.DB, userID string) ([]Recipe, error) {
 	recipes := []Recipe{}
 
 	for results.Next() {
-		r := Recipe{}
+		r := Recipe{Tags: []string{}}
 		var tag sql.NullString
 		err = results.Scan(&r.ID, &r.Name, &tag)
 		if err != nil {

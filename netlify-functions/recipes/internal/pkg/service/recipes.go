@@ -7,15 +7,23 @@ import (
 
 // Recipe is a lightweight recipe type w/o ingredients
 type Recipe struct {
-	Name string `json:"name"`
-	ID   int    `json:"id"`
+	Name string   `json:"name"`
+	ID   int      `json:"id"`
+	Tags []string `json:"tags"`
 }
 
 // GetAllRecipes returns all recipes in the recipe table
 func GetAllRecipes(db *sql.DB, userID string) ([]Recipe, error) {
 	accountID, err := GetAccountID(db, userID)
+
+	if err != nil {
+		log.Println("Error getting account ID")
+		return nil, err
+	}
+
 	recipesQuery := `
-		SELECT id, name FROM recipe
+		SELECT id, name, tag_name FROM recipe
+			LEFT JOIN recipe_tag on recipe.id = recipe_tag.recipe_id
 			WHERE account_id = ?
 			ORDER BY lower(recipe.name);
 	`
@@ -26,13 +34,23 @@ func GetAllRecipes(db *sql.DB, userID string) ([]Recipe, error) {
 		return nil, err
 	}
 
-	recipes := make([]Recipe, 0)
+	recipes := []Recipe{}
 
 	for results.Next() {
 		r := Recipe{}
-		err = results.Scan(&r.ID, &r.Name)
+		var tag sql.NullString
+		err = results.Scan(&r.ID, &r.Name, &tag)
 		if err != nil {
 			return nil, err
+		}
+
+		if r.ID == recipes[len(recipes)-1].ID {
+			r.Tags = append(r.Tags, tag.String)
+			continue
+		}
+
+		if tag.Valid {
+			r.Tags = []string{tag.String}
 		}
 		recipes = append(recipes, r)
 	}

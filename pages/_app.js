@@ -1,6 +1,5 @@
 import './styles.css'
 import { Auth0Provider, useAuth0 } from "@auth0/auth0-react";
-import Login from '@components/identity/login';
 import { Provider as FetchProvider } from 'use-http';
 import { useRouter } from 'next/router';
 import { useEffect } from 'react';

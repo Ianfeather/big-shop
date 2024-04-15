@@ -17,12 +17,3 @@ create table `recipe_tag` (
 );
 
 INSERT INTO `tag` (name) VALUES ('Vegetarian'), ('Batch Cook');
-
-
--- add the table + relationships DONE
--- add an endpoint to associate a tag with a recipe DONE
-  -- update recipe/edit and recipe/add DONE
-  -- update the struct response to include tags (including on the recipe-list) DONE
-  -- update recipes response DONE
--- add a field on the recipe page to add a tag
--- add a filter on the list page to filter by tag

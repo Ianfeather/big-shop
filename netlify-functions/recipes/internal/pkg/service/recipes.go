@@ -44,7 +44,7 @@ func GetAllRecipes(db *sql.DB, userID string) ([]Recipe, error) {
 			return nil, err
 		}
 
-		if r.ID == recipes[len(recipes)-1].ID {
+		if len(recipes) > 0 && r.ID == recipes[len(recipes)-1].ID {
 			r.Tags = append(r.Tags, tag.String)
 			continue
 		}

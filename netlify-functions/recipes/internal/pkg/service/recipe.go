@@ -336,12 +336,11 @@ func insertTags(recipe common.Recipe, db *sql.DB) error {
 	placeholders := []string{}
 	placeholderValues := []interface{}{}
 
-	addQuery := "INSERT INTO recipe_tag (recipe_id, tag_name) VALUES (%s);"
+	addQuery := "INSERT INTO recipe_tag (recipe_id, tag_name) VALUES %s;"
 	for _, tag := range recipe.Tags {
 		placeholders = append(placeholders, "(?,?)")
 		placeholderValues = append(placeholderValues, recipe.ID, tag)
 	}
-	fmt.Println(fmt.Sprintf(addQuery, strings.Join(placeholders, ",")))
 	_, err = db.Exec(fmt.Sprintf(addQuery, strings.Join(placeholders, ",")), placeholderValues...)
 	if err != nil {
 		fmt.Println("could not add tags")

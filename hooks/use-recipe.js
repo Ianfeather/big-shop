@@ -2,7 +2,7 @@ import useFetch from 'use-http'
 import { useState, useEffect } from 'react';
 
 const useRecipe = (id) => {
-  let [recipe, setRecipe] = useState({});
+  let [recipe, setRecipe] = useState({ tags: [], ingredients: [] });
   const { get, response } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
     cachePolicy: 'no-cache'
   });

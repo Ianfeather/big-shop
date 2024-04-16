@@ -45,11 +45,8 @@ func GetAllRecipes(db *sql.DB, userID string) ([]Recipe, error) {
 		}
 
 		if len(recipes) > 0 {
-			lastRecipe := recipes[len(recipes)-1]
-			log.Println(r.ID, lastRecipe.ID)
-			if r.ID == lastRecipe.ID {
-				lastRecipe.Tags = append(lastRecipe.Tags, tag.String)
-				log.Println(lastRecipe.Tags)
+			if r.ID == recipes[len(recipes)-1].ID {
+				recipes[len(recipes)-1].Tags = append(recipes[len(recipes)-1].Tags, tag.String)
 				continue
 			}
 		}

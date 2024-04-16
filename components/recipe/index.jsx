@@ -13,6 +13,13 @@ const Recipe = ({ recipe }) => {
     <>
       <RecipeLink link={recipe.remoteUrl} />
       <p>{recipe.notes}</p>
+      <div className={styles.container}>
+        {
+          recipe.tags.map(tag => (
+            <span key={tag} className={styles.btn}>{tag}</span>
+          ))
+        }
+      </div>
       <div className={styles.ingredients}>
         <h3 className={styles.heading}>Ingredients</h3>
         <ul>

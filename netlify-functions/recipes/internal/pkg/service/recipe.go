@@ -278,7 +278,7 @@ func DeleteRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 	}
 
 	// Delete the existing relationships between recipe & tags
-	if _, err := db.Exec("DELETE FROM tag WHERE recipe_id=?;", recipe.ID); err != nil {
+	if _, err := db.Exec("DELETE FROM recipe_tag WHERE recipe_id=?;", recipe.ID); err != nil {
 		return err
 	}
 

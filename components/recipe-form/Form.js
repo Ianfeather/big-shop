@@ -68,12 +68,12 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
   }
 
   function updateRecipeTags(value) {
-    const exists = recipe.tags.some(tag => tag.name === value);
+    const exists = recipe.tags.includes(value);
     let newTags;
     if (exists) {
-      newTags = recipe.tags.filter(tag => tag.name != value)
+      newTags = recipe.tags.filter(tag => tag != value)
     } else {
-      newTags = [...recipe.tags, tags.find(t => t.name === value)]
+      newTags = [...recipe.tags, tags.find(t => t === value)]
     }
     const updatedRecipe = { ...recipe, tags: newTags};
     setRecipe(updatedRecipe)
@@ -174,7 +174,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
                   type="checkbox"
                   value={tag.name.toLowerCase()}
                   id={`tag-${idx}`}
-                  checked={recipe.tags.some(t => t.name === tag.name)}
+                  checked={recipe.tags.includes(tag.name)}
                   onChange={(e) => updateRecipeTags(e.target.value)}
                   />
                 <label for={`tag-${idx}`}>{tag.name}</label>

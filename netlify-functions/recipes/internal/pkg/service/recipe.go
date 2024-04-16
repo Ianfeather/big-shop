@@ -65,8 +65,9 @@ func GetRecipeBySlug(slug string, userID string, db *sql.DB) (r *common.Recipe, 
 	}
 	recipe := &common.Recipe{Ingredients: []common.Ingredient{}, Tags: []string{}}
 	query := `
-		SELECT id, name, remote_url, notes
+		SELECT id, name, remote_url, notes, tag_name
 			FROM recipe
+			LEFT JOIN recipe_tag on recipe.id = recipe_tag.recipe_id
 			WHERE slug = ? AND account_id = ?;`
 
 	results, err := db.Query(query, slug, accountID)
@@ -127,7 +128,7 @@ func GetRecipeByID(id int, userID string, db *sql.DB) (r *common.Recipe, e error
 		SELECT recipe.id, name, remote_url, notes, tag_name
 			FROM recipe
 			LEFT JOIN recipe_tag on recipe.id = recipe_tag.recipe_id
-			WHERE id = ? AND account_id = ?;`
+			WHERE recipe.id = ? AND account_id = ?;`
 
 	results, err := db.Query(query, id, accountID)
 

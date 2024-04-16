@@ -345,6 +345,7 @@ func insertTags(recipe common.Recipe, db *sql.DB) error {
 	_, err = db.Exec(fmt.Sprintf(addQuery, strings.Join(placeholders, ",")), placeholderValues...)
 	if err != nil {
 		fmt.Println("could not add tags")
+		fmt.Println(err)
 		return err
 	}
 

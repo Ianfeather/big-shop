@@ -341,6 +341,7 @@ func insertTags(recipe common.Recipe, db *sql.DB) error {
 		placeholders = append(placeholders, "(?,?)")
 		placeholderValues = append(placeholderValues, recipe.ID, tag)
 	}
+	fmt.Println(fmt.Sprintf(addQuery, strings.Join(placeholders, ",")))
 	_, err = db.Exec(fmt.Sprintf(addQuery, strings.Join(placeholders, ",")), placeholderValues...)
 	if err != nil {
 		fmt.Println("could not add tags")

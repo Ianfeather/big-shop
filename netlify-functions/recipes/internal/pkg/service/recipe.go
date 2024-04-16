@@ -169,8 +169,13 @@ func GetRecipeByID(id int, userID string, db *sql.DB) (*common.Recipe, error) {
 			return nil, err
 		}
 
+		log.Println("ingredients")
+		log.Println(ingredients)
+
 		recipe.Ingredients = ingredients
 	}
+	log.Println("recipe")
+	log.Println(recipe)
 	return recipe, nil
 }
 

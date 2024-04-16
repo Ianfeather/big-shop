@@ -77,8 +77,9 @@ func GetRecipeBySlug(slug string, userID string, db *sql.DB) (*common.Recipe, er
 		var remoteURL sql.NullString
 		var notes sql.NullString
 		var tag sql.NullString
+		var id int
 
-		err = results.Scan(&recipe.ID, &recipe.Name, &remoteURL, &notes, &tag)
+		err = results.Scan(&id, &recipe.Name, &remoteURL, &notes, &tag)
 		if err != nil {
 			return nil, err
 		}
@@ -88,6 +89,8 @@ func GetRecipeBySlug(slug string, userID string, db *sql.DB) (*common.Recipe, er
 			recipe.Tags = append(recipe.Tags, tag.String)
 			continue
 		}
+
+		recipe.ID = id
 
 		if remoteURL.Valid {
 			recipe.RemoteURL = remoteURL.String
@@ -138,8 +141,9 @@ func GetRecipeByID(id int, userID string, db *sql.DB) (*common.Recipe, error) {
 		var remoteURL sql.NullString
 		var notes sql.NullString
 		var tag sql.NullString
+		var id int
 
-		err = results.Scan(&recipe.ID, &recipe.Name, &remoteURL, &notes, &tag)
+		err = results.Scan(&id, &recipe.Name, &remoteURL, &notes, &tag)
 		if err != nil {
 			return nil, err
 		}
@@ -149,6 +153,8 @@ func GetRecipeByID(id int, userID string, db *sql.DB) (*common.Recipe, error) {
 			recipe.Tags = append(recipe.Tags, tag.String)
 			continue
 		}
+
+		recipe.ID = id
 
 		if remoteURL.Valid {
 			recipe.RemoteURL = remoteURL.String

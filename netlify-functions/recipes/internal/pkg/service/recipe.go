@@ -43,9 +43,6 @@ func getIngredientsByRecipeID(id int, db *sql.DB) ([]common.Ingredient, error) {
 			return nil, err
 		}
 
-		log.Println("ingredient")
-		log.Println(ingredient)
-
 		if department.Valid {
 			ingredient.Department = department.String
 		} else {
@@ -58,7 +55,7 @@ func getIngredientsByRecipeID(id int, db *sql.DB) ([]common.Ingredient, error) {
 }
 
 // GetRecipeBySlug fetches a recipe from the database by Slug
-func GetRecipeBySlug(slug string, userID string, db *sql.DB) (r *common.Recipe, e error) {
+func GetRecipeBySlug(slug string, userID string, db *sql.DB) (*common.Recipe, error) {
 	accountID, err := GetAccountID(db, userID)
 	if err != nil {
 		return nil, err
@@ -87,8 +84,8 @@ func GetRecipeBySlug(slug string, userID string, db *sql.DB) (r *common.Recipe, 
 		}
 
 		// Add tags from multiple rows and continue
-		if r.ID > 0 && tag.Valid {
-			r.Tags = append(r.Tags, tag.String)
+		if recipe.ID > 0 && tag.Valid {
+			recipe.Tags = append(recipe.Tags, tag.String)
 			continue
 		}
 
@@ -101,7 +98,7 @@ func GetRecipeBySlug(slug string, userID string, db *sql.DB) (r *common.Recipe, 
 		}
 
 		if tag.Valid {
-			r.Tags = []string{tag.String}
+			recipe.Tags = []string{tag.String}
 		}
 
 		ingredients, err := getIngredientsByRecipeID(recipe.ID, db)
@@ -117,7 +114,7 @@ func GetRecipeBySlug(slug string, userID string, db *sql.DB) (r *common.Recipe, 
 }
 
 // GetRecipeByID fetches a recipe from the database by ID
-func GetRecipeByID(id int, userID string, db *sql.DB) (r *common.Recipe, e error) {
+func GetRecipeByID(id int, userID string, db *sql.DB) (*common.Recipe, error) {
 	accountID, err := GetAccountID(db, userID)
 	if err != nil {
 		log.Println(err)
@@ -148,8 +145,8 @@ func GetRecipeByID(id int, userID string, db *sql.DB) (r *common.Recipe, e error
 		}
 
 		// Add tags from multiple rows and continue
-		if r.ID > 0 && tag.Valid {
-			r.Tags = append(r.Tags, tag.String)
+		if recipe.ID > 0 && tag.Valid {
+			recipe.Tags = append(recipe.Tags, tag.String)
 			continue
 		}
 
@@ -162,7 +159,7 @@ func GetRecipeByID(id int, userID string, db *sql.DB) (r *common.Recipe, e error
 		}
 
 		if tag.Valid {
-			r.Tags = []string{tag.String}
+			recipe.Tags = []string{tag.String}
 		}
 
 		ingredients, err := getIngredientsByRecipeID(id, db)

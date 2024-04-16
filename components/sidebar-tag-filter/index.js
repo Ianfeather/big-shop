@@ -6,7 +6,7 @@ const SidebarTagFilter = ({ onChange, tags, value }) => {
       <button className={`${styles.btn} ${value=='' ? styles.selected : ''}`} onClick={() => onChange('')}>All</button>
       {
         tags.map(tag => (
-          <button key={tag.name} className={`${styles.btn} ${value==tag.name ? styles.selected : ''}`} onClick={(e) => onChange(e.target.innerText)}>{tag.name}</button>
+          <button key={tag} className={`${styles.btn} ${value==tag ? styles.selected : ''}`} onClick={(e) => onChange(e.target.innerText)}>{tag}</button>
         ))
       }
     </div>

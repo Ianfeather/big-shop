@@ -18,7 +18,7 @@ const capitalize = (str) => {
 }
 
 export default function Form({initialRecipe = {}, mode = 'new'}) {
-  const bareRecipe = { name: '', remoteUrl: '', notes: '', ingredients: [{...bareIngredient}]};
+  const bareRecipe = { name: '', remoteUrl: '', notes: '', ingredients: [{...bareIngredient}], tags: []};
 
   let [recipe, setRecipe] = useState(initialRecipe.id ? initialRecipe : bareRecipe);
   let [saved, setSaved] = useState(false);
@@ -169,15 +169,15 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
           <label htmlFor="recipe-remote-url">Tags</label>
           {
             tags.map((tag, idx) => (
-              <div key={tag.name}>
+              <div key={tag}>
                 <input
                   type="checkbox"
-                  value={tag.name.toLowerCase()}
+                  value={tag}
                   id={`tag-${idx}`}
-                  checked={recipe.tags.includes(tag.name)}
+                  checked={recipe.tags.includes(tag)}
                   onChange={(e) => updateRecipeTags(e.target.value)}
                   />
-                <label for={`tag-${idx}`}>{tag.name}</label>
+                <label for={`tag-${idx}`}>{tag}</label>
               </div>
             ))
           }

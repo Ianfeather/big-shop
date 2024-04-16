@@ -4,28 +4,23 @@ import (
 	"database/sql"
 )
 
-// Tag is used to relate meals
-type Tag struct {
-	Name string `json:"name"`
-}
-
 // GetAllTags returns all tags
-func GetAllTags(db *sql.DB) ([]Tag, error) {
+func GetAllTags(db *sql.DB) ([]string, error) {
 	results, err := db.Query("SELECT name FROM tag order by lower(name);")
 
 	if err != nil {
 		return nil, err
 	}
 
-	tags := []Tag{}
+	tags := []string{}
 
 	for results.Next() {
-		r := Tag{}
-		err = results.Scan(&r.Name)
+		var tag string
+		err = results.Scan(&tag)
 		if err != nil {
 			return nil, err
 		}
-		tags = append(tags, r)
+		tags = append(tags, tag)
 	}
 	return tags, nil
 }

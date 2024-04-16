@@ -314,6 +314,9 @@ func insertParts(recipe common.Recipe, db *sql.DB) error {
 		}
 	}
 
+	log.Println("partsQuery")
+	log.Println(partsQuery)
+
 	_, err := db.Exec(partsQuery)
 	if err != nil {
 		fmt.Println("could not insert part")

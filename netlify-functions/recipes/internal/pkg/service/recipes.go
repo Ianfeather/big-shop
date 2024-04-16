@@ -44,9 +44,12 @@ func GetAllRecipes(db *sql.DB, userID string) ([]Recipe, error) {
 			return nil, err
 		}
 
-		if len(recipes) > 0 && r.ID == recipes[len(recipes)-1].ID {
-			r.Tags = append(r.Tags, tag.String)
-			continue
+		if len(recipes) > 0 {
+			lastRecipe := recipes[len(recipes)-1]
+			if r.ID == lastRecipe.ID {
+				lastRecipe.Tags = append(lastRecipe.Tags, tag.String)
+				continue
+			}
 		}
 
 		if tag.Valid {

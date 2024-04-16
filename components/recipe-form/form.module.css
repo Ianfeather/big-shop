@@ -181,3 +181,14 @@
   color: var(--pink);
   font-size: 80%;
 }
+
+.tagContainer {
+  display: flex;
+  align-items: baseline;
+}
+
+.tagLabel {
+  margin-left: 10px;
+  font-weight: normal;
+  font-size: 16px;
+}

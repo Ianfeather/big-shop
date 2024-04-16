@@ -169,15 +169,16 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
           <label htmlFor="recipe-remote-url">Tags</label>
           {
             tags.map((tag, idx) => (
-              <div key={tag}>
+              <div key={tag} className={styles.tagContainer}>
                 <input
                   type="checkbox"
                   value={tag}
                   id={`tag-${idx}`}
                   checked={recipe.tags.includes(tag)}
                   onChange={(e) => updateRecipeTags(e.target.value)}
+                  className={styles.tagCheckbox}
                   />
-                <label for={`tag-${idx}`}>{tag}</label>
+                <label for={`tag-${idx}`} className={styles.tagLabel}>{tag}</label>
               </div>
             ))
           }

@@ -63,34 +63,55 @@ func GetRecipeBySlug(slug string, userID string, db *sql.DB) (r *common.Recipe, 
 	if err != nil {
 		return nil, err
 	}
-	recipe := &common.Recipe{Ingredients: []common.Ingredient{}}
+	recipe := &common.Recipe{Ingredients: []common.Ingredient{}, Tags: []string{}}
 	query := `
 		SELECT id, name, remote_url, notes
 			FROM recipe
 			WHERE slug = ? AND account_id = ?;`
 
-	var remoteURL sql.NullString
-	var notes sql.NullString
-	if err := db.QueryRow(query, slug, accountID).Scan(&recipe.ID, &recipe.Name, &remoteURL, &notes); err != nil {
-		return nil, err
-	}
-
-	if remoteURL.Valid {
-		recipe.RemoteURL = remoteURL.String
-	}
-
-	if notes.Valid {
-		recipe.Notes = notes.String
-	}
-
-	ingredients, err := getIngredientsByRecipeID(recipe.ID, db)
+	results, err := db.Query(query, slug, accountID)
 
 	if err != nil {
+		log.Println("Error querying recipe")
 		return nil, err
 	}
+	for results.Next() {
+		var remoteURL sql.NullString
+		var notes sql.NullString
+		var tag sql.NullString
 
-	recipe.Ingredients = ingredients
+		err = results.Scan(&recipe.ID, &recipe.Name, &remoteURL, &notes, &tag)
+		if err != nil {
+			return nil, err
+		}
 
+		// Add tags from multiple rows and continue
+		if r.ID > 0 && tag.Valid {
+			r.Tags = append(r.Tags, tag.String)
+			continue
+		}
+
+		if remoteURL.Valid {
+			recipe.RemoteURL = remoteURL.String
+		}
+
+		if notes.Valid {
+			recipe.Notes = notes.String
+		}
+
+		if tag.Valid {
+			r.Tags = []string{tag.String}
+		}
+
+		ingredients, err := getIngredientsByRecipeID(recipe.ID, db)
+
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+
+		recipe.Ingredients = ingredients
+	}
 	return recipe, nil
 }
 
@@ -101,35 +122,57 @@ func GetRecipeByID(id int, userID string, db *sql.DB) (r *common.Recipe, e error
 		log.Println(err)
 		return nil, err
 	}
-	recipe := &common.Recipe{Ingredients: []common.Ingredient{}}
+	recipe := &common.Recipe{Ingredients: []common.Ingredient{}, Tags: []string{}}
 	query := `
-		SELECT id, name, remote_url, notes
+		SELECT recipe.id, name, remote_url, notes, tag_name
 			FROM recipe
+			LEFT JOIN recipe_tag on recipe.id = recipe_tag.recipe_id
 			WHERE id = ? AND account_id = ?;`
 
-	var remoteURL sql.NullString
-	var notes sql.NullString
-	if err := db.QueryRow(query, id, accountID).Scan(&recipe.ID, &recipe.Name, &remoteURL, &notes); err != nil {
-		log.Println(err)
-		return nil, err
-	}
-
-	if remoteURL.Valid {
-		recipe.RemoteURL = remoteURL.String
-	}
-
-	if notes.Valid {
-		recipe.Notes = notes.String
-	}
-
-	ingredients, err := getIngredientsByRecipeID(id, db)
+	results, err := db.Query(query, id, accountID)
 
 	if err != nil {
-		log.Println(err)
+		log.Println("Error querying recipe")
 		return nil, err
 	}
 
-	recipe.Ingredients = ingredients
+	for results.Next() {
+		var remoteURL sql.NullString
+		var notes sql.NullString
+		var tag sql.NullString
+
+		err = results.Scan(&recipe.ID, &recipe.Name, &remoteURL, &notes, &tag)
+		if err != nil {
+			return nil, err
+		}
+
+		// Add tags from multiple rows and continue
+		if r.ID > 0 && tag.Valid {
+			r.Tags = append(r.Tags, tag.String)
+			continue
+		}
+
+		if remoteURL.Valid {
+			recipe.RemoteURL = remoteURL.String
+		}
+
+		if notes.Valid {
+			recipe.Notes = notes.String
+		}
+
+		if tag.Valid {
+			r.Tags = []string{tag.String}
+		}
+
+		ingredients, err := getIngredientsByRecipeID(id, db)
+
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+
+		recipe.Ingredients = ingredients
+	}
 	return recipe, nil
 }
 
@@ -296,7 +339,7 @@ func insertTags(recipe common.Recipe, db *sql.DB) error {
 	addQuery := "INSERT INTO recipe_tag (recipe_id, tag_name) VALUES (%s);"
 	for _, tag := range recipe.Tags {
 		placeholders = append(placeholders, "(?,?)")
-		placeholderValues = append(placeholderValues, recipe.ID, tag.Name)
+		placeholderValues = append(placeholderValues, recipe.ID, tag)
 	}
 	_, err = db.Exec(fmt.Sprintf(addQuery, strings.Join(placeholders, ",")), placeholderValues...)
 	if err != nil {

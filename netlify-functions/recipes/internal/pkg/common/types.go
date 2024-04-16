@@ -39,7 +39,7 @@ type Recipe struct {
 	RemoteURL   string       `json:"remoteUrl"`
 	Notes       string       `json:"notes"`
 	Ingredients []Ingredient `json:"ingredients"`
-	Tags        []Tag        `json:"tags"`
+	Tags        []string     `json:"tags"`
 }
 
 // ListIngredient is a subset of shopping List

@@ -163,7 +163,7 @@
 .deleteColumn {
   min-width: 18px;
   display: flex;
-  align-items: center;
+  align-items: end;
   justify-content: center;
 }
 
@@ -191,4 +191,11 @@
   margin-left: 10px;
   font-weight: normal;
   font-size: 16px;
+}
+
+.addIngredientSection {
+  border: 1px solid var(--green);
+  padding: 20px;
+  border-radius: 7px;
+  margin-bottom: 20px;
 }

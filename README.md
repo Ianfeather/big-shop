@@ -23,6 +23,10 @@ Lots to do here.
 - Configure the app to connect to a local db
 - local env vars
 
+For running the UI:
+- Disable auth by setting `behindAuth` to `false` in _app.js
+- Turn on mocks with `useMocks`
+
 
 ### local db
 To enter the mysql workspace:

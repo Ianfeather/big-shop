@@ -103,6 +103,7 @@
 
 .ingredientName {
   flex: 2;
+  text-transform: capitalize;
 }
 
 .ingredientQuantity {

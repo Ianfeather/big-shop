@@ -125,6 +125,7 @@ ul {
   font-size: 16px;
   border: 1px solid #aaa;
   border-radius: 4px;
+  text-transform: capitalize;
 }
 
 .react-autosuggest__input:focus {
@@ -163,6 +164,7 @@ ul {
 .react-autosuggest__suggestion {
   cursor: pointer;
   padding: 10px 20px;
+  text-transform: capitalize;
 }
 
 .react-autosuggest__suggestion--focused, .react-autosuggest__suggestion--highlighted {

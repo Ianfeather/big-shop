@@ -61,7 +61,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
     if (useMocks) {
       setUnits(mocks.units.map(unit => ({...unit, name: capitalize(unit.name)})));
       setTags(mocks.tags);
-      setIngredients(mocks.ingredients.map(i => capitalize(i.name)));
+      setIngredients(mocks.ingredients.map(i => i.name));
       return;
     }
     const [_units, _tags, _ingredients] = await Promise.all([
@@ -72,7 +72,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
     if (response.ok) {
       setUnits(_units.map(unit => ({...unit, name: capitalize(unit.name)})));
       setTags(_tags);
-      setIngredients(_ingredients.map(i => capitalize(i.name)));
+      setIngredients(_ingredients.map(i => i.name));
     }
 
   }
@@ -263,7 +263,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
                   return (
                     <div className={styles.ingredientGroup} key={i}>
                       <div className={styles.ingredientName}>
-                        <label id={ingredient.name.split(' ').join('=')} htmlFor={`ingredient-name-${i}`} className={i != 0 ? styles.srOnly: ''}>Ingredient</label>
+                        <label id={ingredient.name.split(' ').join('=')} htmlFor={`ingredient-name-${i}`} className={i != 0 ? styles.srOnly: ''}>Ingredient </label>
                         {ingredient.name}
                       </div>
 

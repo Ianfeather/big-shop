@@ -11,13 +11,8 @@ import mocks from '../../mocks';
 
 /*
 Issues:
-- Removing an ingredient is a disaster (FIXED)
-- Adding is a disaster (FIXED)
-- Saving a recipe will fail silently and not tell you why (it's some kind of sql issue)  (FIXED)
 - Ingredients won't match and we get loads of similar ones
   -- need to prune the list
-  -- change typeahead
-- [List] The way it syncs and updates is terrible. Built for real-time without being real-time. Remove.
 
 */
 

@@ -7,7 +7,6 @@ import Tabs from '@components/layout/Tabs'
 import RecipeSidebar from '@components/shopping-list/Recipes';
 import ShoppingList from '@components/shopping-list/ShoppingList';
 import useRecipes from '@hooks/use-recipes';
-import useInterval from '@hooks/use-interval';
 
 const List = () => {
   const [recipes] = useRecipes();
@@ -15,7 +14,6 @@ const List = () => {
   let [shoppingList, setShoppingList] = useState({});
   let [extras, setExtras] = useState({});
   let [hydrateFlag, setHydrateFlag] = useState(false);
-  let [dirtyState, setDirtyState] = useState(false);
   const { user } = useAuth0();
 
   const handleRecipeSelect = (e) => {
@@ -49,25 +47,18 @@ const List = () => {
       setExtras(newList);
     }
 
-    setDirtyState(true);
     try {
-      const result = await patch('/shopping-list/buy', { name, isBought: newList[name].isBought });
-      if (response.ok && result.recipes.length) {
-        setListState(result.ingredients, result.extras);
-      }
+      await patch('/shopping-list/buy', { name, isBought: newList[name].isBought });
     } catch (e) {
       // todo: move the bought item back into not-bought
       console.error(e);
     }
-    setDirtyState(false);
   }
 
   const getListState = async () => {
     const result = await get('/shopping-list');
     if (response.ok && result.recipes.length) {
-      if (!dirtyState) {
-        setListState(result.ingredients, result.extras);
-      }
+      setListState(result.ingredients, result.extras);
       return result;
     }
     return {};
@@ -75,12 +66,13 @@ const List = () => {
 
   // This will only run once on load
   async function hydrateShoppingList() {
-    const { recipes = [] } = await getListState();
+    const { recipes = [], extras = {} } = await getListState();
     setHydrateFlag(true);
     setRecipeList(recipes.reduce((acc, recipe) => {
       acc[recipe] = true;
       return acc;
     }, {}));
+    setExtras(extras);
   }
 
   async function getShoppingList() {
@@ -136,9 +128,6 @@ const List = () => {
   useEffect(() => { hydrateShoppingList() }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { getShoppingList() }, [recipeList]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { addUserAccount() }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // poll for list updates
-  useInterval(getListState, 5000);
 
   return (
     <Layout>

@@ -2,7 +2,7 @@ import styles from './form.module.css';
 import { useState, useEffect } from 'react';
 import useFetch from 'use-http'
 import { useRouter } from 'next/router'
-import { Typeahead } from 'react-typeahead';
+import Autosuggest from 'react-autosuggest';
 import Button from '@components/button';
 import Message from '@components/message';
 import partition from 'just-partition';
@@ -44,6 +44,9 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
   let [showIngredients, setShowIngredients] = useState(mode != 'new');
   let [autoIngredients, setAutoIngredients] = useState(mode === 'new');
   let [unmatchedIngredients, setUnmatchedIngredients] = useState([]);
+  let [newIngredient, setNewIngredient] = useState('');
+  let [suggestions, setSuggestions] = useState([]);
+
   const router = useRouter();
   const { get, post, put, del, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
     cachePolicy: 'no-cache'
@@ -97,13 +100,13 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
     setRecipe(updatedRecipe)
   }
 
-  function addIngredient(name) {
+  function addIngredient(e) {
+    e.preventDefault();
     setRecipe(prevRecipe => ({
         ...prevRecipe,
-        ingredients: [...prevRecipe.ingredients, { name, unit: '', quantity: '' }]
+        ingredients: [...prevRecipe.ingredients, { name: newIngredient, unit: '', quantity: '' }]
     }));
-    // Need to clear the value here but it's an uncontrolled component
-    // prob just switch the lib because it's bad
+    setNewIngredient('');
   }
 
   function updateIngredient(i, key, value) {
@@ -149,6 +152,12 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
     setRecipe(bareRecipe);
     setUnmatchedIngredients([]);
   }
+
+  const getSuggestions = (value) => {
+    const inputValue = value.trim().toLowerCase();
+    if (inputValue.length < 2) return [];
+    return ingredients.filter(ingredient => ingredient.toLowerCase().indexOf(inputValue) > -1);
+  };
 
   async function onNext(e) {
     e.preventDefault();
@@ -232,6 +241,27 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
               </div>
             )}
 
+            <div className={styles.addIngredientSection}>
+              <div className={styles.addIngredientTitle}>Add ingredient</div>
+              <div className={styles.addIngredientGroup}>
+                <div className={styles.addIngredientInput}>
+                  <Autosuggest
+                    suggestions={suggestions}
+                    onSuggestionsFetchRequested = {e => setSuggestions(getSuggestions(e.value))}
+                    onSuggestionsClearRequested={() => setSuggestions([])}
+                    getSuggestionValue = {(suggestion) => suggestion}
+                    renderSuggestion={(suggestion) => <div>{suggestion}</div>}
+                    inputProps={{
+                      value: newIngredient,
+                      onChange: (e, { newValue }) => setNewIngredient(newValue)
+                    }}
+                  />
+                </div>
+                <Button className={styles.addIngredientButton} style="blue" icon="tick" onClick={addIngredient}>Add</Button>
+              </div>
+
+            </div>
+
             <div className={styles.ingredientsGroup}>
               {
                 recipe.ingredients.map((ingredient, i) => {
@@ -267,21 +297,6 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
                   )
                 })
               }
-            </div>
-            <div className={styles.addIngredientSection}>
-              Add ingredient
-              <div className={styles.ingredientGroup}>
-                <div className={styles.ingredientName}>
-                  <Typeahead
-                    options={ingredients}
-                    maxVisible={3}
-                    placeholder="Ingredient"
-                    autoComplete="off"
-                    value={''}
-                    onOptionSelected={(value) => addIngredient(value)} />
-                </div>
-              </div>
-
             </div>
             <div className={styles.buttonContainer}>
               <Button style="green" icon="tick" className={`${loading ? styles.loading : ''}`} onClick={submitRecipe}>

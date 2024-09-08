@@ -163,7 +163,7 @@
 .deleteColumn {
   min-width: 18px;
   display: flex;
-  align-items: center;
+  align-items: end;
   justify-content: center;
 }
 
@@ -191,4 +191,33 @@
   margin-left: 10px;
   font-weight: normal;
   font-size: 16px;
+}
+
+.addIngredientSection {
+  background-color: var(--light-purple);
+  padding: 20px;
+  border-radius: 7px;
+  margin-bottom: 20px;
+}
+
+.addIngredientSection input {
+  background-color: var(--light-purple);
+}
+
+.addIngredientGroup {
+  display: flex;
+}
+
+.addIngredientTitle {
+  font-weight: bold;
+  font-size: 18px;
+  margin-bottom: 20px;
+}
+
+.addIngredientInput {
+  flex-grow: 1;
+}
+
+.addIngredientButton {
+  margin-left: 20px;
 }

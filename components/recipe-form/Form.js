@@ -2,12 +2,27 @@ import styles from './form.module.css';
 import { useState, useEffect } from 'react';
 import useFetch from 'use-http'
 import { useRouter } from 'next/router'
-import { Typeahead } from 'react-typeahead';
+import Autosuggest from 'react-autosuggest';
 import Button from '@components/button';
+import Message from '@components/message';
 import partition from 'just-partition';
 import Spinner from './spinner';
+import mocks from '../../mocks';
 
-const bareIngredient = { name: '', quantity: '', unit: '' };
+/*
+Issues:
+- Removing an ingredient is a disaster (FIXED)
+- Adding is a disaster (FIXED)
+- Saving a recipe will fail silently and not tell you why (it's some kind of sql issue)  (FIXED)
+- Ingredients won't match and we get loads of similar ones
+  -- need to prune the list
+  -- change typeahead
+- [List] The way it syncs and updates is terrible. Built for real-time without being real-time. Remove.
+
+*/
+
+
+const useMocks = false;
 
 const capitalize = (str) => {
   if (!str) {
@@ -18,7 +33,7 @@ const capitalize = (str) => {
 }
 
 export default function Form({initialRecipe = {}, mode = 'new'}) {
-  const bareRecipe = { name: '', remoteUrl: '', notes: '', ingredients: [{...bareIngredient}], tags: []};
+  const bareRecipe = { name: '', remoteUrl: '', notes: '', ingredients: [], tags: []};
 
   let [recipe, setRecipe] = useState(initialRecipe.id ? initialRecipe : bareRecipe);
   let [saved, setSaved] = useState(false);
@@ -29,25 +44,31 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
   let [showIngredients, setShowIngredients] = useState(mode != 'new');
   let [autoIngredients, setAutoIngredients] = useState(mode === 'new');
   let [unmatchedIngredients, setUnmatchedIngredients] = useState([]);
+  let [newIngredient, setNewIngredient] = useState('');
+  let [suggestions, setSuggestions] = useState([]);
+
   const router = useRouter();
-  const { get, post, put, del, response, loading } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
+  const { get, post, put, del, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
     cachePolicy: 'no-cache'
   });
 
-  const { get: getNextAPI, response: nextAPIResponse, loading: nextAPILoading } = useFetch(process.env.NEXT_PUBLIC_HOST, {
+  const { get: getNextAPI, response: nextAPIResponse, loading: nextAPILoading, error: nextAPIError } = useFetch(process.env.NEXT_PUBLIC_HOST, {
     cachePolicy: 'no-cache'
   });
 
   useEffect(() => {
     if (initialRecipe.name) {
-      setRecipe({
-        ...initialRecipe,
-        ingredients: [ ...initialRecipe.ingredients, {...bareIngredient} ]
-      });
+      setRecipe(initialRecipe);
     }
   }, [initialRecipe]);
 
   async function getUnitsTagsAndIngredients() {
+    if (useMocks) {
+      setUnits(mocks.units.map(unit => ({...unit, name: capitalize(unit.name)})));
+      setTags(mocks.tags);
+      setIngredients(mocks.ingredients.map(i => capitalize(i.name)));
+      return;
+    }
     const [_units, _tags, _ingredients] = await Promise.all([
       get('/units'),
       get('/tags'),
@@ -79,12 +100,18 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
     setRecipe(updatedRecipe)
   }
 
+  function addIngredient(e) {
+    e.preventDefault();
+    setRecipe(prevRecipe => ({
+        ...prevRecipe,
+        ingredients: [...prevRecipe.ingredients, { name: newIngredient, unit: '', quantity: '' }]
+    }));
+    setNewIngredient('');
+  }
+
   function updateIngredient(i, key, value) {
     let newIngredients = [...recipe.ingredients];
     newIngredients[i][key] = value;
-    if (i === recipe.ingredients.length - 1) {
-      newIngredients.push({...bareIngredient});
-    }
     setRecipe({
       ...recipe,
       ingredients: newIngredients
@@ -93,11 +120,10 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
 
   async function submitRecipe(e) {
     e.preventDefault();
-    const completeRecipe = { ...recipe, ingredients: recipe.ingredients.filter(({name}) => !!name)};
     if (mode === 'edit') {
-      await put('/recipe', completeRecipe)
+      await put('/recipe', recipe)
     } else {
-      await post('/recipe', completeRecipe)
+      await post('/recipe', recipe)
     }
     if (response.ok) {
       setSaved(true);
@@ -113,13 +139,11 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
     }
   }
 
-  function deleteIngredient(e) {
+  function deleteIngredient(e, name) {
     e.preventDefault();
     setRecipe({
       ...recipe,
-      ingredients: recipe.ingredients.filter((_, idx) => {
-        return idx !== Number(e.target.id)
-      })
+      ingredients: recipe.ingredients.filter(ingredient => ingredient.name !== name)
     })
   }
 
@@ -128,6 +152,12 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
     setRecipe(bareRecipe);
     setUnmatchedIngredients([]);
   }
+
+  const getSuggestions = (value) => {
+    const inputValue = value.trim().toLowerCase();
+    if (inputValue.length < 2) return [];
+    return ingredients.filter(ingredient => ingredient.toLowerCase().indexOf(inputValue) > -1);
+  };
 
   async function onNext(e) {
     e.preventDefault();
@@ -141,7 +171,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
         });
         setRecipe({
           ...recipe,
-          ingredients: [...matched, {...bareIngredient}]
+          ingredients: matched
         });
         setUnmatchedIngredients(unmatched);
       }
@@ -178,7 +208,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
                   onChange={(e) => updateRecipeTags(e.target.value)}
                   className={styles.tagCheckbox}
                   />
-                <label for={`tag-${idx}`} className={styles.tagLabel}>{tag}</label>
+                <label htmlFor={`tag-${idx}`} className={styles.tagLabel}>{tag}</label>
               </div>
             ))
           }
@@ -211,22 +241,35 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
               </div>
             )}
 
+            <div className={styles.addIngredientSection}>
+              <div className={styles.addIngredientTitle}>Add ingredient</div>
+              <div className={styles.addIngredientGroup}>
+                <div className={styles.addIngredientInput}>
+                  <Autosuggest
+                    suggestions={suggestions}
+                    onSuggestionsFetchRequested = {e => setSuggestions(getSuggestions(e.value))}
+                    onSuggestionsClearRequested={() => setSuggestions([])}
+                    getSuggestionValue = {(suggestion) => suggestion}
+                    renderSuggestion={(suggestion) => <div>{suggestion}</div>}
+                    inputProps={{
+                      value: newIngredient,
+                      onChange: (e, { newValue }) => setNewIngredient(newValue)
+                    }}
+                  />
+                </div>
+                <Button className={styles.addIngredientButton} style="blue" icon="tick" onClick={addIngredient}>Add</Button>
+              </div>
+
+            </div>
+
             <div className={styles.ingredientsGroup}>
               {
                 recipe.ingredients.map((ingredient, i) => {
                   return (
                     <div className={styles.ingredientGroup} key={i}>
                       <div className={styles.ingredientName}>
-                        <label htmlFor={`ingredient-name-${i}`} className={i != 0 ? styles.srOnly: ''}>Ingredient</label>
-                        <Typeahead
-                          options={ingredients}
-                          maxVisible={3}
-                          placeholder="Ingredient"
-                          id={`ingredient-name-${i}`}
-                          autoComplete="off"
-                          value={ingredient.name}
-                          onChange={(e) => updateIngredient(i, 'name', e.target.value)}
-                          onOptionSelected={(value) => updateIngredient(i, 'name', value)} />
+                        <label id={ingredient.name.split(' ').join('=')} htmlFor={`ingredient-name-${i}`} className={i != 0 ? styles.srOnly: ''}>Ingredient</label>
+                        {ingredient.name}
                       </div>
 
                       <div className={styles.ingredientQuantity}>
@@ -246,14 +289,8 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
                       </div>
 
                       <div className={styles.deleteColumn}>
-                        {
-                          i > 0 && (
-                            <>
-                              <label className={i != 0 ? styles.srOnly : ''}>Delete</label>
-                              <button className={styles.trash} aria-label="trash" id={i} onClick={deleteIngredient}>×</button>
-                            </>
-                          )
-                        }
+                        <label className={styles.srOnly}>Delete</label>
+                        <button className={styles.trash} aria-label="trash" id={i} onClick={(e) => deleteIngredient(e, ingredient.name)}>×</button>
                       </div>
 
                     </div>
@@ -291,6 +328,9 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
                 )
               }
             </div>
+            { error && (
+              <Message message={error.message} status='error' />
+            )}
           </>
         ) :
         (

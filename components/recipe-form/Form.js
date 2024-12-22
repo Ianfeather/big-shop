@@ -30,13 +30,14 @@ const capitalize = (str) => {
 export default function Form({initialRecipe = {}, mode = 'new'}) {
   const bareRecipe = { name: '', remoteUrl: '', notes: '', ingredients: [], tags: []};
 
-  let [recipe, setRecipe] = useState(initialRecipe.id ? initialRecipe : bareRecipe);
+  let useInitialRecipe = Object.keys(initialRecipe).length > 0;
+  let [recipe, setRecipe] = useState(useInitialRecipe ? initialRecipe : bareRecipe);
   let [saved, setSaved] = useState(false);
   let [units, setUnits] = useState([]);
   let [tags, setTags] = useState([]);
   let [ingredients, setIngredients] = useState([]);
   let [deleted, setDeleted] = useState(false);
-  let [showIngredients, setShowIngredients] = useState(mode != 'new');
+  let [showIngredients, setShowIngredients] = useState(recipe.ingredients.length > 0);
   let [autoIngredients, setAutoIngredients] = useState(mode === 'new');
   let [unmatchedIngredients, setUnmatchedIngredients] = useState([]);
   let [newIngredient, setNewIngredient] = useState('');
@@ -220,8 +221,6 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
               </div>
           )
         }
-
-
       </div>
 
       {

@@ -17,7 +17,7 @@ Issues:
 */
 
 
-const useMocks = false;
+const useMocks = true;
 
 const capitalize = (str) => {
   if (!str) {
@@ -30,7 +30,8 @@ const capitalize = (str) => {
 export default function Form({initialRecipe = {}, mode = 'new'}) {
   const bareRecipe = { name: '', remoteUrl: '', notes: '', ingredients: [], tags: []};
 
-  let [recipe, setRecipe] = useState(initialRecipe.id ? initialRecipe : bareRecipe);
+  let useInitialRecipe = Object.keys(initialRecipe).length > 0;
+  let [recipe, setRecipe] = useState(useInitialRecipe ? initialRecipe : bareRecipe);
   let [saved, setSaved] = useState(false);
   let [units, setUnits] = useState([]);
   let [tags, setTags] = useState([]);
@@ -220,12 +221,10 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
               </div>
           )
         }
-
-
       </div>
 
       {
-        showIngredients ? (
+        true ? (
           <>
             { autoIngredients && !!unmatchedIngredients.length && (
               <div className={styles.unmatchedIngredients}>

@@ -9,3 +9,22 @@
   top: 30px;
   right: 20px;
 }
+
+.headerContainer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.fileInput {
+  display: none;
+}
+
+.photoIcon {
+  width: 20px;
+  height: 20px;
+}
+.photoIcon path {
+  fill: white;
+}

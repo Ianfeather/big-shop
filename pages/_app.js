@@ -25,9 +25,9 @@ const  InnerApp = ({ Component, pageProps }) => {
     }
   }, [isAuthenticated, router, isLoading]);
 
-  // if (isLoading || !isAuthenticated) {
-  //   return false;
-  // }
+  if (isLoading || !isAuthenticated) {
+    return false;
+  }
 
   return (
     <FetchProvider url={process.env.NEXT_PUBLIC_API_HOST} options={fetchOptions}>
@@ -40,7 +40,7 @@ export default function App({ Component, pageProps, router }) {
   const domain = process.env.NEXT_PUBLIC_AUTH0_DOMAIN;
   const clientId = process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID;
   const audience = process.env.NEXT_PUBLIC_AUTH0_AUDIENCE;
-  const behindAuth = false;router.route !== '/';
+  const behindAuth = router.route !== '/';
 
   return (
     <Auth0Provider

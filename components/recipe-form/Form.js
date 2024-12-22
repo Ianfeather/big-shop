@@ -37,7 +37,6 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
   let [tags, setTags] = useState([]);
   let [ingredients, setIngredients] = useState([]);
   let [deleted, setDeleted] = useState(false);
-  let [showIngredients, setShowIngredients] = useState(recipe.ingredients.length > 0);
   let [autoIngredients, setAutoIngredients] = useState(mode === 'new');
   let [unmatchedIngredients, setUnmatchedIngredients] = useState([]);
   let [newIngredient, setNewIngredient] = useState('');
@@ -172,7 +171,6 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
         setUnmatchedIngredients(unmatched);
       }
     }
-    setShowIngredients(true);
   }
 
   if (mode === 'edit' && !recipe.id) {
@@ -224,7 +222,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
       </div>
 
       {
-        showIngredients ? (
+        recipe.ingredients.length > 0 ? (
           <>
             { autoIngredients && !!unmatchedIngredients.length && (
               <div className={styles.unmatchedIngredients}>

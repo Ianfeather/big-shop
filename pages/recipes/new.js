@@ -31,7 +31,6 @@ const NewRecipe = () => {
     const { result } = await post(formData);
     if (error) throw new Error('Failed to process image');
     if (response.ok) {
-      console.log('received result');
       let recipe = JSON.parse(result);
       recipe.tags = [];
       setParsedRecipe(recipe);

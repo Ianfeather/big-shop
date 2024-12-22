@@ -10,6 +10,7 @@ const Recipes = () => {
     return (
       <Layout pageTitle={"Recipes"}>
         <MainContent>
+          <Link href="/recipes/new"><a>Add new recipe</a></Link>
           <RecipeList />
         </MainContent>
       </Layout>

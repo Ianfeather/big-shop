@@ -26,7 +26,7 @@ const NewRecipe = () => {
     }
 
     const formData = new FormData();
-    formData.append('image', selectedImage);
+    formData.append('image', file);
 
     const { result } = await post(formData);
     if (error) throw new Error('Failed to process image');

@@ -348,6 +348,10 @@ func insertTags(recipe common.Recipe, db *sql.DB) error {
 	placeholders := []string{}
 	placeholderValues := []interface{}{}
 
+	if len(recipe.Tags) == 0 {
+		return nil
+	}
+
 	addQuery := "INSERT INTO recipe_tag (recipe_id, tag_name) VALUES %s;"
 	for _, tag := range recipe.Tags {
 		placeholders = append(placeholders, "(?,?)")

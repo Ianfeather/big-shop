@@ -30,6 +30,8 @@ const Recipe = ({ recipe }) => {
           ))}
         </ul>
       </div>
+      <h3>Method</h3>
+      <p>{recipe.method}</p>
     </>
   )
 }

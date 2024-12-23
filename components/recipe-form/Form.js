@@ -28,7 +28,7 @@ const capitalize = (str) => {
 }
 
 export default function Form({initialRecipe = {}, mode = 'new'}) {
-  const bareRecipe = { name: '', remoteUrl: '', notes: '', ingredients: [], tags: []};
+  const bareRecipe = { name: '', remoteUrl: '', notes: '', method: '', ingredients: [], tags: []};
 
   let useInitialRecipe = Object.keys(initialRecipe).length > 0;
   let [recipe, setRecipe] = useState(useInitialRecipe ? initialRecipe : bareRecipe);
@@ -210,6 +210,11 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
         <div className={styles.group}>
           <label htmlFor="recipe-remote-url">Notes</label>
           <textarea placeholder="Go heavy on the pepper" value={recipe.notes} autoComplete="off" id="recipe-notes" rows="3" onChange={(e) => updateRecipe('notes', e.target.value)}/>
+        </div>
+
+        <div className={styles.group}>
+          <label htmlFor="recipe-remote-url">Method</label>
+          <textarea placeholder="1. Cook until done" value={recipe.method} autoComplete="off" id="recipe-method" rows="10" onChange={(e) => updateRecipe('method', e.target.value)}/>
         </div>
         {
           recipe.remoteUrl && (

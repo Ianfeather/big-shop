@@ -60,7 +60,7 @@ export default async function handler(req, res) {
               text: `
                 This is an image of a recipe from a cookbook. Extract the recipe name, ingredients, and instructions. Format the response in a JSON object.
 
-                The schema for the json object should be {name: string, ingredients: Ingredient[], instructions: string[]}. The Ingredient schema should be {name: string, quantity: string, unit: string}.
+                The schema for the json object should be {name: string, ingredients: Ingredient[], instructions: string}. The Ingredient schema should be {name: string, quantity: string, unit: string}.
 
                 The name of the recipe should be in title case.
 
@@ -71,6 +71,8 @@ export default async function handler(req, res) {
                 Ingredient quantities should be in string format and use decimals rather than fractions.
 
                 You should omit any ingredients that would be considered pantry staples such as salt, pepper, oil, or water.
+
+                The instructions should be in markdown format and formatted to be as clear as possible. Each instruction should be a separate line. If an instruction is a list of items then it should be formatted as a list. For example, "1. Preheat the oven. 2. Mix the ingredients. 3. Bake for 30 minutes.".
                 `,
             },
             {

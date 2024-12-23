@@ -1,9 +1,9 @@
 import styles from './index.module.css';
+import Tabs from '@components/layout/Tabs';
 import useFetch from 'use-http'
 import { useState, useEffect } from 'react';
 import { useAuth0 } from "@auth0/auth0-react";
 import Layout, { MainContent, Sidebar } from '@components/layout'
-import Tabs from '@components/layout/Tabs'
 import RecipeSidebar from '@components/shopping-list/Recipes';
 import ShoppingList from '@components/shopping-list/ShoppingList';
 import useRecipes from '@hooks/use-recipes';

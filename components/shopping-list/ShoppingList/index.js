@@ -1,10 +1,8 @@
 import styles from './index.module.css'
 import Item from './Item';
-import useViewport from '@hooks/use-viewport';
 import ClearList from './clear-list';
 
 const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList }) => {
-  const { width } = useViewport();
 
   const boughtItems = Object.keys(shoppingList).filter((name => shoppingList[name].isBought));
   const boughtExtras = Object.keys(extras).filter((name => extras[name].isBought));
@@ -23,7 +21,7 @@ const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList }) => {
 
   return (
     <>
-      { width > 800 && <h2 className={styles.heading}>Your shopping list</h2>}
+      <h2 className={styles.heading}>Your shopping list</h2>
       { !hasListItems && (
           <p className={styles.emptyList}>Looks like you don&apos;t need to go shopping! Select a recipe from the list to start building a new list.</p>
       )}

@@ -41,6 +41,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
   let [unmatchedIngredients, setUnmatchedIngredients] = useState([]);
   let [newIngredient, setNewIngredient] = useState('');
   let [suggestions, setSuggestions] = useState([]);
+  let [showIngredients, setShowIngredients] = useState(false);
 
   const router = useRouter();
   const { get, post, put, del, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
@@ -169,6 +170,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
           ingredients: matched
         });
         setUnmatchedIngredients(unmatched);
+        setShowIngredients(true);
       }
     }
   }
@@ -214,7 +216,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
 
         <div className={styles.group}>
           <label htmlFor="recipe-remote-url">Method</label>
-          <textarea placeholder="1. Cook until done" value={recipe.method} autoComplete="off" id="recipe-method" rows="10" onChange={(e) => updateRecipe('method', e.target.value)}/>
+          <textarea placeholder="1. Cook until done" value={recipe.method} autoComplete="off" id="recipe-method" rows="5" onChange={(e) => updateRecipe('method', e.target.value)}/>
         </div>
         {
           recipe.remoteUrl && (
@@ -227,7 +229,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
       </div>
 
       {
-        recipe.ingredients.length > 0 ? (
+        recipe.ingredients.length > 0 || showIngredients ? (
           <>
             { autoIngredients && !!unmatchedIngredients.length && (
               <div className={styles.unmatchedIngredients}>

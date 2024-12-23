@@ -38,6 +38,7 @@ type Recipe struct {
 	ID          int          `json:"id"`
 	RemoteURL   string       `json:"remoteUrl"`
 	Notes       string       `json:"notes"`
+	Method       string       `json:"method"`
 	Ingredients []Ingredient `json:"ingredients"`
 	Tags        []string     `json:"tags"`
 }

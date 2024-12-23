@@ -51,5 +51,5 @@ I've also been using workbench for dumping the db from prod to local.
 
 ## useful links
 - [netlify](https://app.netlify.com/sites/big-shop/overview)
-- [PlanetScale DB](https://app.planetscale.com/ianfeather/bigshop)
+- [TiDB](https://tidbcloud.com/console/clusters/10445360365857932862/sqleditor?orgId=1372813089209222715&projectId=1372813089454538934)
 - [Auth0 (for managing user)](https://manage.auth0.com/dashboard/eu/dev-x-n37k6b/applications/HxkTOH3ZYxjbsgrVI4ii1CV2TQx7hk9G/settings)

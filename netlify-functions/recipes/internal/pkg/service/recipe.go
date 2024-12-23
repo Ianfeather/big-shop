@@ -62,7 +62,7 @@ func GetRecipeBySlug(slug string, userID string, db *sql.DB) (*common.Recipe, er
 	}
 	recipe := &common.Recipe{Ingredients: []common.Ingredient{}, Tags: []string{}}
 	query := `
-		SELECT id, name, remote_url, notes, tag_name
+		SELECT id, name, remote_url, notes, method, tag_name
 			FROM recipe
 			LEFT JOIN recipe_tag on recipe.id = recipe_tag.recipe_id
 			WHERE slug = ? AND account_id = ?;`
@@ -76,10 +76,11 @@ func GetRecipeBySlug(slug string, userID string, db *sql.DB) (*common.Recipe, er
 	for results.Next() {
 		var remoteURL sql.NullString
 		var notes sql.NullString
+		var method sql.NullString
 		var tag sql.NullString
 		var id int
 
-		err = results.Scan(&id, &recipe.Name, &remoteURL, &notes, &tag)
+		err = results.Scan(&id, &recipe.Name, &remoteURL, &notes, &method, &tag)
 		if err != nil {
 			return nil, err
 		}
@@ -98,6 +99,10 @@ func GetRecipeBySlug(slug string, userID string, db *sql.DB) (*common.Recipe, er
 
 		if notes.Valid {
 			recipe.Notes = notes.String
+		}
+
+		if method.Valid {
+			recipe.Method = method.String
 		}
 
 		if tag.Valid {
@@ -125,7 +130,7 @@ func GetRecipeByID(id int, userID string, db *sql.DB) (*common.Recipe, error) {
 	}
 	recipe := &common.Recipe{Ingredients: []common.Ingredient{}, Tags: []string{}}
 	query := `
-		SELECT recipe.id, name, remote_url, notes, tag_name
+		SELECT recipe.id, name, remote_url, notes, method, tag_name
 			FROM recipe
 			LEFT JOIN recipe_tag on recipe.id = recipe_tag.recipe_id
 			WHERE recipe.id = ? AND account_id = ?;`
@@ -140,10 +145,11 @@ func GetRecipeByID(id int, userID string, db *sql.DB) (*common.Recipe, error) {
 	for results.Next() {
 		var remoteURL sql.NullString
 		var notes sql.NullString
+		var method sql.NullString
 		var tag sql.NullString
 		var id int
 
-		err = results.Scan(&id, &recipe.Name, &remoteURL, &notes, &tag)
+		err = results.Scan(&id, &recipe.Name, &remoteURL, &notes, &method, &tag)
 		if err != nil {
 			return nil, err
 		}
@@ -162,6 +168,10 @@ func GetRecipeByID(id int, userID string, db *sql.DB) (*common.Recipe, error) {
 
 		if notes.Valid {
 			recipe.Notes = notes.String
+		}
+
+		if method.Valid {
+			recipe.Method = method.String
 		}
 
 		if tag.Valid {
@@ -191,8 +201,8 @@ func AddRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 	if err != nil {
 		return err
 	}
-	query := "INSERT INTO recipe (name, slug, remote_url, notes, account_id) VALUES (?, ?, ?, ?, ?);"
-	res, err := db.Exec(query, recipe.Name, common.Slugify(recipe.Name), recipe.RemoteURL, recipe.Notes, accountID)
+	query := "INSERT INTO recipe (name, slug, remote_url, notes, method, account_id) VALUES (?, ?, ?, ?, ?, ?);"
+	res, err := db.Exec(query, recipe.Name, common.Slugify(recipe.Name), recipe.RemoteURL, recipe.Notes, recipe.Method, accountID)
 
 	if err != nil {
 		fmt.Println("could not insert recipe")
@@ -229,8 +239,8 @@ func EditRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 		return err
 	}
 
-	updateQuery := "UPDATE recipe SET name=?, remote_url=?, notes=? WHERE id=? AND account_id=?"
-	if _, err := db.Exec(updateQuery, recipe.Name, recipe.RemoteURL, recipe.Notes, recipe.ID, accountID); err != nil {
+	updateQuery := "UPDATE recipe SET name=?, remote_url=?, notes=?, method=? WHERE id=? AND account_id=?"
+	if _, err := db.Exec(updateQuery, recipe.Name, recipe.RemoteURL, recipe.Notes, recipe.Method, recipe.ID, accountID); err != nil {
 		log.Println(err)
 		return err
 	}

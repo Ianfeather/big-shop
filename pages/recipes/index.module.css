@@ -28,3 +28,12 @@
 .photoIcon path {
   fill: white;
 }
+
+.error {
+  color: var(--pink);
+  font-size: 14px;
+  margin-top: 5px;
+  border: 1px solid var(--pink);
+  padding: 5px;
+  border-radius: 5px;
+}

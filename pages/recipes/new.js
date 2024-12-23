@@ -9,7 +9,7 @@ import PhotoIcon from '@components/svg/photo';
 
 const NewRecipe = () => {
   const title = 'Add New Recipe';
-  const [selectedImage, setSelectedImage] = useState(null);
+  const [APIError, setAPIError] = useState(null);
   const [parsedRecipe, setParsedRecipe] = useState(null);
   const imageInput = useRef(null);
 
@@ -27,15 +27,19 @@ const NewRecipe = () => {
 
     const formData = new FormData();
     formData.append('image', file);
-
     const { result } = await post(formData);
-    if (error) throw new Error('Failed to process image');
-    if (response.ok) {
-      let {name, ingredients, instructions: method} = JSON.parse(result);
-      let recipe = { name, ingredients, method, tags: [] }
-      setParsedRecipe(recipe);
-    }
 
+    if (error || !response.ok) {
+      if (response.status === 504) {
+        setAPIError('Ran out of time processing image. Please try again.');
+        return;
+      }
+      setAPIError('Failed to process image');
+      return;
+    }
+    let {name, ingredients, instructions: method} = JSON.parse(result);
+    let recipe = { name, ingredients, method, tags: [] }
+    setParsedRecipe(recipe);
   };
 
   return (
@@ -57,6 +61,7 @@ const NewRecipe = () => {
             { !!loading && <Spinner>Loading...</Spinner>}
           </Button>
         </div>
+        { APIError && <p className={styles.error}>{APIError}</p> }
         {
           parsedRecipe ?
             <Form initialRecipe={parsedRecipe} mode="new"/> :

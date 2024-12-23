@@ -72,7 +72,7 @@ export default async function handler(req, res) {
 
                 You should omit any ingredients that would be considered pantry staples such as salt, pepper, oil, or water.
 
-                The instructions should be in markdown format and formatted to be as clear as possible. Each instruction should be a separate line. If an instruction is a list of items then it should be formatted as a list. For example, "1. Preheat the oven. 2. Mix the ingredients. 3. Bake for 30 minutes.".
+                The instructions should be in markdown format and formatted to be as clear as possible. Each instruction should be a separate line. If an instruction is a list of items then it should be formatted as a list. For example, "1. Preheat the oven. 2. Mix the ingredients. 3. Bake for 30 minutes.". The instruction must NOT use double quotes (") at any point. They should be replaced by a single quote if present or omitted.
                 `,
             },
             {

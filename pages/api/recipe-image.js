@@ -70,9 +70,8 @@ export default async function handler(req, res) {
     // Clean up the temporary file
     await fs.unlink(imageFile.filepath);
 
-    // Process with OpenAI
     const response = await openai.chat.completions.create({
-      model: 'gpt-4-vision-preview',
+      model: 'gpt-4o',
       response_format: {
         type: 'json_object',
       },

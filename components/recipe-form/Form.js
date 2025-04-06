@@ -17,7 +17,7 @@ Issues:
 */
 
 
-const useMocks = false;
+const useMocks = true;
 
 const capitalize = (str) => {
   if (!str) {

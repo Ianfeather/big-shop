@@ -20,8 +20,8 @@ const UserMenu = ({ className, user }) => {
       {
         isOpen && (
           <div className={styles.userMenuContainer}>
-            <Link href="/account">
-              <a className={styles.link}>Account</a>
+            <Link href="/account" className={styles.link}>
+              Account
             </Link>
             <Logout className={`${styles.logout} ${styles.link}`} />
           </div>

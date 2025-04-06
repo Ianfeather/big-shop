@@ -3,7 +3,6 @@ import formidable from 'formidable';
 import fs from 'fs/promises';
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
 });
 
 // Configure API route to handle form data
@@ -29,6 +28,8 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  return res.status(504).json({ error: 'Gateway Timeout' });
 
   try {
     // Parse the form data

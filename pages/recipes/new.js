@@ -10,10 +10,14 @@ import PhotoIcon from '@components/svg/photo';
 const NewRecipe = () => {
   const title = 'Add New Recipe';
   const [APIError, setAPIError] = useState(null);
+  const [errorDetails, setErrorDetails] = useState(null);
   const [parsedRecipe, setParsedRecipe] = useState(null);
   const imageInput = useRef(null);
 
-  const { post, response, loading, error } = useFetch(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image`, { cachePolicy: 'no-cache' });
+  const { post, response, loading, error } = useFetch(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image`, {
+    cachePolicy: 'no-cache',
+    timeout: 60000, // 60 second timeout
+  });
 
   const handleImageClick = () => {
     imageInput.current.click();
@@ -25,21 +29,54 @@ const NewRecipe = () => {
       return;
     }
 
-    const formData = new FormData();
-    formData.append('image', file);
-    const { result } = await post(formData);
+    // Reset error states
+    setAPIError(null);
+    setErrorDetails(null);
 
-    if (error || !response.ok) {
-      if (response.status === 504) {
-        setAPIError('Ran out of time processing image. Please try again.');
-        return;
-      }
-      setAPIError('Failed to process image');
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setAPIError('Invalid file type');
+      setErrorDetails('Please select an image file (JPEG, PNG, etc.).');
       return;
     }
-    let {name, ingredients, instructions: method} = JSON.parse(result);
-    let recipe = { name, ingredients, method, tags: [] }
-    setParsedRecipe(recipe);
+
+    // Validate file size
+    if (file.size > 5 * 1024 * 1024) {
+      setAPIError('Image too large');
+      setErrorDetails('Please select an image smaller than 5MB.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('image', file);
+
+    try {
+      const { result, error, details } = await post(formData);
+
+      if (error) {
+        setAPIError(error);
+        setErrorDetails(details);
+        return;
+      }
+
+      if (!response.ok) {
+        if (response.status === 504) {
+          setAPIError('Processing timeout');
+          setErrorDetails('The image processing took too long. Please try again with a smaller or clearer image.');
+          return;
+        }
+        setAPIError('Failed to process image');
+        setErrorDetails('An unexpected error occurred. Please try again.');
+        return;
+      }
+
+      let {name, ingredients, instructions: method} = JSON.parse(result);
+      let recipe = { name, ingredients, method, tags: [] }
+      setParsedRecipe(recipe);
+    } catch (error) {
+      setAPIError('Failed to process image');
+      setErrorDetails('An unexpected error occurred. Please try again.');
+    }
   };
 
   return (
@@ -58,10 +95,15 @@ const NewRecipe = () => {
           />
           <Button className="" style="blue" onClick={handleImageClick}>
             <PhotoIcon className={styles.photoIcon} />
-            { !!loading && <Spinner>Loading...</Spinner>}
+            { !!loading && <Spinner>Processing image...</Spinner>}
           </Button>
         </div>
-        { APIError && <p className={styles.error}>{APIError}</p> }
+        { APIError && (
+          <div className={styles.errorContainer}>
+            <p className={styles.error}>{APIError}</p>
+            { errorDetails && <p className={styles.errorDetails}>{errorDetails}</p> }
+          </div>
+        )}
         {
           parsedRecipe ?
             <Form initialRecipe={parsedRecipe} mode="new"/> :

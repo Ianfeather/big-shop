@@ -3,25 +3,51 @@ import formidable from 'formidable';
 import fs from 'fs/promises';
 
 const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  timeout: 30000, // 30 second timeout
 });
 
 // Configure API route to handle form data
 export const config = {
   api: {
     bodyParser: false,
+    responseLimit: '10mb', // Increase response limit for larger images
   },
 };
 
-
-// Helper function to parse form data
+// Helper function to parse form data with timeout
 const parseForm = async (req) => {
   return new Promise((resolve, reject) => {
-    const form = formidable();
+    const form = formidable({
+      maxFileSize: 5 * 1024 * 1024, // 5MB limit
+      keepExtensions: true,
+    });
+
+    const timeout = setTimeout(() => {
+      reject(new Error('Form parsing timed out'));
+    }, 10000); // 10 second timeout for form parsing
+
     form.parse(req, (err, fields, files) => {
+      clearTimeout(timeout);
       if (err) reject(err);
       resolve({ fields, files });
     });
   });
+};
+
+// Helper function to validate image
+const validateImage = (file) => {
+  if (!file) {
+    throw new Error('No image file provided');
+  }
+
+  if (!file.mimetype?.startsWith('image/')) {
+    throw new Error('File must be an image');
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error('Image size must be less than 5MB');
+  }
 };
 
 export default async function handler(req, res) {
@@ -29,16 +55,13 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  return res.status(504).json({ error: 'Gateway Timeout' });
-
   try {
     // Parse the form data
     const { files } = await parseForm(req);
     const [imageFile] = files.image;
 
-    if (!imageFile) {
-      return res.status(400).json({ error: 'No image file provided' });
-    }
+    // Validate the image
+    validateImage(imageFile);
 
     // Read the file and convert to base64
     const imageBuffer = await fs.readFile(imageFile.filepath);
@@ -47,8 +70,9 @@ export default async function handler(req, res) {
     // Clean up the temporary file
     await fs.unlink(imageFile.filepath);
 
+    // Process with OpenAI
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4-vision-preview',
       response_format: {
         type: 'json_object',
       },
@@ -79,8 +103,8 @@ export default async function handler(req, res) {
             {
               type: 'image_url',
               image_url: {
-                "url": `data:image/jpeg;base64,${base64Image}`,
-                "detail": "high"
+                url: `data:image/jpeg;base64,${base64Image}`,
+                detail: 'high'
               }
             }
           ],
@@ -89,14 +113,53 @@ export default async function handler(req, res) {
       max_tokens: 1000,
     });
 
-
-
-
     return res.status(200).json({
       result: response.choices[0].message.content,
     });
   } catch (error) {
     console.error('Error processing recipe:', error);
-    return res.status(500).json({ error: 'Failed to process recipe image' });
+
+    // Handle specific error cases
+    if (error.message.includes('timed out')) {
+      return res.status(504).json({
+        error: 'The image processing took too long. Please try again with a smaller or clearer image.',
+        details: 'The request timed out while processing the image.'
+      });
+    }
+
+    if (error.message.includes('No image file provided')) {
+      return res.status(400).json({
+        error: 'No image was provided',
+        details: 'Please select an image to process.'
+      });
+    }
+
+    if (error.message.includes('File must be an image')) {
+      return res.status(400).json({
+        error: 'Invalid file type',
+        details: 'Please upload an image file (JPEG, PNG, etc.).'
+      });
+    }
+
+    if (error.message.includes('Image size must be less than 5MB')) {
+      return res.status(400).json({
+        error: 'Image too large',
+        details: 'Please upload an image smaller than 5MB.'
+      });
+    }
+
+    // Handle OpenAI API errors
+    if (error.response?.status === 429) {
+      return res.status(429).json({
+        error: 'Too many requests',
+        details: 'Please wait a moment and try again.'
+      });
+    }
+
+    // Generic error
+    return res.status(500).json({
+      error: 'Failed to process recipe image',
+      details: 'An unexpected error occurred. Please try again.'
+    });
   }
 }

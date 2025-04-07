@@ -1,6 +1,8 @@
 import { OpenAI } from 'openai';
 import formidable from 'formidable';
 import fs from 'fs/promises';
+import { v4 as uuidv4 } from 'uuid';
+import { getStore } from '@netlify/blobs';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -11,7 +13,7 @@ const openai = new OpenAI({
 export const config = {
   api: {
     bodyParser: false,
-    responseLimit: '10mb', // Increase response limit for larger images
+    responseLimit: '10mb',
   },
 };
 
@@ -19,13 +21,13 @@ export const config = {
 const parseForm = async (req) => {
   return new Promise((resolve, reject) => {
     const form = formidable({
-      maxFileSize: 5 * 1024 * 1024, // 5MB limit
+      maxFileSize: 5 * 1024 * 1024,
       keepExtensions: true,
     });
 
     const timeout = setTimeout(() => {
       reject(new Error('Form parsing timed out'));
-    }, 10000); // 10 second timeout for form parsing
+    }, 10000);
 
     form.parse(req, (err, fields, files) => {
       clearTimeout(timeout);
@@ -50,7 +52,94 @@ const validateImage = (file) => {
   }
 };
 
+// Process image with OpenAI
+const processImage = async (base64Image) => {
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    response_format: {
+      type: 'json_object',
+    },
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `
+              This is an image of a recipe from a cookbook. Extract the recipe name, ingredients, and instructions. Format the response in a JSON object.
+
+              The schema for the json object should be {name: string, ingredients: Ingredient[], instructions: string}. The Ingredient schema should be {name: string, quantity: string, unit: string}.
+
+              The name of the recipe should be in title case.
+
+              The units for the ingredients should be standardized to the following: bottle,clove,gram,kilogram,litre,millilitre,packet,pinch,slice,tablespoon,teaspoon,tin. You can translate abbreviations. eg. tsp should become teaspoon. If you can't translate the unit to one of these then you must leave the unit value as an empty string. If there is no unit specified then you should leave the unit value as an empty string.
+
+              Ingredient names should be in lowercase and singular form. For example, "tomatoes" should be "tomato". The ingredient should not include adjectives or descriptive words such as large, peeled or chopped, but it CAN include the type of ingredient. For example, "chicken breast or "green beans". You should never remove the name of a flavour or key ingredient e.g 'chicken stock' should never be reduced just to 'stock'
+
+              Ingredient quantities should be in string format and use decimals rather than fractions.
+
+              You should omit any ingredients that would be considered pantry staples such as salt, pepper, oil, or water.
+
+              The instructions should be in markdown format and formatted to be as clear as possible. Each instruction should be a separate line. If an instruction is a list of items then it should be formatted as a list. For example, "1. Preheat the oven. 2. Mix the ingredients. 3. Bake for 30 minutes.". The instruction must NOT use double quotes (") at any point. They should be replaced by a single quote if present or omitted.
+            `,
+          },
+          {
+            type: 'image_url',
+            image_url: {
+              url: `data:image/jpeg;base64,${base64Image}`,
+              detail: 'high'
+            }
+          }
+        ],
+      },
+    ],
+    max_tokens: 1000,
+  });
+
+  if (!response.choices || response.choices.length === 0) {
+    throw new Error('No choices found in the OpenAI response');
+  }
+  return response.choices[0].message.content;
+};
+
+// Helper function to update job status
+const updateJobStatus = async (jobId, status, result = null, error = null) => {
+  const store = getStore('jobs');
+  const job = {
+    id: jobId,
+    status,
+    result,
+    error,
+    updatedAt: Date.now(),
+  };
+  await store.set(jobId, JSON.stringify(job), { ttl: 3600 }); // 1 hour TTL
+  return job;
+};
+
 export default async function handler(req, res) {
+  if (req.method === 'GET') {
+    // Handle job status check
+    const { jobId } = req.query;
+    if (!jobId) {
+      return res.status(400).json({ error: 'Job ID is required' });
+    }
+
+    try {
+      const store = getStore('jobs');
+      const jobData = await store.get(jobId);
+
+      if (!jobData) {
+        return res.status(404).json({ error: 'Job not found' });
+      }
+
+      const job = JSON.parse(jobData);
+      return res.status(200).json(job);
+    } catch (error) {
+      console.error('Error fetching job:', error);
+      return res.status(500).json({ error: 'Failed to fetch job status' });
+    }
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -70,51 +159,22 @@ export default async function handler(req, res) {
     // Clean up the temporary file
     await fs.unlink(imageFile.filepath);
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      response_format: {
-        type: 'json_object',
-      },
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `
-                This is an image of a recipe from a cookbook. Extract the recipe name, ingredients, and instructions. Format the response in a JSON object.
+    // Create a new job
+    const jobId = uuidv4();
+    const initialJob = await updateJobStatus(jobId, 'processing');
 
-                The schema for the json object should be {name: string, ingredients: Ingredient[], instructions: string}. The Ingredient schema should be {name: string, quantity: string, unit: string}.
+    // Start processing in the background
+    processImage(base64Image)
+      .then(async (result) => {
+        await updateJobStatus(jobId, 'completed', result);
+      })
+      .catch(async (error) => {
+        console.error('Error processing recipe:', error);
+        await updateJobStatus(jobId, 'failed', null, error.message);
+      });
 
-                The name of the recipe should be in title case.
-
-                The units for the ingredients should be standardized to the following: bottle,clove,gram,kilogram,litre,millilitre,packet,pinch,slice,tablespoon,teaspoon,tin. You can translate abbreviations. eg. tsp should become teaspoon. If you can't translate the unit to one of these then you must leave the unit value as an empty string. If there is no unit specified then you should leave the unit value as an empty string.
-
-                Ingredient names should be in lowercase and singular form. For example, "tomatoes" should be "tomato". The ingredient should not include adjectives or descriptive words such as large, peeled or chopped, but it CAN include the type of ingredient. For example, "chicken breast or "green beans". You should never remove the name of a flavour or key ingredient e.g 'chicken stock' should never be reduced just to 'stock'
-
-                Ingredient quantities should be in string format and use decimals rather than fractions.
-
-                You should omit any ingredients that would be considered pantry staples such as salt, pepper, oil, or water.
-
-                The instructions should be in markdown format and formatted to be as clear as possible. Each instruction should be a separate line. If an instruction is a list of items then it should be formatted as a list. For example, "1. Preheat the oven. 2. Mix the ingredients. 3. Bake for 30 minutes.". The instruction must NOT use double quotes (") at any point. They should be replaced by a single quote if present or omitted.
-                `,
-            },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/jpeg;base64,${base64Image}`,
-                detail: 'high'
-              }
-            }
-          ],
-        },
-      ],
-      max_tokens: 1000,
-    });
-
-    return res.status(200).json({
-      result: response.choices[0].message.content,
-    });
+    // Return the job ID immediately
+    return res.status(202).json({ jobId });
   } catch (error) {
     console.error('Error processing recipe:', error);
 
@@ -144,14 +204,6 @@ export default async function handler(req, res) {
       return res.status(400).json({
         error: 'Image too large',
         details: 'Please upload an image smaller than 5MB.'
-      });
-    }
-
-    // Handle OpenAI API errors
-    if (error.response?.status === 429) {
-      return res.status(429).json({
-        error: 'Too many requests',
-        details: 'Please wait a moment and try again.'
       });
     }
 

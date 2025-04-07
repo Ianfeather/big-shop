@@ -2,7 +2,7 @@ import Spinner from '@components/recipe-form/spinner';
 import Form from '@components/recipe-form/Form';
 import Layout, { MainContent } from '@components/layout'
 import styles from './index.module.css';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Button from '@components/button';
 import useFetch from 'use-http'
 import PhotoIcon from '@components/svg/photo';
@@ -82,12 +82,49 @@ const NewRecipe = () => {
   const [APIError, setAPIError] = useState(null);
   const [errorDetails, setErrorDetails] = useState(null);
   const [parsedRecipe, setParsedRecipe] = useState(null);
+  const [processingJob, setProcessingJob] = useState(null);
   const imageInput = useRef(null);
 
-  const { post, response, loading, error } = useFetch(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image`, {
+  const { post, get, response, loading, error } = useFetch(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image`, {
     cachePolicy: 'no-cache',
-    timeout: 60000, // 60 second timeout
   });
+
+  // Poll for job status
+  useEffect(() => {
+    let pollInterval;
+
+    if (processingJob) {
+      pollInterval = setInterval(async () => {
+        const { jobId } = processingJob;
+        const job = await get(`?jobId=${jobId}`);
+
+        if (job.status === 'completed') {
+          clearInterval(pollInterval);
+          setProcessingJob(null);
+          try {
+            let {name, ingredients, instructions: method} = JSON.parse(job.result);
+            let recipe = { name, ingredients, method, tags: [] }
+            setParsedRecipe(recipe);
+          } catch (error) {
+            setAPIError('Failed to parse recipe');
+            setErrorDetails('The recipe data was corrupted. Please try again.');
+          }
+        } else if (job.status === 'failed') {
+          clearInterval(pollInterval);
+          setProcessingJob(null);
+          setAPIError('Processing failed');
+          setErrorDetails(job.error || 'An error occurred while processing the image.');
+        }
+        // If still processing, continue polling
+      }, 2000); // Poll every 2 seconds
+    }
+
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [processingJob, get]);
 
   const handleImageClick = () => {
     imageInput.current.click();
@@ -102,6 +139,7 @@ const NewRecipe = () => {
     // Reset error states
     setAPIError(null);
     setErrorDetails(null);
+    setParsedRecipe(null);
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
@@ -117,35 +155,22 @@ const NewRecipe = () => {
       const formData = new FormData();
       formData.append('image', resizedBlob, file.name);
 
-      const { result, error: apiError, details } = await post(formData);
+      const { jobId } = await post(formData);
 
-      // Check for fetch errors first
       if (error) {
         setAPIError('Network error');
         setErrorDetails('Failed to connect to the server. Please check your internet connection and try again.');
         return;
       }
 
-      if (apiError) {
-        setAPIError(apiError);
-        setErrorDetails(details);
-        return;
-      }
-
       if (!response.ok) {
-        if (response.status === 504) {
-          setAPIError('Processing timeout');
-          setErrorDetails('The image processing took too long. Please try again with a smaller or clearer image.');
-          return;
-        }
-        setAPIError('Failed to process image');
+        setAPIError('Failed to start processing');
         setErrorDetails('An unexpected error occurred. Please try again.');
         return;
       }
 
-      let {name, ingredients, instructions: method} = JSON.parse(result);
-      let recipe = { name, ingredients, method, tags: [] }
-      setParsedRecipe(recipe);
+      // Start polling for the job
+      setProcessingJob({ jobId });
     } catch (error) {
       setAPIError('Failed to process image');
       setErrorDetails('An unexpected error occurred. Please try again.');
@@ -168,7 +193,7 @@ const NewRecipe = () => {
           />
           <Button className="" style="blue" onClick={handleImageClick}>
             <PhotoIcon className={styles.photoIcon} />
-            { !!loading && <Spinner>Processing image...</Spinner>}
+            { (loading || processingJob) && <Spinner>Processing image...</Spinner>}
           </Button>
         </div>
         { APIError && (

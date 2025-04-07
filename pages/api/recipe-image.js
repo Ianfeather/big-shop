@@ -96,6 +96,9 @@ const processImage = async (base64Image) => {
     max_tokens: 1000,
   });
 
+  if (!response.choices || response.choices.length === 0) {
+    throw new Error('No choices found in the OpenAI response');
+  }
   return response.choices[0].message.content;
 };
 

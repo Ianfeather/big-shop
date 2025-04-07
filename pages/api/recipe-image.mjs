@@ -1,7 +1,8 @@
-const { OpenAI } = require('openai');
-const formidable = require('formidable');
-const fs = require('fs/promises');
-const { v4: uuidv4 } = require('uuid');
+import { OpenAI } from 'openai';
+import formidable from 'formidable';
+import fs from 'fs/promises';
+import { v4 as uuidv4 } from 'uuid';
+import { Blobs } from '@netlify/blobs';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -95,16 +96,16 @@ const processImage = async (base64Image) => {
     max_tokens: 1000,
   });
 
-  if (!response.choices || response.choices.length === 0) {
-    throw new Error('No choices found in the OpenAI response');
-  }
   return response.choices[0].message.content;
 };
 
 // Helper function to update job status
 const updateJobStatus = async (jobId, status, result = null, error = null) => {
-  const { getStore } = require('@netlify/blobs');
-  const store = getStore('jobs');
+  const store = new Blobs({
+    token: process.env.NETLIFY_BLOB_STORE_TOKEN,
+    siteID: process.env.NETLIFY_SITE_ID,
+  });
+
   const job = {
     id: jobId,
     status,
@@ -112,6 +113,7 @@ const updateJobStatus = async (jobId, status, result = null, error = null) => {
     error,
     updatedAt: Date.now(),
   };
+
   await store.set(jobId, JSON.stringify(job), { ttl: 3600 }); // 1 hour TTL
   return job;
 };
@@ -125,8 +127,11 @@ export default async function handler(req, res) {
     }
 
     try {
-      const { getStore } = require('@netlify/blobs');
-      const store = getStore('jobs');
+      const store = new Blobs({
+        token: process.env.NETLIFY_BLOB_STORE_TOKEN,
+        siteID: process.env.NETLIFY_SITE_ID,
+      });
+
       const jobData = await store.get(jobId);
 
       if (!jobData) {

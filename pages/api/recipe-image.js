@@ -2,7 +2,6 @@ import { OpenAI } from 'openai';
 import formidable from 'formidable';
 import fs from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
-import { getStore } from '@netlify/blobs';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -55,7 +54,7 @@ const validateImage = (file) => {
 // Process image with OpenAI
 const processImage = async (base64Image) => {
   const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
+    model: 'gpt-4-vision-preview',
     response_format: {
       type: 'json_object',
     },
@@ -104,6 +103,7 @@ const processImage = async (base64Image) => {
 
 // Helper function to update job status
 const updateJobStatus = async (jobId, status, result = null, error = null) => {
+  const { getStore } = await import('@netlify/blobs');
   const store = getStore('jobs');
   const job = {
     id: jobId,
@@ -125,6 +125,7 @@ export default async function handler(req, res) {
     }
 
     try {
+      const { getStore } = await import('@netlify/blobs');
       const store = getStore('jobs');
       const jobData = await store.get(jobId);
 

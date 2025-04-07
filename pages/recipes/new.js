@@ -7,6 +7,65 @@ import Button from '@components/button';
 import useFetch from 'use-http'
 import PhotoIcon from '@components/svg/photo';
 
+// Helper function to resize image
+const resizeImage = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        // Calculate new dimensions while maintaining aspect ratio
+        const MAX_WIDTH = 2000; // Maximum width
+        const MAX_HEIGHT = 2000; // Maximum height
+        const MAX_SIZE = 5 * 1024 * 1024; // 5MB in bytes
+
+        if (width > MAX_WIDTH) {
+          height = Math.round((height * MAX_WIDTH) / width);
+          width = MAX_WIDTH;
+        }
+
+        if (height > MAX_HEIGHT) {
+          width = Math.round((width * MAX_HEIGHT) / height);
+          height = MAX_HEIGHT;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Convert to blob with quality adjustment
+        let quality = 0.9;
+        let blob = null;
+
+        do {
+          canvas.toBlob((b) => {
+            blob = b;
+            if (blob.size > MAX_SIZE && quality > 0.1) {
+              quality -= 0.1;
+              canvas.toBlob((b) => {
+                blob = b;
+                resolve(blob);
+              }, 'image/jpeg', quality);
+            } else {
+              resolve(blob);
+            }
+          }, 'image/jpeg', quality);
+        } while (blob === null);
+      };
+      img.onerror = reject;
+    };
+    reader.onerror = reject;
+  });
+};
+
 const NewRecipe = () => {
   const title = 'Add New Recipe';
   const [APIError, setAPIError] = useState(null);
@@ -40,17 +99,13 @@ const NewRecipe = () => {
       return;
     }
 
-    // Validate file size
-    if (file.size > 5 * 1024 * 1024) {
-      setAPIError('Image too large');
-      setErrorDetails('Please select an image smaller than 5MB.');
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append('image', file);
-
     try {
+      // Resize the image if it's too large
+      const resizedBlob = await resizeImage(file);
+
+      const formData = new FormData();
+      formData.append('image', resizedBlob, file.name);
+
       const { result, error, details } = await post(formData);
 
       if (error) {

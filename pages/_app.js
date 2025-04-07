@@ -4,8 +4,7 @@ import { Provider as FetchProvider } from 'use-http';
 import { useRouter } from 'next/router';
 import { useEffect } from 'react';
 
-
-const  InnerApp = ({ Component, pageProps }) => {
+const InnerApp = ({ Component, pageProps }) => {
   const { isAuthenticated, isLoading, getAccessTokenSilently } = useAuth0();
   const router = useRouter();
 
@@ -21,7 +20,7 @@ const  InnerApp = ({ Component, pageProps }) => {
 
   useEffect(() => {
     if (!isAuthenticated && !isLoading) {
-      return router.push('/')
+      router.push('/');
     }
   }, [isAuthenticated, router, isLoading]);
 
@@ -49,12 +48,13 @@ export default function App({ Component, pageProps, router }) {
       audience={audience}
       redirectUri={process.env.NEXT_PUBLIC_HOST}
       useRefreshTokens={true}
-      cacheLocation="localstorage">
-        {
-          behindAuth ?
-          <InnerApp Component={Component} pageProps={pageProps} /> :
-          <Component />
-        }
+      cacheLocation="localstorage"
+    >
+      {behindAuth ? (
+        <InnerApp Component={Component} pageProps={pageProps} />
+      ) : (
+        <Component {...pageProps} />
+      )}
     </Auth0Provider>
   )
 }

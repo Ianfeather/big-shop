@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { usePageVisibility } from 'react-page-visibility';
+import usePageVisibility from './use-page-visibility';
 
 function useInterval(callback, delay, pauseOnHide = true) {
   const savedCallback = useRef();
-  const isVisible = usePageVisibility()
+  const isVisible = usePageVisibility();
 
   // Remember the latest callback.
   useEffect(() => {

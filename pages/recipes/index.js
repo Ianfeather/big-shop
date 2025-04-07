@@ -8,7 +8,7 @@ const Recipes = () => {
       <Grid>
         <MainContent>
           <div>Here you can view, edit and curate your list of recipes</div>
-          <Link href="/recipes/new"><a>Add new recipe</a></Link>
+          <Link href="/recipes/new" className="link">Add new recipe</Link>
         </MainContent>
         <Sidebar>
           <RecipeList />

@@ -11,11 +11,9 @@ const Button = ({ className = '', onClick, children, href, icon, style, outline 
 
   if (href) {
     return (
-      <Link href={href}>
-        <a className={classes}>
-          { icon &&  <IconElement className={styles.svg} /> }
-          {children}
-        </a>
+      <Link href={href} className={classes}>
+        { icon &&  <IconElement className={styles.svg} /> }
+        {children}
       </Link>
     )
   }

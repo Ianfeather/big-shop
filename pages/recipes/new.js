@@ -41,24 +41,35 @@ const resizeImage = (file) => {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Convert to blob with quality adjustment
-        let quality = 0.9;
-        let blob = null;
+        // Recursive function to create blob with quality adjustment
+        const createBlob = (quality) => {
+          return new Promise((resolveBlob) => {
+            canvas.toBlob((blob) => {
+              if (!blob) {
+                resolveBlob(null);
+                return;
+              }
 
-        do {
-          canvas.toBlob((b) => {
-            blob = b;
-            if (blob.size > MAX_SIZE && quality > 0.1) {
-              quality -= 0.1;
-              canvas.toBlob((b) => {
-                blob = b;
-                resolve(blob);
-              }, 'image/jpeg', quality);
-            } else {
-              resolve(blob);
+              if (blob.size <= MAX_SIZE || quality <= 0.1) {
+                resolveBlob(blob);
+              } else {
+                // Reduce quality and try again
+                createBlob(quality - 0.1).then(resolveBlob);
+              }
+            }, 'image/jpeg', quality);
+          });
+        };
+
+        // Start with 90% quality
+        createBlob(0.9)
+          .then((blob) => {
+            if (!blob) {
+              reject(new Error('Failed to create image blob'));
+              return;
             }
-          }, 'image/jpeg', quality);
-        } while (blob === null);
+            resolve(blob);
+          })
+          .catch(reject);
       };
       img.onerror = reject;
     };
@@ -106,10 +117,17 @@ const NewRecipe = () => {
       const formData = new FormData();
       formData.append('image', resizedBlob, file.name);
 
-      const { result, error, details } = await post(formData);
+      const { result, error: apiError, details } = await post(formData);
 
+      // Check for fetch errors first
       if (error) {
-        setAPIError(error);
+        setAPIError('Network error');
+        setErrorDetails('Failed to connect to the server. Please check your internet connection and try again.');
+        return;
+      }
+
+      if (apiError) {
+        setAPIError(apiError);
         setErrorDetails(details);
         return;
       }

@@ -1,7 +1,7 @@
-import { OpenAI } from 'openai';
-import formidable from 'formidable';
-import fs from 'fs/promises';
-import { v4 as uuidv4 } from 'uuid';
+const { OpenAI } = require('openai');
+const formidable = require('formidable');
+const fs = require('fs/promises');
+const { v4: uuidv4 } = require('uuid');
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -103,7 +103,7 @@ const processImage = async (base64Image) => {
 
 // Helper function to update job status
 const updateJobStatus = async (jobId, status, result = null, error = null) => {
-  const { getStore } = await import('@netlify/blobs');
+  const { getStore } = require('@netlify/blobs');
   const store = getStore('jobs');
   const job = {
     id: jobId,
@@ -125,7 +125,7 @@ export default async function handler(req, res) {
     }
 
     try {
-      const { getStore } = await import('@netlify/blobs');
+      const { getStore } = require('@netlify/blobs');
       const store = getStore('jobs');
       const jobData = await store.get(jobId);
 

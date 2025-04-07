@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@auth0/auth0-react": "^1.2.0",
-    "@netlify/blobs": "^1.0.0",
+    "@netlify/blobs": "8.1.2",
     "express": "^4.17.2",
     "express-openid-connect": "^2.5.2",
     "formidable": "^3.5.2",

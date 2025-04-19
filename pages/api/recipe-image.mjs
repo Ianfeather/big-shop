@@ -55,7 +55,7 @@ const validateImage = (file) => {
 // Process image with OpenAI
 const processImage = async (base64Image) => {
   const response = await openai.chat.completions.create({
-    model: 'gpt-4-vision-preview',
+    model: 'gpt-4o',
     response_format: {
       type: 'json_object',
     },

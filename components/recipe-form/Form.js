@@ -170,9 +170,9 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
           ingredients: matched
         });
         setUnmatchedIngredients(unmatched);
-        setShowIngredients(true);
       }
     }
+    setShowIngredients(true);
   }
 
   if (mode === 'edit' && !recipe.id) {

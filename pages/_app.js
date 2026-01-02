@@ -39,7 +39,10 @@ export default function App({ Component, pageProps, router }) {
   const domain = process.env.NEXT_PUBLIC_AUTH0_DOMAIN;
   const clientId = process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID;
   const audience = process.env.NEXT_PUBLIC_AUTH0_AUDIENCE;
-  const behindAuth = router.route !== '/';
+  
+  // Check if auth is disabled in local development
+  const authDisabled = process.env.DISABLE_AUTH === 'true';
+  const behindAuth = !authDisabled && router.route !== '/';
 
   return (
     <Auth0Provider

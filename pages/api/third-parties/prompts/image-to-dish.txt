@@ -1,0 +1,17 @@
+Analyze the attached image and guess the name of the dish. It will always be a picture of food for a single meal. Be confident in your answer and always come up with something. If you're unsure, chose the closest approximation.
+
+Write a recipe for the dish. It should maximize flavour, not convenience. Extract the recipe name, ingredients, and instructions. Format the response in a JSON object.
+
+The schema for the json object should be {name: string, ingredients: Ingredient[], instructions: string}. The Ingredient schema should be {name: string, quantity: string, unit: string}.
+
+The name of the recipe should be in title case.
+
+The units for the ingredients should be standardized to the following: bottle,clove,gram,kilogram,litre,millilitre,packet,pinch,slice,tablespoon,teaspoon,tin. You can translate abbreviations. eg. tsp should become teaspoon. If you can't translate the unit to one of these then you must leave the unit value as an empty string. If there is no unit specified then you should leave the unit value as an empty string.
+
+Ingredient names should be in lowercase and singular form. For example, "tomatoes" should be "tomato". The ingredient should not include adjectives or descriptive words such as large, peeled or chopped, but it CAN include the type of ingredient. For example, "chicken breast or "green beans". You should never remove the name of a flavour or key ingredient e.g 'chicken stock' should never be reduced just to 'stock'
+
+Ingredient quantities should be in string format and use decimals rather than fractions.
+
+You should omit any ingredients that would be considered pantry staples such as salt, pepper, oil, or water.
+
+The instructions should be in markdown format and formatted to be as clear as possible. Each instruction should be a separate line. If an instruction is a list of items then it should be formatted as a list. For example, "1. Preheat the oven. 2. Mix the ingredients. 3. Bake for 30 minutes.". The instruction must NOT use double quotes (") at any point. They should be replaced by a single quote if present or omitted.

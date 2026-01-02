@@ -21,10 +21,9 @@ The lambda used to connect to planetscale DB. Since they dropped the free tier i
 Lots to do here.
 - Setup netlify-lambda package for local dev
 - Configure the app to connect to a local db
-- local env vars
 
 For running the UI:
-- Disable auth by setting `behindAuth` to `false` in _app.js
+- Disable auth by setting `behindAuth` to `false` in .env.local
 - Turn on mocks with `useMocks`
 
 

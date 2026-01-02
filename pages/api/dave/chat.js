@@ -23,12 +23,12 @@ Your personality:
 
 Available tools:
 - search_recipes: Search the user's recipe collection
-- get_recipe_details: Get full details for a specific recipe  
+- get_recipe_details: Get full details for a specific recipe
 - create_shopping_list: Add recipes to shopping list
 
 IMPORTANT: You MUST use tools to perform actions. Never claim to have done something without calling the appropriate tool.
 - When user asks to search/find recipes → ALWAYS call search_recipes
-- When user asks to add recipes to shopping list → ALWAYS call create_shopping_list
+- When user asks to add recipes to shopping list → ALWAYS call create_shopping_list. You do not need to ask for confirmation first.
 - When user asks for recipe details → ALWAYS call get_recipe_details
 
 Always be helpful and try to understand what the user wants to accomplish with their meal planning.
@@ -45,7 +45,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { messages, userId, authToken } = req.body;
+    const { messages, userId, authToken, useMockApi = false } = req.body;
 
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'Messages array is required' });
@@ -60,46 +60,70 @@ export default async function handler(req, res) {
       }))
     ];
 
-    // Initial completion with tools
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: openAIMessages,
-      tools: availableTools,
-      tool_choice: 'auto',  
-      temperature: 0.7,
-      max_tokens: 1000,
-    });
+    // Iterative tool calling - allow multiple rounds
+    let toolMessages = [...openAIMessages];
+    let allToolCalls = [];
+    let totalToolsUsed = 0;
+    const maxIterations = 5; // Prevent infinite loops
+    let iteration = 0;
 
-    console.log('OpenAI Messages sent:', openAIMessages.length);
-    console.log('Last message:', openAIMessages[openAIMessages.length - 1]);
+    while (iteration < maxIterations) {
+      iteration++;
 
-    const assistantMessage = completion.choices[0].message;
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        messages: toolMessages,
+        tools: availableTools,
+        tool_choice: 'auto',
+        temperature: 0.7,
+        max_tokens: 1000,
+      });
 
-    console.log('Assistant response content:', assistantMessage.content);
-    console.log('Tool calls requested:', assistantMessage.tool_calls ? assistantMessage.tool_calls.length : 0);
-    
-    if (assistantMessage.tool_calls) {
-      console.log('Tool calls details:', JSON.stringify(assistantMessage.tool_calls, null, 2));
-    } else {
-      console.log('❌ NO TOOL CALLS - AI responded directly without using tools');
-    }
+      const assistantMessage = completion.choices[0].message;
 
-    // Check if tools were called
-    if (assistantMessage.tool_calls) {
-      const toolMessages = [...openAIMessages, assistantMessage];
+      // Add assistant message to conversation
+      toolMessages.push(assistantMessage);
 
-      // Execute tool calls
+      if (!assistantMessage.tool_calls) {
+        return res.status(200).json({
+          message: {
+            role: 'assistant',
+            content: assistantMessage.content,
+            timestamp: new Date().toISOString()
+          },
+          toolCalls: allToolCalls,
+          debug: {
+            toolsUsed: totalToolsUsed,
+            iterations: iteration,
+            conversationLength: openAIMessages.length
+          }
+        });
+      }
+
+      // Execute all tool calls for this iteration
       for (const toolCall of assistantMessage.tool_calls) {
         try {
           const args = JSON.parse(toolCall.function.arguments);
-          const result = await executeToolCall(toolCall.function.name, args, authToken);
-          console.log({result});
+          const result = await executeToolCall(toolCall.function.name, args, authToken, useMockApi);
+
+          // Add tool result to conversation
           toolMessages.push({
             role: 'tool',
             tool_call_id: toolCall.id,
             content: JSON.stringify(result)
           });
+
+          // Store tool call info for response
+          allToolCalls.push({
+            name: toolCall.function.name,
+            arguments: args,
+            result: result
+          });
+
+          totalToolsUsed++;
         } catch (error) {
+          console.error(`Tool ${toolCall.function.name} failed:`, error.message);
+
           toolMessages.push({
             role: 'tool',
             tool_call_id: toolCall.id,
@@ -108,36 +132,33 @@ export default async function handler(req, res) {
               error: error.message
             })
           });
+
+          allToolCalls.push({
+            name: toolCall.function.name,
+            arguments: JSON.parse(toolCall.function.arguments),
+            error: error.message
+          });
         }
       }
-
-      // Get final response with tool results
-      const finalCompletion = await openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
-        messages: toolMessages,
-        temperature: 0.7,
-        max_tokens: 500,
-      });
-
-      const finalResponse = finalCompletion.choices[0].message.content;
-
-      return res.status(200).json({
-        message: {
-          role: 'assistant',
-          content: finalResponse,
-          timestamp: new Date().toISOString()
-        }
-      });
-    } else {
-      // No tools called, return direct response
-      return res.status(200).json({
-        message: {
-          role: 'assistant',
-          content: assistantMessage.content,
-          timestamp: new Date().toISOString()
-        }
-      });
     }
+
+    // If we hit max iterations, return what we have
+    console.warn('Max tool calling iterations reached');
+
+    return res.status(200).json({
+      message: {
+        role: 'assistant',
+        content: 'I apologize, but I encountered an issue completing your request after multiple attempts.',
+        timestamp: new Date().toISOString()
+      },
+      toolCalls: allToolCalls,
+      debug: {
+        toolsUsed: totalToolsUsed,
+        iterations: iteration,
+        maxIterationsReached: true,
+        conversationLength: openAIMessages.length
+      }
+    });
 
   } catch (error) {
     console.error('Dave chat error:', error);

@@ -1,0 +1,27 @@
+{
+  "name": "simple_shopping_list",
+  "description": "Simple test with explicit recipe ID to isolate tool calling issue", 
+  "conversation": [
+    {
+      "role": "user",
+      "content": "Add Thai Green Curry to my shopping list",
+      "timestamp": "2025-01-02T12:00:00Z"
+    }
+  ],
+  "userId": "test-user-123",
+  "assertions": [
+    {
+      "type": "tool_called",
+      "toolName": "search_recipes",
+      "description": "Should search for the recipe first"
+    },
+    {
+      "type": "tool_called",
+      "toolName": "create_shopping_list",
+      "description": "Should call create_shopping_list tool",
+      "expectedArgs": {
+        "recipeIds": ["any_id"]
+      }
+    }
+  ]
+}

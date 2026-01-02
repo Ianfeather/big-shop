@@ -3,18 +3,19 @@
 /**
  * Search recipes in the user's collection
  */
-export async function searchRecipes({ query = '', tags = '' }, authToken) {
+export async function searchRecipes({ query = '', tags = '' }, authToken, useMockApi = false) {
   try {
-    const apiHost = process.env.NEXT_PUBLIC_API_HOST;
+    // Use mock API for testing, otherwise use remote API
+    const apiHost = useMockApi ? 'http://localhost:3001' : process.env.NEXT_PUBLIC_API_HOST;
 
     // For now, just fetch all recipes and filter client-side
     // TODO: Add proper search parameters to the API
-    const response = await fetch(`${apiHost}/recipes`, {
-      headers: {
-        'Authorization': `Bearer ${authToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    const headers = { 'Content-Type': 'application/json' };
+    if (!useMockApi) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
+    const response = await fetch(`${apiHost}/recipes`, { headers });
 
     if (!response.ok) {
       throw new Error(`API request failed: ${response.status}`);
@@ -45,8 +46,6 @@ export async function searchRecipes({ query = '', tags = '' }, authToken) {
       );
     }
 
-    // Log search results for debugging
-    console.log('Search results:', filteredRecipes.map(r => ({ id: r.id, name: r.name })));
 
     return {
       success: true,
@@ -77,16 +76,17 @@ export async function searchRecipes({ query = '', tags = '' }, authToken) {
 /**
  * Get detailed recipe information
  */
-export async function getRecipeDetails({ recipeId }, authToken) {
+export async function getRecipeDetails({ recipeId }, authToken, useMockApi = false) {
   try {
-    const apiHost = process.env.NEXT_PUBLIC_API_HOST;
+    // Use mock API for testing, otherwise use remote API
+    const apiHost = useMockApi ? 'http://localhost:3001' : process.env.NEXT_PUBLIC_API_HOST;
 
-    const response = await fetch(`${apiHost}/recipe/${recipeId}`, {
-      headers: {
-        'Authorization': `Bearer ${authToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    const headers = { 'Content-Type': 'application/json' };
+    if (!useMockApi) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
+    const response = await fetch(`${apiHost}/recipe/${recipeId}`, { headers });
 
     if (!response.ok) {
       throw new Error(`API request failed: ${response.status}`);
@@ -110,18 +110,18 @@ export async function getRecipeDetails({ recipeId }, authToken) {
 /**
  * Create shopping list from selected recipes
  */
-export async function createShoppingList({ recipeIds }, authToken) {
+export async function createShoppingList({ recipeIds }, authToken, useMockApi = false) {
   try {
-    console.log('Creating shopping list with recipe IDs:', recipeIds);
-    const apiHost = process.env.NEXT_PUBLIC_API_HOST;
+    // Use mock API for testing, otherwise use remote API
+    const apiHost = useMockApi ? 'http://localhost:3001' : process.env.NEXT_PUBLIC_API_HOST;
 
     // First, fetch existing shopping list
-    const existingResponse = await fetch(`${apiHost}/shopping-list`, {
-      headers: {
-        'Authorization': `Bearer ${authToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    const headers = { 'Content-Type': 'application/json' };
+    if (!useMockApi) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
+    const existingResponse = await fetch(`${apiHost}/shopping-list`, { headers });
 
     let existingRecipeIds = [];
     if (existingResponse.ok) {
@@ -133,12 +133,14 @@ export async function createShoppingList({ recipeIds }, authToken) {
     const combinedRecipeIds = [...new Set([...existingRecipeIds, ...recipeIds])];
 
     // Create/update shopping list with combined recipes
+    const postHeaders = { 'Content-Type': 'application/json' };
+    if (!useMockApi) {
+      postHeaders['Authorization'] = `Bearer ${authToken}`;
+    }
+
     const response = await fetch(`${apiHost}/shopping-list`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${authToken}`,
-        'Content-Type': 'application/json'
-      },
+      headers: postHeaders,
       body: JSON.stringify(combinedRecipeIds)
     });
 
@@ -237,15 +239,14 @@ export const availableTools = [
 ];
 
 // Execute tool calls
-export async function executeToolCall(toolName, args, authToken) {
-  console.log({toolName});
+export async function executeToolCall(toolName, args, authToken, useMockApi = false) {
   switch (toolName) {
     case 'search_recipes':
-      return await searchRecipes(args, authToken);
+      return await searchRecipes(args, authToken, useMockApi);
     case 'get_recipe_details':
-      return await getRecipeDetails(args, authToken);
+      return await getRecipeDetails(args, authToken, useMockApi);
     case 'create_shopping_list':
-      return await createShoppingList(args, authToken);
+      return await createShoppingList(args, authToken, useMockApi);
     default:
       throw new Error(`Unknown tool: ${toolName}`);
   }

@@ -1,0 +1,46 @@
+{
+  "name": "shopping_list_tool_calling",
+  "description": "Test that create_shopping_list tool is called when user requests to add recipes",
+  "conversation": [
+    {
+      "role": "user",
+      "content": "Find Thai recipes",
+      "timestamp": "2025-01-02T12:00:00Z"
+    },
+    {
+      "role": "user", 
+      "content": "Add the first recipe to my shopping list",
+      "timestamp": "2025-01-02T12:01:00Z"
+    }
+  ],
+  "userId": "test-user-123",
+  "assertions": [
+    {
+      "type": "tool_called",
+      "toolName": "create_shopping_list",
+      "description": "Should call create_shopping_list tool when user asks to add recipe",
+      "expectedArgs": {
+        "recipeIds": ["any_id"]
+      }
+    },
+    {
+      "type": "response_contains",
+      "text": "shopping list",
+      "description": "Response should mention shopping list"
+    },
+    {
+      "type": "tool_called",
+      "toolName": "search_recipes", 
+      "description": "Should first search for Thai recipes"
+    },
+    {
+      "type": "api_state",
+      "endpoint": "GET /shopping-list",
+      "description": "Shopping list should contain the Thai recipe",
+      "expectedState": {
+        "recipes": ["1"],
+        "ingredients.Coconut milk": "exists"
+      }
+    }
+  ]
+}

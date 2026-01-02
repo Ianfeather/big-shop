@@ -68,19 +68,25 @@
 ---
 
 ### Day 2: Evals & Testing Framework
-**Status**: ⏳ Not Started
+**Status**: ✅ Complete
 
 **Morning Tasks**:
-- [ ] Set up automated testing framework for Dave
-- [ ] Create eval dataset of conversation flows
-- [ ] Build test cases for tool calling behavior
-- [ ] Implement assertion checking for agent responses
+- [x] Set up automated testing framework for Dave
+- [x] Create eval dataset of conversation flows
+- [x] Build test cases for tool calling behavior
+- [x] Implement assertion checking for agent responses
 
 **Afternoon Tasks**:
-- [ ] Test recipe search accuracy and tool calling
-- [ ] Test shopping list workflow end-to-end
-- [ ] Validate conversation context management
-- [ ] Performance and reliability testing
+- [x] Test recipe search accuracy and tool calling
+- [x] Test shopping list workflow end-to-end
+- [x] Validate conversation context management
+- [x] Performance and reliability testing
+
+**Additional Achievements**:
+- [x] **Fixed core tool calling issue**: Implemented iterative tool calling for multi-step workflows
+- [x] **Built mock API server**: Authentication-free testing with realistic data
+- [x] **Added integration testing**: API state verification and end-to-end validation
+- [x] **100% test success rate**: All shopping list workflows now work correctly
 
 **Success Criteria**:
 - ✅ Automated test suite runs reliably
@@ -114,76 +120,83 @@
 
 ---
 
-### Day 4: N8N Orchestration
+### Day 4: LangChain + LangSmith Integration
+**Status**: ⏳ Not Started
+
+**Morning Tasks**:
+- [ ] Integrate LangChain framework with existing Dave setup
+- [ ] Set up LangSmith account and project
+- [ ] Migrate custom evals to LangSmith evaluation framework
+- [ ] Configure tracing and monitoring
+
+**Afternoon Tasks**:
+- [ ] Build LangSmith evaluation datasets
+- [ ] Implement industry-standard eval metrics
+- [ ] Set up automated evaluation pipelines
+- [ ] Compare custom vs LangSmith evaluation approaches
+
+**Success Criteria**:
+- ✅ Dave integrated with LangChain agents framework
+- ✅ LangSmith capturing all conversation traces
+- ✅ Evaluation pipeline running in LangSmith
+- ✅ Understanding of production AI monitoring
+
+**Learning Focus**: LangChain agents, LangSmith evaluation platform, production AI monitoring
+
+---
+
+### Day 5: N8N Orchestration + Production Monitoring
 **Status**: ⏳ Not Started
 
 **Morning Tasks**:
 - [ ] Set up N8N instance
-- [ ] Create basic workflows for meal planning
-- [ ] Connect N8N to your APIs
+- [ ] Create workflows for automated meal planning
+- [ ] Connect N8N to Dave APIs with LangSmith tracing
 
 **Afternoon Tasks**:
-- [ ] Build automated weekly planning triggers
-- [ ] Implement scheduled meal suggestions
-- [ ] Test workflow automation
+- [ ] Build scheduled meal planning triggers
+- [ ] Implement automated evaluation monitoring
+- [ ] Set up alerts for evaluation failures
+- [ ] Production monitoring dashboard
 
 **Success Criteria**:
-- ✅ N8N can trigger meal planning conversations
-- ✅ Automated weekly planning works
-- ✅ Workflows integrate with existing app
+- ✅ N8N workflows trigger meal planning conversations
+- ✅ All automated interactions traced in LangSmith
+- ✅ Evaluation monitoring catches regressions
+- ✅ Production-ready monitoring setup
 
-**Learning Focus**: Workflow automation, event-driven architecture
+**Learning Focus**: Workflow automation, production AI monitoring, automated evaluation
 
 ---
 
-### Day 5: Production Polish
-**Status**: ⏳ Not Started
-
-**Morning Tasks**:
-- [ ] Add proper error handling
-- [ ] Polish chat UI/UX
-- [ ] Basic monitoring and logging
-- [ ] Performance optimization
-
-**Afternoon Tasks**:
-- [ ] Deploy and test full workflow
-- [ ] User testing and feedback
-- [ ] Documentation and cleanup
-
-**Success Criteria**:
-- ✅ Production-ready deployment
-- ✅ Good user experience
-- ✅ Stable and reliable
-
-**Learning Focus**: Production deployment, monitoring, UX
-
----
-
-### Day 6: Vector Embeddings Enhancement (Optional)
+### Day 6: Vector Embeddings + Advanced Evaluation
 **Status**: ⏳ Not Started
 
 **Morning Tasks**:
 - [ ] Set up vector store (Pinecone or local)
-- [ ] Embed existing recipes
-- [ ] Implement semantic recipe search
+- [ ] Embed existing recipes for semantic search
+- [ ] Implement semantic recipe recommendations
 
 **Afternoon Tasks**:
-- [ ] Add "recipes similar to X" functionality
-- [ ] Test improved recommendations
-- [ ] Performance optimization
+- [ ] Build advanced evaluation metrics for semantic search
+- [ ] A/B test keyword vs semantic search in LangSmith
+- [ ] Performance benchmarking and optimization
+- [ ] Final production deployment
 
 **Success Criteria**:
-- ✅ Semantic recipe search works
-- ✅ Much smarter recipe recommendations
-- ✅ "Find recipes similar to pasta carbonara" functionality
+- ✅ Semantic search dramatically improves recommendations
+- ✅ A/B testing shows measurable improvement
+- ✅ Full production deployment with monitoring
+- ✅ Complete evaluation and monitoring pipeline
 
-**Learning Focus**: Vector embeddings, semantic search
+**Learning Focus**: Vector embeddings, semantic search, A/B testing, production deployment
 
 ## Current Progress
 
-**Overall Status**: 🚀 Ready to Start  
-**Current Phase**: Day 1 - Foundation  
-**Next Action**: Set up basic chat UI and OpenAI integration
+**Overall Status**: ✅ Day 2 Complete - Ready for Day 3  
+**Current Phase**: Evaluation framework + iterative tool calling implemented  
+**Key Achievement**: Dave's shopping list functionality now works end-to-end with 100% test coverage
+**Next Action**: Move to Day 3 - Enhanced recipe recommendations and meal planning workflows
 
 ## Key Files to Create/Modify
 

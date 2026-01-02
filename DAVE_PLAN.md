@@ -42,7 +42,7 @@
 ## Implementation Plan
 
 ### Day 1: Foundation + Basic Tool Calling
-**Status**: 🔄 In Progress
+**Status**: ✅ Complete
 
 **Morning Tasks**:
 - [x] Create `/pages/dave.js` - new page for AI chat
@@ -52,41 +52,69 @@
 
 **Afternoon Tasks**:
 - [x] Implement simple recipe search tool calling
-- [ ] Connect to existing recipe endpoints (`/recipes`, `/recipe/{id}`)
-- [ ] Test basic conversation flow with tools
+- [x] Connect to existing recipe endpoints (`/recipes`, `/recipe/{id}`)
+- [x] Test basic conversation flow with tools
+- [x] Fix UX issues (remove IDs from user messages)
+- [x] Improve search functionality (query + tags)
+- [x] Debug tool calling behavior
 
 **Success Criteria**: 
 - ✅ Dave can chat and maintain conversation context
-- ⏳ Dave can search your recipe collection (mock data working)
-- ⏳ Basic tool calling works with your existing API
+- ✅ Dave can search your recipe collection (real data working)
+- ✅ Basic tool calling works with your existing API
 
-**Learning Focus**: Message management, basic function calling
+**Learning Focus**: Message management, function calling, API integration
 
 ---
 
-### Day 2: Recipe Integration + Shopping Lists
+### Day 2: Evals & Testing Framework
 **Status**: ⏳ Not Started
 
 **Morning Tasks**:
-- [ ] Connect to all recipe/shopping APIs (`/shopping-list`, `/ingredients`)
-- [ ] Implement conversation-to-shopping-list generation
-- [ ] Add recipe recommendation logic
+- [ ] Set up automated testing framework for Dave
+- [ ] Create eval dataset of conversation flows
+- [ ] Build test cases for tool calling behavior
+- [ ] Implement assertion checking for agent responses
 
 **Afternoon Tasks**:
-- [ ] Build meal planning conversation flows
-- [ ] Integration testing with existing shopping list feature
-- [ ] Error handling for API calls
+- [ ] Test recipe search accuracy and tool calling
+- [ ] Test shopping list workflow end-to-end
+- [ ] Validate conversation context management
+- [ ] Performance and reliability testing
 
 **Success Criteria**:
-- ✅ Dave suggests recipes based on conversation
-- ✅ Dave generates shopping lists from meal suggestions
-- ✅ End-to-end meal planning conversation works
+- ✅ Automated test suite runs reliably
+- ✅ Tool calling behavior is predictable and tested
+- ✅ Conversation flows work consistently
+- ✅ Can catch regressions in agent behavior
 
-**Learning Focus**: Complex tool orchestration, data integration
+**Learning Focus**: AI testing methodologies, eval frameworks, quality assurance
 
 ---
 
-### Day 3: N8N Orchestration
+### Day 3: Recipe Integration + Shopping Lists
+**Status**: ⏳ Not Started
+
+**Morning Tasks**:
+- [ ] Enhanced recipe recommendations based on conversation
+- [ ] Meal planning conversation flows
+- [ ] Integration with existing shopping list features
+
+**Afternoon Tasks**:
+- [ ] Multi-recipe shopping list generation
+- [ ] Conversation-driven meal planning
+- [ ] Polish user experience and error handling
+
+**Success Criteria**:
+- ✅ Dave suggests recipes based on conversation context
+- ✅ Dave generates comprehensive shopping lists
+- ✅ End-to-end meal planning conversations work smoothly
+
+**Learning Focus**: Complex conversation flows, recommendation logic
+
+---
+
+### Day 4: N8N Orchestration
 **Status**: ⏳ Not Started
 
 **Morning Tasks**:
@@ -108,14 +136,14 @@
 
 ---
 
-### Day 4: Production Polish
+### Day 5: Production Polish
 **Status**: ⏳ Not Started
 
 **Morning Tasks**:
 - [ ] Add proper error handling
 - [ ] Polish chat UI/UX
 - [ ] Basic monitoring and logging
-- [ ] Add Dave to main navigation
+- [ ] Performance optimization
 
 **Afternoon Tasks**:
 - [ ] Deploy and test full workflow
@@ -131,7 +159,7 @@
 
 ---
 
-### Day 5: Vector Embeddings Enhancement (Optional)
+### Day 6: Vector Embeddings Enhancement (Optional)
 **Status**: ⏳ Not Started
 
 **Morning Tasks**:

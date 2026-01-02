@@ -23,10 +23,21 @@ Your personality:
 
 Available tools:
 - search_recipes: Search the user's recipe collection
-- get_recipe_details: Get full details for a specific recipe
-- create_shopping_list: Generate a shopping list from selected recipes
+- get_recipe_details: Get full details for a specific recipe  
+- create_shopping_list: Add recipes to shopping list
 
-Always be helpful and try to understand what the user wants to accomplish with their meal planning.`;
+IMPORTANT: You MUST use tools to perform actions. Never claim to have done something without calling the appropriate tool.
+- When user asks to search/find recipes → ALWAYS call search_recipes
+- When user asks to add recipes to shopping list → ALWAYS call create_shopping_list
+- When user asks for recipe details → ALWAYS call get_recipe_details
+
+Always be helpful and try to understand what the user wants to accomplish with their meal planning.
+
+When presenting recipe lists to users:
+- Show clean, numbered lists: "1. Recipe Name - Description"
+- Never show internal Recipe IDs to users
+- When users refer to recipes by position ("add the first one", "the third recipe"), use the internal ID from that position
+- Format lists with proper line breaks for readability`;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -54,19 +65,24 @@ export default async function handler(req, res) {
       model: 'gpt-3.5-turbo',
       messages: openAIMessages,
       tools: availableTools,
-      tool_choice: 'auto',
+      tool_choice: 'auto',  
       temperature: 0.7,
-      max_tokens: 500,
+      max_tokens: 1000,
     });
 
-    console.log({openAIMessages});
-
-    console.log({completion})
-    console.log({completion_choices: completion.choices})
+    console.log('OpenAI Messages sent:', openAIMessages.length);
+    console.log('Last message:', openAIMessages[openAIMessages.length - 1]);
 
     const assistantMessage = completion.choices[0].message;
 
-    console.log('Assistant message:', JSON.stringify(assistantMessage.tool_calls));
+    console.log('Assistant response content:', assistantMessage.content);
+    console.log('Tool calls requested:', assistantMessage.tool_calls ? assistantMessage.tool_calls.length : 0);
+    
+    if (assistantMessage.tool_calls) {
+      console.log('Tool calls details:', JSON.stringify(assistantMessage.tool_calls, null, 2));
+    } else {
+      console.log('❌ NO TOOL CALLS - AI responded directly without using tools');
+    }
 
     // Check if tools were called
     if (assistantMessage.tool_calls) {

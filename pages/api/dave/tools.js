@@ -45,9 +45,22 @@ export async function searchRecipes({ query = '', tags = '' }, authToken) {
       );
     }
 
+    // Log search results for debugging
+    console.log('Search results:', filteredRecipes.map(r => ({ id: r.id, name: r.name })));
+
     return {
       success: true,
-      recipes: filteredRecipes,
+      recipes: filteredRecipes.map((recipe, index) => ({
+        id: recipe.id,
+        name: recipe.name,
+        description: recipe.description,
+        tags: recipe.tags,
+        // Clean user-facing display
+        displayText: `${index + 1}. ${recipe.name}${recipe.description ? ` - ${recipe.description}` : ''}`,
+        // Internal mapping for AI (not shown to user)
+        internalId: recipe.id,
+        position: index + 1
+      })),
       message: query
         ? `Found ${filteredRecipes.length} recipes matching "${query}"`
         : `Found ${filteredRecipes.length} recipes in your collection`
@@ -99,15 +112,34 @@ export async function getRecipeDetails({ recipeId }, authToken) {
  */
 export async function createShoppingList({ recipeIds }, authToken) {
   try {
+    console.log('Creating shopping list with recipe IDs:', recipeIds);
     const apiHost = process.env.NEXT_PUBLIC_API_HOST;
 
+    // First, fetch existing shopping list
+    const existingResponse = await fetch(`${apiHost}/shopping-list`, {
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    let existingRecipeIds = [];
+    if (existingResponse.ok) {
+      const existingList = await existingResponse.json();
+      existingRecipeIds = existingList.recipes || [];
+    }
+
+    // Combine existing recipe IDs with new ones (remove duplicates)
+    const combinedRecipeIds = [...new Set([...existingRecipeIds, ...recipeIds])];
+
+    // Create/update shopping list with combined recipes
     const response = await fetch(`${apiHost}/shopping-list`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${authToken}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(recipeIds)
+      body: JSON.stringify(combinedRecipeIds)
     });
 
     if (!response.ok) {
@@ -116,16 +148,19 @@ export async function createShoppingList({ recipeIds }, authToken) {
 
     const shoppingList = await response.json();
 
+    const isAdding = existingRecipeIds.length > 0;
+    const action = isAdding ? 'added to' : 'created for';
+
     return {
       success: true,
       shoppingList: shoppingList,
-      message: `Shopping list created for ${recipeIds.length} recipes`
+      message: `Shopping list ${action} ${recipeIds.length} recipes. Total recipes: ${combinedRecipeIds.length}`
     };
   } catch (error) {
     return {
       success: false,
       error: error.message,
-      message: 'Failed to create shopping list'
+      message: 'Failed to update shopping list'
     };
   }
 }
@@ -136,17 +171,17 @@ export const availableTools = [
     type: 'function',
     function: {
       name: 'search_recipes',
-      description: 'Search the user\'s recipe collection',
+      description: 'Search the user\'s recipe collection. Use both query and tags for best results.',
       parameters: {
         type: 'object',
         properties: {
           query: {
             type: 'string',
-            description: 'Search term for recipes (ingredient, dish name, etc.)'
+            description: 'Primary search term: ingredient, dish name, cooking method (e.g., "curry", "chicken", "pasta"). Use this for most searches.'
           },
           tags: {
             type: 'string',
-            description: 'tags such as cuisine (e.g., Italian, Indian, Mexican), dietary preferences (e.g., vegetarian), meal type (e.g., breakfast, dinner), meal features (e.g. Batch Cook)'
+            description: 'Additional tag filter: cuisine, dietary preferences, meal type, features (e.g., "Thai", "vegetarian", "Batch Cook"). Use alongside query when user mentions specific attributes.'
           }
         }
       }
@@ -173,14 +208,26 @@ export const availableTools = [
     type: 'function',
     function: {
       name: 'create_shopping_list',
-      description: 'Generate a shopping list from selected recipes',
+      description: `
+      Use this function whenever the user expresses an intent to add one or more recipes to their shopping list.
+
+      Call this tool if the user:
+      - Explicitly asks to add a recipe or recipes to their shopping list
+      - Uses phrases like "add to shopping list", "add this recipe", "put this on my list", "add ingredients", "save for shopping", or similar wording
+      - Refers to previously shown or selected recipes and indicates they want them added
+
+      Do NOT respond with a confirmation message alone.
+      You MUST call this function instead of saying that the list was updated.
+
+      This function should be called even if the user’s wording is casual, indirect, or implied, as long as the intent is clearly to add recipes for shopping.
+      `,
       parameters: {
         type: 'object',
         properties: {
           recipeIds: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Array of recipe IDs to include in shopping list'
+            description: 'Array of recipe IDs from search results. Use the "id" field from recipe objects returned by search_recipes.'
           }
         },
         required: ['recipeIds']

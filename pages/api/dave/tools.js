@@ -108,6 +108,40 @@ export async function getRecipeDetails({ recipeId }, authToken, useMockApi = fal
 }
 
 /**
+ * Get historical shopping list patterns for meal planning
+ */
+export async function getShoppingHistory(args, authToken, useMockApi = false) {
+  try {
+    const apiHost = useMockApi ? 'http://localhost:3001' : process.env.NEXT_PUBLIC_API_HOST;
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (!useMockApi) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
+    const response = await fetch(`${apiHost}/shopping-list/history`, { headers });
+
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.status}`);
+    }
+
+    const historyData = await response.json();
+
+    return {
+      success: true,
+      history: historyData,
+      message: `Found ${historyData.recent_recipes.length} recent recipes and ${historyData.favorite_recipes.length} favorites`
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+      message: 'Failed to get shopping history'
+    };
+  }
+}
+
+/**
  * Create shopping list from selected recipes
  */
 export async function createShoppingList({ recipeIds }, authToken, useMockApi = false) {
@@ -192,6 +226,18 @@ export const availableTools = [
   {
     type: 'function',
     function: {
+      name: 'get_shopping_history',
+      description: 'Get historical shopping list patterns to suggest frequently used or recently added recipes for meal planning. Use this when the user asks about meal planning, suggests for this week, or wants recommendations based on their cooking habits.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        additionalProperties: false
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'get_recipe_details',
       description: 'Get full details for a specific recipe',
       parameters: {
@@ -245,6 +291,8 @@ export async function executeToolCall(toolName, args, authToken, useMockApi = fa
       return await searchRecipes(args, authToken, useMockApi);
     case 'get_recipe_details':
       return await getRecipeDetails(args, authToken, useMockApi);
+    case 'get_shopping_history':
+      return await getShoppingHistory(args, authToken, useMockApi);
     case 'create_shopping_list':
       return await createShoppingList(args, authToken, useMockApi);
     default:

@@ -120,6 +120,14 @@ func (a *App) createListHandler(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	// Log shopping list history for meal planning intelligence
+	if intRecipeIDs, err := service.GetRecipeIDsFromStrings(recipeIDs); err == nil {
+		if logErr := service.LogShoppingListEvent(userID, "add_recipe", intRecipeIDs, a.db); logErr != nil {
+			// Log error but don't fail the main operation
+			log.Printf("Failed to log shopping list history: %v", logErr)
+		}
+	}
+
 	list, err := service.GetShoppingList(userID, a.db)
 
 	if err != nil {
@@ -197,7 +205,41 @@ func (a *App) clearListHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Log clear event for meal planning intelligence
+	if logErr := service.LogShoppingListClearEvent(userID, a.db); logErr != nil {
+		// Log error but don't fail the main operation
+		log.Printf("Failed to log shopping list clear: %v", logErr)
+	}
+
 	response := &common.ShoppingList{}
+	encoder := json.NewEncoder(w)
+	if err := encoder.Encode(response); err != nil {
+		http.Error(w, "Error encoding json", http.StatusInternalServerError)
+	}
+}
+
+func (a *App) getShoppingListHistory(w http.ResponseWriter, req *http.Request) {
+	userID := req.Context().Value(contextKey("userID")).(string)
+
+	recentRecipes, err := service.GetRecentRecipeUsage(userID, 30, 10, a.db)
+	if err != nil {
+		log.Printf("Error getting recent recipes: %v", err)
+		http.Error(w, "Error getting recent recipes", http.StatusInternalServerError)
+		return
+	}
+
+	favoriteRecipes, err := service.GetFavoriteRecipes(userID, 10, a.db)
+	if err != nil {
+		log.Printf("Error getting favorite recipes: %v", err)
+		http.Error(w, "Error getting favorite recipes", http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"recent_recipes":   recentRecipes,
+		"favorite_recipes": favoriteRecipes,
+	}
+
 	encoder := json.NewEncoder(w)
 	if err := encoder.Encode(response); err != nil {
 		http.Error(w, "Error encoding json", http.StatusInternalServerError)

@@ -165,6 +165,15 @@ app.delete('/shopping-list/clear', (req, res) => {
   res.json(mockShoppingList);
 });
 
+// GET /shopping-list/history - Get shopping list history for meal planning
+app.get('/shopping-list/history', (req, res) => {
+  console.log('📊 Mock API: Getting shopping list history');
+  res.json({
+    recent_recipes: [1, 3, 2],
+    favorite_recipes: [1, 3]
+  });
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'dave-mock-api' });
@@ -178,6 +187,7 @@ const server = app.listen(PORT, () => {
   console.log('  GET  /recipe/:id - Specific recipe');
   console.log('  GET  /shopping-list - Current shopping list');
   console.log('  POST /shopping-list - Create shopping list');
+  console.log('  GET  /shopping-list/history - Shopping history');
   console.log('  GET  /health - Health check');
 });
 

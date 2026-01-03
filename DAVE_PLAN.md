@@ -98,25 +98,30 @@
 
 ---
 
-### Day 3: Recipe Integration + Shopping Lists
-**Status**: ⏳ Not Started
+### Day 3: Weekly Meal Planning Intelligence
+**Status**: 🔄 In Progress
 
-**Morning Tasks**:
-- [ ] Enhanced recipe recommendations based on conversation
-- [ ] Meal planning conversation flows
-- [ ] Integration with existing shopping list features
+### Morning: Historical shopping list tracking (database schema + data collection) ✅
+- [x] Design database schema for tracking shopping list history
+- [x] Create migration for history tables (`015_shopping_list_history.sql`)
+- [x] Add history logging to Go API shopping list endpoints with source tracking
+- [x] Create history service layer in Go API (`service/history.go`)
+- [x] Add `get_shopping_history` tool for Dave to access historical patterns
+- [x] Test history collection with mock data
 
-**Afternoon Tasks**:
-- [ ] Multi-recipe shopping list generation
-- [ ] Conversation-driven meal planning
-- [ ] Polish user experience and error handling
+### Afternoon Tasks:
+- [ ] "Plan my meals for this week" core conversation flow
+- [ ] Variety optimization using historical data
+- [ ] Historical pattern recognition (favorites, avoidance, timing patterns)
+- [ ] Conversation-driven planning refinement with context
+- [ ] Polish user experience and progress tracking
 
 **Success Criteria**:
-- ✅ Dave suggests recipes based on conversation context
-- ✅ Dave generates comprehensive shopping lists
-- ✅ End-to-end meal planning conversations work smoothly
+- ✅ Dave tracks and uses shopping list history for recommendations
+- ✅ "Plan my meals for this week" works end-to-end with variety optimization
+- ✅ Historical patterns improve suggestion quality over time
 
-**Learning Focus**: Complex conversation flows, recommendation logic
+**Learning Focus**: Historical data integration, stateful conversation flows, pattern recognition
 
 ---
 

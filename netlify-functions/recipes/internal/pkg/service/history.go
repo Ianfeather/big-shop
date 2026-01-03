@@ -3,7 +3,6 @@ package service
 import (
 	"database/sql"
 	"fmt"
-	"strings"
 )
 
 // LogShoppingListEvent logs shopping list changes for meal planning intelligence
@@ -16,8 +15,8 @@ func LogShoppingListEvent(userID string, eventType string, recipeIDs []int, db *
 	// Log each recipe as a separate event
 	for _, recipeID := range recipeIDs {
 		query := `
-			INSERT INTO shopping_list_event 
-			(account_id, event_type, recipe_id) 
+			INSERT INTO shopping_list_event
+			(account_id, event_type, recipe_id)
 			VALUES (?, ?, ?)
 		`
 		if _, err := db.Exec(query, accountID, eventType, recipeID); err != nil {
@@ -35,8 +34,8 @@ func LogShoppingListClearEvent(userID string, db *sql.DB) error {
 	}
 
 	query := `
-		INSERT INTO shopping_list_event 
-		(account_id, event_type) 
+		INSERT INTO shopping_list_event
+		(account_id, event_type)
 		VALUES (?, 'clear_list')
 	`
 	if _, err := db.Exec(query, accountID); err != nil {
@@ -54,13 +53,13 @@ func GetRecentRecipeUsage(userID string, daysBack int, limit int, db *sql.DB) ([
 
 	query := `
 		SELECT recipe_id, MAX(created_at) as last_used
-		FROM shopping_list_event 
-		WHERE account_id = ? 
-		  AND event_type = 'add_recipe' 
+		FROM shopping_list_event
+		WHERE account_id = ?
+		  AND event_type = 'add_recipe'
 		  AND recipe_id IS NOT NULL
 		  AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
-		GROUP BY recipe_id 
-		ORDER BY last_used DESC 
+		GROUP BY recipe_id
+		ORDER BY last_used DESC
 		LIMIT ?
 	`
 
@@ -92,11 +91,11 @@ func GetFavoriteRecipes(userID string, limit int, db *sql.DB) ([]int, error) {
 
 	query := `
 		SELECT recipe_id, COUNT(*) as usage_count
-		FROM shopping_list_event 
-		WHERE account_id = ? 
-		  AND event_type = 'add_recipe' 
+		FROM shopping_list_event
+		WHERE account_id = ?
+		  AND event_type = 'add_recipe'
 		  AND recipe_id IS NOT NULL
-		GROUP BY recipe_id 
+		GROUP BY recipe_id
 		HAVING usage_count > 1
 		ORDER BY usage_count DESC, MAX(created_at) DESC
 		LIMIT ?

@@ -45,6 +45,7 @@ func LogShoppingListClearEvent(userID string, db *sql.DB) error {
 }
 
 // GetRecentRecipeUsage returns recently used recipes for meal planning
+// Groups by date to avoid counting bulk shopping list updates as multiple uses
 func GetRecentRecipeUsage(userID string, daysBack int, limit int, db *sql.DB) ([]int, error) {
 	accountID, err := GetAccountID(db, userID)
 	if err != nil {
@@ -53,11 +54,15 @@ func GetRecentRecipeUsage(userID string, daysBack int, limit int, db *sql.DB) ([
 
 	query := `
 		SELECT recipe_id, MAX(created_at) as last_used
-		FROM shopping_list_event
-		WHERE account_id = ?
-		  AND event_type = 'add_recipe'
-		  AND recipe_id IS NOT NULL
-		  AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+		FROM (
+			SELECT recipe_id, DATE(created_at) as use_date, MAX(created_at) as created_at
+			FROM shopping_list_event
+			WHERE account_id = ?
+			  AND event_type = 'add_recipe'
+			  AND recipe_id IS NOT NULL
+			  AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+			GROUP BY recipe_id, DATE(created_at)
+		) daily_usage
 		GROUP BY recipe_id
 		ORDER BY last_used DESC
 		LIMIT ?
@@ -83,6 +88,7 @@ func GetRecentRecipeUsage(userID string, daysBack int, limit int, db *sql.DB) ([
 }
 
 // GetFavoriteRecipes returns most frequently used recipes
+// Groups by date to avoid counting bulk shopping list updates as multiple uses
 func GetFavoriteRecipes(userID string, limit int, db *sql.DB) ([]int, error) {
 	accountID, err := GetAccountID(db, userID)
 	if err != nil {
@@ -91,13 +97,17 @@ func GetFavoriteRecipes(userID string, limit int, db *sql.DB) ([]int, error) {
 
 	query := `
 		SELECT recipe_id, COUNT(*) as usage_count
-		FROM shopping_list_event
-		WHERE account_id = ?
-		  AND event_type = 'add_recipe'
-		  AND recipe_id IS NOT NULL
+		FROM (
+			SELECT recipe_id, DATE(created_at) as use_date
+			FROM shopping_list_event
+			WHERE account_id = ?
+			  AND event_type = 'add_recipe'
+			  AND recipe_id IS NOT NULL
+			GROUP BY recipe_id, DATE(created_at)
+		) daily_usage
 		GROUP BY recipe_id
 		HAVING usage_count > 1
-		ORDER BY usage_count DESC, MAX(created_at) DESC
+		ORDER BY usage_count DESC
 		LIMIT ?
 	`
 

@@ -1,0 +1,34 @@
+{
+  "name": "shopping_list_variations",
+  "description": "Test different ways users might ask to add recipes to shopping list",
+  "conversation": [
+    {
+      "role": "user",
+      "content": "Show me some pasta recipes",
+      "timestamp": "2025-01-02T12:00:00Z"
+    },
+    {
+      "role": "user",
+      "content": "Put the carbonara on my list", 
+      "timestamp": "2025-01-02T12:01:00Z"
+    }
+  ],
+  "userId": "test-user-456",
+  "assertions": [
+    {
+      "type": "tool_called",
+      "toolName": "search_recipes",
+      "description": "Should search for pasta recipes first"
+    },
+    {
+      "type": "tool_called", 
+      "toolName": "create_shopping_list",
+      "description": "Should call shopping list tool for 'put on my list' phrase"
+    },
+    {
+      "type": "response_contains",
+      "text": "added",
+      "description": "Should confirm the recipe was added"
+    }
+  ]
+}

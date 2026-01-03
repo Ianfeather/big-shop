@@ -26,6 +26,9 @@ export default function Header() {
               <Link href="/recipes" className={getClassName("/recipes")}>
                 Your Recipes
               </Link>
+              <Link href="/dave" className={getClassName("/dave")}>
+                Chat with Dave
+              </Link>
             </nav>
             <UserMenu user={user}/>
           </>

@@ -1,0 +1,24 @@
+{
+  "name": "test_weekly_planning_with_history",
+  "description": "Test weekly meal planning workflow using historical data",
+  "conversation": [
+    {
+      "role": "user",
+      "content": "Plan my meals for this week based on what I usually like to cook"
+    }
+  ],
+  "assertions": [
+    {
+      "type": "tool_called",
+      "toolName": "get_shopping_history"
+    },
+    {
+      "type": "tool_called",
+      "toolName": "get_recipe_details"
+    },
+    {
+      "type": "response_contains",
+      "text": "week"
+    }
+  ]
+}

@@ -17,7 +17,7 @@ Issues:
 */
 
 
-const useMocks = false;
+const useMocks = process.env.USE_MOCKS === 'true';
 
 const capitalize = (str) => {
   if (!str) {

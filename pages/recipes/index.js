@@ -6,7 +6,7 @@ const Recipes = () => {
   return (
     <Layout pageTitle={"Recipes"}>
       <Grid>
-        <MainContent>
+        <MainContent fullHeight={false}>
           <div>Here you can view, edit and curate your list of recipes</div>
           <Link href="/recipes/new" className="link">Add new recipe</Link>
         </MainContent>

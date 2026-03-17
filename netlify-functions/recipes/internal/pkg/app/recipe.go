@@ -66,14 +66,15 @@ func (a *App) addRecipeHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if err := service.AddRecipe(recipe, userID, a.db); err != nil {
+	id, err := service.AddRecipe(recipe, userID, a.db)
+	if err != nil {
 		http.Error(w, "could not insert ingredients", http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
 	encoder := json.NewEncoder(w)
-	if err := encoder.Encode("ok"); err != nil {
+	if err := encoder.Encode(map[string]int{"id": id}); err != nil {
 		http.Error(w, "Error encoding json", http.StatusInternalServerError)
 	}
 }

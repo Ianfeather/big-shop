@@ -32,15 +32,26 @@ type Tag struct {
 	Name string `json:"name"`
 }
 
+// Step contains a single cooking step for a recipe
+type Step struct {
+	ID              int    `json:"id"`
+	RecipeID        int    `json:"recipeId"`
+	StepNumber      int    `json:"stepNumber"`
+	Instruction     string `json:"instruction"`
+	DurationMinutes *int   `json:"durationMinutes"`
+	StepType        string `json:"stepType"`
+}
+
 // Recipe contains recipe fields
 type Recipe struct {
 	Name        string       `json:"name"`
 	ID          int          `json:"id"`
 	RemoteURL   string       `json:"remoteUrl"`
 	Notes       string       `json:"notes"`
-	Method       string       `json:"method"`
+	Method      string       `json:"method"`
 	Ingredients []Ingredient `json:"ingredients"`
 	Tags        []string     `json:"tags"`
+	Steps       []Step       `json:"steps"`
 }
 
 // ListIngredient is a subset of shopping List

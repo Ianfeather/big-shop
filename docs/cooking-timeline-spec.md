@@ -23,13 +23,13 @@ When cooking multiple recipes at once, coordination is difficult:
 1. Show a parallel cooking timeline across multiple recipes
 2. Suggest optimal start offsets so all recipes finish at the same time
 3. Guide users step-by-step through the combined cooking session
-4. Work even for recipes that have no structured timing data today
+4. Populate timing data from original recipe sources wherever possible
 
 ### Non-goals (for this iteration)
 
 - Shared/multiplayer cooking sessions
 - Timer notifications via push or email
-- Automatic ordering of steps across recipes (steps within each recipe remain sequential)
+- Automatic cross-recipe step reordering (steps within each recipe remain sequential)
 - Integrating with smart kitchen hardware
 
 ---
@@ -39,10 +39,10 @@ When cooking multiple recipes at once, coordination is difficult:
 **Entry point**: A new "Cook" link in the navigation alongside List and Recipes.
 
 #### Step 1 — Select recipes
-User picks which recipes to cook in this session. Same recipe-selector pattern as the shopping list page.
+User picks which recipes to cook in this session. Same recipe-selector pattern as the shopping list page. The current session is saved to `localStorage` so it survives page reloads.
 
 #### Step 2 — Resolve timing data
-For any recipe missing structured steps, the app attempts AI extraction from the existing `method` text. The user sees a preview of the extracted steps with estimated durations and can edit them before proceeding. Recipes with no `method` text at all prompt the user to add steps manually.
+Shown only for recipes that don't yet have structured steps. The app attempts extraction automatically (see data strategy below). The user sees a preview of the extracted steps with estimated durations and can edit, reorder, or add steps before proceeding. Recipes where all extraction methods fail prompt the user to add steps manually.
 
 #### Step 3 — Timeline view
 A Gantt-style timeline is generated:
@@ -70,30 +70,43 @@ User taps "Start Cooking". The view switches to step-by-step guidance:
 | `passive` | Unattended time (oven, resting, marinating, simmering) | Green |
 | `other` | Anything that doesn't fit the above | Grey |
 
-Passive steps are key to the timeline value: they create windows where the cook can work on another recipe.
+Passive steps are the key value driver: they create windows where the cook can work on another recipe.
 
 ---
 
 ### The Timing Data Problem
 
-This is the main technical challenge. Today, recipes have a `method` column containing free-text instructions with no structured steps and no explicit timing. Three scenarios to handle:
+Today, recipes have a `method` column containing free-text instructions with no structured steps and no explicit timing. The primary strategy is to go back to the **original source** rather than inferring from the text — most recipe sites publish `schema.org/Recipe` JSON-LD with structured steps including ISO 8601 timing (`performTime`). AI extraction is the fallback for recipes without a source URL or from unsupported sites.
 
-#### Scenario A: No method text at all
-Many recipes were imported with only ingredients. **Solution**: prompt the user to add method steps when they try to add the recipe to a cook session. Offer a simple step-entry UI.
+#### Extraction priority chain
 
-#### Scenario B: Free-text method, no timing
-The most common case. **Solution**: AI extraction — send the method text to GPT and ask it to return structured steps with duration estimates. GPT can infer timings from context ("fry until golden" → ~5 min, "roast at 180°C" → look for explicit time in text or estimate from dish type).
+1. **schema.org JSON-LD** from the recipe's `remote_url` — parse `recipeInstructions` (array of `HowToStep`) for `text` and `performTime`/`totalTime`. This is the highest-fidelity source and works on the majority of recipe sites without any site-specific scraping logic.
 
-The extracted steps are **saved back to the recipe** so re-extraction is never needed again. The user can review and correct before saving.
+2. **Site-specific scraper** `getSteps` method — for sites where JSON-LD is absent or incomplete, add a `getSteps(document)` method to each existing scraper (mirroring the existing `getList` pattern).
 
-#### Scenario C: No timing on individual steps
-Even after extraction, some steps will have `null` duration (e.g. "season to taste"). **Solution**: these steps are shown without a time block on the timeline and are surfaced as quick pass-through steps in active cooking mode.
+3. **AI extraction** from existing `method` text — send the method text to GPT-3.5-turbo to parse into discrete steps with estimated durations. This is used when there is no `remote_url`, the URL is unreachable, or the URL belongs to an unsupported domain.
+
+4. **Manual entry** — the user adds steps themselves via the step editor in the recipe form. Shown when all automated methods produce no results.
+
+#### Handling implicit parallel steps
+
+Some methods describe simultaneous actions: *"while the onions fry, chop the garlic."* During extraction — whether via JSON-LD, scraper, or AI — these should be broken into separate sequential steps. The AI prompt should explicitly instruct this. For JSON-LD / scraper extraction the instructions are usually already separated.
+
+#### Extraction timing
+
+Step extraction is triggered at **recipe import time** — when a recipe is first saved via the new recipe form or via a third-party URL import. The `StepEditor` component is shown as the final step of the recipe creation flow, pre-populated with the extracted steps. The user confirms or edits before saving.
+
+For existing recipes without steps, extraction runs lazily when the recipe is first added to a cook session.
+
+Steps are **saved to the recipe** once confirmed so extraction never runs twice.
 
 ---
 
 ## Implementation Spec
 
 ### Phase 1: Structured Steps Data Model
+
+The foundation. Everything else builds on this.
 
 #### New migration: `016_steps.sql`
 
@@ -132,135 +145,154 @@ Add `Steps []Step` to the `Recipe` struct.
 #### New Go API routes
 
 ```
-GET  /recipe/{id}/steps       # Fetch steps for a recipe
-POST /recipe/{id}/steps       # Save/replace steps for a recipe
+GET  /recipe/{id}/steps    # Fetch steps for a recipe
+POST /recipe/{id}/steps    # Save/replace all steps for a recipe
 ```
 
-Steps are also included in `GET /recipe/{id}` and `GET /recipe/{slug}` responses.
+Steps are also included in existing `GET /recipe/{id}` and `GET /recipe/{slug}` responses so the client always has them without an extra round-trip.
 
-#### New Next.js API route: `/api/recipe-steps/extract`
+---
 
-- **Input**: `{ recipeId, method }` (method text passed directly to avoid a round-trip)
-- **Calls**: GPT-3.5-turbo with a structured extraction prompt (GPT-4 is overkill here; no vision needed)
-- **Output**: Array of `{ stepNumber, instruction, durationMinutes, stepType }`
-- **Prompt strategy**: Ask GPT to identify discrete steps, estimate durations from cooking knowledge where the text is vague, and classify by step type. Request JSON output with the schema above.
+### Phase 2: Step Extraction Pipeline
 
-Example extraction prompt:
+Runs server-side as a Next.js API route called at import time and lazily on first cook session use.
+
+#### Extend third-party scrapers
+
+Add a `getSteps(document)` method to each scraper in `pages/api/third-parties/`. The method returns:
+
+```js
+[{ instruction: string, durationMinutes: number|null, stepType: string }]
 ```
-You are a cooking assistant. Parse the following recipe method into discrete steps.
-For each step, estimate a duration in minutes if one can be reasonably inferred.
-Classify each step as one of: prep, cook, passive, other.
-Return JSON: [{ stepNumber, instruction, durationMinutes, stepType }]
-Respond only with the JSON array, no explanation.
+
+**Default scraper enhancement** — parse `schema.org/Recipe` JSON-LD first:
+
+```js
+getSteps(document) {
+  // 1. Try schema.org JSON-LD
+  const scripts = document.querySelectorAll('script[type="application/ld+json"]');
+  for (const script of scripts) {
+    const data = JSON.parse(script.innerText);
+    const recipe = Array.isArray(data) ? data.find(d => d['@type'] === 'Recipe') : data;
+    if (recipe?.recipeInstructions) {
+      return recipe.recipeInstructions.map((step, i) => ({
+        instruction: step.text || step,
+        durationMinutes: parseDuration(step.performTime || step.totalTime),
+        stepType: inferStepType(step.text || step),
+      }));
+    }
+  }
+  // 2. Fall back to DOM parsing (site-specific implementations override this)
+  return null;
+}
+```
+
+`parseDuration` converts ISO 8601 (`PT30M`, `PT1H30M`) to minutes. `inferStepType` applies keyword heuristics (`oven`, `bake`, `roast` → `passive`; `chop`, `dice`, `measure` → `prep`; etc.).
+
+Site-specific scrapers only need to implement `getSteps` if their JSON-LD is absent/wrong — most won't need it.
+
+#### New Next.js API route: `POST /api/recipe-steps/extract`
+
+Input:
+```json
+{ "recipeId": 7, "remoteUrl": "https://...", "method": "..." }
+```
+
+Logic:
+1. If `remoteUrl` is present: fetch the page, run the appropriate scraper's `getSteps`, return results if non-empty
+2. If step 1 yields nothing and `method` is present: call GPT-3.5-turbo with the extraction prompt below
+3. Return `{ steps: [...], source: "scraper"|"ai"|"none" }`
+
+**AI extraction prompt:**
+```
+You are a cooking assistant. Parse the following recipe method into discrete cooking steps.
+
+Rules:
+- Split any step that describes two simultaneous actions into two separate sequential steps
+- Estimate a duration in minutes where you can reasonably do so; use null if uncertain
+- Classify each step as: prep (chopping/measuring/mixing), cook (active heat requiring attention),
+  passive (oven/resting/marinating — no attention needed), or other
+- Return only a JSON array, no explanation
+
+Schema: [{ "stepNumber": 1, "instruction": "...", "durationMinutes": 10, "stepType": "prep" }]
 
 Method:
 {{method}}
 ```
 
+#### Recipe form integration (`components/recipe-form/`)
+
+Add a `StepEditor` sub-component as the final section of the recipe form, appearing after Method:
+
+- On new recipe import: automatically calls `/api/recipe-steps/extract` with the URL/method after the main recipe data is populated, shows a loading state, then displays results for user review
+- Shows an editable step list: instruction text, duration input, step type dropdown, drag handles for reordering, add/remove buttons
+- "Re-extract" button reruns extraction
+- Steps are submitted alongside the rest of the recipe form data and saved via `POST /recipe/{id}/steps`
+
 ---
 
-### Phase 2: Cook Sessions
+### Phase 3: Cook Sessions (localStorage)
 
-#### New migration: `017_cook_sessions.sql`
-
-```sql
-CREATE TABLE `cook_session` (
-  `id`         int NOT NULL AUTO_INCREMENT,
-  `account_id` int NOT NULL,
-  `status`     enum('active','completed') NOT NULL DEFAULT 'active',
-  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  CONSTRAINT `fk_cook_session_account_id` FOREIGN KEY (`account_id`) REFERENCES `account` (`id`)
-);
-
-CREATE TABLE `cook_session_recipe` (
-  `id`                   int NOT NULL AUTO_INCREMENT,
-  `session_id`           int NOT NULL,
-  `recipe_id`            int NOT NULL,
-  `start_offset_minutes` int NOT NULL DEFAULT 0,
-  PRIMARY KEY (`id`),
-  CONSTRAINT `fk_csr_session_id` FOREIGN KEY (`session_id`) REFERENCES `cook_session` (`id`),
-  CONSTRAINT `fk_csr_recipe_id`  FOREIGN KEY (`recipe_id`)  REFERENCES `recipe` (`id`)
-);
-```
-
-`start_offset_minutes` stores when each recipe should begin relative to the session start. The default suggestion algorithm works backwards from the longest total recipe duration so that all recipes finish at the same time.
-
-#### New Go API routes
-
-```
-POST   /cook-session              # Create session { recipeIds: [...] }
-GET    /cook-session/{id}         # Get session + all recipes with steps + offsets
-PATCH  /cook-session/{id}         # Update offsets (user dragged timeline)
-DELETE /cook-session/{id}         # Delete session
-```
-
-The `GET /cook-session/{id}` response shape:
+No new DB tables needed. The cook session is stored in `localStorage` under the key `cookSession` as:
 
 ```json
 {
-  "id": 42,
-  "status": "active",
-  "totalDurationMinutes": 75,
-  "recipes": [
-    {
-      "id": 7,
-      "name": "Roast Chicken",
-      "startOffsetMinutes": 0,
-      "totalDurationMinutes": 75,
-      "steps": [
-        { "id": 1, "stepNumber": 1, "instruction": "Preheat oven to 200°C", "durationMinutes": 15, "stepType": "passive" },
-        { "id": 2, "stepNumber": 2, "instruction": "Season the chicken", "durationMinutes": 5, "stepType": "prep" },
-        ...
-      ]
-    }
-  ]
+  "recipeIds": [7, 12, 3],
+  "startOffsets": { "7": 0, "12": 20, "3": 35 },
+  "activeSteps": { "7": 2, "12": 0, "3": 1 },
+  "startedAt": null
 }
 ```
 
----
+`startedAt` is `null` until the user taps "Start Cooking", then set to a UTC timestamp. This enables countdown timers to be computed from elapsed time rather than fragile interval state.
 
-### Phase 3: Frontend
+The page reads this on mount and rehydrates the session. If recipe data has changed since the session was saved (steps added/edited), the session is merged rather than discarded.
 
 #### New page: `pages/cook.js`
 
-Three internal views managed by local state:
+Three internal views managed by local state, persisted to `localStorage`:
 
-1. **`select`** — Recipe picker (reuse `components/shopping-list/Recipes` selector component)
-2. **`timeline`** — Gantt timeline + start offset controls
+1. **`select`** — Recipe picker, reusing `components/shopping-list/Recipes` selector component
+2. **`timeline`** — Gantt chart + start offset controls + "Start Cooking" button
 3. **`active`** — Step-by-step cooking mode
 
-#### New components
+---
 
-**`components/cook/RecipeTimeline/index.js`**
-- Renders the Gantt chart
-- Props: `recipes` (with steps and offsets)
-- Each recipe gets a swimlane; each step a coloured block sized proportionally to duration
-- Steps without duration shown as a fixed narrow block with a "?" label
-- Horizontal axis label: minutes from 0 to `totalDurationMinutes`
+### Phase 4: Frontend Components
 
-**`components/cook/ActiveCooking/index.js`**
-- Shows all currently-active steps across all recipes in a card-per-recipe layout
-- Each card shows: recipe name, current step instruction, countdown timer (if timed)
-- "Mark done" button on each card advances that recipe to its next step
-- Background timer for passive steps shows a pill with remaining time
+#### `components/cook/RecipeTimeline/index.js`
 
-**`components/cook/StepEditor/index.js`**
-- Used in the resolution flow (Phase 1, Step 2 of user journey)
-- Renders an editable list of steps with instruction text, duration input, and step type dropdown
-- "Extract with AI" button triggers `/api/recipe-steps/extract` and populates the list
-- Changes are saved to the recipe via `POST /recipe/{id}/steps` before proceeding to timeline
+Gantt chart component:
+- Props: `recipes` (array with steps and offsets), `totalDuration`, `onOffsetChange`
+- One swimlane per recipe, coloured step blocks sized proportionally to duration
+- Steps without duration shown as a fixed-width block with a "?" label
+- X-axis tick marks at 5 or 10 minute intervals depending on total duration
+- Draggable swimlane handles to adjust start offset per recipe
 
-#### Start offset suggestion algorithm (client-side)
-
+**Start offset suggestion algorithm** (runs when recipes change):
 ```
 totalDuration(recipe) = sum of durationMinutes for all steps (nulls treated as 0)
 maxDuration = max totalDuration across all recipes
-offset(recipe) = maxDuration - totalDuration(recipe)
+suggestedOffset(recipe) = maxDuration − totalDuration(recipe)
 ```
+The longest recipe starts at t=0; all others start later so they finish together.
 
-This means the longest recipe starts at t=0 and shorter recipes start later so they all finish together. Users can override by dragging swimlanes.
+#### `components/cook/ActiveCooking/index.js`
+
+Step-by-step cooking mode:
+- Card-per-recipe layout showing the current step for each recipe
+- Active steps (`prep`/`cook`): countdown timer if timed, "Mark done" button
+- Passive steps: pill showing remaining time, auto-advances when timer reaches zero
+- When all steps for a recipe are complete, the card shows a "Done" state
+- A global elapsed time indicator in the header
+
+#### `components/cook/StepEditor/index.js`
+
+Editable step list used in both the recipe form (at import time) and in the cook session resolution flow:
+- Drag-to-reorder
+- Per-step: instruction text area, duration number input (minutes), step type select
+- "Extract with AI" / "Re-extract" button
+- "Add step" button appends a blank step
 
 ---
 
@@ -270,22 +302,22 @@ Add a "Cook" link to `components/layout/` header alongside the existing List and
 
 ---
 
-### Data migration for existing recipes
+### Data cleanup task (separate backlog item)
 
-No automatic backfill needed. Steps are populated lazily:
-- When a user adds a recipe to a cook session and it has no steps, the extraction flow is triggered
-- Extracted steps are saved and reused from then on
+Once the extraction pipeline is proven on new imports, run a one-time backfill for existing recipes:
+1. For each recipe with a `remote_url` and no steps: call `/api/recipe-steps/extract` server-side
+2. For recipes with no URL but with a `method`: queue AI extraction in batches to stay within OpenAI rate limits
+3. Review results before persisting (given volume, a simple admin script with human spot-check is appropriate)
 
-This avoids running a bulk expensive AI operation across all recipes upfront, and means the data model fills up organically through actual use.
+This is deferred deliberately — the quality of the source-first scraping approach should be validated through normal use before investing in a bulk backfill.
 
 ---
 
-## Open Questions
+## Decisions Log
 
-1. **Parallel steps within a recipe**: Some recipes have steps that can happen in parallel (e.g. "while the onions fry, chop the garlic"). The current model treats all steps within a recipe as sequential. Should we support parallel steps in a future iteration, or is the sequential model good enough for most cases?
-
-2. **Session persistence**: Should an in-progress cook session survive a page reload? The current shopping list is persisted to the DB; same approach makes sense here but adds complexity. Could defer to Phase 2 and keep Phase 1 client-only.
-
-3. **Step extraction quality**: GPT-3.5-turbo should be sufficient but timing estimates for unusual dishes may be inaccurate. Is it worth adding a "report bad extraction" path so users can flag poor results?
-
-4. **Recipe form integration**: Should the step editor be exposed in the normal recipe edit flow (so users can add steps to a recipe without going through cook mode)? Probably yes for completeness, but it could be Phase 2.
+| # | Question | Decision |
+|---|----------|----------|
+| 1 | Parallel steps within a recipe | Break into separate sequential steps during extraction; don't model parallelism within a recipe |
+| 2 | Session persistence | `localStorage` — no DB tables needed; rehydrate on page load |
+| 3 | Step extraction quality | Source-first: extract from `remote_url` using schema.org JSON-LD before falling back to AI; bulk backfill is a separate deferred task |
+| 4 | Recipe form integration | Yes — step extraction runs at import time as the final step of the recipe creation flow |

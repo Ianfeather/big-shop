@@ -67,12 +67,12 @@ User taps "Start Cooking". The vertical track view remains but a **"Next action"
 
 | Type | Description | Visual |
 |------|-------------|--------|
-| `prep` | Active preparation (chopping, measuring, mixing) | Filled dot, yellow label |
-| `cook` | Active cooking requiring attention (frying, stirring) | Filled dot, orange label |
-| `passive` | Unattended time (oven, resting, marinating, simmering) | Hollow dot, muted label, countdown pill |
-| `other` | Anything that doesn't fit the above | Filled dot, grey label |
+| `prep` | Active preparation (chopping, measuring, mixing) | Filled dot, yellow label — no time indicator |
+| `cook` | Active cooking requiring attention (frying, stirring) | Filled dot, orange label — duration shown; live elapsed indicator when active |
+| `passive` | Unattended time (oven, resting, marinating, simmering) | Hollow dot, muted label — duration shown; countdown pill when running |
+| `other` | Anything that doesn't fit the above | Filled dot, grey label — no time indicator |
 
-Passive steps are the key value driver: they create windows where the cook can work on another recipe. The visual distinction makes this obvious at a glance.
+Time indicators are shown only for `cook` and `passive` steps. Prep timing is too variable to be useful and would add visual noise. The distinction is intentional: you care how long the chicken has been in the oven; you don't especially care how long the chopping took.
 
 ---
 
@@ -311,12 +311,16 @@ No DB tables needed. Session stored in `localStorage` key `cookSession`:
   "recipeIds": [7, 12, 3],
   "scheduledSequence": [...],
   "activeStepIndex": 4,
+  "stepStartedAt": { "stepId_18": 1712345600000 },
   "passiveTimers": { "stepId_22": 1712345678000 },
-  "startedAt": null
+  "actualDurations": { "stepId_15": 6, "stepId_16": 12 },
+  "startedAt": 1712345500000
 }
 ```
 
-`passiveTimers` maps step ID → UTC timestamp when the passive step started (used to compute remaining time on reload). `startedAt` is set when the user taps "Start Cooking".
+- `stepStartedAt` — maps step ID → UTC timestamp when that step became active. Used to compute elapsed time for `cook` steps on reload.
+- `passiveTimers` — maps step ID → UTC timestamp when the passive step started. Used to compute remaining time on reload.
+- `actualDurations` — maps step ID → actual minutes taken (recorded when Done is tapped). Useful future input for improving duration estimates.
 
 ---
 
@@ -329,9 +333,13 @@ The vertical track view:
 - Recipe name + colour swatch at the top of each track
 - Checkpoint dots on each line for each step, with instruction labels to the right
 - Active recipe track: full opacity. Others: 30% opacity
-- Passive steps: hollow dot, muted label, countdown pill showing remaining minutes
 - Completed steps: dot fills in, label gets a strikethrough
-- No time axis — this is a qualitative sequence view, not a time chart
+
+**Time indicators on the track (cook and passive steps only):**
+- Each `cook` or `passive` checkpoint shows a small muted duration label beside it: *"~8 min"*
+- While a `cook` step is the current active step, the label updates to show elapsed vs. expected: *"5 / 8 min"*. If elapsed exceeds expected, it flips to an amber over-time state: *"+2 min"*
+- Passive steps show a live countdown pill once started: *"14 min left"*
+- A subtle vertical tick mark on the track line between two timed steps can optionally show the cumulative expected cooking time from that point to the end of the recipe — giving a rough "how much cooking time remains" reading without turning into a time chart
 
 Colours are assigned from a fixed accessible palette, consistently assigned per recipe for the session.
 
@@ -341,9 +349,14 @@ The persistent "what to do now" card shown during active cooking:
 - Anchored to the bottom of the screen
 - Shows the current scheduled step (or combined action card if merged)
 - Recipe colour chip and name as context
-- Countdown timer for timed steps
 - "Done" button — advances the sequence, marks step(s) complete, recalculates next action
 - For passive steps: shows a "Running" state with countdown; auto-advances when timer expires
+
+**Time tracking on the card (cook steps only):**
+- For `cook` steps with a known duration: a compact elapsed timer runs visibly on the card — *"4 min"* counting up against the expected *"/ 8 min"*
+- When elapsed exceeds expected, the timer turns amber and shows the overage: *"+2 min"*
+- When "Done" is tapped, the actual duration is recorded in `localStorage` alongside the expected. A brief dismissible note appears if the step ran significantly long or short: *"Took 3 min longer than expected"* — useful for calibrating the recipe's step timings over time
+- No time tracking shown for `prep` steps; the card just shows the instruction and Done button
 
 #### `components/cook/StepEditor/index.js`
 
@@ -402,3 +415,4 @@ Deferred deliberately — validate quality through normal use before investing i
 | 4 | Recipe form integration | Step extraction runs at import time as the final step of the recipe creation flow |
 | 5 | Timeline visualisation | Vertical colour-matched tracks per recipe, not a Gantt chart; active recipe fully opaque, others dimmed |
 | 6 | Step batching | Constrained topological sort with operation verb grouping heuristic; passive steps trigger pivot to other recipes; adjacent same-verb steps merged into combined action cards |
+| 7 | Time indication | Shown only on `cook` and `passive` steps (not prep); live elapsed vs. expected on active cook steps; amber over-time state if exceeded; actual durations recorded in `localStorage` for future calibration |

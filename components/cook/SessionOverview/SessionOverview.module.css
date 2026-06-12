@@ -1,0 +1,129 @@
+.overview {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  padding: 1.5rem;
+}
+
+/* One horizontal row per recipe */
+.track {
+  transition: opacity 0.2s ease;
+}
+
+.trackDimmed {
+  opacity: 0.3;
+}
+
+.recipeHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.colourSwatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.recipeName {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #1f2937;
+}
+
+/* Vertical step list */
+.stepList {
+  display: flex;
+  flex-direction: column;
+}
+
+.stepRow {
+  display: flex;
+  align-items: stretch;
+  gap: 0.75rem;
+  min-height: 2.5rem;
+}
+
+/* Left column: connector line + dot */
+.dotColumn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 20px;
+}
+
+.connector {
+  width: 0;
+  flex: 1;
+  min-height: 0.5rem;
+  border-left: 2px solid #d1d5db;
+}
+
+.connectorCompleted {
+  border-left-style: solid;
+}
+
+.dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid #d1d5db;
+  background: #fff;
+  flex-shrink: 0;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.dotPassive {
+  /* hollow dot — background stays white */
+}
+
+.dotActive {
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08);
+}
+
+.dotCompleted {
+  /* background and border set inline via recipe colour */
+}
+
+/* Right column: instruction + timing */
+.stepLabel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0.35rem 0 0.75rem;
+  gap: 0.15rem;
+  flex: 1;
+}
+
+.stepLabelCompleted .instruction {
+  color: #9ca3af;
+  text-decoration: line-through;
+}
+
+.instruction {
+  font-size: 0.875rem;
+  color: #374151;
+  line-height: 1.4;
+}
+
+.duration {
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+
+.durationOver {
+  color: #d97706;
+  font-weight: 600;
+}
+
+.noSteps {
+  font-size: 0.85rem;
+  color: #9ca3af;
+  font-style: italic;
+  padding: 0.5rem 0;
+}

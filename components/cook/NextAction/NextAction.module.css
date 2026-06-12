@@ -1,0 +1,182 @@
+.card {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-top: 1px solid #e5e7eb;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
+  padding: 1rem 1.5rem 1.25rem;
+  z-index: 100;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.cardPassive {
+  border-top-color: #fbbf24;
+  background: #fffbeb;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.cardLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+}
+
+.overviewLink {
+  background: none;
+  border: none;
+  font-size: 0.8rem;
+  color: #6b7280;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.overviewLink:hover {
+  color: #374151;
+}
+
+.stepList {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.stepEntry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.recipeTag {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #9ca3af;
+}
+
+.instruction {
+  font-size: 1rem;
+  color: #1f2937;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Timer */
+.timerBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.progressBar {
+  height: 4px;
+  background: #e5e7eb;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: #16a34a;
+  transition: width 0.5s linear;
+  border-radius: 2px;
+}
+
+.progressOver {
+  background: #d97706;
+}
+
+.timer {
+  font-size: 0.82rem;
+  color: #6b7280;
+  font-variant-numeric: tabular-nums;
+}
+
+.timerOver {
+  color: #d97706;
+  font-weight: 600;
+}
+
+/* Footer */
+.cardFooter {
+  margin-top: 1rem;
+}
+
+.doneBtn {
+  width: 100%;
+  padding: 0.75rem;
+  background: #16a34a;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.doneBtn:hover {
+  background: #15803d;
+}
+
+.doneBtnPassive {
+  background: #d97706;
+}
+
+.doneBtnPassive:hover {
+  background: #b45309;
+}
+
+/* Finished state */
+.finishedState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 0;
+  text-align: center;
+}
+
+.finishedIcon {
+  font-size: 2rem;
+  color: #16a34a;
+}
+
+.finishedTitle {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+}
+
+.finishedSub {
+  font-size: 0.9rem;
+  color: #6b7280;
+  margin: 0;
+}
+
+.overviewBtn {
+  margin-top: 0.5rem;
+  padding: 0.6rem 1.5rem;
+  background: none;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #374151;
+  cursor: pointer;
+}
+
+.overviewBtn:hover {
+  background: #f9fafb;
+}

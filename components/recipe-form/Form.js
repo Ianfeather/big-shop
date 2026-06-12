@@ -8,6 +8,7 @@ import Message from '@components/message';
 import partition from 'just-partition';
 import Spinner from './spinner';
 import mocks from '../../mocks';
+import StepEditor from '@components/cook/StepEditor';
 
 /*
 Issues:
@@ -42,6 +43,10 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
   let [newIngredient, setNewIngredient] = useState('');
   let [suggestions, setSuggestions] = useState([]);
   let [showIngredients, setShowIngredients] = useState(false);
+  let [savedRecipeId, setSavedRecipeId] = useState(initialRecipe.id || null);
+  let [pendingSteps, setPendingSteps] = useState(initialRecipe.steps || []);
+  let [stepsSaved, setStepsSaved] = useState(false);
+  let [showSteps, setShowSteps] = useState(mode === 'edit');
 
   const router = useRouter();
   const { get, post, put, del, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
@@ -117,12 +122,26 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
   async function submitRecipe(e) {
     e.preventDefault();
     if (mode === 'edit') {
-      await put('/recipe', recipe)
+      await put('/recipe', recipe);
+      if (response.ok) {
+        setSaved(true);
+      }
     } else {
-      await post('/recipe', recipe)
+      const result = await post('/recipe', recipe);
+      if (response.ok && result?.id) {
+        setSavedRecipeId(result.id);
+        setSaved(true);
+        setShowSteps(true);
+      }
     }
+  }
+
+  async function saveSteps(e) {
+    e.preventDefault();
+    if (!savedRecipeId) return;
+    await post(`/recipe/${savedRecipeId}/steps`, pendingSteps);
     if (response.ok) {
-      setSaved(true);
+      setStepsSaved(true);
     }
   }
 
@@ -307,7 +326,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
                   <div className={styles.stored}>
                     { mode === 'edit' ? 'Updated!' : 'Stored!'}
                   </div>
-                  { mode === 'new' &&
+                  { mode === 'new' && !showSteps &&
                     <div>
                       <Button className={`${styles.addAnotherRecipe}`} onClick={resetForm}>
                         Add another recipe
@@ -327,6 +346,30 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
                 )
               }
             </div>
+            { showSteps && (
+              <>
+                <StepEditor
+                  steps={pendingSteps}
+                  onChange={setPendingSteps}
+                  recipeId={savedRecipeId}
+                  remoteUrl={recipe.remoteUrl}
+                  method={recipe.method}
+                />
+                { !stepsSaved ? (
+                  <Button style="green" onClick={saveSteps}>Save Steps</Button>
+                ) : (
+                  <div className={styles.stored}>
+                    Steps saved!
+                    { mode === 'new' && (
+                      <Button className={styles.addAnotherRecipe} onClick={resetForm}>
+                        Add another recipe
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
             { error && (
               <Message message={error.message} status='error' />
             )}

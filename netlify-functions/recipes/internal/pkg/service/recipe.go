@@ -110,13 +110,18 @@ func GetRecipeBySlug(slug string, userID string, db *sql.DB) (*common.Recipe, er
 		}
 
 		ingredients, err := getIngredientsByRecipeID(recipe.ID, db)
-
 		if err != nil {
 			log.Println(err)
 			return nil, err
 		}
-
 		recipe.Ingredients = ingredients
+
+		steps, err := GetStepsByRecipeID(recipe.ID, db)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		recipe.Steps = steps
 	}
 	return recipe, nil
 }
@@ -179,49 +184,54 @@ func GetRecipeByID(id int, userID string, db *sql.DB) (*common.Recipe, error) {
 		}
 
 		ingredients, err := getIngredientsByRecipeID(id, db)
-
 		if err != nil {
 			log.Println(err)
 			return nil, err
 		}
-
-		log.Println("ingredients")
-		log.Println(ingredients)
-
 		recipe.Ingredients = ingredients
+
+		steps, err := GetStepsByRecipeID(id, db)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		recipe.Steps = steps
 	}
 	log.Println("recipe")
 	log.Println(recipe)
 	return recipe, nil
 }
 
-// AddRecipe inserts recipe, ingredients into the DB
-func AddRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
+// AddRecipe inserts recipe, ingredients into the DB and returns the new recipe ID
+func AddRecipe(recipe common.Recipe, userID string, db *sql.DB) (int, error) {
 	accountID, err := GetAccountID(db, userID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	query := "INSERT INTO recipe (name, slug, remote_url, notes, method, account_id) VALUES (?, ?, ?, ?, ?, ?);"
 	res, err := db.Exec(query, recipe.Name, common.Slugify(recipe.Name), recipe.RemoteURL, recipe.Notes, recipe.Method, accountID)
 
 	if err != nil {
 		fmt.Println("could not insert recipe")
-		return err
+		return 0, err
 	}
 
 	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
 	recipe.ID = int(id)
 
 	if err = insertIngredients(recipe, db); err != nil {
-		return err
+		return 0, err
 	}
 	if err = insertParts(recipe, db); err != nil {
-		return err
+		return 0, err
 	}
 	if err = insertTags(recipe, db); err != nil {
-		return err
+		return 0, err
 	}
-	return nil
+	return int(id), nil
 }
 
 // EditRecipe updates recipe information

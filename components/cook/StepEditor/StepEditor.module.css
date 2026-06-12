@@ -1,0 +1,150 @@
+.editor {
+  margin-top: 2rem;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.extractButton {
+  padding: 0.4rem 0.9rem;
+  font-size: 0.85rem;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.extractButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sourceNote {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin: 0 0 0.75rem;
+}
+
+.error {
+  font-size: 0.85rem;
+  color: #dc2626;
+  margin: 0 0 0.75rem;
+}
+
+.empty {
+  font-size: 0.85rem;
+  color: #9ca3af;
+  margin: 0 0 0.75rem;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.75rem;
+}
+
+.step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid #e5e7eb;
+  cursor: default;
+}
+
+.step:last-child {
+  border-bottom: none;
+}
+
+.dragHandle {
+  color: #9ca3af;
+  cursor: grab;
+  padding-top: 0.35rem;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.stepFields {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.instruction {
+  width: 100%;
+  font-size: 0.9rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.meta {
+  display: flex;
+  gap: 1rem;
+}
+
+.metaLabel {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.75rem;
+  color: #6b7280;
+  gap: 0.2rem;
+}
+
+.duration {
+  width: 5rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.stepType {
+  padding: 0.25rem 0.4rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.removeButton {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.25rem;
+}
+
+.removeButton:hover {
+  color: #dc2626;
+}
+
+.addButton {
+  font-size: 0.85rem;
+  color: #2563eb;
+  background: none;
+  border: 1px dashed #93c5fd;
+  border-radius: 4px;
+  padding: 0.4rem 0.75rem;
+  cursor: pointer;
+  width: 100%;
+}
+
+.addButton:hover {
+  background: #eff6ff;
+}

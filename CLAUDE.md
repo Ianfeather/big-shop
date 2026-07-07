@@ -48,11 +48,34 @@ npm run package      # Lint and build (used in deployment)
 
 ### Local Development Setup
 
-1. **Disable authentication** for UI-only development:
-   - Set `DISABLE_AUTH=true` in `.env.local` (for offline development)
-   - Set `USE_MOCKS=true` for mock data instead of API calls
+1. **Disable authentication** for UI-only development, in `.env.local`:
+   - `NEXT_PUBLIC_DISABLE_AUTH=true` — both `pages/_app.js` and every consumer of
+     `hooks/use-auth.js` (a thin wrapper around `@auth0/auth0-react`'s `useAuth0`)
+     resolve to a fixed mock user instead of mounting the real `Auth0Provider`.
+     Must be `NEXT_PUBLIC_`-prefixed — Next.js strips non-prefixed env vars from
+     the client bundle, so an unprefixed flag only takes effect during SSR and
+     causes a hydration mismatch (this bit us once: `/list` would flash its
+     content then get redirected back to `/`).
+   - `NEXT_PUBLIC_USE_MOCKS=true` — serves canned data from `mocks/*.json`
+     instead of calling the Go API, for `/recipes`, `/list`, and the new-recipe
+     form's ingredient/unit/tag autosuggest. Mutations (save/delete recipe,
+     invites, account) still hit the real API even with mocks on.
 
-2. **Database setup** (when needed):
+2. **Run the API locally** (optional, for real data instead of mocks):
+   - The Go binary already supports a non-Lambda dev mode: `go run . dev` inside
+     `netlify-functions/recipes/` starts a plain HTTP server on `:8080`
+     (matching `NEXT_PUBLIC_API_HOST` in `.env.development`).
+   - It still needs a live DB via `DSN` (local MySQL is fine — see below).
+   - Set `DISABLE_AUTH=true` (no `NEXT_PUBLIC_` prefix — this is read server-side
+     by the Go process, not the browser) to skip real Auth0 JWT validation; the
+     router then injects a fixed `DEV_USER_ID` (default `local-dev-user`) as the
+     request's user ID instead. That user must exist in `account_user` in your
+     local DB for requests to resolve to an account.
+   - Without `DISABLE_AUTH`, the Go server validates JWTs against the real
+     Auth0 tenant (`AUTH0_DOMAIN`/`AUTH0_AUDIENCE`), so you'd need a real logged
+     -in access token — impractical for local-only work.
+
+3. **Database setup** (when running the API locally):
    ```bash
    mysql -u root
    use bigshop;
@@ -63,9 +86,9 @@ npm run package      # Lint and build (used in deployment)
    GRANT ALL PRIVILEGES ON bigshop.* TO 'admin'@'localhost';
    ```
 
-3. **Environment variables**:
+4. **Environment variables**:
    - Copy from `.env.development` for local development
-   - Auth0 credentials required for authentication flow
+   - Auth0 credentials required for authentication flow (unless `DISABLE_AUTH`/`NEXT_PUBLIC_DISABLE_AUTH` set)
    - `OPENAI_API_KEY` required for AI features
    - `SENDGRID_API_KEY` required for email invitations
 

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import styles from './header.module.css'
-import { useAuth0 } from "@auth0/auth0-react";
+import useAuth0 from '@hooks/use-auth';
 import UserMenu from '@components/user-menu';
 
 export default function Header() {

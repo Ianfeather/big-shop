@@ -1,7 +1,7 @@
 import styles from './index.module.css';
 import Button from '@components/button'
 import Layout, { MainContent } from '@components/layout'
-import { useAuth0 } from "@auth0/auth0-react";
+import useAuth0 from '@hooks/use-auth';
 import { LoginButton } from '@components/identity/login';
 import { CreateAccountButton } from '@components/identity/create';
 

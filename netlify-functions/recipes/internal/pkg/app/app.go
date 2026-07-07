@@ -61,6 +61,19 @@ func userMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFun
 	next.ServeHTTP(w, r.WithContext(ctx))
 }
 
+// devUserMiddleware stands in for the jwt+user middleware pair when
+// DISABLE_AUTH=true, so the API can be run locally (`go run . dev`) without a
+// real Auth0 token. The user ID it injects must exist in the local DB
+// (account_user) for requests to resolve to an account.
+func devUserMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	devUserID := os.Getenv("DEV_USER_ID")
+	if devUserID == "" {
+		devUserID = "local-dev-user"
+	}
+	ctx := context.WithValue(r.Context(), contextKey("userID"), devUserID)
+	next.ServeHTTP(w, r.WithContext(ctx))
+}
+
 func getPemCert(token *jwt.Token) (string, error) {
 	cert := ""
 	resp, err := http.Get("https://" + os.Getenv("AUTH0_DOMAIN") + "/.well-known/jwks.json")
@@ -165,8 +178,12 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, error) {
 
 	n := negroni.New(negroni.NewLogger())
 	n.Use(c)
-	n.Use(negroni.HandlerFunc(jwtMiddleware.HandlerWithNext))
-	n.Use(negroni.HandlerFunc(userMiddleware))
+	if os.Getenv("DISABLE_AUTH") == "true" {
+		n.Use(negroni.HandlerFunc(devUserMiddleware))
+	} else {
+		n.Use(negroni.HandlerFunc(jwtMiddleware.HandlerWithNext))
+		n.Use(negroni.HandlerFunc(userMiddleware))
+	}
 	n.UseHandler(router)
 
 	return n, nil

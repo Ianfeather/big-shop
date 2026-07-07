@@ -1,0 +1,32 @@
+[
+  {
+    "id": 1,
+    "name": "Shepherd's Pie",
+    "slug": "shepherds-pie",
+    "remoteUrl": "",
+    "notes": "Go heavy on the pepper",
+    "method": "1. Brown the mince\n2. Add veg and simmer\n3. Top with mash and bake until golden",
+    "tags": ["Batch Cook"],
+    "ingredients": [
+      { "name": "Beef mince", "unit": "gram", "quantity": "500", "department": "meat and fish" },
+      { "name": "Potato", "unit": "gram", "quantity": "800", "department": "vegetables" },
+      { "name": "Carrot", "unit": "gram", "quantity": "200", "department": "vegetables" },
+      { "name": "Onion", "unit": "packet", "quantity": "1", "department": "vegetables" }
+    ]
+  },
+  {
+    "id": 2,
+    "name": "Veggie Chilli",
+    "slug": "veggie-chilli",
+    "remoteUrl": "",
+    "notes": "",
+    "method": "1. Fry onion and garlic\n2. Add beans and tomatoes, simmer 20 mins\n3. Serve with rice",
+    "tags": ["Vegetarian", "Batch Cook"],
+    "ingredients": [
+      { "name": "Kidney beans", "unit": "tin", "quantity": "2", "department": "other" },
+      { "name": "Chopped tomatoes", "unit": "tin", "quantity": "2", "department": "other" },
+      { "name": "Onion", "unit": "packet", "quantity": "1", "department": "vegetables" },
+      { "name": "Rice", "unit": "gram", "quantity": "300", "department": "other" }
+    ]
+  }
+]

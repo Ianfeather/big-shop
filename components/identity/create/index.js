@@ -1,4 +1,4 @@
-import { useAuth0 } from "@auth0/auth0-react";
+import useAuth0 from '@hooks/use-auth';
 import Button from '../../button';
 import styles from '../index.module.css';
 

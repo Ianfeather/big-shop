@@ -2,7 +2,7 @@ import styles from './account.module.css';
 import useFetch from 'use-http'
 import { useState, useEffect } from 'react';
 import Invite from '@components/invite';
-import { useAuth0 } from "@auth0/auth0-react";
+import useAuth0 from '@hooks/use-auth';
 import Layout, { MainContent, Sidebar } from '@components/layout'
 import Button from '@components/button';
 

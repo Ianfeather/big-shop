@@ -1,6 +1,6 @@
 import styles from './dave.module.css';
 import { useState, useEffect } from 'react';
-import { useAuth0 } from "@auth0/auth0-react";
+import useAuth0 from '@hooks/use-auth';
 import Layout, { MainContent, Sidebar } from '@components/layout'
 import DaveChat from '@components/dave-chat';
 import useRecipes from '@hooks/use-recipes';

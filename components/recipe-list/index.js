@@ -7,6 +7,9 @@ import SidebarTagFilter from '../sidebar-tag-filter';
 import SidebarHeading from '../sidebar-heading';
 import useRecipes from '@hooks/use-recipes';
 import useFetch from 'use-http'
+import mocks from '../../mocks';
+
+const useMocks = process.env.NEXT_PUBLIC_USE_MOCKS === 'true';
 
 const RecipeList = ({ handleRecipeSelect, filterFn = () => true }) => {
   const router = useRouter()
@@ -19,6 +22,10 @@ const RecipeList = ({ handleRecipeSelect, filterFn = () => true }) => {
   });
 
   async function getTags() {
+    if (useMocks) {
+      setTags(mocks.tags);
+      return;
+    }
     const _tags = await get('/tags');
     if (response.ok) {
       setTags(_tags);

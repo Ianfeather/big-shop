@@ -2,11 +2,32 @@ import styles from './index.module.css';
 import Tabs from '@components/layout/Tabs';
 import useFetch from 'use-http'
 import { useState, useEffect } from 'react';
-import { useAuth0 } from "@auth0/auth0-react";
+import useAuth0 from '@hooks/use-auth';
 import Layout, { MainContent, Sidebar } from '@components/layout'
 import RecipeSidebar from '@components/shopping-list/Recipes';
 import ShoppingList from '@components/shopping-list/ShoppingList';
 import useRecipes from '@hooks/use-recipes';
+import mocks from '../mocks';
+
+const useMocks = process.env.NEXT_PUBLIC_USE_MOCKS === 'true';
+
+function buildMockIngredients(selectedRecipeIds) {
+  const ingredients = {};
+  selectedRecipeIds.forEach(id => {
+    const recipe = mocks.recipes.find(r => String(r.id) === String(id));
+    if (!recipe) return;
+    recipe.ingredients.forEach(ingredient => {
+      ingredients[ingredient.name] = {
+        unit: ingredient.unit,
+        quantity: Number(ingredient.quantity),
+        isBought: false,
+        recipe_id: recipe.id,
+        department: ingredient.department,
+      };
+    });
+  });
+  return ingredients;
+}
 
 const List = () => {
   const [recipes] = useRecipes();
@@ -47,6 +68,8 @@ const List = () => {
       setExtras(newList);
     }
 
+    if (useMocks) return;
+
     try {
       await patch('/shopping-list/buy', { name, isBought: newList[name].isBought });
     } catch (e) {
@@ -56,6 +79,8 @@ const List = () => {
   }
 
   const getListState = async () => {
+    if (useMocks) return {};
+
     const result = await get('/shopping-list');
     if (response.ok && result.recipes.length) {
       setListState(result.ingredients, result.extras);
@@ -89,6 +114,12 @@ const List = () => {
     if (!selectedRecipes.length) {
       return;
     }
+
+    if (useMocks) {
+      setListState(buildMockIngredients(selectedRecipes), extras);
+      return;
+    }
+
     const result = await post('/shopping-list', selectedRecipes);
     if (response.ok) {
       setListState(result.ingredients, result.extras);
@@ -99,7 +130,7 @@ const List = () => {
     setShoppingList({});
     setExtras({});
     setRecipeList([]);
-    del('/shopping-list/clear');
+    if (!useMocks) del('/shopping-list/clear');
   }
 
   function addExtraItem(extraItem) {
@@ -109,13 +140,16 @@ const List = () => {
       [extraItem]: { quantity: '', unit: '' }
     };
     setExtras(newList);
-    post('/shopping-list/extra', {
-      name: extraItem,
-      isBought: false
-    });
+    if (!useMocks) {
+      post('/shopping-list/extra', {
+        name: extraItem,
+        isBought: false
+      });
+    }
   }
 
   function addUserAccount() {
+    if (useMocks) return;
     const appState = localStorage.getItem('app_state');
     if (!appState) return;
     if (appState === 'login') {

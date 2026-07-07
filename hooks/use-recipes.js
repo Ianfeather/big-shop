@@ -1,5 +1,8 @@
 import useFetch from 'use-http'
 import { useState, useEffect } from 'react';
+import mocks from '../mocks';
+
+const useMocks = process.env.NEXT_PUBLIC_USE_MOCKS === 'true';
 
 const useRecipes = () => {
   let [recipes, setRecipes] = useState([]);
@@ -8,10 +11,14 @@ const useRecipes = () => {
   });
 
   async function getRecipes() {
+    if (useMocks) {
+      setRecipes(mocks.recipes.map(({ id, name, tags }) => ({ id, name, tags })));
+      return;
+    }
     const recipes = await get('/recipes')
     if (response.ok) setRecipes(recipes)
   }
-  useEffect(() => { getRecipes() }, []);
+  useEffect(() => { getRecipes() }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return [recipes];
 };
 

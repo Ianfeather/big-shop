@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 
 DB_PORT="${DB_PORT:-3308}"
 API_PORT="${API_PORT:-8080}"
-WEB_PORT="${WEB_PORT:-3001}"
+WEB_PORT="${WEB_PORT:-3000}"
 export DB_PORT API_PORT
 
 echo "Starting local MySQL + Go API (docker compose)..."

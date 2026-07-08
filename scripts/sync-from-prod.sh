@@ -44,7 +44,13 @@ run_mysqldump() {
 }
 
 echo "Exporting shared reference tables (ingredients, units, tags, departments)..."
-run_mysqldump bigshop department unit ingredient tag ingredient_department > "$DUMP_FILE"
+# One table per mysqldump call, not `bigshop department unit ingredient ...`:
+# --single-transaction makes mysqldump wrap each table after the first in a
+# SAVEPOINT/ROLLBACK TO SAVEPOINT pair, which TiDB doesn't fully support -
+# dumping a single table per invocation never needs that.
+for table in department unit ingredient tag ingredient_department; do
+  run_mysqldump bigshop "$table" >> "$DUMP_FILE"
+done
 
 echo "Exporting your recipes (account_id=${ACCOUNT_ID})..."
 run_mysqldump bigshop recipe --where="account_id=${ACCOUNT_ID}" >> "$DUMP_FILE"

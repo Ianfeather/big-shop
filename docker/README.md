@@ -57,14 +57,22 @@ Your row's `account_id` is the value to enter when the script prompts for it.
 
 ## Connection details
 
-- Host / username - from your TiDB Cloud cluster (same values used in the
-  production `DSN`, just the individual pieces rather than one connection
-  string).
+- Host / username / password - all three can be read straight out of the
+  production `DSN` connection string, which lives in Netlify's environment
+  variables UI (see the Netlify Dashboard link in `CLAUDE.md`) rather than
+  anywhere in this repo. The `DSN` format is
+  `user:password@tcp(host:port)/bigshop?...` (see `main.go`'s
+  `sql.Open("mysql", os.Getenv("DSN"))`).
 - Port - defaults to `4000`, TiDB Cloud's protocol port (not MySQL's usual
   `3306`). Only enter a different one if yours differs.
-- Password - never passed as an argument or stored anywhere. The script
-  prompts for it once (silently) and holds it only in memory for the
-  `mysqldump` calls that need it.
+- Password - never passed as an argument or stored anywhere by the script.
+  It prompts for it once (silently) and holds it only in memory for the
+  `mysqldump` calls that need it. Credential-injection tooling (1Password
+  CLI, macOS Keychain) was considered and deliberately skipped for now -
+  1Password's seamless biometric-unlock flow is inherently host-bound and
+  can't run purely in Docker, and the fully-containerized alternative
+  (service account tokens) needs a compatible plan tier and a separate
+  shared vault, which wasn't judged worth it yet.
 
 ## Why mysqldump runs inside Docker
 

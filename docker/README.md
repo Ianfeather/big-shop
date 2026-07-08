@@ -80,6 +80,18 @@ inside a throwaway `mysql:8.0` container instead
   MySQL 8.0's client (what the container runs) still bundles that plugin, so
   this sidesteps the issue without touching anything on the TiDB side.
 
+## Why no `--single-transaction`
+
+`mysqldump --single-transaction` wraps every table it dumps - even just one
+- in a `SAVEPOINT`/`ROLLBACK TO SAVEPOINT` pair, and TiDB's `SAVEPOINT`
+support doesn't fully match MySQL's here: it fails with `Couldn't execute
+'ROLLBACK TO SAVEPOINT sp': SAVEPOINT sp does not exist`. The script uses
+`--skip-lock-tables` instead - TiDB is MVCC-based like InnoDB, so an
+unlocked read is no less consistent than what `--single-transaction` would
+have given for this use case, and it also avoids needing `LOCK
+TABLES`/`FLUSH TABLES WITH READ LOCK` privileges a TiDB Cloud user may not
+have anyway.
+
 ## Why not TiDB's own export feature, or the web SQL editor?
 
 TiDB Cloud's bulk "Export to storage" feature is typically a Dedicated-tier
@@ -91,11 +103,13 @@ the same access the app's own `DSN` already relies on - so that's what this
 script uses. Auth0 never comes into it either way: it gates the
 *application's* API, not direct database access.
 
-This has been run against a real TiDB Cloud cluster; the one issue hit so
-far (a MySQL 9 client's `mysql_native_password` incompatibility) is what
-led to running `mysqldump` inside Docker rather than a host install. If
-another `mysqldump` flag needs adjusting for TiDB's exact feature set, let
-me know what error you see and we'll fix it.
+This has been run against a real TiDB Cloud cluster; two issues surfaced so
+far, both fixed above - a MySQL 9 client's `mysql_native_password`
+incompatibility (running `mysqldump` inside Docker instead), and
+`--single-transaction`'s `SAVEPOINT` handling not matching TiDB's (using
+`--skip-lock-tables` instead). If another `mysqldump` flag needs adjusting
+for TiDB's exact feature set, let me know what error you see and we'll fix
+it.
 
 ## Reverting to the synthetic seed
 

@@ -33,10 +33,18 @@ mkdir -p docker/prod-dumps
 DUMP_FILE="docker/prod-dumps/prod-sync-${ACCOUNT_ID}-$(date +%Y%m%d-%H%M%S).sql"
 
 run_mysqldump() {
+  # No --single-transaction: mysqldump wraps every table it dumps (even one)
+  # in a SAVEPOINT/ROLLBACK TO SAVEPOINT pair under that flag, and TiDB's
+  # SAVEPOINT support doesn't fully match MySQL's, failing with "Couldn't
+  # execute 'ROLLBACK TO SAVEPOINT sp': SAVEPOINT sp does not exist".
+  # --skip-lock-tables instead: TiDB is MVCC-based like InnoDB, so an
+  # unlocked read here is no less consistent than what --single-transaction
+  # would have given, and it avoids relying on LOCK TABLES/FLUSH TABLES WITH
+  # READ LOCK privileges a TiDB Cloud user may not even have.
   docker run --rm -e MYSQL_PWD="$TIDB_PASSWORD" mysql:8.0 \
     mysqldump -h "$TIDB_HOST" -P "$TIDB_PORT" -u "$TIDB_USER" \
     --ssl-mode=REQUIRED \
-    --single-transaction \
+    --skip-lock-tables \
     --no-tablespaces \
     --set-gtid-purged=OFF \
     --no-create-db \
@@ -44,13 +52,7 @@ run_mysqldump() {
 }
 
 echo "Exporting shared reference tables (ingredients, units, tags, departments)..."
-# One table per mysqldump call, not `bigshop department unit ingredient ...`:
-# --single-transaction makes mysqldump wrap each table after the first in a
-# SAVEPOINT/ROLLBACK TO SAVEPOINT pair, which TiDB doesn't fully support -
-# dumping a single table per invocation never needs that.
-for table in department unit ingredient tag ingredient_department; do
-  run_mysqldump bigshop "$table" >> "$DUMP_FILE"
-done
+run_mysqldump bigshop department unit ingredient tag ingredient_department > "$DUMP_FILE"
 
 echo "Exporting your recipes (account_id=${ACCOUNT_ID})..."
 run_mysqldump bigshop recipe --where="account_id=${ACCOUNT_ID}" >> "$DUMP_FILE"

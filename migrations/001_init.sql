@@ -36,7 +36,7 @@ create table `part` (
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   CONSTRAINT `fk_part_recipe_id` FOREIGN KEY (`recipe_id`) REFERENCES `recipe` (`id`),
-  CONSTRAINT `fk_part_ingredient_id` FOREIGN KEY (`ingredient_id`) REFERENCES `ingredient` (`id`)
+  CONSTRAINT `fk_part_ingredient_id` FOREIGN KEY (`ingredient_id`) REFERENCES `ingredient` (`id`),
   CONSTRAINT `fk_part_unit_id` FOREIGN KEY (`unit_id`) REFERENCES `unit` (`id`)
 );
 

@@ -62,7 +62,7 @@ type User struct {
 // Account holds accounts and users
 type Account struct {
 	ID    int    `json:"id"`
-	Users []User `json:"users`
+	Users []User `json:"users"`
 }
 
 // Invite holds information about account collaboration invites

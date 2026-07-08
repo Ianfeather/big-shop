@@ -21,17 +21,26 @@ const RecipeList = ({ handleRecipeSelect, filterFn = () => true }) => {
     cachePolicy: 'no-cache'
   });
 
-  async function getTags() {
-    if (useMocks) {
-      setTags(mocks.tags);
-      return;
+  useEffect(() => {
+    let cancelled = false;
+
+    async function getTags() {
+      if (useMocks) {
+        if (!cancelled) setTags(mocks.tags);
+        return;
+      }
+      const _tags = await get('/tags');
+      if (!cancelled && response.ok) {
+        setTags(_tags);
+      }
     }
-    const _tags = await get('/tags');
-    if (response.ok) {
-      setTags(_tags);
-    }
-  }
-  useEffect(() => { getTags() }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    getTags();
+
+    // React 18 Strict Mode double-invokes effects in dev (mount, cleanup,
+    // mount again). Without this guard, the throwaway first call can resolve
+    // after the real one and stomp good data with an aborted/empty result.
+    return () => { cancelled = true };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   const onClick = handleRecipeSelect || function (e) {

@@ -12,19 +12,20 @@ production instead of the two made-up ones.
 
 ## What `scripts/sync-from-prod.sh` does
 
-One command:
+One command, no arguments or env vars:
 
 ```bash
-TIDB_HOST=<host> TIDB_USER=<user> scripts/sync-from-prod.sh <your_account_id>
+scripts/sync-from-prod.sh
 ```
 
-It prompts once for your TiDB password, then:
+It prompts for TiDB host, port (defaults to `4000`), username, password, and
+account id (defaults to `1`), then:
 1. Exports full copies of the shared reference tables - `ingredient`,
    `unit`, `tag`, `department`, `ingredient_department`. These aren't
    scoped to any account, so they're pulled in whole.
 2. Exports **only** `recipe`/`part`/`recipe_tag` rows belonging to the
-   account id you pass in - never other accounts' data, not even
-   transiently in the dump file.
+   account id you enter - never other accounts' data, not even transiently
+   in the dump file.
 3. Saves all of that to `docker/prod-dumps/prod-sync-<id>-<timestamp>.sql`
    (gitignored - these contain real recipe data and must never be
    committed).
@@ -52,19 +53,32 @@ SQL editor (link in `CLAUDE.md`):
 SELECT * FROM account_user;
 ```
 
-Your row's `account_id` is the value to pass as `<your_account_id>` above.
+Your row's `account_id` is the value to enter when the script prompts for it.
 
 ## Connection details
 
-- `TIDB_HOST` / `TIDB_USER` - from your TiDB Cloud cluster (same values
-  used in the production `DSN`, just the individual pieces rather than one
-  connection string).
-- `TIDB_PORT` - defaults to `4000`, TiDB Cloud's protocol port (not MySQL's
-  usual `3306`). Only set it if yours differs.
+- Host / username - from your TiDB Cloud cluster (same values used in the
+  production `DSN`, just the individual pieces rather than one connection
+  string).
+- Port - defaults to `4000`, TiDB Cloud's protocol port (not MySQL's usual
+  `3306`). Only enter a different one if yours differs.
 - Password - never passed as an argument or stored anywhere. The script
-  prompts for it once (silently) and holds it only in the `MYSQL_PWD`
-  environment variable for the few `mysqldump` calls that need it, then
-  unsets it before touching the local database.
+  prompts for it once (silently) and holds it only in memory for the
+  `mysqldump` calls that need it.
+
+## Why mysqldump runs inside Docker
+
+`mysqldump` doesn't run against a host install - each export call runs
+inside a throwaway `mysql:8.0` container instead
+(`docker run --rm mysql:8.0 mysqldump ...`). Two reasons:
+- Nothing needs installing locally at all, consistent with the rest of this
+  setup (no Go or MySQL toolchain required on your machine either).
+- Newer client libraries (MySQL 9+, e.g. Homebrew's current `mysql` package)
+  have dropped the `mysql_native_password` authentication plugin entirely,
+  which many TiDB user accounts still use - connecting fails with an
+  `Authentication plugin 'mysql_native_password' cannot be loaded` error.
+  MySQL 8.0's client (what the container runs) still bundles that plugin, so
+  this sidesteps the issue without touching anything on the TiDB side.
 
 ## Why not TiDB's own export feature, or the web SQL editor?
 
@@ -77,9 +91,11 @@ the same access the app's own `DSN` already relies on - so that's what this
 script uses. Auth0 never comes into it either way: it gates the
 *application's* API, not direct database access.
 
-This hasn't been run against a real TiDB Cloud cluster from this session -
-if a `mysqldump` flag needs adjusting for TiDB's exact feature set, let me
-know what error you see and we'll fix it.
+This has been run against a real TiDB Cloud cluster; the one issue hit so
+far (a MySQL 9 client's `mysql_native_password` incompatibility) is what
+led to running `mysqldump` inside Docker rather than a host install. If
+another `mysqldump` flag needs adjusting for TiDB's exact feature set, let
+me know what error you see and we'll fix it.
 
 ## Reverting to the synthetic seed
 

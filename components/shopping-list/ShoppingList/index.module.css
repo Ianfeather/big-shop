@@ -9,11 +9,11 @@
 }
 
 .boughtContainer {
-  margin-top: 50px;
+  margin-top: var(--space-7);
 }
 
 .heading {
-  font-size: 30px;
+  font-size: var(--text-xl);
   /* todo: new serif font family */
 }
 
@@ -21,7 +21,7 @@
   display: flex;
   cursor: pointer;
   border-bottom: 1px solid rgba(235, 112, 164, 0.5);
-  padding: 15px 0;
+  padding: var(--space-3) 0;
 }
 
 .item:last-child {
@@ -34,10 +34,10 @@
 }
 
 .itemUnit {
-  margin-left: 10px;
+  margin-left: var(--space-2);
 }
 
 .emptyList {
-  margin-top: 20px;
+  margin-top: var(--space-4);
 }
 

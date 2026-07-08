@@ -3,9 +3,9 @@
   width: 80%;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: var(--space-4);
 }
 
 .invite button {
-  margin-left: 10px;
+  margin-left: var(--space-2);
 }

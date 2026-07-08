@@ -1,20 +1,20 @@
 .title {
-  font-size: 36px;
-  margin: 10px 0;
+  font-size: var(--text-2xl);
+  margin: var(--space-2) 0;
   width: 85%;
 }
 
 .topRightButton {
   position: absolute;
-  top: 30px;
-  right: 20px;
+  top: var(--space-5);
+  right: var(--space-4);
 }
 
 .headerContainer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: var(--space-4);
 }
 
 .fileInput {
@@ -30,22 +30,22 @@
 }
 
 .errorContainer {
-  margin: 10px 0;
-  padding: 10px;
+  margin: var(--space-2) 0;
+  padding: var(--space-2);
   border: 1px solid var(--pink);
-  border-radius: 5px;
+  border-radius: var(--radius-md);
 }
 
 .error {
   color: var(--pink);
-  font-size: 16px;
+  font-size: var(--text-base);
   font-weight: bold;
   margin: 0;
 }
 
 .errorDetails {
   color: var(--pink);
-  font-size: 14px;
-  margin: 5px 0 0;
+  font-size: var(--text-sm);
+  margin: var(--space-1) 0 0;
   opacity: 0.8;
 }

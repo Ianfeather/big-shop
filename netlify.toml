@@ -6,4 +6,4 @@
 package = "@netlify/plugin-nextjs"
 
 [build.environment]
-  GO_VERSION = "1.14"
+  GO_VERSION = "1.23"

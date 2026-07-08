@@ -33,6 +33,15 @@ mkdir -p docker/prod-dumps
 DUMP_FILE="docker/prod-dumps/prod-sync-${ACCOUNT_ID}-$(date +%Y%m%d-%H%M%S).sql"
 
 run_mysqldump() {
+  # --no-create-info: data only, no DROP/CREATE TABLE. The local bigshop
+  # database already has a correct, internally-consistent schema from
+  # migrations/*.sql - we only want prod's data, not prod's DDL. TiDB's
+  # dumped CREATE TABLE statements for different tables can carry subtly
+  # different charset/collation metadata (hit this as an "incompatible" FK
+  # error between recipe_tag.tag_name and tag.name), and re-creating tables
+  # from them locally inherits that inconsistency. Importing data only into
+  # our own already-migrated schema sidesteps that whole class of problem.
+  #
   # No --single-transaction: mysqldump wraps every table it dumps (even one)
   # in a SAVEPOINT/ROLLBACK TO SAVEPOINT pair under that flag, and TiDB's
   # SAVEPOINT support doesn't fully match MySQL's, failing with "Couldn't
@@ -44,10 +53,9 @@ run_mysqldump() {
   docker run --rm -e MYSQL_PWD="$TIDB_PASSWORD" mysql:8.0 \
     mysqldump -h "$TIDB_HOST" -P "$TIDB_PORT" -u "$TIDB_USER" \
     --ssl-mode=REQUIRED \
+    --no-create-info \
     --skip-lock-tables \
-    --no-tablespaces \
     --set-gtid-purged=OFF \
-    --no-create-db \
     "$@"
 }
 
@@ -75,8 +83,22 @@ until docker compose exec -T db mysqladmin ping -uroot -proot --silent 2>/dev/nu
   sleep 1
 done
 
+echo "Clearing existing recipe-related tables locally..."
+echo "(any local-only test data in these tables will be lost)"
+docker compose exec -T db mysql -uroot -proot bigshop -e "
+  SET FOREIGN_KEY_CHECKS=0;
+  TRUNCATE TABLE recipe_tag;
+  TRUNCATE TABLE part;
+  TRUNCATE TABLE ingredient_department;
+  TRUNCATE TABLE recipe;
+  TRUNCATE TABLE tag;
+  TRUNCATE TABLE ingredient;
+  TRUNCATE TABLE unit;
+  TRUNCATE TABLE department;
+  SET FOREIGN_KEY_CHECKS=1;
+"
+
 echo "Importing into the local bigshop database..."
-echo "(this replaces the recipe/ingredient/unit/tag/department tables entirely - any local-only test data in those tables will be lost)"
 docker compose exec -T db mysql -uroot -proot bigshop < "$DUMP_FILE"
 
 echo "Mapping imported recipes to local account 1..."

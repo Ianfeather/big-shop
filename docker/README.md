@@ -29,8 +29,8 @@ account id (defaults to `1`), then:
 3. Saves all of that to `docker/prod-dumps/prod-sync-<id>-<timestamp>.sql`
    (gitignored - these contain real recipe data and must never be
    committed).
-4. Imports it into the local `db` container, then remaps the imported
-   recipes to local account `1`.
+4. Truncates those same 8 tables locally, imports the dump's data into
+   them, then remaps the imported recipes to local account `1`.
 
 `local-dev-user` (the fixed identity `DISABLE_AUTH` mode uses) is already
 linked to local account `1` by the synthetic seed, so after this runs it
@@ -92,6 +92,19 @@ have given for this use case, and it also avoids needing `LOCK
 TABLES`/`FLUSH TABLES WITH READ LOCK` privileges a TiDB Cloud user may not
 have anyway.
 
+## Why data only, no schema
+
+The dump is `--no-create-info` - data only, no `DROP`/`CREATE TABLE`. The
+local `bigshop` database already has a correct, internally-consistent
+schema from `migrations/*.sql`; we only want prod's *data*. Importing
+TiDB's dumped `CREATE TABLE` statements hit an `Incompatible` foreign key
+error between `recipe_tag.tag_name` and `tag.name` - each table's dump is a
+separate `mysqldump` invocation, and TiDB's per-table charset/collation
+metadata wasn't identical between them, which MySQL 8 rejects at
+`CREATE TABLE` time even though the underlying data types match. Skipping
+schema entirely and truncating the already-correct local tables before
+importing data sidesteps that whole class of DDL-compatibility problem.
+
 ## Why not TiDB's own export feature, or the web SQL editor?
 
 TiDB Cloud's bulk "Export to storage" feature is typically a Dedicated-tier
@@ -103,13 +116,14 @@ the same access the app's own `DSN` already relies on - so that's what this
 script uses. Auth0 never comes into it either way: it gates the
 *application's* API, not direct database access.
 
-This has been run against a real TiDB Cloud cluster; two issues surfaced so
-far, both fixed above - a MySQL 9 client's `mysql_native_password`
-incompatibility (running `mysqldump` inside Docker instead), and
+This has been run against a real TiDB Cloud cluster; three issues surfaced
+so far, all fixed above - a MySQL 9 client's `mysql_native_password`
+incompatibility (running `mysqldump` inside Docker instead),
 `--single-transaction`'s `SAVEPOINT` handling not matching TiDB's (using
-`--skip-lock-tables` instead). If another `mysqldump` flag needs adjusting
-for TiDB's exact feature set, let me know what error you see and we'll fix
-it.
+`--skip-lock-tables` instead), and a cross-table charset/collation FK
+mismatch when importing TiDB's schema (switched to data-only dumps against
+the local, already-migrated schema). If another issue turns up, let me know
+what error you see and we'll fix it.
 
 ## Reverting to the synthetic seed
 

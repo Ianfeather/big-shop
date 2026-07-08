@@ -1,0 +1,18 @@
+.container {
+  display: flex;
+  overflow-x: scroll;
+}
+.container::-webkit-scrollbar {
+  display: none;
+}
+
+.pill {
+  margin-bottom: var(--space-2);
+  padding: var(--space-1) var(--space-4);
+  outline: none;
+  border: 1px solid var(--purple-border);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  text-wrap: nowrap;
+  margin-right: var(--space-2);
+}

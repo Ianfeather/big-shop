@@ -1,24 +1,24 @@
 .header {
-  padding: 20px 20px 30px;
+  padding: var(--space-4) var(--space-4) var(--space-5);
   height: 190px;
   position: relative;
   overflow: hidden;
 }
 
 .header .title {
-  font-family: quicksand;
+  font-family: var(--font-heading);
   -webkit-font-smoothing: antialiased;
   letter-spacing: -0.05em;
   margin-top: 0;
   margin-bottom: 0;
   text-align: center;
   color: white;
-  font-size: 30px;
+  font-size: var(--text-xl);
 }
 
 @media (min-width: 500px) {
   .header .title {
-    font-size: 40px;
+    font-size: var(--text-display);
   }
 }
 
@@ -34,7 +34,7 @@
 .nav a, .logout {
   color: white;
   text-decoration: none;
-  margin: 0 10px;
+  margin: 0 var(--space-2);
 }
 
 .logo {

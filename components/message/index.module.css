@@ -1,11 +1,11 @@
 .message {
     border: 1px solid;
-    border-radius: 4px;
-    padding: 10px 20px;
-    margin-top: 20px;
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-4);
+    margin-top: var(--space-4);
 }
 
 .error {
-    background-color: #f1c8c8;
-    border-color: #ed9797;
+    background-color: var(--error-bg);
+    border-color: var(--error-border);
 }

@@ -1,14 +1,14 @@
 .module {
-  margin-bottom: 30px;
+  margin-bottom: var(--space-5);
 }
 
 .addButton {
   background: var(--purple);
   border: none;
   color: white;
-  padding: 0 10px;
+  padding: 0 var(--space-2);
   height: 30px;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
@@ -18,7 +18,7 @@
 
 .extraListContainer {
   display: flex;
-  margin-bottom: 20px;
+  margin-bottom: var(--space-4);
 }
 
 @media( min-width: 800px) {

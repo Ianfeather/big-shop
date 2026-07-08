@@ -1,31 +1,19 @@
 .heading {
-  font-size: 24px;
+  font-size: var(--text-lg);
 }
 
 .ingredients {
-  margin-top: 40px;
+  margin-top: var(--space-6);
 }
 
 .ingredient {
-  padding: 5px 0;
+  padding: var(--space-1) 0;
 }
 
 .container {
-  display: flex;
-  overflow-x: scroll;
-}
-.container::-webkit-scrollbar {
-  display: none;
+  composes: container from '../tag-pill/index.module.css';
 }
 
 .btn {
-  margin-bottom: 10px;
-  padding: 5px 20px;
-  outline: none;
-  border: none;
-  border: 1px solid #d7b1f3;
-  border-radius: 20px;
-  background: transparent;
-  text-wrap: nowrap;
-  margin-right: 10px;
+  composes: pill from '../tag-pill/index.module.css';
 }

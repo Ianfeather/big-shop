@@ -1,4 +1,5 @@
 :root {
+  /* Brand colours */
   --purple: #b870eb;
   --pink: #eb70a4;
   --yellow: #ebd270;
@@ -8,6 +9,54 @@
   --light-purple: #f0ebf4;
   --red: #eb7070;
   --blue: #2897c1;
+
+  /* Brand accents used for borders/muted text (previously one-off hex values) */
+  --purple-border: #d7b1f3;
+  --purple-muted: #cbb5dc;
+
+  /* Neutral scale (consolidated from one-off greys scattered across components) */
+  --gray-100: #f5f5f5;
+  --gray-200: #e7eaea;
+  --gray-300: #d2d0d0;
+  --gray-400: #aaaaaa;
+  --gray-500: #666666;
+  --gray-700: #525050;
+
+  /* Semantic colours */
+  --success: #28c17b;
+  --success-muted: #94c3ae;
+  --error-bg: #f1c8c8;
+  --error-border: #ed9797;
+
+  /* Typography */
+  --font-heading: 'quicksand', 'SF Pro Text', 'SF Pro Icons', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+  --font-body: 'opensans', 'SF Pro Text', 'SF Pro Icons', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-md: 18px;
+  --text-lg: 24px;
+  --text-xl: 30px;
+  --text-2xl: 36px;
+  --text-display: 40px;
+
+  /* Spacing scale (matches the 5/10/20/30/40px rhythm already used across the app) */
+  --space-1: 5px;
+  --space-2: 10px;
+  --space-3: 15px;
+  --space-4: 20px;
+  --space-5: 30px;
+  --space-6: 40px;
+  --space-7: 50px;
+
+  /* Radius scale (consolidates 11 distinct one-off values down to 3 steps) */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 20px;
+  --radius-round: 50%;
+
+  /* Elevation */
+  --shadow-card: 0px 1px 1px 1px rgba(235, 112, 164, 0.1);
 }
 
 @font-face {
@@ -48,17 +97,17 @@
 body {
   padding: 0;
   margin: 0;
-  font-family: 'opensans', 'SF Pro Text', 'SF Pro Icons', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+  font-family: var(--font-body);
   background: linear-gradient(180deg, var(--purple) 0%, var(--purple) 220px, var(--light-purple) 221px, var(--light-purple) 100%) no-repeat;
   -webkit-font-smoothing: antialiased;
 }
 
 button {
-  font-family: 'opensans', 'SF Pro Text', 'SF Pro Icons', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+  font-family: var(--font-body);
 }
 
 h1, h2, h3, h4 {
-  font-family: quicksand;
+  font-family: var(--font-heading);
   font-weight: normal;
 }
 
@@ -68,7 +117,11 @@ h1, h2, h3, h4 {
 
 input, select {
   font-family: inherit;
-  font-size: 16px;
+  font-size: var(--text-base);
+}
+
+input[type='checkbox'] {
+  accent-color: var(--purple);
 }
 
 ul {
@@ -97,9 +150,9 @@ ul {
 }
 
 .typeahead-selector li {
-  padding: 15px 10px;
-  background: #e7eaea;
-  color: #5a5656;
+  padding: var(--space-3) var(--space-2);
+  background: var(--gray-200);
+  color: var(--gray-700);
 }
 
 .typeahead-selector li:hover {
@@ -119,12 +172,12 @@ ul {
 .react-autosuggest__input {
   width: 240px;
   height: 30px;
-  padding: 10px 20px;
+  padding: var(--space-2) var(--space-4);
   font-family: Helvetica, sans-serif;
   font-weight: 300;
-  font-size: 16px;
-  border: 1px solid #aaa;
-  border-radius: 4px;
+  font-size: var(--text-base);
+  border: 1px solid var(--gray-400);
+  border-radius: var(--radius-sm);
   text-transform: capitalize;
 }
 
@@ -144,12 +197,12 @@ ul {
   margin: 1px 0 0;
   padding: 0;
   list-style-type: none;
-  border: 1px solid #aaa;
+  border: 1px solid var(--gray-400);
   background-color: #fff;
   font-weight: 300;
-  font-size: 16px;
-  border-bottom-left-radius: 4px;
-  border-bottom-right-radius: 4px;
+  font-size: var(--text-base);
+  border-bottom-left-radius: var(--radius-sm);
+  border-bottom-right-radius: var(--radius-sm);
   z-index: 2;
   display: none;
 }
@@ -163,7 +216,7 @@ ul {
 
 .react-autosuggest__suggestion {
   cursor: pointer;
-  padding: 10px 20px;
+  padding: var(--space-2) var(--space-4);
   text-transform: capitalize;
 }
 

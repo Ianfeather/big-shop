@@ -3,18 +3,18 @@
   flex-direction: column;
   height: 100%;
   max-height: 600px;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
   background: white;
 }
 
 .messagesContainer {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-3);
 }
 
 .message {
@@ -36,11 +36,11 @@
 
 .messageHeader {
   display: flex;
-  gap: 8px;
+  gap: var(--space-1);
   align-items: center;
   margin-bottom: 4px;
-  font-size: 12px;
-  color: #666;
+  font-size: var(--text-xs);
+  color: var(--gray-500);
 }
 
 .messageRole {
@@ -52,34 +52,34 @@
 }
 
 .messageContent {
-  padding: 12px 16px;
-  border-radius: 18px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-lg);
   line-height: 1.4;
   word-wrap: break-word;
 }
 
 .userMessage .messageContent {
-  background: #007bff;
+  background: var(--blue);
   color: white;
 }
 
 .assistantMessage .messageContent {
-  background: #f1f3f4;
-  color: #333;
+  background: var(--gray-100);
+  color: var(--gray-700);
 }
 
 .typingIndicator {
   display: flex;
   gap: 4px;
   align-items: center;
-  padding: 8px 0;
+  padding: var(--space-1) 0;
 }
 
 .typingIndicator span {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
-  background: #666;
+  border-radius: var(--radius-round);
+  background: var(--gray-500);
   animation: typing 1.4s infinite;
 }
 
@@ -96,13 +96,13 @@
 }
 
 .inputForm {
-  border-top: 1px solid #e0e0e0;
-  padding: 16px;
+  border-top: 1px solid var(--gray-200);
+  padding: var(--space-3);
 }
 
 .inputContainer {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
   align-items: flex-end;
 }
 
@@ -110,18 +110,18 @@
   flex: 1;
   min-height: 40px;
   max-height: 120px;
-  padding: 10px 16px;
-  border: 1px solid #ddd;
-  border-radius: 20px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
   resize: none;
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--text-sm);
   outline: none;
   transition: border-color 0.2s;
 }
 
 .messageInput:focus {
-  border-color: #007bff;
+  border-color: var(--blue);
 }
 
 .messageInput:disabled {
@@ -130,19 +130,19 @@
 }
 
 .sendButton {
-  padding: 10px 20px;
-  background: #007bff;
+  padding: var(--space-2) var(--space-4);
+  background: var(--blue);
   color: white;
   border: none;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--text-sm);
   font-weight: 500;
   transition: background-color 0.2s;
 }
 
 .sendButton:hover:not(:disabled) {
-  background: #0056b3;
+  filter: brightness(0.9);
 }
 
 .sendButton:disabled {

@@ -1,9 +1,9 @@
 .container {
   display: flex;
   justify-content: center;
-  padding-top: 50px;
+  padding-top: var(--space-7);
 }
 
 .clear {
-  margin-right: 15px;
+  margin-right: var(--space-3);
 }

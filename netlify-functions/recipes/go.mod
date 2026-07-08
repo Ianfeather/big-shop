@@ -1,6 +1,6 @@
 module recipes
 
-go 1.14
+go 1.23
 
 require (
 	github.com/auth0/go-jwt-middleware v1.0.0

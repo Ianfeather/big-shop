@@ -1,0 +1,38 @@
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "${DB_PORT:-3308}:3306"
+    volumes:
+      - bigshop-db-data:/var/lib/mysql
+      - ./migrations:/migrations:ro
+      - ./docker/mysql-seed:/seed:ro
+      - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ./netlify-functions/recipes
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DSN: "root:root@tcp(db:3306)/bigshop?parseTime=true"
+      DISABLE_AUTH: "true"
+      DEV_USER_ID: "local-dev-user"
+    ports:
+      - "${API_PORT:-8080}:8080"
+    volumes:
+      - ./netlify-functions/recipes:/app
+
+volumes:
+  bigshop-db-data:

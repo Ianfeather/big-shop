@@ -1,7 +1,7 @@
 import styles from './index.module.css';
 import Tabs from '@components/layout/Tabs';
 import useFetch from 'use-http'
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import useAuth0 from '@hooks/use-auth';
 import Layout, { MainContent, Sidebar } from '@components/layout'
 import RecipeSidebar from '@components/shopping-list/Recipes';
@@ -36,6 +36,14 @@ const List = () => {
   let [extras, setExtras] = useState({});
   let [hydrateFlag, setHydrateFlag] = useState(false);
   const { user } = useAuth0();
+  // React 18 Strict Mode double-invokes effects in dev (mount, cleanup, mount
+  // again). Without this, the throwaway first mount's in-flight requests can
+  // resolve after the real ones and stomp good state with stale/empty data.
+  const cancelledRef = useRef(false);
+  useEffect(() => {
+    cancelledRef.current = false;
+    return () => { cancelledRef.current = true; };
+  }, []);
 
   const handleRecipeSelect = (e) => {
     const newList = { ...recipeList,
@@ -82,6 +90,7 @@ const List = () => {
     if (useMocks) return {};
 
     const result = await get('/shopping-list');
+    if (cancelledRef.current) return {};
     if (response.ok && result.recipes.length) {
       setListState(result.ingredients, result.extras);
       return result;
@@ -92,6 +101,7 @@ const List = () => {
   // This will only run once on load
   async function hydrateShoppingList() {
     const { recipes = [], extras = {} } = await getListState();
+    if (cancelledRef.current) return;
     setHydrateFlag(true);
     setRecipeList(recipes.reduce((acc, recipe) => {
       acc[recipe] = true;
@@ -121,7 +131,7 @@ const List = () => {
     }
 
     const result = await post('/shopping-list', selectedRecipes);
-    if (response.ok) {
+    if (!cancelledRef.current && response.ok) {
       setListState(result.ingredients, result.extras);
     }
   }

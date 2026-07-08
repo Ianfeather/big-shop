@@ -10,17 +10,25 @@ const useRecipe = (id) => {
     cachePolicy: 'no-cache'
   });
 
-  async function getRecipe() {
-    if (useMocks) {
-      const match = mocks.recipes.find(r => String(r.id) === String(id) || r.slug === id);
-      if (match) setRecipe(match);
-      return;
-    }
-    const recipe = await get(`/recipe/${id}`)
-    if (response.ok) setRecipe(recipe)
-  }
+  useEffect(() => {
+    let cancelled = false;
 
-  useEffect(() => { getRecipe() }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+    async function getRecipe() {
+      if (useMocks) {
+        const match = mocks.recipes.find(r => String(r.id) === String(id) || r.slug === id);
+        if (!cancelled && match) setRecipe(match);
+        return;
+      }
+      const recipe = await get(`/recipe/${id}`)
+      if (!cancelled && response.ok) setRecipe(recipe)
+    }
+    getRecipe();
+
+    // React 18 Strict Mode double-invokes effects in dev (mount, cleanup,
+    // mount again). Without this guard, the throwaway first call can resolve
+    // after the real one and stomp good data with an aborted/empty result.
+    return () => { cancelled = true };
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return [recipe, setRecipe];
 }

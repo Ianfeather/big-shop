@@ -144,7 +144,6 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, error) {
 
 	router := mux.NewRouter()
 
-	router.HandleFunc(base+"/health", healthHandler).Methods("GET")
 	router.HandleFunc(base+"/recipes", a.recipesHandler).Methods("GET")
 	router.HandleFunc(base+"/ingredients", a.ingredientsHandler).Methods("GET")
 	router.HandleFunc(base+"/recipe/{slug:[a-zA-Z-]+}", a.recipeHandlerBySlug).Methods("GET")
@@ -176,7 +175,19 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, error) {
 		AllowCredentials: true,
 	})
 
+	healthPath := base + "/health"
+
 	n := negroni.New(negroni.NewLogger())
+	// /health must stay reachable without a JWT - it's used by uptime monitors
+	// and Lambda warmers, none of which can hold an Auth0 token - so it's
+	// handled before CORS/auth even run, not registered on the mux router.
+	n.Use(negroni.HandlerFunc(func(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+		if r.Method == http.MethodGet && r.URL.Path == healthPath {
+			healthHandler(w, r)
+			return
+		}
+		next(w, r)
+	}))
 	n.Use(c)
 	if os.Getenv("DISABLE_AUTH") == "true" {
 		n.Use(negroni.HandlerFunc(devUserMiddleware))

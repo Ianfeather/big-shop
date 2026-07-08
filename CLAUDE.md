@@ -35,6 +35,7 @@ The app uses Auth0 for authentication:
 ### Frontend Development
 ```bash
 npm run dev          # Start Next.js development server
+npm run dev:full     # docker compose (local MySQL + Go API) + Next.js, one command
 npm run build        # Build production frontend
 npm run start        # Start production server
 npm run lint         # Run ESLint
@@ -48,7 +49,28 @@ npm run package      # Lint and build (used in deployment)
 
 ### Local Development Setup
 
-1. **Disable authentication** for UI-only development, in `.env.local`:
+**Fastest path — full local stack:** `npm run dev:full` (needs Docker running).
+This runs `scripts/dev-full.sh`, which:
+- Brings up `docker-compose.yml`'s `db` (MySQL 8, seeded once on first run from
+  `migrations/*.sql` + `docker/mysql-seed/dev-seed.sql` via
+  `docker/mysql-init/01-migrate-and-seed.sh`) and `api` (the Go binary's `dev`
+  mode, `DISABLE_AUTH=true`, hot-reloaded with `air` — edit any `.go` file and
+  it rebuilds automatically) services.
+- Waits for the API's `/health` endpoint, then runs Next.js natively on the
+  host (not dockerized — keeps fast refresh) on port 3001 by default.
+- Ports are overridable if they clash with another checkout/worktree:
+  `DB_PORT`, `API_PORT`, `WEB_PORT` env vars (see the script for defaults).
+- The seeded dev user is `local-dev-user`, already linked to account id 1
+  (the account `migrations/008_user.sql` creates on a fresh DB), with two
+  sample recipes. `docker compose down -v` wipes the DB volume, so the next
+  `npm run dev:full` reseeds from scratch.
+
+This gives real read/write behavior against an actual DB — no mocks, no
+special-casing in the frontend hooks — closest thing to prod available
+locally.
+
+**Faster-but-shallower path — JSON mocks, no backend at all:**
+1. In `.env.local`, set:
    - `NEXT_PUBLIC_DISABLE_AUTH=true` — both `pages/_app.js` and every consumer of
      `hooks/use-auth.js` (a thin wrapper around `@auth0/auth0-react`'s `useAuth0`)
      resolve to a fixed mock user instead of mounting the real `Auth0Provider`.
@@ -60,37 +82,36 @@ npm run package      # Lint and build (used in deployment)
      instead of calling the Go API, for `/recipes`, `/list`, and the new-recipe
      form's ingredient/unit/tag autosuggest. Mutations (save/delete recipe,
      invites, account) still hit the real API even with mocks on.
+2. `npm run dev` — no Docker, no DB, no Go API needed at all.
 
-2. **Run the API locally** (optional, for real data instead of mocks):
-   - The Go binary already supports a non-Lambda dev mode: `go run . dev` inside
-     `netlify-functions/recipes/` starts a plain HTTP server on `:8080`
-     (matching `NEXT_PUBLIC_API_HOST` in `.env.development`).
-   - It still needs a live DB via `DSN` (local MySQL is fine — see below).
-   - Set `DISABLE_AUTH=true` (no `NEXT_PUBLIC_` prefix — this is read server-side
-     by the Go process, not the browser) to skip real Auth0 JWT validation; the
-     router then injects a fixed `DEV_USER_ID` (default `local-dev-user`) as the
-     request's user ID instead. That user must exist in `account_user` in your
-     local DB for requests to resolve to an account.
-   - Without `DISABLE_AUTH`, the Go server validates JWTs against the real
-     Auth0 tenant (`AUTH0_DOMAIN`/`AUTH0_AUDIENCE`), so you'd need a real logged
-     -in access token — impractical for local-only work.
+**Manual path** (what `dev:full` automates, useful if you want the API/DB
+outside Docker): `go run . dev` inside `netlify-functions/recipes/` starts a
+plain HTTP server on `:8080` — but routes are always registered under
+`/.netlify/functions/recipes` (see `main.go`'s `GetRouter` call), so
+`NEXT_PUBLIC_API_HOST` must include that suffix, e.g.
+`http://localhost:8080/.netlify/functions/recipes` (already the case in
+`.env.development`). It needs a live DB via `DSN`, and `DISABLE_AUTH=true`
+(no `NEXT_PUBLIC_` prefix — read server-side by the Go process) to skip real
+Auth0 JWT validation; the router then injects a fixed `DEV_USER_ID` (default
+`local-dev-user`) as the request's user ID, which must exist in `account_user`
+in your DB for requests to resolve to an account. Without `DISABLE_AUTH`, the
+Go server validates JWTs against the real Auth0 tenant
+(`AUTH0_DOMAIN`/`AUTH0_AUDIENCE`) — impractical for local-only work.
 
-3. **Database setup** (when running the API locally):
-   ```bash
-   mysql -u root
-   use bigshop;
-   ```
-   Create admin user:
-   ```sql
-   CREATE USER 'admin'@'localhost' IDENTIFIED BY 'admin';
-   GRANT ALL PRIVILEGES ON bigshop.* TO 'admin'@'localhost';
-   ```
+**Known rough edge (dev-only):** `next.config.js` has `reactStrictMode: true`,
+which double-invokes effects in development. Combined with `use-http`'s
+abort-on-unmount behavior, a hard page reload on `/recipes`, `/recipes/[id]`,
+or `/list` can occasionally render empty if the aborted first call's state
+resolves after the real one. Client-side `<Link>` navigation is unaffected in
+practice. Doesn't happen in production (Strict Mode's double-invoke is a dev
+build only). Not something this setup work fixed — the real-API path was
+never previously exercised locally, so this was never observable before.
 
-4. **Environment variables**:
-   - Copy from `.env.development` for local development
-   - Auth0 credentials required for authentication flow (unless `DISABLE_AUTH`/`NEXT_PUBLIC_DISABLE_AUTH` set)
-   - `OPENAI_API_KEY` required for AI features
-   - `SENDGRID_API_KEY` required for email invitations
+**Environment variables:**
+- Copy from `.env.development` for local development
+- Auth0 credentials required for authentication flow (unless `DISABLE_AUTH`/`NEXT_PUBLIC_DISABLE_AUTH` set)
+- `OPENAI_API_KEY` required for AI features
+- `SENDGRID_API_KEY` required for email invitations
 
 ## Pages & Features
 
@@ -251,7 +272,7 @@ npm run test:evals   # runs evals/run-evals.sh
 - Automatic deployment via Netlify on git push
 - Build command: `./build.sh` (runs `npm run package` + Go tests)
 - Publish directory: `.next`
-- Environment: Node 14+ (`.node-version`), Go 1.14
+- Environment: Node 14+ (`.node-version`), Go 1.23 (`netlify.toml` `GO_VERSION`, matches `go.mod`)
 
 ## Key Dependencies
 

@@ -202,7 +202,6 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
                   id={`tag-${idx}`}
                   checked={recipe.tags.includes(tag)}
                   onChange={(e) => updateRecipeTags(e.target.value)}
-                  className={styles.tagCheckbox}
                   />
                 <label htmlFor={`tag-${idx}`} className={styles.tagLabel}>{tag}</label>
               </div>
@@ -256,7 +255,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
                     }}
                   />
                 </div>
-                <Button className={styles.addIngredientButton} style="blue" icon="tick" onClick={addIngredient}>Add</Button>
+                <Button className={styles.addIngredientButton} style="primary" outline={true} icon="tick" onClick={addIngredient}>Add</Button>
               </div>
 
             </div>
@@ -298,7 +297,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
               }
             </div>
             <div className={styles.buttonContainer}>
-              <Button style="green" icon="tick" className={`${loading ? styles.loading : ''}`} onClick={submitRecipe}>
+              <Button style="primary" icon="tick" className={`${loading ? styles.loading : ''}`} onClick={submitRecipe}>
                 { mode === 'edit' ? 'Update Recipe' : 'Store Recipe'}
               </Button>
 
@@ -309,7 +308,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
                   </div>
                   { mode === 'new' &&
                     <div>
-                      <Button className={`${styles.addAnotherRecipe}`} onClick={resetForm}>
+                      <Button className={`${styles.addAnotherRecipe}`} style="primary" onClick={resetForm}>
                         Add another recipe
                       </Button>
                     </div>
@@ -319,7 +318,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
               {
                 mode === 'edit' && (
                   <div>
-                    <Button style="red" icon="trash" onClick={deleteRecipe}>Delete Recipe</Button>
+                    <Button style="danger" icon="trash" onClick={deleteRecipe}>Delete Recipe</Button>
                     {
                       deleted && <span>Deleted</span>
                     }
@@ -334,7 +333,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
         ) :
         (
           <>
-            <Button style="green" onClick={onNext}>
+            <Button style="primary" onClick={onNext}>
               Next: Add Ingredients
               { !!nextAPILoading && <Spinner className={styles.loadingIngredients}>Loading...</Spinner>}
             </Button>

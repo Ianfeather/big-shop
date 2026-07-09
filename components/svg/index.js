@@ -5,6 +5,9 @@ import PencilIcon from './pencil';
 import TrashIcon from './trash';
 import TickIcon from './tick';
 import UserIcon from './user';
+import LeafIcon from './leaf';
+import BatchIcon from './batch';
+import TagIcon from './tag';
 
 const icons = {
   back: BackIcon,
@@ -13,7 +16,10 @@ const icons = {
   pencil: PencilIcon,
   trash: TrashIcon,
   tick: TickIcon,
-  user: UserIcon
+  user: UserIcon,
+  leaf: LeafIcon,
+  batch: BatchIcon,
+  tag: TagIcon
 }
 
 export default icons;

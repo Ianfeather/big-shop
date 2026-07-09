@@ -191,7 +191,7 @@ const NewRecipe = () => {
             className={styles.fileInput}
             onChange={handleImageChange}
           />
-          <Button className="" style="blue" onClick={handleImageClick}>
+          <Button className={styles.cameraButton} style="primary" outline={true} iconOnly={!loading && !processingJob} onClick={handleImageClick} aria-label="Add recipe from photo">
             <PhotoIcon className={styles.photoIcon} />
             { (loading || processingJob) && <Spinner>Processing image...</Spinner>}
           </Button>

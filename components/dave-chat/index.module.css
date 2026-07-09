@@ -59,7 +59,7 @@
 }
 
 .userMessage .messageContent {
-  background: var(--blue);
+  background: var(--color-info);
   color: white;
 }
 
@@ -121,7 +121,7 @@
 }
 
 .messageInput:focus {
-  border-color: var(--blue);
+  border-color: var(--color-info);
 }
 
 .messageInput:disabled {
@@ -131,7 +131,7 @@
 
 .sendButton {
   padding: var(--space-2) var(--space-4);
-  background: var(--blue);
+  background: var(--color-info);
   color: white;
   border: none;
   border-radius: var(--radius-lg);

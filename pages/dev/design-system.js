@@ -6,6 +6,7 @@ import SidebarHeading from '@components/sidebar-heading';
 import SidebarInput from '@components/sidebar-input';
 import SidebarTagFilter from '@components/sidebar-tag-filter';
 import ListItem from '@components/sidebar-item';
+import TagPill from '@components/tag-pill';
 import Spinner from '@components/recipe-form/spinner';
 import DaveChat from '@components/dave-chat';
 import icons from '@components/svg';
@@ -26,17 +27,13 @@ const colorGroups = [
   {
     title: 'Brand',
     colors: [
-      { name: '--purple', value: '#b870eb' },
-      { name: '--pink', value: '#eb70a4' },
-      { name: '--yellow', value: '#ebd270' },
-      { name: '--green', value: '#a4eb70' },
-      { name: '--dark-green', value: '#8bd455' },
-      { name: '--darker-green', value: '#42c540' },
-      { name: '--light-purple', value: '#f0ebf4' },
-      { name: '--red', value: '#eb7070' },
-      { name: '--blue', value: '#2897c1' },
-      { name: '--purple-border', value: '#d7b1f3' },
-      { name: '--purple-muted', value: '#cbb5dc' },
+      { name: '--color-primary', value: '#b870eb', note: 'the one forward action per screen' },
+      { name: '--color-primary-soft', value: '#f0ebf4', note: 'tinted backgrounds' },
+      { name: '--color-primary-border', value: '#d7b1f3', note: 'default borders/dividers' },
+      { name: '--color-primary-muted', value: '#cbb5dc', note: 'hover state, muted text' },
+      { name: '--color-accent', value: '#eb70a4', note: 'decorative hover/highlight only' },
+      { name: '--color-danger', value: '#eb7070', note: 'destructive actions, errors, required' },
+      { name: '--color-info', value: '#2897c1', note: "Dave's own palette only - not used elsewhere" },
     ],
   },
   {
@@ -53,10 +50,10 @@ const colorGroups = [
   {
     title: 'Semantic',
     colors: [
-      { name: '--success', value: '#28c17b' },
-      { name: '--success-muted', value: '#94c3ae' },
-      { name: '--error-bg', value: '#f1c8c8' },
-      { name: '--error-border', value: '#ed9797' },
+      { name: '--color-success', value: '#28c17b', note: 'confirmation state, e.g. "Stored!"' },
+      { name: '--color-success-soft', value: '#94c3ae', note: 'pending/loading row background' },
+      { name: '--color-danger-soft', value: '#f1c8c8' },
+      { name: '--color-danger-border', value: '#ed9797' },
     ],
   },
 ];
@@ -121,6 +118,7 @@ const DesignSystem = () => {
                       <div className={styles.swatchLabel}>
                         <span className={styles.swatchName}>{c.name}</span>
                         <span className={styles.swatchValue}>{c.value}</span>
+                        { c.note && <span className={styles.swatchNote}>{c.note}</span> }
                       </div>
                     </div>
                   ))}
@@ -134,11 +132,11 @@ const DesignSystem = () => {
             <div className={styles.card} style={{ marginBottom: '20px' }}>
               <div className={styles.typeRow}>
                 <span className={styles.typeLabel}>--font-heading</span>
-                <span className={styles.fontSample}>Quicksand — headings, big numbers</span>
+                <span className={styles.fontSample}>Fraunces — headings, the wordmark</span>
               </div>
               <div className={styles.typeRow}>
                 <span className={styles.typeLabel}>--font-body</span>
-                <span className={styles.bodySample}>Open Sans — body copy, buttons, inputs</span>
+                <span className={styles.bodySample}>Plus Jakarta Sans — body copy, buttons, inputs</span>
               </div>
             </div>
             <div className={styles.card}>
@@ -190,17 +188,58 @@ const DesignSystem = () => {
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>Buttons</h2>
             <div className={styles.card}>
+              <p className={styles.intro} style={{ marginBottom: '12px' }}>
+                Two roles only: <code>primary</code> is the one forward action on a
+                screen, <code>danger</code> is destructive. Add <code>outline</code>{' '}
+                for the lower-emphasis &quot;secondary&quot; pattern (Edit, Cancel, inline
+                utilities) - same role colour, less visual weight.
+              </p>
               <div className={styles.componentRow}>
-                <Button style="blue" icon="tick">Blue</Button>
-                <Button style="green" icon="tick">Green</Button>
-                <Button style="red" icon="trash">Red</Button>
-                <Button style="pink" icon="cross">Pink</Button>
+                <Button style="primary" icon="tick">Primary</Button>
+                <Button style="danger" icon="trash">Danger</Button>
               </div>
               <div className={styles.componentRow}>
-                <Button style="blue" outline icon="back">Outline blue</Button>
-                <Button style="red" outline icon="cross">Outline red</Button>
-                <Button style="pink" outline>Outline pink</Button>
+                <Button style="primary" outline icon="back">Outline primary</Button>
+                <Button style="danger" outline icon="cross">Outline danger</Button>
+                <Button style="primary" outline iconOnly icon="pencil" aria-label="Edit" />
               </div>
+            </div>
+          </section>
+
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>Checkboxes</h2>
+            <div className={styles.card}>
+              <div className={styles.componentRow} style={{ alignItems: 'center', gap: '20px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input type="checkbox" defaultChecked={false} /> Unchecked
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input type="checkbox" defaultChecked={true} readOnly /> Checked
+                </label>
+              </div>
+              <p className={styles.intro} style={{ marginTop: '12px', marginBottom: 0 }}>
+                Real <code>&lt;input type=&quot;checkbox&quot;&gt;</code> elements with a custom
+                appearance (see <code>input[type=&apos;checkbox&apos;]</code> in{' '}
+                <code>pages/styles.css</code>) - keeps native keyboard, screen reader and
+                mobile tap behaviour instead of a div pretending to be a checkbox.
+              </p>
+            </div>
+          </section>
+
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>Tags</h2>
+            <div className={styles.card}>
+              <div className={styles.componentRow}>
+                <TagPill tag="Vegetarian" />
+                <TagPill tag="Batch Cook" />
+                <TagPill tag="Gluten Free" />
+              </div>
+              <p className={styles.intro} style={{ marginTop: '12px', marginBottom: 0 }}>
+                Icon + colour come from a lookup in <code>components/tag-pill/tag-meta.js</code>,
+                keyed by tag name. &quot;Gluten Free&quot; above has no entry, so it falls
+                back to a neutral tag glyph - new tags need one line in that file, no
+                new CSS.
+              </p>
             </div>
           </section>
 
@@ -218,8 +257,8 @@ const DesignSystem = () => {
               <SidebarInput placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} />
               <SidebarTagFilter tags={['Batch Cook', 'Vegetarian']} value={tagFilter} onChange={setTagFilter} />
               <ul>
-                <ListItem id="ds-item-1" name="Shepherd's Pie" checked={false} onClick={() => {}} />
-                <ListItem id="ds-item-2" name="Veggie Chilli" checked={true} onClick={() => {}} />
+                <ListItem id="ds-item-1" name="Shepherd's Pie" tags={['Batch Cook']} checked={false} onClick={() => {}} />
+                <ListItem id="ds-item-2" name="Veggie Chilli" tags={['Vegetarian', 'Batch Cook']} checked={true} onClick={() => {}} />
               </ul>
             </div>
           </section>
@@ -227,7 +266,7 @@ const DesignSystem = () => {
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>Misc</h2>
             <div className={styles.componentGrid}>
-              <div className={styles.card} style={{ background: 'var(--purple)' }}>
+              <div className={styles.card} style={{ background: 'var(--color-primary)' }}>
                 <div className={styles.cardTitle} style={{ color: 'white' }}>Spinner</div>
                 <Spinner />
               </div>
@@ -243,8 +282,9 @@ const DesignSystem = () => {
             <div className={styles.gapCallout}>
               <ul>
                 <li>Spacing/radius/font-size tokens are now defined and applied to the app&apos;s core components and the Dave feature, but not every legacy CSS module has been swept — new code should use the tokens above rather than one-off pixel values.</li>
-                <li>Native checkboxes and selects still use the browser default appearance beyond an accent-color tweak; a fully custom control hasn&apos;t been designed.</li>
+                <li>Only two tags have an icon/colour mapping (Vegetarian, Batch Cook) - everything else falls back to a neutral tag glyph until someone extends <code>tag-pill/tag-meta.js</code>.</li>
                 <li>There is no documented empty/loading/error state pattern beyond <code>Message</code> and the recipe-form spinner - features like Dave currently roll their own loading indicator (the typing dots above).</li>
+                <li>Recipes have no stored image - the AI photo-extraction flow discards the photo after parsing it. Cards and the detail page are text-only as a result; the schema has no <code>image_url</code> column yet.</li>
               </ul>
             </div>
           </section>

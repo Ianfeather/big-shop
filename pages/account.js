@@ -69,7 +69,7 @@ const List = () => {
             <p>Sharing an account with someone means you will have access to the same recipes and shopping list. </p>
             <div className={styles.inviteForm}>
               <input className={styles.input} type="text" value={invitee} onChange={(e) => setInvitee(e.target.value)} />
-              <Button style="green" icon="tick" onClick={handleInvite}>Invite</Button>
+              <Button style="primary" icon="tick" onClick={handleInvite}>Invite</Button>
             </div>
             { successMessage && (
               <h3>{successMessage}</h3>

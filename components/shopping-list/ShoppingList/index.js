@@ -27,10 +27,10 @@ const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList }) => {
       )}
       <ul className={styles.shoppingList}>
         { ingredients.map((name, i) => (
-          <Item type='ingredient' name={name} item={shoppingList[name]} handleClick={buyIngredient} key={i}/>
+          <Item type='ingredient' name={name} item={shoppingList[name]} bought={false} handleClick={buyIngredient} key={i}/>
         ))}
         { Object.keys(extras).filter((name => !extras[name].isBought)).map((name, i) => (
-          <Item type='extra' name={name} handleClick={buyIngredient} key={i}/>
+          <Item type='extra' name={name} bought={false} handleClick={buyIngredient} key={i}/>
         ))}
       </ul>
       {
@@ -39,10 +39,10 @@ const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList }) => {
             <h2>Already bought</h2>
             <ul className={styles.shoppingList}>
               { boughtItems.map((name, i) => (
-                <Item type='ingredient' name={name} item={shoppingList[name]} handleClick={buyIngredient} key={i}/>
+                <Item type='ingredient' name={name} item={shoppingList[name]} bought={true} handleClick={buyIngredient} key={i}/>
               ))}
               { boughtExtras.map((name, i) => (
-                <Item type='extra' name={name} handleClick={buyIngredient} key={i}/>
+                <Item type='extra' name={name} bought={true} handleClick={buyIngredient} key={i}/>
               ))}
             </ul>
           </div>

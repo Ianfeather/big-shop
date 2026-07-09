@@ -3,7 +3,7 @@
 }
 
 .addButton {
-  background: var(--purple);
+  background: var(--color-primary);
   border: none;
   color: white;
   padding: 0 var(--space-2);

@@ -2,11 +2,16 @@
   composes: container from '../tag-pill/index.module.css';
 }
 
-.btn {
+.overflowing {
+  composes: overflowing from '../tag-pill/index.module.css';
+}
+
+.allPill {
   composes: pill from '../tag-pill/index.module.css';
+  border-color: var(--color-primary-border);
 }
 
 .selected {
-  background: var(--purple);
-  color: white;
+  composes: selected from '../tag-pill/index.module.css';
+  --tag-color: var(--color-primary);
 }

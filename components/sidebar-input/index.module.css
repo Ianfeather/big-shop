@@ -4,10 +4,10 @@
   width: 100%;
   outline: none;
   border: none;
-  border-left: 1px solid var(--purple-border);
+  border-left: 1px solid var(--color-primary-border);
   background: transparent;
 }
 
 .input:focus {
-  border-left: 1px solid var(--purple);
+  border-left: 1px solid var(--color-primary);
 }

@@ -9,6 +9,11 @@
   font-weight: bold;
 }
 
+.checkboxContainer {
+  display: flex;
+  align-items: center;
+}
+
 .checkboxContainer label {
   display: inline;
   margin: 0 0 0 10px;
@@ -32,7 +37,7 @@
 
 .unmatchedIngredients {
   margin-bottom: var(--space-4);
-  border: 3px solid var(--red);
+  border: 3px solid var(--color-danger);
   padding: var(--space-4);
   border-radius: var(--radius-md);
 }
@@ -57,13 +62,13 @@
   padding: 8px 0;
   border: none;
   outline: none;
-  border-bottom: 1px solid var(--purple-border);
+  border-bottom: 1px solid var(--color-primary-border);
   font-size: var(--text-base);
   font-family: inherit;
 }
 
 .form input:focus, .form textarea:focus {
-  border-bottom: 2px solid var(--purple);
+  border-bottom: 2px solid var(--color-primary);
 }
 
 .form input::placeholder, .form textarea::placeholder {
@@ -87,7 +92,7 @@
   height: 39px;
   width: 100%;
   border: none;
-  border-bottom: 1px solid var(--purple-border);
+  border-bottom: 1px solid var(--color-primary-border);
   -webkit-appearance: none;
   text-align: left;
 }
@@ -128,7 +133,7 @@
 }
 
 .trash {
-  color: var(--pink);
+  color: var(--color-danger);
   font-size: var(--text-lg);
   border: none;
   background-color: transparent;
@@ -137,7 +142,7 @@
 }
 
 .loading {
-  background-color: var(--success-muted);
+  background-color: var(--color-success-soft);
 }
 
 .loadingIngredients {
@@ -147,7 +152,7 @@
 .stored {
   display: inline-block;
   margin-left: var(--space-5);
-  color: var(--success);
+  color: var(--color-success);
   font-size: var(--text-md);
 }
 
@@ -174,17 +179,18 @@
 .addAnotherRecipe {
   margin-top: var(--space-4);
   text-decoration: none;
-  background-color: var(--purple);
+  background-color: var(--color-primary);
 }
 
 .required {
-  color: var(--pink);
+  color: var(--color-danger);
   font-size: 80%;
 }
 
 .tagContainer {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  margin-bottom: var(--space-1);
 }
 
 .tagLabel {
@@ -194,14 +200,14 @@
 }
 
 .addIngredientSection {
-  background-color: var(--light-purple);
+  background-color: var(--color-primary-soft);
   padding: var(--space-4);
   border-radius: var(--radius-md);
   margin-bottom: var(--space-4);
 }
 
 .addIngredientSection input {
-  background-color: var(--light-purple);
+  background-color: var(--color-primary-soft);
 }
 
 .addIngredientGroup {

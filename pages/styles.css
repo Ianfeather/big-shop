@@ -1,18 +1,14 @@
 :root {
-  /* Brand colours */
-  --purple: #b870eb;
-  --pink: #eb70a4;
-  --yellow: #ebd270;
-  --green: #a4eb70;
-  --dark-green: #8bd455;
-  --darker-green: #42c540;
-  --light-purple: #f0ebf4;
-  --red: #eb7070;
-  --blue: #2897c1;
-
-  /* Brand accents used for borders/muted text (previously one-off hex values) */
-  --purple-border: #d7b1f3;
-  --purple-muted: #cbb5dc;
+  /* Brand colours, named for the job they do rather than their hue.
+     --color-info is kept only because Dave's chat UI (out of scope for this
+     pass) still references it directly. */
+  --color-primary: #b870eb;
+  --color-primary-soft: #f0ebf4;
+  --color-primary-border: #d7b1f3;
+  --color-primary-muted: #cbb5dc;
+  --color-accent: #eb70a4;
+  --color-danger: #eb7070;
+  --color-info: #2897c1;
 
   /* Neutral scale (consolidated from one-off greys scattered across components) */
   --gray-100: #f5f5f5;
@@ -23,14 +19,14 @@
   --gray-700: #525050;
 
   /* Semantic colours */
-  --success: #28c17b;
-  --success-muted: #94c3ae;
-  --error-bg: #f1c8c8;
-  --error-border: #ed9797;
+  --color-success: #28c17b;
+  --color-success-soft: #94c3ae;
+  --color-danger-soft: #f1c8c8;
+  --color-danger-border: #ed9797;
 
   /* Typography */
-  --font-heading: 'quicksand', 'SF Pro Text', 'SF Pro Icons', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
-  --font-body: 'opensans', 'SF Pro Text', 'SF Pro Icons', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+  --font-heading: 'fraunces', Georgia, 'Times New Roman', serif;
+  --font-body: 'jakarta', 'SF Pro Text', 'SF Pro Icons', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
   --text-xs: 12px;
   --text-sm: 14px;
   --text-base: 16px;
@@ -59,46 +55,81 @@
   --shadow-card: 0px 1px 1px 1px rgba(235, 112, 164, 0.1);
 }
 
+/* Self-hosted rather than next/font/google: this app's dev/build environment
+   can't reliably reach Google's font servers, and next/font fails that
+   silently (falls back to a system font with no error) rather than loudly -
+   so hand-rolled @font-face against locally vendored files, same pattern the
+   app used for Quicksand/Open Sans before. */
 @font-face {
-  font-family: 'quicksand';
-  src: url('/static/fonts/quicksand-variablefont_wght-webfont.woff2') format('woff2'), url('/static/fonts/quicksand-variablefont_wght-webfont.woff') format('woff');
-  font-weight: 200;
+  font-family: 'fraunces';
+  src: url('/static/fonts/fraunces-500.woff2') format('woff2');
+  font-weight: 500;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
-  font-family: 'quicksand';
-  src: url('/static/fonts/quicksand-bold-webfont.woff2') format('woff2'), url('/static/fonts/quicksand-bold-webfont.woff') format('woff');
+  font-family: 'fraunces';
+  src: url('/static/fonts/fraunces-600.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'fraunces';
+  src: url('/static/fonts/fraunces-700.woff2') format('woff2');
   font-weight: 700;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
-  font-family: 'quicksand';
-  src: url('/static/fonts/quicksand-regular-webfont.woff2') format('woff2'), url('/static/fonts/quicksand-regular-webfont.woff') format('woff');
+  font-family: 'jakarta';
+  src: url('/static/fonts/jakarta-400.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
-  font-family: 'opensans';
-  src: url('/static/fonts/OpenSans-Regular-webfont.woff') format('woff');
-  font-weight: normal;
+  font-family: 'jakarta';
+  src: url('/static/fonts/jakarta-500.woff2') format('woff2');
+  font-weight: 500;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
-  font-family: 'opensans';
-  src: url('/static/fonts/OpenSans-Bold-webfont.woff') format('woff');
-  font-weight: bold;
+  font-family: 'jakarta';
+  src: url('/static/fonts/jakarta-600.woff2') format('woff2');
+  font-weight: 600;
   font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'jakarta';
+  src: url('/static/fonts/jakarta-700.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+html {
+  /* Owns the page canvas colour so short pages (landing, account) don't
+     reveal blank white below the content instead of the intended tint -
+     previously only `body` was coloured, and body's height only ever
+     matched its content. */
+  min-height: 100%;
+  background: var(--color-primary-soft);
 }
 
 body {
   padding: 0;
   margin: 0;
+  min-height: 100vh;
   font-family: var(--font-body);
-  background: linear-gradient(180deg, var(--purple) 0%, var(--purple) 220px, var(--light-purple) 221px, var(--light-purple) 100%) no-repeat;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -120,8 +151,50 @@ input, select {
   font-size: var(--text-base);
 }
 
+/* Custom checkbox skin. Still a real <input type="checkbox"> underneath -
+   only the paint job is custom - so screen readers, keyboard control and
+   mobile tap targets all keep native behaviour. */
 input[type='checkbox'] {
-  accent-color: var(--purple);
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border: 2px solid var(--color-primary-border);
+  border-radius: var(--radius-sm);
+  background: white;
+  display: inline-block;
+  vertical-align: middle;
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+input[type='checkbox']:hover {
+  border-color: var(--color-primary);
+}
+
+input[type='checkbox']:checked {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+input[type='checkbox']:checked::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 5px;
+  height: 10px;
+  border-right: 2px solid white;
+  border-bottom: 2px solid white;
+  transform: rotate(45deg);
+}
+
+input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 ul {
@@ -156,7 +229,7 @@ ul {
 }
 
 .typeahead-selector li:hover {
-  background: var(--pink);
+  background: var(--color-accent);
   color: white;
 }
 
@@ -221,5 +294,5 @@ ul {
 }
 
 .react-autosuggest__suggestion--focused, .react-autosuggest__suggestion--highlighted {
-  background-color: var(--light-purple);
+  background-color: var(--color-primary-soft);
 }

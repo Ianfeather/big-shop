@@ -14,11 +14,11 @@ const ClearList = ({ onClick }) => {
         isClicked ?
         (
           <>
-            <Button className={styles.clear} style="red" outline={true} icon="cross" onClick={() => onClick()}>You sure? Click to confirm</Button>
-            <Button style="blue" outline={true} icon="cross" onClick={() => handleCancel()}>Cancel</Button>
+            <Button className={styles.clear} style="danger" outline={true} icon="cross" onClick={() => onClick()}>You sure? Click to confirm</Button>
+            <Button style="primary" outline={true} icon="cross" onClick={() => handleCancel()}>Cancel</Button>
           </>
         ) :
-        <Button className={styles.clear} style="red" outline={true} icon="cross" onClick={() => handleClear()}>Clear list and start over</Button>
+        <Button className={styles.clear} style="danger" outline={true} icon="cross" onClick={() => handleClear()}>Clear list and start over</Button>
       }
     </div>
   );

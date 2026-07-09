@@ -10,12 +10,12 @@
 }
 
 .tabButtons button:first-child {
-  border-right: 1px solid var(--light-purple);
+  border-right: 1px solid var(--color-primary-soft);
 }
 
 .tabButtons button:not(:disabled) {
-  color: var(--purple-muted);
-  border-bottom: 1px solid var(--light-purple);
+  color: var(--color-primary-muted);
+  border-bottom: 1px solid var(--color-primary-soft);
 }
 
 .landingPage {

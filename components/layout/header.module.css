@@ -1,6 +1,6 @@
 .header {
-  padding: var(--space-4) var(--space-4) var(--space-5);
-  height: 190px;
+  padding: var(--space-5) var(--space-4) var(--space-6);
+  background: var(--color-primary);
   position: relative;
   overflow: hidden;
 }

@@ -15,8 +15,8 @@ export const CreateAccountButton = () => {
 
   return (
     <Button
-      style='pink'
-      outline='true'
+      style='primary'
+      outline={true}
       className={styles.authButton}
       onClick={() => handleClick()}
     >

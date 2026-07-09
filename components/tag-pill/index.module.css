@@ -1,18 +1,55 @@
 .container {
   display: flex;
-  overflow-x: scroll;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 .container::-webkit-scrollbar {
   display: none;
 }
 
+.container.overflowing {
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+  mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+}
+
 .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin-bottom: var(--space-2);
-  padding: var(--space-1) var(--space-4);
+  padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2);
   outline: none;
-  border: 1px solid var(--purple-border);
+  border: 1px solid var(--tag-color, var(--color-primary-border));
   border-radius: var(--radius-lg);
   background: transparent;
+  color: var(--gray-700);
+  font-family: inherit;
+  font-size: var(--text-sm);
   text-wrap: nowrap;
   margin-right: var(--space-2);
+  cursor: pointer;
+}
+
+.pill:last-child {
+  margin-right: 0;
+}
+
+.icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.icon path, .icon rect {
+  fill: var(--tag-color, var(--gray-500));
+}
+
+.pill.selected {
+  background: var(--tag-color, var(--color-primary));
+  border-color: var(--tag-color, var(--color-primary));
+  color: white;
+}
+
+.pill.selected .icon path, .pill.selected .icon rect {
+  fill: white;
 }

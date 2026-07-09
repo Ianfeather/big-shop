@@ -39,7 +39,7 @@
     margin: 0 auto;
   }
   .grid {
-    grid-template-columns: 1fr 250px;
+    grid-template-columns: 1fr 280px;
     grid-gap: 1rem;
   }
   .sideBarContainer {

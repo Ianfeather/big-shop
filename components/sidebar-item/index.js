@@ -2,11 +2,12 @@ import icons from '@components/svg';
 import { getTagMeta } from '@components/tag-pill/tag-meta';
 import styles from './index.module.css';
 
-const ListItem = ({ id, name, tags = [], checked = false, onClick}) => {
-  const className = `${styles.listItem} ${checked ? styles.checked : ''}`;
+const ListItem = ({ id, name, tags = [], checked = false, onClick, variant = 'panel' }) => {
+  const className = `${styles.listItem} ${styles[variant]} ${checked ? styles.checked : ''}`;
   return (
     <li key={id} className={className}>
       <label htmlFor={id}>
+        { variant === 'chip' && <span className={styles.check} aria-hidden="true"></span> }
         <span className={styles.name}>{name}</span>
         {
           !!tags.length && (

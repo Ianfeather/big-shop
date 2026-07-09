@@ -4,6 +4,7 @@
      pass) still references it directly. */
   --color-primary: #b870eb;
   --color-primary-soft: #f0ebf4;
+  --color-primary-tint: #e3d7f0;
   --color-primary-border: #d7b1f3;
   --color-primary-muted: #cbb5dc;
   --color-accent: #eb70a4;

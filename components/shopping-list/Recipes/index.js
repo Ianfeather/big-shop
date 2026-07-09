@@ -11,12 +11,12 @@ const RecipeList = ({ recipes, recipeList, handleRecipeSelect, addExtraItem, cla
     <div className={className}>
       {
         hasSelectedRecipes && (
-          <div className={`${styles.recipeList} ${styles.module}`}>
-            <Heading>Selected Recipes</Heading>
+          <div className={`${styles.tintedPanel} ${styles.module}`}>
+            <Heading tone="tinted">Selected Recipes</Heading>
             <ul>
               {
                 recipes.filter(({id}) => recipeList[id])
-                  .map(recipe => <ListItem {...recipe} key={recipe.id} checked={true} onClick={handleRecipeSelect} />)
+                  .map(recipe => <ListItem {...recipe} key={recipe.id} checked={true} variant="chip" onClick={handleRecipeSelect} />)
               }
             </ul>
           </div>

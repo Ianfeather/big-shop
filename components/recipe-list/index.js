@@ -49,7 +49,7 @@ const RecipeList = ({ handleRecipeSelect, filterFn = () => true }) => {
   }
 
   return (
-    <>
+    <div className={styles.panel}>
       <SidebarHeading>All Recipes</SidebarHeading>
       <SidebarInput placeholder="Search..." onChange={(e) => setSidebarFilter(e.target.value)} value={sidebarFilter} />
       <SidebarTagFilter onChange={(value) => setTagsFilter(value)} value={tagsFilter} tags={tags}/>
@@ -65,11 +65,11 @@ const RecipeList = ({ handleRecipeSelect, filterFn = () => true }) => {
                 }
                 return recipeTags.some(tag => tag === tagsFilter)
               })
-              .map(recipe => <ListItem {...recipe} key={recipe.id} checked={false} onClick={onClick}/>)
+              .map(recipe => <ListItem {...recipe} key={recipe.id} checked={false} variant="panel" onClick={onClick}/>)
           }
         </ul>
       </div>
-    </>
+    </div>
   )
 }
 

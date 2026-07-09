@@ -1,3 +1,9 @@
+.panel {
+  background: white;
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
 .recipeList {
   margin-top: var(--space-2);
 }

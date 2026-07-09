@@ -252,14 +252,29 @@ const DesignSystem = () => {
 
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>Sidebar controls</h2>
-            <div className={styles.card}>
-              <SidebarHeading>All Recipes</SidebarHeading>
-              <SidebarInput placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} />
-              <SidebarTagFilter tags={['Batch Cook', 'Vegetarian']} value={tagFilter} onChange={setTagFilter} />
-              <ul>
-                <ListItem id="ds-item-1" name="Shepherd's Pie" tags={['Batch Cook']} checked={false} onClick={() => {}} />
-                <ListItem id="ds-item-2" name="Veggie Chilli" tags={['Vegetarian', 'Batch Cook']} checked={true} onClick={() => {}} />
-              </ul>
+            <p className={styles.intro} style={{ marginBottom: '12px' }}>
+              Two <code>ListItem</code> variants: <code>panel</code> (default) for a
+              browsable list inside a white panel, <code>chip</code> for items already
+              committed to something - paired with <code>&lt;SidebarHeading tone=&quot;tinted&quot;&gt;</code>
+              inside a <code>--color-primary-tint</code> panel.
+            </p>
+            <div className={styles.componentGrid}>
+              <div className={styles.card} style={{ maxWidth: '280px' }}>
+                <SidebarHeading>All Recipes</SidebarHeading>
+                <SidebarInput placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} />
+                <SidebarTagFilter tags={['Batch Cook', 'Vegetarian']} value={tagFilter} onChange={setTagFilter} />
+                <ul>
+                  <ListItem id="ds-item-1" name="Shepherd's Pie" tags={['Batch Cook']} checked={false} onClick={() => {}} />
+                  <ListItem id="ds-item-2" name="Veggie Chilli" tags={['Vegetarian', 'Batch Cook']} checked={true} onClick={() => {}} />
+                </ul>
+              </div>
+              <div className={styles.card} style={{ maxWidth: '280px', background: 'var(--color-primary-tint)' }}>
+                <SidebarHeading tone="tinted">Selected Recipes</SidebarHeading>
+                <ul>
+                  <ListItem id="ds-item-3" name="Shepherd's Pie" tags={['Batch Cook']} checked={true} variant="chip" onClick={() => {}} />
+                  <ListItem id="ds-item-4" name="Veggie Chilli" tags={['Vegetarian', 'Batch Cook']} checked={true} variant="chip" onClick={() => {}} />
+                </ul>
+              </div>
             </div>
           </section>
 

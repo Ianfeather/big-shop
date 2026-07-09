@@ -2,6 +2,17 @@
   margin-bottom: var(--space-5);
 }
 
+.tintedPanel {
+  background: var(--color-primary-tint);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+}
+
+.tintedPanel ul {
+  display: flex;
+  flex-direction: column;
+}
+
 .addButton {
   background: var(--color-primary);
   border: none;

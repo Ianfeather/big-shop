@@ -69,6 +69,28 @@ This gives real read/write behavior against an actual DB — no mocks, no
 special-casing in the frontend hooks — closest thing to prod available
 locally.
 
+**Multiple worktrees — isolate the docker compose project.** Docker Compose
+derives its project name from the directory basename by default, and every
+worktree of this repo is checked out into a directory named `big-shop`. That
+means running plain `docker compose` commands (`up`, `ps`, `exec`, `restart`,
+`logs`...) from a second worktree doesn't spin up isolated containers — it
+silently finds and operates on the *other* worktree's already-running
+containers, DB included, regardless of the `DB_PORT`/`API_PORT` overrides
+above (those only avoid port-binding conflicts; they don't change which
+project/containers compose resolves to). `docker inspect <container>
+--format '{{range .Mounts}}{{.Source}}{{end}}'` shows which worktree's
+source a running container is actually bind-mounted to if there's ever any
+doubt. To get a genuinely separate stack when working from a non-primary
+worktree, set an explicit project name and non-colliding ports, e.g.:
+```bash
+COMPOSE_PROJECT_NAME=bigshop-<worktree-name> DB_PORT=3309 API_PORT=8081 \
+  docker compose up -d db api
+```
+Tear it down the same way (`COMPOSE_PROJECT_NAME=... docker compose down -v`)
+when done — don't run bare `docker compose down`/migrations/`exec` against
+whatever project happens to already be running unless you've confirmed via
+`docker inspect` that it's actually this worktree's stack.
+
 **Faster-but-shallower path — JSON mocks, no backend at all:**
 1. In `.env.local`, set:
    - `NEXT_PUBLIC_DISABLE_AUTH=true` — both `pages/_app.js` and every consumer of

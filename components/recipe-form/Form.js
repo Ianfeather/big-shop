@@ -105,6 +105,22 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
     }));
   }
 
+  // The extractor can introduce a unit that isn't in the units list fetched at mount (e.g.
+  // "bunch") - whether ingredients arrive via appendIngredients or via initialRecipe (URL/camera
+  // import). Reconcile reactively rather than inline in each call site, since fetch ordering
+  // between the units request and an in-flight extraction isn't guaranteed.
+  useEffect(() => {
+    const unitNamesInRecipe = [...new Set(recipe.ingredients.map(i => i.unit).filter(Boolean))];
+    if (!unitNamesInRecipe.length) return;
+    setUnits(prevUnits => {
+      const missing = unitNamesInRecipe.filter(
+        unit => !prevUnits.some(u => u.name.toLowerCase() === unit.toLowerCase())
+      );
+      if (!missing.length) return prevUnits;
+      return [...prevUnits, ...missing.map(name => ({ id: `new-${name}`, name: capitalize(name) }))];
+    });
+  }, [recipe.ingredients]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function handleParseIngredients(e) {
     e.preventDefault();
     if (!bulkText.trim()) return;

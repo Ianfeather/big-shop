@@ -215,6 +215,9 @@ func AddRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 	if err = insertIngredients(recipe, db); err != nil {
 		return err
 	}
+	if err = insertUnits(recipe, db); err != nil {
+		return err
+	}
 	if err = insertParts(recipe, db); err != nil {
 		return err
 	}
@@ -246,6 +249,11 @@ func EditRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 	}
 
 	if err := insertIngredients(recipe, db); err != nil {
+		log.Println(err)
+		return err
+	}
+
+	if err := insertUnits(recipe, db); err != nil {
 		log.Println(err)
 		return err
 	}
@@ -305,41 +313,60 @@ func DeleteRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 }
 
 func insertIngredients(recipe common.Recipe, db *sql.DB) error {
-	ingredientQuery := "INSERT INTO ingredient (name) values "
-	for idx, ingredient := range recipe.Ingredients {
-		ingredientQuery += fmt.Sprintf("('%s')", ingredient.Name)
-		if idx != len(recipe.Ingredients)-1 {
-			ingredientQuery += ","
-		}
+	if len(recipe.Ingredients) == 0 {
+		return nil
 	}
-	ingredientQuery += " ON DUPLICATE KEY UPDATE id=id;"
+	placeholders := []string{}
+	placeholderValues := []interface{}{}
+	for _, ingredient := range recipe.Ingredients {
+		placeholders = append(placeholders, "(?)")
+		placeholderValues = append(placeholderValues, ingredient.Name)
+	}
+	query := fmt.Sprintf("INSERT INTO ingredient (name) VALUES %s ON DUPLICATE KEY UPDATE id=id;", strings.Join(placeholders, ","))
 
-	if _, err := db.Exec(ingredientQuery); err != nil {
+	if _, err := db.Exec(query, placeholderValues...); err != nil {
 		fmt.Println("could not insert ingredients")
 		return err
 	}
 	return nil
 }
 
-func insertParts(recipe common.Recipe, db *sql.DB) error {
-	partsQuery := "INSERT INTO part (recipe_id, ingredient_id, unit_id, quantity) VALUES "
-	for idx, ingredient := range recipe.Ingredients {
-		partsQuery += fmt.Sprintf("(%d, ", recipe.ID)
-		partsQuery += fmt.Sprintf("(SELECT id FROM ingredient WHERE name = '%s'),", ingredient.Name)
-		partsQuery += fmt.Sprintf("(SELECT id FROM unit WHERE name = '%s'),", ingredient.Unit)
-		partsQuery += fmt.Sprintf("%s) ", ingredient.Quantity)
-		if idx != len(recipe.Ingredients)-1 {
-			partsQuery += ","
-		} else {
-			partsQuery += ";"
-		}
+// insertUnits upserts every unit referenced by the recipe's ingredients, including a blank
+// ("no unit, just a count") entry where needed, mirroring insertIngredients. Without this, a
+// unit that doesn't already exist (e.g. "bunch") leaves part.unit_id with nothing to reference,
+// which fails the recipe save outright since that column is NOT NULL.
+func insertUnits(recipe common.Recipe, db *sql.DB) error {
+	if len(recipe.Ingredients) == 0 {
+		return nil
 	}
+	placeholders := []string{}
+	placeholderValues := []interface{}{}
+	for _, ingredient := range recipe.Ingredients {
+		placeholders = append(placeholders, "(?)")
+		placeholderValues = append(placeholderValues, ingredient.Unit)
+	}
+	query := fmt.Sprintf("INSERT INTO unit (name) VALUES %s ON DUPLICATE KEY UPDATE id=id;", strings.Join(placeholders, ","))
 
-	log.Println("partsQuery")
-	log.Println(partsQuery)
+	if _, err := db.Exec(query, placeholderValues...); err != nil {
+		fmt.Println("could not insert units")
+		return err
+	}
+	return nil
+}
 
-	_, err := db.Exec(partsQuery)
-	if err != nil {
+func insertParts(recipe common.Recipe, db *sql.DB) error {
+	if len(recipe.Ingredients) == 0 {
+		return nil
+	}
+	placeholders := []string{}
+	placeholderValues := []interface{}{}
+	for _, ingredient := range recipe.Ingredients {
+		placeholders = append(placeholders, "(?, (SELECT id FROM ingredient WHERE name = ?), (SELECT id FROM unit WHERE name = ?), ?)")
+		placeholderValues = append(placeholderValues, recipe.ID, ingredient.Name, ingredient.Unit, ingredient.Quantity)
+	}
+	query := fmt.Sprintf("INSERT INTO part (recipe_id, ingredient_id, unit_id, quantity) VALUES %s;", strings.Join(placeholders, ","))
+
+	if _, err := db.Exec(query, placeholderValues...); err != nil {
 		fmt.Println("could not insert part")
 		return err
 	}

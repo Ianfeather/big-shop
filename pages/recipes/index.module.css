@@ -24,6 +24,7 @@
 .photoIcon {
   width: 20px;
   height: 20px;
+  margin-right: 8px;
 }
 .photoIcon path {
   fill: white;
@@ -48,4 +49,57 @@
   font-size: 14px;
   margin: 5px 0 0;
   opacity: 0.8;
+}
+
+.sourceTabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.sourceTab {
+  border: none;
+  background-color: var(--light-purple);
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: bold;
+  color: var(--purple);
+  cursor: pointer;
+}
+
+.sourceTabActive {
+  background-color: var(--purple);
+  color: #fff;
+}
+
+.sourceSection {
+  margin-bottom: 20px;
+}
+
+.sourceSection label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.sourceInputGroup {
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+}
+
+.sourceInputGroup input {
+  flex-grow: 1;
+  padding: 8px 0;
+  border: none;
+  outline: none;
+  border-bottom: 1px solid #d7b1f3;
+  font-size: 16px;
+  font-family: inherit;
+}
+
+.sourceInputGroup input:focus {
+  border-bottom: 2px solid var(--purple);
 }

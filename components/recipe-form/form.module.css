@@ -9,43 +9,30 @@
   font-weight: bold;
 }
 
-.checkboxContainer label {
-  display: inline;
-  margin: 0 0 0 10px;
-  font-size: 14px;
-  font-weight: normal;
-}
-
 @media (min-width: 500px) {
   .form label {
     font-size: 18px;
   }
 }
 
-.metaGroup {
-  margin-bottom: 30px;
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0 40px;
+}
+
+@media (min-width: 1000px) {
+  .grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.gridCell {
+  min-width: 0;
 }
 
 .ingredientsGroup {
   margin-bottom: 30px;
-}
-
-.unmatchedIngredients {
-  margin-bottom: 20px;
-  border: 3px solid var(--red);
-  padding: 20px;
-  border-radius: 7px;
-  padding: 20px;
-}
-
-.unmatchedIngredients li {
-  list-style: disc;
-  margin-left: 20px;
-}
-
-.unmatchedHeading {
-  font-weight: bold;
-  margin-bottom: 10px;
 }
 
 .buttonContainer {
@@ -74,6 +61,7 @@
 
 .ingredientGroup {
   display: flex;
+  margin-bottom: 8px;
 }
 
 .ingredientGroup div {
@@ -95,10 +83,6 @@
 
 .group {
   margin-bottom: 30px;
-}
-
-.ingredientGroup {
-  margin-bottom: 8px;
 }
 
 .ingredientName {
@@ -168,10 +152,6 @@
   justify-content: center;
 }
 
-.heading {
-  font-weight: bold;
-}
-
 .addAnotherRecipe {
   margin-top: 20px;
   text-decoration: none;
@@ -201,24 +181,29 @@
   margin-bottom: 20px;
 }
 
-.addIngredientSection input {
-  background-color: var(--light-purple);
+.addIngredientHint {
+  font-size: 13px;
+  color: #7a7a7a;
+  margin-bottom: 14px;
 }
 
-.addIngredientGroup {
-  display: flex;
+.bulkTextarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #d7b1f3;
+  border-radius: 5px;
+  font-size: 15px;
+  font-family: inherit;
+  background-color: #fff;
+  margin-bottom: 14px;
+  resize: vertical;
 }
 
-.addIngredientTitle {
-  font-weight: bold;
-  font-size: 18px;
-  margin-bottom: 20px;
+.bulkTextarea:focus {
+  outline: none;
+  border-color: var(--purple);
 }
 
-.addIngredientInput {
-  flex-grow: 1;
-}
-
-.addIngredientButton {
-  margin-left: 20px;
+.bulkError {
+  margin-top: 14px;
 }

@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from 'react';
 import Button from '@components/button';
 import useFetch from 'use-http'
 import PhotoIcon from '@components/svg/photo';
+import useIngredientMetadata from '@hooks/use-ingredient-metadata';
 
 // Helper function to resize image
 const resizeImage = (file) => {
@@ -77,15 +78,29 @@ const resizeImage = (file) => {
   });
 };
 
+const SOURCE_TABS = [
+  { id: 'url', label: 'Recipe Link' },
+  { id: 'camera', label: 'Import from Camera' },
+  { id: 'manual', label: 'Enter Manually' },
+];
+
 const NewRecipe = () => {
   const title = 'Add New Recipe';
+  const [activeTab, setActiveTab] = useState('url');
   const [APIError, setAPIError] = useState(null);
   const [errorDetails, setErrorDetails] = useState(null);
   const [parsedRecipe, setParsedRecipe] = useState(null);
   const [processingJob, setProcessingJob] = useState(null);
+  const [urlValue, setUrlValue] = useState('');
+  const [urlFetched, setUrlFetched] = useState('');
   const imageInput = useRef(null);
+  const { ingredients: knownIngredients, units: knownUnits } = useIngredientMetadata();
 
   const { post, get, response, loading, error } = useFetch(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image`, {
+    cachePolicy: 'no-cache',
+  });
+
+  const { post: postUrl, response: urlResponse, loading: urlLoading } = useFetch(`${process.env.NEXT_PUBLIC_HOST}/api/parse-recipe-url`, {
     cachePolicy: 'no-cache',
   });
 
@@ -103,8 +118,7 @@ const NewRecipe = () => {
           setProcessingJob(null);
           try {
             let {name, ingredients, instructions: method} = JSON.parse(job.result);
-            let recipe = { name, ingredients, method, tags: [] }
-            setParsedRecipe(recipe);
+            setParsedRecipe({ name, ingredients, method, tags: [] });
           } catch (error) {
             setAPIError('Failed to parse recipe');
             setErrorDetails('The recipe data was corrupted. Please try again.');
@@ -177,36 +191,111 @@ const NewRecipe = () => {
     }
   };
 
+  const fetchFromUrl = async (rawUrl) => {
+    const trimmed = (rawUrl || '').trim();
+    if (!trimmed || trimmed === urlFetched) return;
+
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(trimmed);
+    } catch {
+      // Not a full URL yet - wait for more input rather than erroring on every keystroke.
+      return;
+    }
+
+    setAPIError(null);
+    setErrorDetails(null);
+    const result = await postUrl({ url: parsedUrl.href, knownIngredients, knownUnits });
+
+    if (!urlResponse.ok) {
+      setAPIError('Failed to fetch recipe');
+      setErrorDetails(result?.error || 'Could not extract a recipe from that link. Please check it and try again, or use Enter Manually.');
+      return;
+    }
+
+    setUrlFetched(trimmed);
+    setParsedRecipe({
+      name: result.name || '',
+      ingredients: result.ingredients || [],
+      method: result.method || '',
+      remoteUrl: parsedUrl.href,
+      tags: result.isVegetarian ? ['Vegetarian'] : []
+    });
+  };
+
   return (
     <Layout pageTitle={title}>
       <MainContent>
         <div className={styles.headerContainer}>
           <h1 className={styles.title}>{title}</h1>
-          <input
-            type="file"
-            id="imageInput"
-            accept="image/*"
-            capture="environment"
-            ref={imageInput}
-            className={styles.fileInput}
-            onChange={handleImageChange}
-          />
-          <Button className="" style="blue" onClick={handleImageClick}>
-            <PhotoIcon className={styles.photoIcon} />
-            { (loading || processingJob) && <Spinner>Processing image...</Spinner>}
-          </Button>
         </div>
+
+        <div className={styles.sourceTabs}>
+          {
+            SOURCE_TABS.map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                className={`${styles.sourceTab} ${activeTab === tab.id ? styles.sourceTabActive : ''}`}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))
+          }
+        </div>
+
+        { activeTab === 'url' && (
+          <div className={styles.sourceSection}>
+            <label htmlFor="recipe-url-input">Recipe URL</label>
+            <div className={styles.sourceInputGroup}>
+              <input
+                id="recipe-url-input"
+                placeholder="https://"
+                autoComplete="off"
+                type="text"
+                value={urlValue}
+                onChange={(e) => setUrlValue(e.target.value)}
+                onBlur={(e) => fetchFromUrl(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); fetchFromUrl(urlValue); } }}
+              />
+              <Button style="blue" icon="tick" onClick={(e) => { e.preventDefault(); fetchFromUrl(urlValue); }}>
+                Fetch
+                { urlLoading && <Spinner className={styles.loadingIngredients}>Fetching...</Spinner>}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        { activeTab === 'camera' && (
+          <div className={styles.sourceSection}>
+            <input
+              type="file"
+              id="imageInput"
+              accept="image/*"
+              capture="environment"
+              ref={imageInput}
+              className={styles.fileInput}
+              onChange={handleImageChange}
+            />
+            <Button style="blue" onClick={handleImageClick}>
+              <PhotoIcon className={styles.photoIcon} />
+              Take or upload a photo
+              { (loading || processingJob) && <Spinner className={styles.loadingIngredients}>Processing image...</Spinner>}
+            </Button>
+          </div>
+        )}
+
         { APIError && (
           <div className={styles.errorContainer}>
             <p className={styles.error}>{APIError}</p>
             { errorDetails && <p className={styles.errorDetails}>{errorDetails}</p> }
           </div>
         )}
-        {
-          parsedRecipe ?
-            <Form initialRecipe={parsedRecipe} mode="new"/> :
-            <Form mode="new"/>
-        }
+
+        { (activeTab === 'manual' || parsedRecipe) && (
+          <Form initialRecipe={parsedRecipe || {}} mode="new"/>
+        )}
       </MainContent>
     </Layout>
   )

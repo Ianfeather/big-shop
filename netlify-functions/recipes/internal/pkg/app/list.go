@@ -15,54 +15,6 @@ type ListItem struct {
 	Name     string
 }
 
-// CombineIngredients creates combined values/units
-func CombineIngredients(r []common.Recipe) map[string]*common.ListIngredient {
-	parentUnit := map[string]string{
-		"gram":       "kilogram",
-		"millilitre": "litre",
-	}
-	childUnit := map[string]string{
-		"kilogram": "gram",
-		"litre":    "millilitre",
-	}
-
-	ingredientList := make(map[string]*common.ListIngredient)
-	for _, recipe := range r {
-		for _, ingredient := range recipe.Ingredients {
-			if q, err := strconv.ParseFloat(ingredient.Quantity, 64); err == nil {
-				if childUnit, isParentUnit := childUnit[ingredient.Unit]; isParentUnit {
-					q = q * 1000
-					ingredient.Unit = childUnit
-				}
-				if existingIngredient, exists := ingredientList[ingredient.Name]; exists {
-					existingIngredient.Quantity = existingIngredient.Quantity + q
-				} else {
-					newIngredient := common.ListIngredient{
-						Unit:       ingredient.Unit,
-						Quantity:   q,
-						IsBought:   false,
-						Department: ingredient.Department,
-						RecipeID:   recipe.ID,
-					}
-					ingredientList[ingredient.Name] = &newIngredient
-				}
-			}
-		}
-	}
-
-	for key, value := range ingredientList {
-		if value.Quantity < 1000 {
-			continue
-		}
-		if parentUnit, exists := parentUnit[value.Unit]; exists {
-			ingredientList[key].Unit = parentUnit
-			ingredientList[key].Quantity = ingredientList[key].Quantity / 1000
-		}
-	}
-
-	return ingredientList
-}
-
 func (a *App) getListHandler(w http.ResponseWriter, req *http.Request) {
 	userID := req.Context().Value(contextKey("userID")).(string)
 

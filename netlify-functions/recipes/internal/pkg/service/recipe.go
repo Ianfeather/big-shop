@@ -247,6 +247,11 @@ func AddRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 	id, err := res.LastInsertId()
 	recipe.ID = int(id)
 
+	newIngredientNames, err := NewIngredientNames(ingredientNames(recipe), db)
+	if err != nil {
+		log.Println("could not determine new ingredient names:", err)
+	}
+
 	if err = insertIngredients(recipe, db); err != nil {
 		return err
 	}
@@ -256,6 +261,11 @@ func AddRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 	if err = insertTags(recipe, db); err != nil {
 		return err
 	}
+
+	// Best-effort: propose a preferred unit/average weight for any
+	// ingredient this recipe introduces for the first time.
+	ClassifyNewIngredients(newIngredientNames, db)
+
 	return nil
 }
 
@@ -280,6 +290,11 @@ func EditRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 		return err
 	}
 
+	newIngredientNames, err := NewIngredientNames(ingredientNames(recipe), db)
+	if err != nil {
+		log.Println("could not determine new ingredient names:", err)
+	}
+
 	if err := insertIngredients(recipe, db); err != nil {
 		log.Println(err)
 		return err
@@ -299,6 +314,11 @@ func EditRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 	if err = insertTags(recipe, db); err != nil {
 		return err
 	}
+
+	// Best-effort: propose a preferred unit/average weight for any
+	// ingredient this recipe introduces for the first time.
+	ClassifyNewIngredients(newIngredientNames, db)
+
 	return nil
 }
 
@@ -337,6 +357,20 @@ func DeleteRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 	}
 
 	return nil
+}
+
+// ingredientNames returns the deduplicated, non-empty ingredient names on a recipe.
+func ingredientNames(recipe common.Recipe) []string {
+	seen := make(map[string]bool, len(recipe.Ingredients))
+	names := make([]string, 0, len(recipe.Ingredients))
+	for _, ingredient := range recipe.Ingredients {
+		if ingredient.Name == "" || seen[ingredient.Name] {
+			continue
+		}
+		seen[ingredient.Name] = true
+		names = append(names, ingredient.Name)
+	}
+	return names
 }
 
 func insertIngredients(recipe common.Recipe, db *sql.DB) error {

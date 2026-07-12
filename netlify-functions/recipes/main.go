@@ -12,6 +12,7 @@ import (
 
 	"recipes/internal/pkg/app"
 	"recipes/internal/pkg/common"
+	"recipes/internal/pkg/service"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -23,6 +24,7 @@ import (
 
 var negroniLambda *negroniadapter.NegroniAdapter
 var router *negroni.Negroni
+var appEnv *common.Env
 
 func init() {
 	mysql.RegisterTLSConfig("tidb", &tls.Config{
@@ -42,6 +44,7 @@ func init() {
 	}
 
 	env := &common.Env{DB: db}
+	appEnv = env
 
 	application, err := app.NewApp(env)
 
@@ -65,7 +68,8 @@ func handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.API
 
 func main() {
 	args := os.Args
-	if len(args) > 1 && args[1] == "dev" {
+	switch {
+	case len(args) > 1 && args[1] == "dev":
 		server := http.Server{
 			Addr:         ":8080",
 			ReadTimeout:  3000 * time.Millisecond,
@@ -73,7 +77,14 @@ func main() {
 			Handler:      router,
 		}
 		server.ListenAndServe()
-	} else {
+	case len(args) > 1 && args[1] == "backfill-ingredients":
+		// One-off: propose a preferred_unit/average_weight_grams for every
+		// ingredient that doesn't have one yet, via the same LLM
+		// classification new ingredients get. See spec/unit-normalisation.md.
+		if err := service.BackfillIngredientClassifications(appEnv.DB); err != nil {
+			log.Fatalf("backfill failed: %v", err)
+		}
+	default:
 		lambda.Start(handler)
 	}
 }

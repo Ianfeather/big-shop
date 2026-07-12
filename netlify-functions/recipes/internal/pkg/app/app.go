@@ -146,6 +146,7 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, error) {
 
 	router.HandleFunc(base+"/recipes", a.recipesHandler).Methods("GET")
 	router.HandleFunc(base+"/ingredients", a.ingredientsHandler).Methods("GET")
+	router.HandleFunc(base+"/ingredient", a.updateIngredientHandler).Methods("PATCH")
 	router.HandleFunc(base+"/recipe/{slug:[a-zA-Z-]+}", a.recipeHandlerBySlug).Methods("GET")
 	router.HandleFunc(base+"/recipe/{id:[0-9]+}", a.recipeHandlerByID).Methods("GET")
 	router.HandleFunc(base+"/recipe", a.addRecipeHandler).Methods("POST")

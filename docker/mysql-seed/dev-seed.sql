@@ -7,9 +7,15 @@
 INSERT INTO `user` (id, name, email) VALUES ('local-dev-user', 'Local Dev', 'dev@localhost');
 INSERT INTO `account_user` (user_id, account_id) VALUES ('local-dev-user', 1);
 
-INSERT INTO `unit` (name) VALUES
-  ('gram'), ('kilogram'), ('millilitre'), ('litre'),
-  ('teaspoon'), ('tablespoon'), ('packet'), ('whole'), ('clove'), ('pinch');
+-- unit_type/base_factor set inline here (matching migrations/016_unit_normalisation.sql's
+-- classification) rather than relying on that migration's UPDATE statements: on a fresh
+-- DB, all migrations run before this seed file inserts any unit rows, so an UPDATE ... WHERE
+-- name = 'gram' at migration time would match nothing and silently no-op.
+INSERT INTO `unit` (name, unit_type, base_factor) VALUES
+  ('gram', 'weight', 1), ('kilogram', 'weight', 1000),
+  ('millilitre', 'volume', 1), ('litre', 'volume', 1000),
+  ('teaspoon', 'volume', 5), ('tablespoon', 'volume', 15),
+  ('packet', 'count', 1), ('whole', 'count', 1), ('clove', 'count', 1), ('pinch', 'count', 1);
 
 INSERT INTO `ingredient` (name) VALUES
   ('Spaghetti'), ('Beef Mince'), ('Onion'), ('Garlic Clove'),

@@ -14,14 +14,21 @@ func getIngredientsByRecipeID(id int, db *sql.DB) ([]common.Ingredient, error) {
 		SELECT
 			ingredient.name as name,
 			unit.name as unit,
+			unit.unit_type as unit_type,
+			unit.base_factor as base_factor,
 			quantity,
-			department.name as department
+			department.name as department,
+			ingredient.average_weight_grams as average_weight_grams,
+			preferred_unit.name as preferred_unit,
+			preferred_unit.unit_type as preferred_unit_type,
+			preferred_unit.base_factor as preferred_unit_base_factor
 		FROM
 			part
 			INNER JOIN ingredient on ingredient_id = ingredient.id
 			INNER JOIN unit on unit_id = unit.id
 			LEFT JOIN ingredient_department on ingredient_department.ingredient_id = ingredient.id
 			LEFT JOIN department on department.id = ingredient_department.department_id
+			LEFT JOIN unit preferred_unit on ingredient.preferred_unit_id = preferred_unit.id
 		WHERE
 		recipe_id = ?;
 	`
@@ -35,8 +42,23 @@ func getIngredientsByRecipeID(id int, db *sql.DB) ([]common.Ingredient, error) {
 
 	for results.Next() {
 		var department sql.NullString
+		var averageWeightGrams sql.NullFloat64
+		var preferredUnit sql.NullString
+		var preferredUnitType sql.NullString
+		var preferredUnitBaseFactor sql.NullFloat64
 		ingredient := common.Ingredient{}
-		err = results.Scan(&ingredient.Name, &ingredient.Unit, &ingredient.Quantity, &department)
+		err = results.Scan(
+			&ingredient.Name,
+			&ingredient.Unit,
+			&ingredient.UnitType,
+			&ingredient.BaseFactor,
+			&ingredient.Quantity,
+			&department,
+			&averageWeightGrams,
+			&preferredUnit,
+			&preferredUnitType,
+			&preferredUnitBaseFactor,
+		)
 
 		if err != nil {
 			log.Println(err)
@@ -47,6 +69,19 @@ func getIngredientsByRecipeID(id int, db *sql.DB) ([]common.Ingredient, error) {
 			ingredient.Department = department.String
 		} else {
 			ingredient.Department = ""
+		}
+
+		if averageWeightGrams.Valid {
+			ingredient.AverageWeightGrams = averageWeightGrams.Float64
+		}
+		if preferredUnit.Valid {
+			ingredient.PreferredUnit = preferredUnit.String
+		}
+		if preferredUnitType.Valid {
+			ingredient.PreferredUnitType = preferredUnitType.String
+		}
+		if preferredUnitBaseFactor.Valid {
+			ingredient.PreferredUnitBaseFactor = preferredUnitBaseFactor.Float64
 		}
 
 		ingredients = append(ingredients, ingredient)

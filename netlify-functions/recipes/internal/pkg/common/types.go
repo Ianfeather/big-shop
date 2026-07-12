@@ -25,6 +25,19 @@ type Ingredient struct {
 	Unit       string `json:"unit"`
 	Quantity   string `json:"quantity"`
 	Department string `json:"department"`
+
+	// The following are populated from the unit/ingredient lookup tables (see
+	// getIngredientsByRecipeID) and used by CombineIngredients to aggregate
+	// quantities across recipes; they're not supplied by callers creating or
+	// editing a recipe.
+	UnitType   string  `json:"unitType,omitempty"`   // weight | volume | count
+	BaseFactor float64 `json:"baseFactor,omitempty"` // how many of UnitType's base unit one of Unit represents
+
+	AverageWeightGrams float64 `json:"averageWeightGrams,omitempty"` // 0 = unknown
+
+	PreferredUnit           string  `json:"preferredUnit,omitempty"`
+	PreferredUnitType       string  `json:"preferredUnitType,omitempty"`
+	PreferredUnitBaseFactor float64 `json:"preferredUnitBaseFactor,omitempty"`
 }
 
 // Tag contains tag fields

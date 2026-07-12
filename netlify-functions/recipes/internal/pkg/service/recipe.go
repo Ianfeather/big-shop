@@ -374,16 +374,20 @@ func ingredientNames(recipe common.Recipe) []string {
 }
 
 func insertIngredients(recipe common.Recipe, db *sql.DB) error {
-	ingredientQuery := "INSERT INTO ingredient (name) values "
-	for idx, ingredient := range recipe.Ingredients {
-		ingredientQuery += fmt.Sprintf("('%s')", ingredient.Name)
-		if idx != len(recipe.Ingredients)-1 {
-			ingredientQuery += ","
-		}
+	if len(recipe.Ingredients) == 0 {
+		return nil
 	}
-	ingredientQuery += " ON DUPLICATE KEY UPDATE id=id;"
 
-	if _, err := db.Exec(ingredientQuery); err != nil {
+	placeholders := make([]string, len(recipe.Ingredients))
+	args := make([]interface{}, len(recipe.Ingredients))
+	for i, ingredient := range recipe.Ingredients {
+		placeholders[i] = "(?)"
+		args[i] = ingredient.Name
+	}
+
+	query := fmt.Sprintf("INSERT INTO ingredient (name) VALUES %s ON DUPLICATE KEY UPDATE id=id;", strings.Join(placeholders, ","))
+
+	if _, err := db.Exec(query, args...); err != nil {
 		fmt.Println("could not insert ingredients")
 		return err
 	}
@@ -391,24 +395,20 @@ func insertIngredients(recipe common.Recipe, db *sql.DB) error {
 }
 
 func insertParts(recipe common.Recipe, db *sql.DB) error {
-	partsQuery := "INSERT INTO part (recipe_id, ingredient_id, unit_id, quantity) VALUES "
-	for idx, ingredient := range recipe.Ingredients {
-		partsQuery += fmt.Sprintf("(%d, ", recipe.ID)
-		partsQuery += fmt.Sprintf("(SELECT id FROM ingredient WHERE name = '%s'),", ingredient.Name)
-		partsQuery += fmt.Sprintf("(SELECT id FROM unit WHERE name = '%s'),", ingredient.Unit)
-		partsQuery += fmt.Sprintf("%s) ", ingredient.Quantity)
-		if idx != len(recipe.Ingredients)-1 {
-			partsQuery += ","
-		} else {
-			partsQuery += ";"
-		}
+	if len(recipe.Ingredients) == 0 {
+		return nil
 	}
 
-	log.Println("partsQuery")
-	log.Println(partsQuery)
+	placeholders := make([]string, len(recipe.Ingredients))
+	args := make([]interface{}, 0, len(recipe.Ingredients)*4)
+	for i, ingredient := range recipe.Ingredients {
+		placeholders[i] = "(?, (SELECT id FROM ingredient WHERE name = ?), (SELECT id FROM unit WHERE name = ?), ?)"
+		args = append(args, recipe.ID, ingredient.Name, ingredient.Unit, ingredient.Quantity)
+	}
 
-	_, err := db.Exec(partsQuery)
-	if err != nil {
+	query := fmt.Sprintf("INSERT INTO part (recipe_id, ingredient_id, unit_id, quantity) VALUES %s;", strings.Join(placeholders, ","))
+
+	if _, err := db.Exec(query, args...); err != nil {
 		fmt.Println("could not insert part")
 		return err
 	}

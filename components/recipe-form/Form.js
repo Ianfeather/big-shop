@@ -17,16 +17,6 @@ const capitalize = (str) => {
   return [first.toUpperCase(), ...rest].join('');
 }
 
-// Snaps a parsed ingredient name to an existing canonical ingredient (case
-// insensitive exact match) as a cheap safety net on top of the LLM prompt's
-// own instruction to reuse known names, so near-identical wording doesn't
-// silently fragment into a duplicate ingredient.
-function matchCanonicalIngredient(name, knownIngredientNames) {
-  const normalized = (name || '').trim().toLowerCase();
-  const match = knownIngredientNames.find((known) => known.toLowerCase() === normalized);
-  return match || (name || '').trim();
-}
-
 export default function Form({initialRecipe = {}, mode = 'new'}) {
   const bareRecipe = { name: '', remoteUrl: '', notes: '', method: '', ingredients: [], tags: []};
 
@@ -95,7 +85,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
 
   function appendIngredients(parsedIngredients) {
     const newIngredients = parsedIngredients.map(({ name, quantity, unit }) => ({
-      name: matchCanonicalIngredient(name, ingredients),
+      name: (name || '').trim(),
       quantity: quantity || '',
       unit: unit || ''
     }));

@@ -116,13 +116,8 @@ const NewRecipe = () => {
         if (job.status === 'completed') {
           clearInterval(pollInterval);
           setProcessingJob(null);
-          try {
-            let {name, ingredients, instructions: method} = JSON.parse(job.result);
-            setParsedRecipe({ name, ingredients, method, tags: [] });
-          } catch (error) {
-            setAPIError('Failed to parse recipe');
-            setErrorDetails('The recipe data was corrupted. Please try again.');
-          }
+          const { name, ingredients, method, tags } = job.result;
+          setParsedRecipe({ name, ingredients, method, tags });
         } else if (job.status === 'failed') {
           clearInterval(pollInterval);
           setProcessingJob(null);
@@ -168,6 +163,8 @@ const NewRecipe = () => {
 
       const formData = new FormData();
       formData.append('image', resizedBlob, file.name);
+      formData.append('knownIngredients', JSON.stringify(knownIngredients));
+      formData.append('knownUnits', JSON.stringify(knownUnits));
 
       const { jobId } = await post(formData);
 
@@ -219,7 +216,7 @@ const NewRecipe = () => {
       ingredients: result.ingredients || [],
       method: result.method || '',
       remoteUrl: parsedUrl.href,
-      tags: result.isVegetarian ? ['Vegetarian'] : []
+      tags: result.tags || []
     });
   };
 

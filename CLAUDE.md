@@ -21,7 +21,15 @@ npm run package      # Lint and build (used in deployment)
 
 ### Full Stack Development
 ```bash
-./build.sh           # Build frontend + run Go tests (production build)
+./build.sh                  # Build frontend + run Go tests (production build).
+                             # This is Netlify's actual build command (netlify.toml),
+                             # run in a sandbox with Go provisioned natively - no
+                             # Docker available there. Requires Go installed locally
+                             # to run this yourself.
+./scripts/build-local.sh    # Same checks, for machines without Go installed: runs
+                             # the Go steps (fmt/test/openapi-drift-check) inside the
+                             # api container's Go toolchain via docker compose instead.
+                             # Local dev only - not what Netlify runs.
 ```
 
 ### Local Development Setup

@@ -58,11 +58,10 @@ func (a *App) createList(ctx context.Context, input *CreateListInput) (*Shopping
 
 	if err != nil {
 		if err == service.ErrInvalidRecipeID {
-			http.Error(w, "Cannot parse recipe id", http.StatusBadRequest)
-			return
+			return nil, huma.Error400BadRequest("Cannot parse recipe id")
 		}
 		log.Println("Cannot generate shopping list")
-		http.Error(w, "Cannot generate shopping list", http.StatusInternalServerError)
+		return nil, huma.Error500InternalServerError("Cannot generate shopping list")
 	}
 
 	return &ShoppingListOutput{Body: *list}, nil

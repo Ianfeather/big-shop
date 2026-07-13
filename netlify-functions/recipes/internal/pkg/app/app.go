@@ -11,6 +11,8 @@ import (
 	"recipes/internal/pkg/common"
 
 	jwtmiddleware "github.com/auth0/go-jwt-middleware"
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humamux"
 	"github.com/form3tech-oss/jwt-go"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
@@ -104,8 +106,10 @@ func getPemCert(token *jwt.Token) (string, error) {
 	return cert, nil
 }
 
-// GetRouter returns the application router
-func (a *App) GetRouter(base string) (*negroni.Negroni, error) {
+// GetRouter returns the application router and the Huma API instance backing
+// it, from which the OpenAPI spec can be generated (see the `openapi` mode in
+// main.go) without needing to start a server or hold a DB connection.
+func (a *App) GetRouter(base string) (*negroni.Negroni, huma.API, error) {
 
 	jwtMiddleware := jwtmiddleware.New(jwtmiddleware.Options{
 		ValidationKeyGetter: func(token *jwt.Token) (interface{}, error) {
@@ -144,29 +148,24 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, error) {
 
 	router := mux.NewRouter()
 
-	router.HandleFunc(base+"/recipes", a.recipesHandler).Methods("GET")
-	router.HandleFunc(base+"/ingredients", a.ingredientsHandler).Methods("GET")
-	router.HandleFunc(base+"/recipe/{slug:[a-zA-Z-]+}", a.recipeHandlerBySlug).Methods("GET")
-	router.HandleFunc(base+"/recipe/{id:[0-9]+}", a.recipeHandlerByID).Methods("GET")
-	router.HandleFunc(base+"/recipe", a.addRecipeHandler).Methods("POST")
-	router.HandleFunc(base+"/recipe", a.editRecipeHandler).Methods("PUT")
-	router.HandleFunc(base+"/recipe", a.deleteRecipeHandler).Methods("DELETE")
-	router.HandleFunc(base+"/shopping-list", a.getListHandler).Methods("GET")
-	router.HandleFunc(base+"/shopping-list", a.createListHandler).Methods("POST")
-	router.HandleFunc(base+"/shopping-list/buy", a.buyListItemHandler).Methods("PATCH")
-	router.HandleFunc(base+"/shopping-list/extra", a.addExtraListItem).Methods("POST")
-	router.HandleFunc(base+"/shopping-list/clear", a.clearListHandler).Methods("DELETE")
-	router.HandleFunc(base+"/units", a.getUnitsHandler).Methods("GET")
-	router.HandleFunc(base+"/tags", a.getTagsHandler).Methods("GET")
-	router.HandleFunc(base+"/account", a.getAccount).Methods("GET")
-	router.HandleFunc(base+"/account/add", a.addUserToAccount).Methods("POST")
-	router.HandleFunc(base+"/account/remove", a.removeUserFromAccount).Methods("DELETE")
-	router.HandleFunc(base+"/user", a.addUser).Methods("POST")
-	router.HandleFunc(base+"/invite", a.inviteUser).Methods("POST")
-	router.HandleFunc(base+"/invites", a.getInvites).Methods("GET")
-	router.HandleFunc(base+"/invite/accept", a.acceptInvite).Methods("POST")
-	router.HandleFunc(base+"/invite/reject", a.rejectInvite).Methods("POST")
-	router.HandleFunc(base+"/shopping-list/history", a.getShoppingListHistory).Methods("GET")
+	// All operations are registered on this subrouter so that `base` (the
+	// Netlify function's path prefix) becomes the OpenAPI server URL rather
+	// than being repeated in every operation's path.
+	sub := router.PathPrefix(base).Subrouter()
+	config := huma.DefaultConfig("Big Shop API", "1.0.0")
+	config.Info.Description = "The Go API backing Big Shop, a recipe management and meal planning app."
+	config.Servers = []*huma.Server{{URL: base}}
+	api := humamux.New(sub, config)
+
+	a.registerRecipesRoutes(api)
+	a.registerIngredientsRoutes(api)
+	a.registerRecipeRoutes(api)
+	a.registerListRoutes(api)
+	a.registerUnitsRoutes(api)
+	a.registerTagsRoutes(api)
+	a.registerAccountRoutes(api)
+	a.registerUserRoutes(api)
+	a.registerInviteRoutes(api)
 
 	c := cors.New(cors.Options{
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
@@ -197,5 +196,5 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, error) {
 	}
 	n.UseHandler(router)
 
-	return n, nil
+	return n, api, nil
 }

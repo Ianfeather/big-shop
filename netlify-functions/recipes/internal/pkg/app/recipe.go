@@ -1,128 +1,140 @@
 package app
 
 import (
+	"context"
 	"database/sql"
-	"encoding/json"
 	"net/http"
 	"recipes/internal/pkg/common"
 	"recipes/internal/pkg/service"
 	"strconv"
 
-	"github.com/gorilla/mux"
+	"github.com/danielgtaylor/huma/v2"
 )
 
-func (a *App) recipeHandlerBySlug(w http.ResponseWriter, req *http.Request) {
-	userID := req.Context().Value(contextKey("userID")).(string)
-	slug := mux.Vars(req)["slug"]
-	recipe, err := service.GetRecipeBySlug(slug, userID, a.db)
+// RecipeByIDInput identifies a recipe by numeric ID or URL slug - both are
+// accepted on the same route since gorilla/mux previously disambiguated
+// them via two routes with mutually-exclusive path-segment regexes
+// (`[0-9]+` vs `[a-zA-Z-]+`), which Huma's OpenAPI path templates can't
+// represent (the regex leaks verbatim into the generated spec's path key).
+type RecipeByIDInput struct {
+	ID string `path:"id" doc:"Numeric Recipe ID or URL slug"`
+}
+
+// RecipeOutput is the response body for a single recipe.
+type RecipeOutput struct {
+	Body common.Recipe
+}
+
+// RecipeInput carries a full recipe body, used for add/edit.
+type RecipeInput struct {
+	Body common.Recipe
+}
+
+// DeleteRecipeInput carries just the ID of the recipe to delete - the
+// frontend only ever sends `{id}` for a delete, unlike add/edit which send
+// the full Recipe body.
+type DeleteRecipeInput struct {
+	Body struct {
+		ID int `json:"id"`
+	}
+}
+
+// StatusOutput is a simple ok/error status response.
+type StatusOutput struct {
+	Body common.SimpleResponse
+}
+
+func (a *App) getRecipe(ctx context.Context, input *RecipeByIDInput) (*RecipeOutput, error) {
+	userID := ctx.Value(contextKey("userID")).(string)
+
+	var recipe *common.Recipe
+	var err error
+	if id, convErr := strconv.Atoi(input.ID); convErr == nil {
+		recipe, err = service.GetRecipeByID(id, userID, a.db)
+	} else {
+		recipe, err = service.GetRecipeBySlug(input.ID, userID, a.db)
+	}
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			http.Error(w, "Recipe not found", http.StatusNotFound)
-			return
+			return nil, huma.Error404NotFound("Recipe not found")
 		}
-		http.Error(w, "Failed to parse recipe from db", http.StatusInternalServerError)
-		return
+		return nil, huma.Error500InternalServerError("Failed to parse recipe from db")
 	}
 
-	encoder := json.NewEncoder(w)
-	if encoder.Encode(recipe); err != nil {
-		http.Error(w, "Error encoding json", http.StatusInternalServerError)
-	}
+	return &RecipeOutput{Body: *recipe}, nil
 }
 
-func (a *App) recipeHandlerByID(w http.ResponseWriter, req *http.Request) {
-	userID := req.Context().Value(contextKey("userID")).(string)
-	id, err := strconv.Atoi(mux.Vars(req)["id"])
+func (a *App) addRecipe(ctx context.Context, input *RecipeInput) (*StatusOutput, error) {
+	userID := ctx.Value(contextKey("userID")).(string)
 
-	if err != nil {
-		http.Error(w, "Failed to parse id", http.StatusBadRequest)
-		return
+	if err := service.AddRecipe(input.Body, userID, a.db); err != nil {
+		return nil, huma.Error500InternalServerError("could not insert ingredients")
 	}
 
-	recipe, err := service.GetRecipeByID(id, userID, a.db)
-
-	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Recipe not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, "Failed to parse recipe from db", http.StatusInternalServerError)
-		return
-	}
-
-	encoder := json.NewEncoder(w)
-	if err = encoder.Encode(recipe); err != nil {
-		http.Error(w, "Error encoding json", http.StatusInternalServerError)
-	}
+	return &StatusOutput{Body: common.SimpleResponse{Status: "ok"}}, nil
 }
 
-func (a *App) addRecipeHandler(w http.ResponseWriter, req *http.Request) {
-	userID := req.Context().Value(contextKey("userID")).(string)
-	recipe := common.Recipe{}
+func (a *App) editRecipe(ctx context.Context, input *RecipeInput) (*StatusOutput, error) {
+	userID := ctx.Value(contextKey("userID")).(string)
 
-	if err := json.NewDecoder(req.Body).Decode(&recipe); err != nil {
-		http.Error(w, "Error decoding json body", http.StatusBadRequest)
-		return
+	if input.Body.ID == 0 {
+		return nil, huma.Error400BadRequest("Error: missing id")
 	}
 
-	if err := service.AddRecipe(recipe, userID, a.db); err != nil {
-		http.Error(w, "could not insert ingredients", http.StatusInternalServerError)
-		return
+	if err := service.EditRecipe(input.Body, userID, a.db); err != nil {
+		return nil, huma.Error500InternalServerError("could not update recipe")
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	encoder := json.NewEncoder(w)
-	if err := encoder.Encode("ok"); err != nil {
-		http.Error(w, "Error encoding json", http.StatusInternalServerError)
-	}
+	return &StatusOutput{Body: common.SimpleResponse{Status: "ok"}}, nil
 }
 
-func (a *App) editRecipeHandler(w http.ResponseWriter, req *http.Request) {
-	userID := req.Context().Value(contextKey("userID")).(string)
-	recipe := common.Recipe{}
-	encoder := json.NewEncoder(w)
+func (a *App) deleteRecipe(ctx context.Context, input *DeleteRecipeInput) (*StatusOutput, error) {
+	userID := ctx.Value(contextKey("userID")).(string)
 
-	if err := json.NewDecoder(req.Body).Decode(&recipe); err != nil {
-		http.Error(w, "Error decoding json body", http.StatusBadRequest)
-		return
+	if input.Body.ID == 0 {
+		return nil, huma.Error400BadRequest("Error: missing id")
 	}
 
-	if recipe.ID == 0 {
-		http.Error(w, "Error: missing id", http.StatusBadRequest)
-		return
+	if err := service.DeleteRecipe(common.Recipe{ID: input.Body.ID}, userID, a.db); err != nil {
+		return nil, huma.Error500InternalServerError("could not delete recipe")
 	}
 
-	if err := service.EditRecipe(recipe, userID, a.db); err != nil {
-		http.Error(w, "could not update recipe", http.StatusInternalServerError)
-		return
-	}
-
-	if err := encoder.Encode("ok"); err != nil {
-		http.Error(w, "Error encoding json", http.StatusInternalServerError)
-	}
+	return &StatusOutput{Body: common.SimpleResponse{Status: "ok"}}, nil
 }
 
-func (a *App) deleteRecipeHandler(w http.ResponseWriter, req *http.Request) {
-	userID := req.Context().Value(contextKey("userID")).(string)
-	recipe := common.Recipe{}
-	encoder := json.NewEncoder(w)
-	if err := json.NewDecoder(req.Body).Decode(&recipe); err != nil {
-		http.Error(w, "Error decoding json body", http.StatusBadRequest)
-		return
-	}
+func (a *App) registerRecipeRoutes(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "get-recipe",
+		Method:      http.MethodGet,
+		Path:        "/recipe/{id}",
+		Summary:     "Get a recipe by ID or slug",
+		Description: "Looks a Recipe up by numeric ID if `id` parses as an integer, otherwise by its URL slug.",
+		Tags:        []string{"Recipes"},
+	}, a.getRecipe)
 
-	if recipe.ID == 0 {
-		http.Error(w, "Error: missing id", http.StatusBadRequest)
-		return
-	}
+	huma.Register(api, huma.Operation{
+		OperationID:   "add-recipe",
+		Method:        http.MethodPost,
+		Path:          "/recipe",
+		Summary:       "Add a recipe",
+		Tags:          []string{"Recipes"},
+		DefaultStatus: http.StatusCreated,
+	}, a.addRecipe)
 
-	if err := service.DeleteRecipe(recipe, userID, a.db); err != nil {
-		http.Error(w, "could not delete recipe", http.StatusInternalServerError)
-		return
-	}
+	huma.Register(api, huma.Operation{
+		OperationID: "edit-recipe",
+		Method:      http.MethodPut,
+		Path:        "/recipe",
+		Summary:     "Edit a recipe",
+		Tags:        []string{"Recipes"},
+	}, a.editRecipe)
 
-	if err := encoder.Encode("ok"); err != nil {
-		http.Error(w, "Error encoding json", http.StatusInternalServerError)
-	}
+	huma.Register(api, huma.Operation{
+		OperationID: "delete-recipe",
+		Method:      http.MethodDelete,
+		Path:        "/recipe",
+		Summary:     "Delete a recipe",
+		Tags:        []string{"Recipes"},
+	}, a.deleteRecipe)
 }

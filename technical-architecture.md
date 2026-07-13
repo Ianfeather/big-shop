@@ -37,7 +37,7 @@ Located in `netlify-functions/recipes/`:
 - `internal/pkg/app/app.go`: App struct, JWT middleware, all route definitions (`GetRouter`, ~line 145)
 - `internal/pkg/app/*.go`: Feature handlers
 
-**Route list**: routes are registered in `internal/pkg/app/app.go`'s `GetRouter` — read there for the current, authoritative list rather than a restated copy here (this file's route list previously drifted out of sync, missing `GET /shopping-list/history`). All routes except `/health` require Auth0 JWT validation; the user ID is extracted from the JWT `sub` claim and threaded through context to handlers. See `follow-ups.md` for a planned OpenAPI spec generated from this route table.
+**Route list**: routes are registered in `internal/pkg/app/app.go`'s `GetRouter`, using [Huma](https://github.com/danielgtaylor/huma) (`humamux`, on top of the same `gorilla/mux` router) so each operation's request/response types double as its OpenAPI schema - no separate hand-maintained doc to drift. The generated spec is committed at [`docs/openapi.yaml`](./docs/openapi.yaml); regenerate it with `cd netlify-functions/recipes && go run . openapi > ../../docs/openapi.yaml` (no DB needed - route registration never touches it). `build.sh` fails the build if the committed spec is stale relative to `app.go`. All routes except `/health` require Auth0 JWT validation; the user ID is extracted from the JWT `sub` claim and threaded through context to handlers.
 
 ### API Testing
 For authenticated endpoints, copy the `Authorization` header from browser dev tools — no established curl/Postman workflow exists yet.

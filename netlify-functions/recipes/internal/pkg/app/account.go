@@ -1,54 +1,45 @@
 package app
 
 import (
+	"context"
 	"log"
+	"net/http"
 	"recipes/internal/pkg/common"
 	"recipes/internal/pkg/service"
 
-	"database/sql"
-	"encoding/json"
-	"net/http"
+	"github.com/danielgtaylor/huma/v2"
 )
 
-func (a *App) getAccount(w http.ResponseWriter, req *http.Request) {
-	encoder := json.NewEncoder(w)
-	userID := req.Context().Value(contextKey("userID")).(string)
+// AccountOutput is the response body for the current user's account.
+type AccountOutput struct {
+	Body common.Account
+}
+
+// AccountUserInput carries a user to add/remove from the account.
+type AccountUserInput struct {
+	Body common.User
+}
+
+func (a *App) getAccount(ctx context.Context, _ *struct{}) (*AccountOutput, error) {
+	userID := ctx.Value(contextKey("userID")).(string)
 	account, err := service.GetAccount(a.db, userID)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Account not found", http.StatusNotFound)
-			err = encoder.Encode(make([]string, 0))
-			return
-		}
 		log.Println(err)
-		http.Error(w, "Failed to get Account from db", http.StatusInternalServerError)
-		return
+		return nil, huma.Error500InternalServerError("Failed to get Account from db")
 	}
 
-	err = encoder.Encode(account)
-	if err != nil {
-		http.Error(w, "Error encoding json", http.StatusInternalServerError)
-	}
+	return &AccountOutput{Body: *account}, nil
 }
 
-func (a *App) addUserToAccount(w http.ResponseWriter, req *http.Request) {
-	encoder := json.NewEncoder(w)
-	userID := req.Context().Value(contextKey("userID")).(string)
-
-	newUser := common.User{}
-
-	if err := json.NewDecoder(req.Body).Decode(&newUser); err != nil {
-		http.Error(w, "Error decoding json body", http.StatusBadRequest)
-		return
-	}
+func (a *App) addUserToAccount(ctx context.Context, input *AccountUserInput) (*AccountOutput, error) {
+	userID := ctx.Value(contextKey("userID")).(string)
+	newUser := input.Body
 
 	accountID, err := service.GetAccountID(a.db, userID)
-
 	if err != nil {
 		log.Println("Error: current user is not associated with an account")
-		http.Error(w, "Current user is not associated with an account", http.StatusInternalServerError)
-		return
+		return nil, huma.Error500InternalServerError("Current user is not associated with an account")
 	}
 
 	// TODO: Fetch the user ID associated with the email from Auth0
@@ -56,48 +47,65 @@ func (a *App) addUserToAccount(w http.ResponseWriter, req *http.Request) {
 	newUser.Name = "Anna Feather"
 
 	// TODO: if the user doesn't exist, we should be able to invite them
-	err = service.AddUserToAccount(a.db, accountID, newUser)
-
-	if err != nil {
+	if err := service.AddUserToAccount(a.db, accountID, newUser); err != nil {
 		log.Println("failed to add user to account")
-		http.Error(w, "Failed to add user to account", http.StatusInternalServerError)
-		return
+		return nil, huma.Error500InternalServerError("Failed to add user to account")
 	}
 
-	// return the account object
 	account, err := service.GetAccount(a.db, userID)
-	err = encoder.Encode(account)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Failed to get Account from db")
+	}
+
+	return &AccountOutput{Body: *account}, nil
 }
 
-func (a *App) removeUserFromAccount(w http.ResponseWriter, req *http.Request) {
-	encoder := json.NewEncoder(w)
-	userID := req.Context().Value(contextKey("userID")).(string)
-
-	outgoingUser := common.User{}
-
-	if err := json.NewDecoder(req.Body).Decode(&outgoingUser); err != nil {
-		http.Error(w, "Error decoding json body", http.StatusBadRequest)
-		return
-	}
+func (a *App) removeUserFromAccount(ctx context.Context, input *AccountUserInput) (*AccountOutput, error) {
+	userID := ctx.Value(contextKey("userID")).(string)
+	outgoingUser := input.Body
 
 	accountID, err := service.GetAccountID(a.db, userID)
-
 	if err != nil {
 		log.Println("Error: current user is not associated with an account")
-		http.Error(w, "Current user is not associated with an account", http.StatusInternalServerError)
-		return
+		return nil, huma.Error500InternalServerError("Current user is not associated with an account")
 	}
 
 	// TODO: create the concept of admins
-	err = service.RemoveUserFromAccount(a.db, accountID, outgoingUser)
-
-	if err != nil {
+	if err := service.RemoveUserFromAccount(a.db, accountID, outgoingUser); err != nil {
 		log.Println("failed to remove user frorm account")
-		http.Error(w, "Failed to remove user frorm account", http.StatusInternalServerError)
-		return
+		return nil, huma.Error500InternalServerError("Failed to remove user frorm account")
 	}
 
-	// return the account object
 	account, err := service.GetAccount(a.db, userID)
-	err = encoder.Encode(account)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Failed to get Account from db")
+	}
+
+	return &AccountOutput{Body: *account}, nil
+}
+
+func (a *App) registerAccountRoutes(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "get-account",
+		Method:      http.MethodGet,
+		Path:        "/account",
+		Summary:     "Get the current user's account",
+		Tags:        []string{"Account"},
+	}, a.getAccount)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "add-user-to-account",
+		Method:      http.MethodPost,
+		Path:        "/account/add",
+		Summary:     "Add a user to the current account",
+		Tags:        []string{"Account"},
+	}, a.addUserToAccount)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "remove-user-from-account",
+		Method:      http.MethodDelete,
+		Path:        "/account/remove",
+		Summary:     "Remove a user from the current account",
+		Tags:        []string{"Account"},
+	}, a.removeUserFromAccount)
 }

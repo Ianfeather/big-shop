@@ -20,11 +20,14 @@ type ShoppingList struct {
 }
 
 // Ingredient contains ingredient fields
+// omitempty on Department: the frontend submits new/edited Ingredient Lines
+// as {name, quantity, unit} only - Department is resolved server-side from
+// the ingredient_department join table, never supplied by the client.
 type Ingredient struct {
 	Name       string `json:"name"`
 	Unit       string `json:"unit"`
 	Quantity   string `json:"quantity"`
-	Department string `json:"department"`
+	Department string `json:"department,omitempty"`
 }
 
 // Tag contains tag fields
@@ -34,11 +37,14 @@ type Tag struct {
 
 // Recipe contains recipe fields
 type Recipe struct {
-	Name        string       `json:"name"`
-	ID          int          `json:"id"`
+	Name string `json:"name"`
+	// omitempty: a new Recipe (POST /recipe) has no ID yet - the DB assigns
+	// one on insert. Huma infers required-ness from JSON tags, so without
+	// this a create request without an `id` would fail validation.
+	ID          int          `json:"id,omitempty"`
 	RemoteURL   string       `json:"remoteUrl"`
 	Notes       string       `json:"notes"`
-	Method       string       `json:"method"`
+	Method      string       `json:"method"`
 	Ingredients []Ingredient `json:"ingredients"`
 	Tags        []string     `json:"tags"`
 }
@@ -53,9 +59,12 @@ type ListIngredient struct {
 }
 
 // User object
+// omitempty on ID/Name: a new user (POST /user) and an invite (POST
+// /invite) are sent by the frontend with only a subset of these fields -
+// see the ID comment on Recipe above for why that matters to Huma.
 type User struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
+	ID    string `json:"id,omitempty"`
+	Name  string `json:"name,omitempty"`
 	Email string `json:"email"`
 }
 

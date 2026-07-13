@@ -1,31 +1,38 @@
 package app
 
 import (
+	"context"
 	"log"
+	"net/http"
+
 	"recipes/internal/pkg/service"
 
-	"database/sql"
-	"encoding/json"
-	"net/http"
+	"github.com/danielgtaylor/huma/v2"
 )
 
-func (a *App) getTagsHandler(w http.ResponseWriter, req *http.Request) {
-	encoder := json.NewEncoder(w)
+// TagsOutput is the response body for listing tags.
+type TagsOutput struct {
+	Body []string
+}
+
+func (a *App) getTags(ctx context.Context, _ *struct{}) (*TagsOutput, error) {
 	tags, err := service.GetAllTags(a.db)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Tags not found", http.StatusNotFound)
-			err = encoder.Encode(make([]string, 0))
-			return
-		}
 		log.Println(err)
-		http.Error(w, "Failed to get Tags from db", http.StatusInternalServerError)
-		return
+		return nil, huma.Error500InternalServerError("Failed to get tags from db")
 	}
 
-	err = encoder.Encode(tags)
-	if err != nil {
-		http.Error(w, "Error encoding json", http.StatusInternalServerError)
-	}
+	return &TagsOutput{Body: tags}, nil
+}
+
+func (a *App) registerTagsRoutes(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "list-tags",
+		Method:      http.MethodGet,
+		Path:        "/tags",
+		Summary:     "List tags",
+		Description: "Returns every Tag name used by any Recipe, used for autosuggest.",
+		Tags:        []string{"Tags"},
+	}, a.getTags)
 }

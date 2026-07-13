@@ -1,0 +1,22 @@
+.page {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.intro {
+  color: var(--gray-500);
+  margin-bottom: var(--space-6);
+}
+
+.intro code {
+  background: var(--gray-100);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+}
+
+.swaggerWrapper {
+  background: white;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--gray-200);
+  overflow: hidden;
+}

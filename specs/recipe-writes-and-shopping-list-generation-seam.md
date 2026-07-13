@@ -40,10 +40,9 @@ Owns, in order: fetch each recipe via `GetRecipeByID` (still one call per id, in
 
 ### Phase 5 — Tests against a fake `execer`
 
-Since the new interface is trivially fakeable (a plain struct recording calls, no mocking library needed) and this repo already has `go test` wired up (`list_test.go` exists, `CLAUDE.md` documents `go test ./...`), add:
+**Revised during implementation — the original scope below turned out to be structurally unachievable with a pure fake, for reasons specific to Go's standard library, not this codebase.** `AddRecipe`, `EditRecipe`, and `GenerateShoppingList` all take a concrete `*sql.DB` (not an interface) so they can call `.Begin()` — a fake can't be substituted for that parameter at all, since `*sql.DB` is a concrete type satisfied only by itself. Separately, `dbConn` (needed by `RemoveIngredientListItems`/`AddIngredientListItems`, and transitively `GetAccountID`) requires `QueryRow(...) *sql.Row`, and `sql.Row` has no exported constructor anywhere in `database/sql` — only `*sql.DB`/`*sql.Tx` can produce one. So neither "rolls back the whole `AddRecipe`/`EditRecipe` transaction" nor "`GenerateShoppingList`'s remove+add is atomic" is testable against the exported functions with a hand-written fake, without either a real database or a full fake SQL driver (`sql.Register`) — the latter being materially the same undertaking as the `sqlmock`/test-database options this spec's "Explicitly out of scope" section already ruled out.
 
-- A test that a failing `insertParts` (or any step) rolls back the whole `AddRecipe`/`EditRecipe` transaction — no partial writes survive.
-- A test that `GenerateShoppingList`'s remove+add is atomic — a failure in `AddIngredientListItems` after a successful `RemoveIngredientListItems` doesn't leave the Shopping List empty.
+What ships instead: fake-`execer` tests for `insertIngredients`/`insertUnits`/`insertParts`/`insertTags` (`service/recipe_test.go`) — these four take only `execer` (`Exec`, no `QueryRow`), so they're genuinely fakeable. Each test confirms the right SQL shape (one batched upsert/insert per call, `insertTags`'s delete-then-conditional-insert) and that a failing `Exec` propagates as an error without attempting the next step. This is real, new, deterministic coverage of the SQL-building/error-propagation logic — the actual transaction rollback and remove+add atomicity properties were instead verified live against a real MySQL database during Sessions 2 and 3 (forcing a real failure via a Tag FK-constraint violation, inspecting DB state before/after) — see those Sessions' state-file notes for what was checked and what passed.
 
 ## Decisions made (grilled — do not re-litigate without a load-bearing reason)
 
@@ -52,11 +51,11 @@ Since the new interface is trivially fakeable (a plain struct recording calls, n
 - **Interface scope**: the new `execer` interface is scoped to the specific helpers that need it (Phase 1's four, plus `RemoveIngredientListItems`/`AddIngredientListItems` in Phase 3) — not introduced as a package-wide querier pattern other service functions must adopt.
 - **`GenerateShoppingList` location**: `service/list.go`, matching the existing `app`/`service` split rather than living in `app/list.go`.
 - **Recipe-fetch pattern**: stays the existing N sequential `GetRecipeByID` calls. Batching into one query is a separate, later optimization, not part of this change.
-- **Testing**: add Go tests against a fake `execer` for the two rollback/atomicity properties above (Phase 5) — different call than the JS-side unit-test-runner question in `recipe-import-unification.md`, because Go already has test tooling here; only a DB/mocking layer was missing, and the new interface removes that blocker for free.
+- **Testing**: add Go tests against a fake `execer` (Phase 5) — different call than the JS-side unit-test-runner question in `recipe-import-unification.md`, because Go already has test tooling here. **Revised during implementation**: the fake can only cover `insertIngredients`/`insertUnits`/`insertParts`/`insertTags` (the only `execer`-only functions) — see Phase 5 for why the rollback/atomicity properties themselves aren't fake-testable at the `AddRecipe`/`EditRecipe`/`GenerateShoppingList` level, and were verified live against a real database instead.
 
 ## Explicitly out of scope
 
 - Batching the N-query recipe-fetch loop in `GenerateShoppingList`.
 - A package-wide querier interface applied to every other service function (`GetRecipeByID`, `GetShoppingList`, etc.).
 - Collapsing `AddRecipe`/`EditRecipe` into one `SaveRecipe`.
-- Any DB-backed integration test harness (`sqlmock`, `TestMain`, a test database) — the fake-`execer` unit tests in Phase 5 cover rollback/atomicity logic without needing one.
+- Any DB-backed integration test harness (`sqlmock`, `TestMain`, a test database, or a hand-written fake `sql.Driver`) — the fake-`execer` unit tests in Phase 5 cover the write-helpers' SQL-building/error-propagation logic; transaction rollback and remove+add atomicity were verified live instead (see Phase 5).

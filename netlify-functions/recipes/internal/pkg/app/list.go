@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"recipes/internal/pkg/common"
 	"recipes/internal/pkg/service"
-	"strconv"
 
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -15,54 +14,6 @@ import (
 type ListItem struct {
 	IsBought bool
 	Name     string
-}
-
-// CombineIngredients creates combined values/units
-func CombineIngredients(r []common.Recipe) map[string]*common.ListIngredient {
-	parentUnit := map[string]string{
-		"gram":       "kilogram",
-		"millilitre": "litre",
-	}
-	childUnit := map[string]string{
-		"kilogram": "gram",
-		"litre":    "millilitre",
-	}
-
-	ingredientList := make(map[string]*common.ListIngredient)
-	for _, recipe := range r {
-		for _, ingredient := range recipe.Ingredients {
-			if q, err := strconv.ParseFloat(ingredient.Quantity, 64); err == nil {
-				if childUnit, isParentUnit := childUnit[ingredient.Unit]; isParentUnit {
-					q = q * 1000
-					ingredient.Unit = childUnit
-				}
-				if existingIngredient, exists := ingredientList[ingredient.Name]; exists {
-					existingIngredient.Quantity = existingIngredient.Quantity + q
-				} else {
-					newIngredient := common.ListIngredient{
-						Unit:       ingredient.Unit,
-						Quantity:   q,
-						IsBought:   false,
-						Department: ingredient.Department,
-						RecipeID:   recipe.ID,
-					}
-					ingredientList[ingredient.Name] = &newIngredient
-				}
-			}
-		}
-	}
-
-	for key, value := range ingredientList {
-		if value.Quantity < 1000 {
-			continue
-		}
-		if parentUnit, exists := parentUnit[value.Unit]; exists {
-			ingredientList[key].Unit = parentUnit
-			ingredientList[key].Quantity = ingredientList[key].Quantity / 1000
-		}
-	}
-
-	return ingredientList
 }
 
 // ShoppingListOutput is the response body for the shopping list.
@@ -103,56 +54,14 @@ func (a *App) createList(ctx context.Context, input *CreateListInput) (*Shopping
 	userID := ctx.Value(contextKey("userID")).(string)
 	recipeIDs := input.Body
 
-	recipes := make([]common.Recipe, 0)
-	for i := 0; i < len(recipeIDs); i++ {
-		id, err := strconv.Atoi(recipeIDs[i])
-		if err != nil {
+	list, err := service.GenerateShoppingList(recipeIDs, userID, a.db)
+
+	if err != nil {
+		if err == service.ErrInvalidRecipeID {
 			return nil, huma.Error400BadRequest("Cannot parse recipe id")
 		}
-		recipe, err := service.GetRecipeByID(id, userID, a.db)
-		if err != nil {
-			return nil, huma.Error500InternalServerError("Cannot get recipe")
-		}
-		recipes = append(recipes, *recipe)
-	}
-
-	previousIngredients, err := service.GetIngredientListItems(userID, a.db)
-	if err != nil {
-		log.Println("Cannot get existing list items")
-		return nil, huma.Error500InternalServerError("Cannot get existing list items")
-	}
-
-	combinedIngredients := CombineIngredients(recipes)
-	for name, ingredient := range combinedIngredients {
-		if previous, ok := previousIngredients[name]; ok && previous.IsBought {
-			ingredient.IsBought = true
-		}
-	}
-
-	if err := service.RemoveIngredientListItems(userID, a.db); err != nil {
-		log.Println("Cannot delete list items")
-		return nil, huma.Error500InternalServerError("Cannot delete list items")
-	}
-
-	if len(combinedIngredients) > 0 {
-		if err := service.AddIngredientListItems(userID, combinedIngredients, a.db); err != nil {
-			log.Println("Cannot add list items")
-			return nil, huma.Error500InternalServerError("Cannot add list items")
-		}
-	}
-
-	// Log shopping list history for meal planning intelligence
-	if intRecipeIDs, err := service.GetRecipeIDsFromStrings(recipeIDs); err == nil {
-		if logErr := service.LogShoppingListEvent(userID, "add_recipe", intRecipeIDs, a.db); logErr != nil {
-			// Log error but don't fail the main operation
-			log.Printf("Failed to log shopping list history: %v", logErr)
-		}
-	}
-
-	list, err := service.GetShoppingList(userID, a.db)
-	if err != nil {
-		log.Println("Cannot get extra list items")
-		return nil, huma.Error500InternalServerError("Cannot get extra list items")
+		log.Println("Cannot generate shopping list")
+		return nil, huma.Error500InternalServerError("Cannot generate shopping list")
 	}
 
 	return &ShoppingListOutput{Body: *list}, nil

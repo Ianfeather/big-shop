@@ -1,8 +1,8 @@
 ---
 spec: follow-ups.md
-status: complete
+status: in-progress
 branch: implement/follow-ups-3-4-6
-pr: PENDING
+pr: https://github.com/Ianfeather/big-shop/pull/new/implement/follow-ups-3-4-6 (not yet created — `gh` CLI unavailable in this environment; branch is pushed, PR needs manual creation via this compare link or a `gh` install)
 ---
 
 ## Session 1: Fix RemoveUserFromAccount table name (#3)

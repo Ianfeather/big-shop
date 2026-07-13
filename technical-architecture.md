@@ -55,7 +55,7 @@ The recipe image extraction uses Netlify Blobs to store async job results; the f
 
 ## Database Schema
 
-Production: TiDB (MySQL-compatible). Migrations in `migrations/` applied manually, in order — there is no consolidated schema file, so `migrations/*.sql` (currently 16 files) is the authoritative source for exact columns/constraints.
+Production: TiDB (MySQL-compatible). Migrations in `migrations/` applied manually, in order — there is no consolidated schema file, so `migrations/*.sql` (currently 17 files) is the authoritative source for exact columns/constraints.
 
 | Table | Purpose |
 |-------|---------|

@@ -1,4 +1,5 @@
 import './styles.css'
+import 'swagger-ui-react/swagger-ui.css'
 import { Auth0Provider } from "@auth0/auth0-react";
 import { Provider as FetchProvider } from 'use-http';
 import { useRouter } from 'next/router';

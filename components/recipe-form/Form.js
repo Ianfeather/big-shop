@@ -21,7 +21,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
   const bareRecipe = { name: '', remoteUrl: '', notes: '', method: '', ingredients: [], tags: []};
 
   let useInitialRecipe = Object.keys(initialRecipe).length > 0;
-  let [recipe, setRecipe] = useState(useInitialRecipe ? initialRecipe : bareRecipe);
+  let [recipe, setRecipe] = useState(useInitialRecipe ? { ...bareRecipe, ...initialRecipe } : bareRecipe);
   let [saved, setSaved] = useState(false);
   let [units, setUnits] = useState([]);
   let [tags, setTags] = useState([]);
@@ -41,9 +41,9 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
 
   useEffect(() => {
     if (Object.keys(initialRecipe).length > 0) {
-      setRecipe(initialRecipe);
+      setRecipe({ ...bareRecipe, ...initialRecipe });
     }
-  }, [initialRecipe]);
+  }, [initialRecipe]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function getUnitsTagsAndIngredients() {
     if (useMocks) {

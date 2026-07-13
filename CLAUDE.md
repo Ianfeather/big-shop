@@ -121,6 +121,20 @@ cd netlify-functions/recipes
 go test ./... -v
 ```
 
+Frontend unit/component tests (Vitest + React Testing Library):
+```bash
+npm run test         # run once
+npm run test:watch   # watch mode
+```
+Config is `vitest.config.js`. Components/hooks/tests in this codebase write
+JSX in plain `.js` files (not `.jsx`), which neither Vite's built-in esbuild
+plugin nor `@vitejs/plugin-react`'s babel pass transforms out of the box —
+`vitest.config.js` has a small custom `jsx-in-js` plugin that runs every
+non-`node_modules` `.js` file through esbuild's JSX transform to handle this.
+Test files live next to the file under test (e.g. `components/button/index.test.js`,
+`hooks/use-page-visibility.test.js`) — see those two for the established
+pattern. No e2e framework is set up yet.
+
 Evals:
 ```bash
 npm run test:evals   # runs evals/run-evals.sh

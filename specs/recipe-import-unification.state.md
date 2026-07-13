@@ -2,7 +2,7 @@
 spec: specs/recipe-import-unification.md
 status: in-progress
 branch: implement/recipe-import-unification
-pr:
+pr: https://github.com/Ianfeather/big-shop/pull/new/implement/recipe-import-unification (not yet created - `gh` CLI unavailable/unauthenticated in this environment; branch is pushed, PR needs manual creation via this compare link or a `gh auth login`)
 ---
 
 ## Session 1: Shared extraction core (extract.js)

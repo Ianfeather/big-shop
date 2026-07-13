@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../../lib/extract-recipe-ingredients', () => ({
-  extractRecipeIngredients: vi.fn()
+vi.mock('../../lib/recipe-import/extract', () => ({
+  extractRecipe: vi.fn()
 }));
 
-import { extractRecipeIngredients } from '../../lib/extract-recipe-ingredients';
+import { extractRecipe } from '../../lib/recipe-import/extract';
 import handler from './parse-recipe-text';
 
 function mockRes() {
@@ -15,7 +15,7 @@ function mockRes() {
 }
 
 beforeEach(() => {
-  extractRecipeIngredients.mockReset();
+  extractRecipe.mockReset();
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
@@ -34,22 +34,31 @@ describe('parse-recipe-text handler', () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({ error: 'text is required' });
-    expect(extractRecipeIngredients).not.toHaveBeenCalled();
+    expect(extractRecipe).not.toHaveBeenCalled();
   });
 
   it('extracts and returns ingredients on success', async () => {
-    extractRecipeIngredients.mockResolvedValue({ ingredients: [{ name: 'egg', quantity: '2', unit: '' }] });
+    extractRecipe.mockResolvedValue({
+      name: '',
+      ingredients: [{ name: 'egg', quantity: '2', unit: '' }],
+      method: '',
+      tags: []
+    });
     const res = mockRes();
 
     await handler({ method: 'POST', body: { text: '2 eggs', knownIngredients: ['egg'], knownUnits: [] } }, res);
 
-    expect(extractRecipeIngredients).toHaveBeenCalledWith({ text: '2 eggs', knownIngredients: ['egg'], knownUnits: [] });
+    expect(extractRecipe).toHaveBeenCalledWith({
+      input: { type: 'text', text: '2 eggs' },
+      knownIngredients: ['egg'],
+      knownUnits: []
+    });
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ ingredients: [{ name: 'egg', quantity: '2', unit: '' }] });
   });
 
   it('returns a 500 with the error message when extraction fails', async () => {
-    extractRecipeIngredients.mockRejectedValue(new Error('boom'));
+    extractRecipe.mockRejectedValue(new Error('boom'));
     const res = mockRes();
 
     await handler({ method: 'POST', body: { text: '2 eggs' } }, res);

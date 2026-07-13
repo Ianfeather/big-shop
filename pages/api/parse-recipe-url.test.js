@@ -1,14 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-vi.mock('../../lib/extract-recipe-ingredients', () => ({
-  extractRecipeIngredients: vi.fn()
-}));
-vi.mock('../../lib/extract-recipe-method', () => ({
-  extractRecipeMethod: vi.fn()
+vi.mock('../../lib/recipe-import/extract', () => ({
+  extractRecipe: vi.fn()
 }));
 
-import { extractRecipeIngredients } from '../../lib/extract-recipe-ingredients';
-import { extractRecipeMethod } from '../../lib/extract-recipe-method';
+import { extractRecipe } from '../../lib/recipe-import/extract';
 import handler from './parse-recipe-url';
 
 function mockRes() {
@@ -19,8 +15,7 @@ function mockRes() {
 }
 
 beforeEach(() => {
-  extractRecipeIngredients.mockReset();
-  extractRecipeMethod.mockReset();
+  extractRecipe.mockReset();
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.stubGlobal('fetch', vi.fn());
 });
@@ -53,26 +48,31 @@ describe('parse-recipe-url handler', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'url is not a valid URL' });
   });
 
-  it('fetches the page, strips noise, and combines ingredients + method results', async () => {
+  it('fetches the page, strips noise, and returns the extraction result directly', async () => {
     const html = '<html><head><script>bad()</script></head><body><p>2 eggs</p></body></html>';
     fetch.mockResolvedValue({ text: async () => html });
-    extractRecipeIngredients.mockResolvedValue({ name: 'Omelette', isVegetarian: true, ingredients: [{ name: 'egg', quantity: '2', unit: '' }] });
-    extractRecipeMethod.mockResolvedValue({ method: '1. Beat eggs' });
+    extractRecipe.mockResolvedValue({
+      name: 'Omelette',
+      ingredients: [{ name: 'egg', quantity: '2', unit: '' }],
+      method: '1. Beat eggs',
+      tags: []
+    });
     const res = mockRes();
 
     await handler({ method: 'POST', body: { url: 'https://example.com/recipe' } }, res);
 
     expect(fetch).toHaveBeenCalledWith('https://example.com/recipe');
-    const [{ text }] = extractRecipeIngredients.mock.calls[0];
-    expect(text).not.toContain('<script>');
-    expect(text).toContain('2 eggs');
+    const [{ input }] = extractRecipe.mock.calls[0];
+    expect(input.type).toBe('text');
+    expect(input.text).not.toContain('<script>');
+    expect(input.text).toContain('2 eggs');
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({
       name: 'Omelette',
-      isVegetarian: true,
       ingredients: [{ name: 'egg', quantity: '2', unit: '' }],
-      method: '1. Beat eggs'
+      method: '1. Beat eggs',
+      tags: []
     });
   });
 

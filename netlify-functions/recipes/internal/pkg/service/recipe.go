@@ -9,6 +9,13 @@ import (
 	"log"
 )
 
+// execer is the minimal interface insertIngredients, insertUnits, insertParts, and
+// insertTags need - satisfied by both *sql.DB and *sql.Tx, so AddRecipe/EditRecipe can pass
+// either a bare connection or an in-flight transaction through the same call sites.
+type execer interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+}
+
 func getIngredientsByRecipeID(id int, db *sql.DB) ([]common.Ingredient, error) {
 	query := `
 		SELECT
@@ -312,7 +319,7 @@ func DeleteRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 	return nil
 }
 
-func insertIngredients(recipe common.Recipe, db *sql.DB) error {
+func insertIngredients(recipe common.Recipe, db execer) error {
 	if len(recipe.Ingredients) == 0 {
 		return nil
 	}
@@ -335,7 +342,7 @@ func insertIngredients(recipe common.Recipe, db *sql.DB) error {
 // ("no unit, just a count") entry where needed, mirroring insertIngredients. Without this, a
 // unit that doesn't already exist (e.g. "bunch") leaves part.unit_id with nothing to reference,
 // which fails the recipe save outright since that column is NOT NULL.
-func insertUnits(recipe common.Recipe, db *sql.DB) error {
+func insertUnits(recipe common.Recipe, db execer) error {
 	if len(recipe.Ingredients) == 0 {
 		return nil
 	}
@@ -354,7 +361,7 @@ func insertUnits(recipe common.Recipe, db *sql.DB) error {
 	return nil
 }
 
-func insertParts(recipe common.Recipe, db *sql.DB) error {
+func insertParts(recipe common.Recipe, db execer) error {
 	if len(recipe.Ingredients) == 0 {
 		return nil
 	}
@@ -374,7 +381,7 @@ func insertParts(recipe common.Recipe, db *sql.DB) error {
 	return nil
 }
 
-func insertTags(recipe common.Recipe, db *sql.DB) error {
+func insertTags(recipe common.Recipe, db execer) error {
 	removeQuery := "DELETE FROM recipe_tag WHERE recipe_id = ?;"
 	_, err := db.Exec(removeQuery, recipe.ID)
 	if err != nil {

@@ -1,13 +1,9 @@
-import { OpenAI } from 'openai';
 import formidable from 'formidable';
 import fs from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
 import { Blobs } from '@netlify/blobs';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  timeout: 30000, // 30 second timeout
-});
+import { extractRecipe } from '../../lib/recipe-import/extract';
+import { imageToInput } from '../../lib/recipe-import/photo';
 
 // Configure API route to handle form data
 export const config = {
@@ -52,51 +48,24 @@ const validateImage = (file) => {
   }
 };
 
-// Process image with OpenAI
-const processImage = async (base64Image) => {
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4-vision-preview',
-    response_format: {
-      type: 'json_object',
-    },
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: `
-              This is an image of a recipe from a cookbook. Extract the recipe name, ingredients, and instructions. Format the response in a JSON object.
+// formidable always returns field values as arrays; a JSON-encoded array of
+// known ingredient/unit names is sent as a single form field.
+const parseJsonField = (fields, name) => {
+  const raw = fields[name]?.[0];
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+};
 
-              The schema for the json object should be {name: string, ingredients: Ingredient[], instructions: string}. The Ingredient schema should be {name: string, quantity: string, unit: string}.
-
-              The name of the recipe should be in title case.
-
-              The units for the ingredients should be standardized to the following: bottle,clove,gram,kilogram,litre,millilitre,packet,pinch,slice,tablespoon,teaspoon,tin. You can translate abbreviations. eg. tsp should become teaspoon. If you can't translate the unit to one of these then you must leave the unit value as an empty string. If there is no unit specified then you should leave the unit value as an empty string.
-
-              Ingredient names should be in lowercase and singular form. For example, "tomatoes" should be "tomato". The ingredient should not include adjectives or descriptive words such as large, peeled or chopped, but it CAN include the type of ingredient. For example, "chicken breast or "green beans". You should never remove the name of a flavour or key ingredient e.g 'chicken stock' should never be reduced just to 'stock'
-
-              Ingredient quantities should be in string format and use decimals rather than fractions.
-
-              You should omit any ingredients that would be considered pantry staples such as salt, pepper, oil, or water.
-
-              The instructions should be in markdown format and formatted to be as clear as possible. Each instruction should be a separate line. If an instruction is a list of items then it should be formatted as a list. For example, "1. Preheat the oven. 2. Mix the ingredients. 3. Bake for 30 minutes.". The instruction must NOT use double quotes (") at any point. They should be replaced by a single quote if present or omitted.
-            `,
-          },
-          {
-            type: 'image_url',
-            image_url: {
-              url: `data:image/jpeg;base64,${base64Image}`,
-              detail: 'high'
-            }
-          }
-        ],
-      },
-    ],
-    max_tokens: 1000,
+const processImage = async (base64Image, knownIngredients, knownUnits) => {
+  return extractRecipe({
+    input: imageToInput(base64Image),
+    knownIngredients,
+    knownUnits,
   });
-
-  return response.choices[0].message.content;
 };
 
 // Helper function to update job status
@@ -152,11 +121,14 @@ export default async function handler(req, res) {
 
   try {
     // Parse the form data
-    const { files } = await parseForm(req);
+    const { fields, files } = await parseForm(req);
     const [imageFile] = files.image;
 
     // Validate the image
     validateImage(imageFile);
+
+    const knownIngredients = parseJsonField(fields, 'knownIngredients');
+    const knownUnits = parseJsonField(fields, 'knownUnits');
 
     // Read the file and convert to base64
     const imageBuffer = await fs.readFile(imageFile.filepath);
@@ -170,7 +142,7 @@ export default async function handler(req, res) {
     const initialJob = await updateJobStatus(jobId, 'processing');
 
     // Start processing in the background
-    processImage(base64Image)
+    processImage(base64Image, knownIngredients, knownUnits)
       .then(async (result) => {
         await updateJobStatus(jobId, 'completed', result);
       })

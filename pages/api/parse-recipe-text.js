@@ -1,4 +1,5 @@
-import { extractRecipeIngredients } from '../../lib/extract-recipe-ingredients';
+import { extractRecipe } from '../../lib/recipe-import/extract';
+import { textToInput } from '../../lib/recipe-import/paste';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -12,7 +13,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { ingredients } = await extractRecipeIngredients({ text, knownIngredients, knownUnits });
+    const { ingredients } = await extractRecipe({
+      input: textToInput(text),
+      knownIngredients,
+      knownUnits,
+    });
     res.status(200).json({ ingredients });
   } catch (e) {
     console.error(e);

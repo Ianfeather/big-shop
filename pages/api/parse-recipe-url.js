@@ -1,17 +1,5 @@
-import { parse } from 'node-html-parser';
-import { extractRecipeIngredients } from '../../lib/extract-recipe-ingredients';
-import { extractRecipeMethod } from '../../lib/extract-recipe-method';
-
-// Keep the LLM's input bounded - a full recipe page can be hundreds of KB, almost all of it
-// script/style/nav noise that costs tokens without adding signal.
-const MAX_HTML_LENGTH = 60000;
-const NOISE_SELECTOR = 'script, style, svg, noscript, iframe, link, meta, head';
-
-function extractTextFromHtml(html) {
-  const document = parse(html);
-  document.querySelectorAll(NOISE_SELECTOR).forEach((el) => el.remove());
-  return document.toString().slice(0, MAX_HTML_LENGTH);
-}
+import { extractRecipe } from '../../lib/recipe-import/extract';
+import { htmlToInput } from '../../lib/recipe-import/url';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -32,19 +20,13 @@ export default async function handler(req, res) {
 
   try {
     const html = await (await fetch(url)).text();
-    const text = extractTextFromHtml(html);
-
-    const [ingredientsResult, methodResult] = await Promise.all([
-      extractRecipeIngredients({ text, knownIngredients, knownUnits }),
-      extractRecipeMethod({ text }),
-    ]);
-
-    res.status(200).json({
-      name: ingredientsResult.name,
-      isVegetarian: ingredientsResult.isVegetarian,
-      ingredients: ingredientsResult.ingredients,
-      method: methodResult.method,
+    const result = await extractRecipe({
+      input: htmlToInput(html),
+      knownIngredients,
+      knownUnits,
     });
+
+    res.status(200).json(result);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

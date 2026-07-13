@@ -202,39 +202,54 @@ func GetRecipeByID(id int, userID string, db *sql.DB) (*common.Recipe, error) {
 	return recipe, nil
 }
 
-// AddRecipe inserts recipe, ingredients into the DB
+// AddRecipe inserts recipe, ingredients into the DB. The recipe row and all of its
+// ingredient/unit/part/tag rows are written in one transaction, so a failure partway
+// through (e.g. a bad unit) doesn't leave an orphaned recipe with no Ingredient Lines.
 func AddRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 	accountID, err := GetAccountID(db, userID)
 	if err != nil {
 		return err
 	}
-	query := "INSERT INTO recipe (name, slug, remote_url, notes, method, account_id) VALUES (?, ?, ?, ?, ?, ?);"
-	res, err := db.Exec(query, recipe.Name, common.Slugify(recipe.Name), recipe.RemoteURL, recipe.Notes, recipe.Method, accountID)
 
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	query := "INSERT INTO recipe (name, slug, remote_url, notes, method, account_id) VALUES (?, ?, ?, ?, ?, ?);"
+	res, err := tx.Exec(query, recipe.Name, common.Slugify(recipe.Name), recipe.RemoteURL, recipe.Notes, recipe.Method, accountID)
 	if err != nil {
 		fmt.Println("could not insert recipe")
 		return err
 	}
 
 	id, err := res.LastInsertId()
+	if err != nil {
+		return err
+	}
 	recipe.ID = int(id)
 
-	if err = insertIngredients(recipe, db); err != nil {
+	if err = insertIngredients(recipe, tx); err != nil {
 		return err
 	}
-	if err = insertUnits(recipe, db); err != nil {
+	if err = insertUnits(recipe, tx); err != nil {
 		return err
 	}
-	if err = insertParts(recipe, db); err != nil {
+	if err = insertParts(recipe, tx); err != nil {
 		return err
 	}
-	if err = insertTags(recipe, db); err != nil {
+	if err = insertTags(recipe, tx); err != nil {
 		return err
 	}
-	return nil
+	return tx.Commit()
 }
 
-// EditRecipe updates recipe information
+// EditRecipe updates recipe information. The ownership check is a precondition, run
+// before opening a transaction; the update and all of its ingredient/unit/part/tag
+// writes then happen in one transaction, so a failure partway through (e.g. between
+// deleting and reinserting the recipe's Ingredient Lines) doesn't leave the recipe with
+// no Ingredient Lines.
 func EditRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 	accountID, err := GetAccountID(db, userID)
 	if err != nil {
@@ -249,37 +264,43 @@ func EditRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 		return err
 	}
 
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
 	updateQuery := "UPDATE recipe SET name=?, remote_url=?, notes=?, method=? WHERE id=? AND account_id=?"
-	if _, err := db.Exec(updateQuery, recipe.Name, recipe.RemoteURL, recipe.Notes, recipe.Method, recipe.ID, accountID); err != nil {
+	if _, err := tx.Exec(updateQuery, recipe.Name, recipe.RemoteURL, recipe.Notes, recipe.Method, recipe.ID, accountID); err != nil {
 		log.Println(err)
 		return err
 	}
 
-	if err := insertIngredients(recipe, db); err != nil {
+	if err := insertIngredients(recipe, tx); err != nil {
 		log.Println(err)
 		return err
 	}
 
-	if err := insertUnits(recipe, db); err != nil {
+	if err := insertUnits(recipe, tx); err != nil {
 		log.Println(err)
 		return err
 	}
 
 	// Delete the existing relationships between recipe & ingredients
-	if _, err := db.Exec("DELETE FROM part WHERE recipe_id=?", recipe.ID); err != nil {
+	if _, err := tx.Exec("DELETE FROM part WHERE recipe_id=?", recipe.ID); err != nil {
 		log.Println(err)
 		return err
 	}
 
-	if err := insertParts(recipe, db); err != nil {
+	if err := insertParts(recipe, tx); err != nil {
 		log.Println(err)
 		return err
 	}
 
-	if err = insertTags(recipe, db); err != nil {
+	if err = insertTags(recipe, tx); err != nil {
 		return err
 	}
-	return nil
+	return tx.Commit()
 }
 
 // DeleteRecipe removes a recipe from the db

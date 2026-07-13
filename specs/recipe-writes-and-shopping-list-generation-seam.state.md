@@ -40,15 +40,30 @@ from an unrelated session, not a real missing-unique-constraint bug - see
 that spec's state file and its follow-up correction commit 8377c24).
 
 ## Session 3: service.GenerateShoppingList
-Status: pending
-Scope: service/list.go — new GenerateShoppingList(recipeIDs []string, userID string, db *sql.DB) (*common.ShoppingList, error). Fetch recipes (N sequential GetRecipeByID calls, unchanged), CombineIngredients, remove+add list items in one sql.Tx (RemoveIngredientListItems/AddIngredientListItems updated to accept the Session 1 execer interface), log Shopping List Event best-effort outside the tx, return refreshed list via GetShoppingList.
+Status: done
+Scope: service/list.go — new GenerateShoppingList(recipeIDs []string, userID string, db *sql.DB) (*common.ShoppingList, error). Fetch recipes (N sequential GetRecipeByID calls, unchanged), fetch current Ingredient Items and carry IsBought forward, CombineIngredients, remove+add list items in one sql.Tx (RemoveIngredientListItems/AddIngredientListItems updated to accept a new dbConn interface), log Shopping List Event best-effort outside the tx, return refreshed list via GetShoppingList.
 Depends on: Session 1, Session 2
-Commit:
-Notes:
+Commit: aaf186b
+Notes: Test gate: go build/vet/test clean. Live end-to-end verify (dev:full,
+since torn down) via a temporary uncommitted Go program calling
+GenerateShoppingList directly: cross-recipe aggregation + 1000-unit
+threshold conversion correct, full-replace correctly scoped to Ingredient
+Items only (a pre-existing Extra Item survived two regenerations), and
+IsBought correctly preserved/dropped across regeneration (see below).
+Review gate: 1 real gap caught and fixed before commit - my first draft
+omitted the IsBought carry-over that createListHandler already does (from
+a prior follow-up fix); would have been a silent regression once Session 4
+wires the handler to this function. Fixed and re-verified live. Also
+confirmed as necessary, not scope creep: CombineIngredients duplicated into
+service/list.go (service can't import app; TODO left marking the app-side
+copy for Session 4 deletion), and a new dbConn interface (execer +
+QueryRow) added since GetAccountID - a transitive dependency of
+RemoveIngredientListItems/AddIngredientListItems - needs QueryRow. Spec
+doc corrected (Phase 3 description) to reflect both.
 
 ## Session 4: Shrink the handler
 Status: pending
-Scope: app/list.go createListHandler — decode recipeIDs, call service.GenerateShoppingList, encode result. All algorithm/SQL orchestration moves out of app package.
+Scope: app/list.go createListHandler — decode recipeIDs, call service.GenerateShoppingList, encode result. All algorithm/SQL orchestration moves out of app package. Also delete app/list.go's now-superseded CombineIngredients and its test (app/list_test.go), per the Session 3 TODO.
 Depends on: Session 3
 Commit:
 Notes:

@@ -2,7 +2,7 @@
 spec: specs/recipe-writes-and-shopping-list-generation-seam.md
 status: in-progress
 branch: implement/recipe-writes-and-shopping-list-generation-seam
-pr:
+pr: https://github.com/Ianfeather/big-shop/pull/new/implement/recipe-writes-and-shopping-list-generation-seam (not yet created - `gh` CLI unavailable/unauthenticated in this environment; branch is pushed, PR needs manual creation via this compare link or a `gh auth login`)
 ---
 
 ## Session 1: Minimal execer interface

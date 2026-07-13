@@ -31,6 +31,22 @@
   margin-bottom: var(--space-5);
 }
 
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0 40px;
+}
+
+@media (min-width: 1000px) {
+  .grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.gridCell {
+  min-width: 0;
+}
+
 .ingredientsGroup {
   margin-bottom: var(--space-5);
 }
@@ -78,6 +94,7 @@
 
 .ingredientGroup {
   display: flex;
+  margin-bottom: 8px;
 }
 
 .ingredientGroup div {
@@ -99,10 +116,6 @@
 
 .group {
   margin-bottom: var(--space-5);
-}
-
-.ingredientGroup {
-  margin-bottom: 8px;
 }
 
 .ingredientName {
@@ -172,10 +185,6 @@
   justify-content: center;
 }
 
-.heading {
-  font-weight: bold;
-}
-
 .addAnotherRecipe {
   margin-top: var(--space-4);
   text-decoration: none;
@@ -210,8 +219,22 @@
   background-color: var(--color-primary-soft);
 }
 
-.addIngredientGroup {
-  display: flex;
+.addIngredientHint {
+  font-size: 13px;
+  color: #7a7a7a;
+  margin-bottom: 14px;
+}
+
+.bulkTextarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #d7b1f3;
+  border-radius: 5px;
+  font-size: 15px;
+  font-family: inherit;
+  background-color: #fff;
+  margin-bottom: 14px;
+  resize: vertical;
 }
 
 .addIngredientTitle {
@@ -226,4 +249,13 @@
 
 .addIngredientButton {
   margin-left: var(--space-4);
+}
+
+.bulkTextarea:focus {
+  outline: none;
+  border-color: var(--purple);
+}
+
+.bulkError {
+  margin-top: 14px;
 }

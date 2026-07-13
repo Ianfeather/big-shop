@@ -7,8 +7,10 @@
 INSERT INTO `user` (id, name, email) VALUES ('local-dev-user', 'Local Dev', 'dev@localhost');
 INSERT INTO `account_user` (user_id, account_id) VALUES ('local-dev-user', 1);
 
+-- The blank-name row is a deliberate sentinel for "no unit, just a count" (e.g. "2 eggs") -
+-- part.unit_id is NOT NULL, so count-only ingredients still need a real unit row to point to.
 INSERT INTO `unit` (name) VALUES
-  ('gram'), ('kilogram'), ('millilitre'), ('litre'),
+  (''), ('gram'), ('kilogram'), ('millilitre'), ('litre'),
   ('teaspoon'), ('tablespoon'), ('packet'), ('whole'), ('clove'), ('pinch');
 
 INSERT INTO `ingredient` (name) VALUES

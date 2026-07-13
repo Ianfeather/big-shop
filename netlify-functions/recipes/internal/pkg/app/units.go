@@ -1,31 +1,38 @@
 package app
 
 import (
+	"context"
 	"log"
+	"net/http"
+
 	"recipes/internal/pkg/service"
 
-	"database/sql"
-	"encoding/json"
-	"net/http"
+	"github.com/danielgtaylor/huma/v2"
 )
 
-func (a *App) getUnitsHandler(w http.ResponseWriter, req *http.Request) {
-	encoder := json.NewEncoder(w)
+// UnitsOutput is the response body for listing units.
+type UnitsOutput struct {
+	Body []service.Unit
+}
+
+func (a *App) getUnits(ctx context.Context, _ *struct{}) (*UnitsOutput, error) {
 	units, err := service.GetAllUnits(a.db)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Units not found", http.StatusNotFound)
-			err = encoder.Encode(make([]string, 0))
-			return
-		}
 		log.Println(err)
-		http.Error(w, "Failed to get Units from db", http.StatusInternalServerError)
-		return
+		return nil, huma.Error500InternalServerError("Failed to get units from db")
 	}
 
-	err = encoder.Encode(units)
-	if err != nil {
-		http.Error(w, "Error encoding json", http.StatusInternalServerError)
-	}
+	return &UnitsOutput{Body: units}, nil
+}
+
+func (a *App) registerUnitsRoutes(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "list-units",
+		Method:      http.MethodGet,
+		Path:        "/units",
+		Summary:     "List units",
+		Description: "Returns every Unit an Ingredient Line's quantity can be expressed in.",
+		Tags:        []string{"Units"},
+	}, a.getUnits)
 }

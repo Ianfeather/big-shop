@@ -1,82 +1,104 @@
 package app
 
 import (
-	"encoding/json"
+	"context"
 	"log"
 	"net/http"
+	"recipes/internal/pkg/common"
 	"recipes/internal/pkg/service"
+
+	"github.com/danielgtaylor/huma/v2"
 )
 
-func (a *App) acceptInvite(w http.ResponseWriter, req *http.Request) {
-	currentUser, err := service.GetUser(a.db, req.Context().Value(contextKey("userID")).(string))
-	if err != nil {
-		log.Println("Error finding current user")
-		http.Error(w, "Error finding current user", http.StatusBadRequest)
-		return
-	}
-	var body struct {
+// InviteTokenInput carries an invite token, used to accept/reject an invite.
+type InviteTokenInput struct {
+	Body struct {
 		Token string
 	}
-	if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
-		http.Error(w, "Error decoding json body", http.StatusBadRequest)
-		return
+}
+
+// InvitesOutput is the response body for listing invites.
+type InvitesOutput struct {
+	Body []common.Invite
+}
+
+func (a *App) acceptInvite(ctx context.Context, input *InviteTokenInput) (*struct{}, error) {
+	currentUser, err := service.GetUser(a.db, ctx.Value(contextKey("userID")).(string))
+	if err != nil {
+		log.Println("Error finding current user")
+		return nil, huma.Error400BadRequest("Error finding current user")
 	}
-	accountID, err := service.GetInvite(a.db, body.Token, currentUser.Email)
+
+	accountID, err := service.GetInvite(a.db, input.Body.Token, currentUser.Email)
 	if err != nil {
 		log.Println("Error finding invite")
-		http.Error(w, "Error finding invite", http.StatusBadRequest)
-		return
+		return nil, huma.Error400BadRequest("Error finding invite")
 	}
 
 	// Disable old user account
-	if err = service.DisableUserAccount(a.db, *currentUser); err != nil {
-		http.Error(w, "Error disabling user account", http.StatusInternalServerError)
-		return
+	if err := service.DisableUserAccount(a.db, *currentUser); err != nil {
+		return nil, huma.Error500InternalServerError("Error disabling user account")
 	}
 
 	// Add user to the account
-	if err = service.AddUserToAccount(a.db, *accountID, *currentUser); err != nil {
-		http.Error(w, "Error adding user to the account", http.StatusInternalServerError)
-		return
+	if err := service.AddUserToAccount(a.db, *accountID, *currentUser); err != nil {
+		return nil, huma.Error500InternalServerError("Error adding user to the account")
 	}
 
 	// remove the invite
-	if err = service.DeleteInvite(a.db, *accountID, currentUser.Email); err != nil {
-		http.Error(w, "Error deleting invite", http.StatusInternalServerError)
-		return
+	if err := service.DeleteInvite(a.db, *accountID, currentUser.Email); err != nil {
+		return nil, huma.Error500InternalServerError("Error deleting invite")
 	}
+
+	return nil, nil
 }
 
-func (a *App) getInvites(w http.ResponseWriter, req *http.Request) {
-	user, err := service.GetUser(a.db, req.Context().Value(contextKey("userID")).(string))
+func (a *App) getInvites(ctx context.Context, _ *struct{}) (*InvitesOutput, error) {
+	user, err := service.GetUser(a.db, ctx.Value(contextKey("userID")).(string))
 	if err != nil {
 		log.Println("Error finding current user")
-		http.Error(w, "Error finding current user", http.StatusInternalServerError)
-		return
+		return nil, huma.Error500InternalServerError("Error finding current user")
 	}
+
 	invites, err := service.GetInvites(a.db, user.Email)
 	if err != nil {
 		log.Println("Error finding invites")
-		http.Error(w, "Error finding invites", http.StatusNotFound)
-		return
+		return nil, huma.Error404NotFound("Error finding invites")
 	}
 
-	encoder := json.NewEncoder(w)
-	if err = encoder.Encode(invites); err != nil {
-		http.Error(w, "Error encoding json", http.StatusInternalServerError)
-	}
+	return &InvitesOutput{Body: invites}, nil
 }
 
-func (a *App) rejectInvite(w http.ResponseWriter, req *http.Request) {
-	var body struct {
-		Token string
+func (a *App) rejectInvite(ctx context.Context, input *InviteTokenInput) (*struct{}, error) {
+	if err := service.DeleteInviteByToken(a.db, input.Body.Token); err != nil {
+		return nil, huma.Error500InternalServerError("Error deleting invite")
 	}
-	if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
-		http.Error(w, "Error decoding json body", http.StatusBadRequest)
-		return
-	}
-	if err := service.DeleteInviteByToken(a.db, body.Token); err != nil {
-		http.Error(w, "Error deleting invite", http.StatusInternalServerError)
-		return
-	}
+
+	return nil, nil
+}
+
+func (a *App) registerInviteRoutes(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "accept-invite",
+		Method:      http.MethodPost,
+		Path:        "/invite/accept",
+		Summary:     "Accept an invite",
+		Tags:        []string{"Invites"},
+	}, a.acceptInvite)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "list-invites",
+		Method:      http.MethodGet,
+		Path:        "/invites",
+		Summary:     "List invites for the current user",
+		Tags:        []string{"Invites"},
+	}, a.getInvites)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "reject-invite",
+		Method:      http.MethodPost,
+		Path:        "/invite/reject",
+		Summary:     "Reject an invite",
+		Tags:        []string{"Invites"},
+	}, a.rejectInvite)
 }

@@ -1,0 +1,876 @@
+components:
+  schemas:
+    Account:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /.netlify/functions/recipes/schemas/Account.json
+          format: uri
+          readOnly: true
+          type: string
+        id:
+          format: int64
+          type: integer
+        users:
+          items:
+            $ref: "#/components/schemas/User"
+          type:
+            - array
+            - "null"
+      required:
+        - id
+        - users
+      type: object
+    DeleteRecipeInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /.netlify/functions/recipes/schemas/DeleteRecipeInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        id:
+          format: int64
+          type: integer
+      required:
+        - id
+      type: object
+    ErrorDetail:
+      additionalProperties: false
+      properties:
+        location:
+          description: Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id'
+          type: string
+        message:
+          description: Error message text
+          type: string
+        value:
+          description: The value at the given location
+      type: object
+    ErrorModel:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /.netlify/functions/recipes/schemas/ErrorModel.json
+          format: uri
+          readOnly: true
+          type: string
+        detail:
+          description: A human-readable explanation specific to this occurrence of the problem.
+          examples:
+            - Property foo is required but is missing.
+          type: string
+        errors:
+          description: Optional list of individual error details
+          items:
+            $ref: "#/components/schemas/ErrorDetail"
+          type:
+            - array
+            - "null"
+        instance:
+          description: A URI reference that identifies the specific occurrence of the problem.
+          examples:
+            - https://example.com/error-log/abc123
+          format: uri
+          type: string
+        status:
+          description: HTTP status code
+          examples:
+            - 400
+          format: int64
+          type: integer
+        title:
+          description: A short, human-readable summary of the problem type. This value should not change between occurrences of the error.
+          examples:
+            - Bad Request
+          type: string
+        type:
+          default: about:blank
+          description: A URI reference to human-readable documentation for the error.
+          examples:
+            - https://example.com/errors/example
+          format: uri
+          type: string
+      type: object
+    Ingredient:
+      additionalProperties: false
+      properties:
+        department:
+          type: string
+        name:
+          type: string
+        quantity:
+          type: string
+        unit:
+          type: string
+      required:
+        - name
+        - unit
+        - quantity
+      type: object
+    IngredientName:
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+      required:
+        - name
+      type: object
+    Invite:
+      additionalProperties: false
+      properties:
+        account_holder:
+          type: string
+        token:
+          type: string
+      required:
+        - token
+        - account_holder
+      type: object
+    InviteTokenInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /.netlify/functions/recipes/schemas/InviteTokenInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        Token:
+          type: string
+      required:
+        - Token
+      type: object
+    ListIngredient:
+      additionalProperties: false
+      properties:
+        department:
+          type: string
+        isBought:
+          type: boolean
+        quantity:
+          format: double
+          type: number
+        recipe_id:
+          format: int64
+          type: integer
+        unit:
+          type: string
+      required:
+        - unit
+        - quantity
+        - isBought
+        - recipe_id
+        - department
+      type: object
+    ListItem:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /.netlify/functions/recipes/schemas/ListItem.json
+          format: uri
+          readOnly: true
+          type: string
+        IsBought:
+          type: boolean
+        Name:
+          type: string
+      required:
+        - IsBought
+        - Name
+      type: object
+    Recipe:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /.netlify/functions/recipes/schemas/Recipe.json
+          format: uri
+          readOnly: true
+          type: string
+        id:
+          format: int64
+          type: integer
+        ingredients:
+          items:
+            $ref: "#/components/schemas/Ingredient"
+          type:
+            - array
+            - "null"
+        method:
+          type: string
+        name:
+          type: string
+        notes:
+          type: string
+        remoteUrl:
+          type: string
+        tags:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+      required:
+        - name
+        - remoteUrl
+        - notes
+        - method
+        - ingredients
+        - tags
+      type: object
+    RecipeSummary:
+      additionalProperties: false
+      properties:
+        id:
+          format: int64
+          type: integer
+        name:
+          type: string
+        tags:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+      required:
+        - name
+        - id
+        - tags
+      type: object
+    ShoppingList:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /.netlify/functions/recipes/schemas/ShoppingList.json
+          format: uri
+          readOnly: true
+          type: string
+        extras:
+          additionalProperties:
+            $ref: "#/components/schemas/ListIngredient"
+          type: object
+        ingredients:
+          additionalProperties:
+            $ref: "#/components/schemas/ListIngredient"
+          type: object
+        recipes:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+      required:
+        - recipes
+        - ingredients
+        - extras
+      type: object
+    ShoppingListHistoryOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /.netlify/functions/recipes/schemas/ShoppingListHistoryOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        favorite_recipes:
+          items:
+            format: int64
+            type: integer
+          type:
+            - array
+            - "null"
+        recent_recipes:
+          items:
+            format: int64
+            type: integer
+          type:
+            - array
+            - "null"
+      required:
+        - recent_recipes
+        - favorite_recipes
+      type: object
+    SimpleResponse:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /.netlify/functions/recipes/schemas/SimpleResponse.json
+          format: uri
+          readOnly: true
+          type: string
+        status:
+          type: string
+      required:
+        - status
+      type: object
+    Unit:
+      additionalProperties: false
+      properties:
+        id:
+          format: int64
+          type: integer
+        name:
+          type: string
+      required:
+        - name
+        - id
+      type: object
+    User:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /.netlify/functions/recipes/schemas/User.json
+          format: uri
+          readOnly: true
+          type: string
+        email:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+      required:
+        - email
+      type: object
+info:
+  description: The Go API backing Big Shop, a recipe management and meal planning app.
+  title: Big Shop API
+  version: 1.0.0
+openapi: 3.1.0
+paths:
+  /account:
+    get:
+      operationId: get-account
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Get the current user's account
+      tags:
+        - Account
+  /account/add:
+    post:
+      operationId: add-user-to-account
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/User"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Add a user to the current account
+      tags:
+        - Account
+  /account/remove:
+    delete:
+      operationId: remove-user-from-account
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/User"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Remove a user from the current account
+      tags:
+        - Account
+  /ingredients:
+    get:
+      description: Returns every Ingredient known to the system, used for autosuggest when adding a Recipe.
+      operationId: list-ingredients
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/IngredientName"
+                type:
+                  - array
+                  - "null"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List ingredients
+      tags:
+        - Ingredients
+  /invite:
+    post:
+      description: Creates an Invite and emails it to the given address.
+      operationId: invite-user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/User"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Invite a user to the current account
+      tags:
+        - Invites
+  /invite/accept:
+    post:
+      operationId: accept-invite
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InviteTokenInputBody"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Accept an invite
+      tags:
+        - Invites
+  /invite/reject:
+    post:
+      operationId: reject-invite
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InviteTokenInputBody"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Reject an invite
+      tags:
+        - Invites
+  /invites:
+    get:
+      operationId: list-invites
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/Invite"
+                type:
+                  - array
+                  - "null"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List invites for the current user
+      tags:
+        - Invites
+  /recipe:
+    delete:
+      operationId: delete-recipe
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteRecipeInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Delete a recipe
+      tags:
+        - Recipes
+    post:
+      operationId: add-recipe
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Recipe"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleResponse"
+          description: Created
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Add a recipe
+      tags:
+        - Recipes
+    put:
+      operationId: edit-recipe
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Recipe"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Edit a recipe
+      tags:
+        - Recipes
+  /recipe/{id}:
+    get:
+      description: Looks a Recipe up by numeric ID if `id` parses as an integer, otherwise by its URL slug.
+      operationId: get-recipe
+      parameters:
+        - description: Numeric Recipe ID or URL slug
+          in: path
+          name: id
+          required: true
+          schema:
+            description: Numeric Recipe ID or URL slug
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Recipe"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Get a recipe by ID or slug
+      tags:
+        - Recipes
+  /recipes:
+    get:
+      description: Returns a lightweight (name/id/tags only) list of every Recipe belonging to the current user's Account.
+      operationId: list-recipes
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/RecipeSummary"
+                type:
+                  - array
+                  - "null"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List recipes
+      tags:
+        - Recipes
+  /shopping-list:
+    get:
+      operationId: get-shopping-list
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingList"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Get the shopping list
+      tags:
+        - Shopping List
+    post:
+      description: Combines Ingredient Lines from the given Recipe IDs into the shopping list, preserving already-bought state for surviving items.
+      operationId: create-shopping-list
+      requestBody:
+        content:
+          application/json:
+            schema:
+              items:
+                type: string
+              type:
+                - array
+                - "null"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingList"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Generate the shopping list from a set of recipes
+      tags:
+        - Shopping List
+  /shopping-list/buy:
+    patch:
+      operationId: buy-shopping-list-item
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ListItem"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingList"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Mark a shopping list item as bought/unbought
+      tags:
+        - Shopping List
+  /shopping-list/clear:
+    delete:
+      operationId: clear-shopping-list
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingList"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Clear the shopping list
+      tags:
+        - Shopping List
+  /shopping-list/extra:
+    post:
+      operationId: add-extra-list-item
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ListItem"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Add an extra (non-recipe) item to the shopping list
+      tags:
+        - Shopping List
+  /shopping-list/history:
+    get:
+      description: Returns recently-used and favorite Recipe IDs, used for meal planning suggestions.
+      operationId: get-shopping-list-history
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingListHistoryOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Get shopping list history
+      tags:
+        - Shopping List
+  /tags:
+    get:
+      description: Returns every Tag name used by any Recipe, used for autosuggest.
+      operationId: list-tags
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  type: string
+                type:
+                  - array
+                  - "null"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List tags
+      tags:
+        - Tags
+  /units:
+    get:
+      description: Returns every Unit an Ingredient Line's quantity can be expressed in.
+      operationId: list-units
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/Unit"
+                type:
+                  - array
+                  - "null"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List units
+      tags:
+        - Units
+  /user:
+    post:
+      operationId: add-user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/User"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Add a user
+      tags:
+        - Users
+servers:
+  - url: /.netlify/functions/recipes

@@ -1,29 +1,48 @@
 package app
 
 import (
-	"database/sql"
-	"encoding/json"
-	"fmt"
+	"context"
+	"log"
 	"net/http"
+
 	"recipes/internal/pkg/service"
+
+	"github.com/danielgtaylor/huma/v2"
 )
 
-func (a *App) ingredientsHandler(w http.ResponseWriter, req *http.Request) {
-	encoder := json.NewEncoder(w)
+// IngredientName is service.Ingredient under a distinct name: Huma's schema
+// registry names components after the bare (package-less) Go type name, and
+// that would otherwise collide with common.Ingredient.
+type IngredientName service.Ingredient
+
+// IngredientsOutput is the response body for listing ingredients.
+type IngredientsOutput struct {
+	Body []IngredientName
+}
+
+func (a *App) getIngredients(ctx context.Context, _ *struct{}) (*IngredientsOutput, error) {
 	ingredients, err := service.GetAllIngredients(a.db)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Ingredients not found", http.StatusNotFound)
-			err = encoder.Encode(make([]string, 0))
-			return
-		}
-		fmt.Println(err)
-		http.Error(w, "Failed to get ingredients from db", http.StatusInternalServerError)
-		return
+		log.Println(err)
+		return nil, huma.Error500InternalServerError("Failed to get ingredients from db")
 	}
 
-	if err = encoder.Encode(ingredients); err != nil {
-		http.Error(w, "Error encoding json", http.StatusInternalServerError)
+	names := make([]IngredientName, len(ingredients))
+	for i, ing := range ingredients {
+		names[i] = IngredientName(ing)
 	}
+
+	return &IngredientsOutput{Body: names}, nil
+}
+
+func (a *App) registerIngredientsRoutes(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "list-ingredients",
+		Method:      http.MethodGet,
+		Path:        "/ingredients",
+		Summary:     "List ingredients",
+		Description: "Returns every Ingredient known to the system, used for autosuggest when adding a Recipe.",
+		Tags:        []string{"Ingredients"},
+	}, a.getIngredients)
 }

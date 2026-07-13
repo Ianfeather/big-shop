@@ -119,8 +119,7 @@ func (a *App) createList(ctx context.Context, input *CreateListInput) (*Shopping
 	previousIngredients, err := service.GetIngredientListItems(userID, a.db)
 	if err != nil {
 		log.Println("Cannot get existing list items")
-		http.Error(w, "Cannot get existing list items", http.StatusInternalServerError)
-		return
+		return nil, huma.Error500InternalServerError("Cannot get existing list items")
 	}
 
 	combinedIngredients := CombineIngredients(recipes)

@@ -24,7 +24,7 @@ extractRecipe({ input, knownIngredients = [], knownUnits = [] })
 ```
 
 - One prompt, one strict `json_schema` covering `name`, `isVegetarian`, `ingredients`, `method` in a single model call (merging what `extract-recipe-ingredients.js` and `extract-recipe-method.js` currently do as two calls) — including for image input. A vision call is the most expensive/slowest part of Photo Import; doubling it for a separate method call isn't worth the schema symmetry.
-- Uses `EXTRACTION_MODEL` directly for every adapter, including image input — **assumption to verify before this phase lands**: this constant must point at a multimodal-capable model via `responses.create`. If it doesn't, this phase needs a second model constant (e.g. `VISION_EXTRACTION_MODEL`) passed alongside `EXTRACTION_MODEL`, same API shape, same prompt-building logic — only the model id would vary by adapter.
+- Uses `EXTRACTION_MODEL` directly for every adapter, including image input — confirmed during design (not re-verified at implementation time, since this is a product/model-capability call, not something inferable from the codebase): `EXTRACTION_MODEL` is multimodal-capable via `responses.create`, so no second model constant is introduced. `lib/openai-client.js`'s existing comment ("Photo extraction... still uses its own vision model and is unchanged") is now stale as of this spec landing — updated in Phase 3, where `recipe-image.mjs` actually stops being the exception it describes.
 - After the model call returns, applies `matchCanonicalIngredient` (moved here from `Form.js`) to every returned ingredient name before returning. This is the key structural fix: the interface's postcondition becomes "returned names are already snapped to known ingredients where possible" — no caller can forget to wire this in, which is exactly how the current gap happened.
 - Maps `isVegetarian` internally to `tags: ['Vegetarian'] | []` before returning. Callers never see raw `isVegetarian`.
 - Carries over the full existing prompt rules from `extract-recipe-ingredients.js` (pantry-staple quantity thresholds, ingredient naming/word-order rules, quantity range midpoints, unit standardization/metric preference) as the *only* prompt — Photo Import's cruder inline rules are deleted, not merged.
@@ -69,7 +69,7 @@ None of these touch the async Processing Job lifecycle — that stays a route-le
 
 ## Things to get right when building this
 
-- **Verify `EXTRACTION_MODEL` is multimodal** before writing `photo.js` — this is the one unverified assumption in this spec (see Phase 1). If it isn't, fall back to a second model constant, not a second API shape.
+- `EXTRACTION_MODEL`'s multimodal capability is a confirmed design decision, not an implementation-time check — see Phase 1.
 - Photo Import's `DEFAULT_UNITS` fallback list must still apply when `knownUnits` is empty (e.g. a brand-new account with no units yet) — same fallback `extract-recipe-ingredients.js` already has.
 - The multimodal prompt builder in `extract.js` needs to construct a content-block array for image input rather than the plain string interpolation the current text-only `buildPrompt` uses — these are genuinely different request shapes, not just a parameter swap.
 - `recipe-image.mjs`'s existing image validation/resize/form-parsing (`formidable`, `validateImage`, 5MB limit) are route-specific mechanics, unrelated to extraction — leave them in the route.

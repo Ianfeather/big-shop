@@ -17,11 +17,27 @@ QueryRow; that's only used by EditRecipe/DeleteRecipe's ownership check,
 untouched this session), no scope creep, pure behavior-preserving refactor.
 
 ## Session 2: Transaction-wrap AddRecipe and EditRecipe
-Status: pending
+Status: done
 Scope: service/recipe.go — AddRecipe and EditRecipe each wrap their existing sequence of steps (including EditRecipe's DELETE FROM part + reinsert) in one sql.Tx, committing only if every step succeeds. Stay as two separate functions.
 Depends on: Session 1
-Commit:
-Notes:
+Commit: f412741
+Notes: Test gate: go build/vet/test clean. Live end-to-end verify against a
+real MySQL DB (dev:full, fresh volume): forced a failure at insertTags (the
+last step) via a tag name that violates recipe_tag's FK constraint on
+tag_name - confirmed AddRecipe's transaction rolled back the
+already-successful recipe insert + ingredients/units/parts (recipe count
+unchanged, no orphaned row), and EditRecipe's transaction rolled back the
+UPDATE + delete-and-reinsert-parts sequence (original name/method/
+ingredient unchanged after the failed request). Review gate clean - defer
+tx.Rollback() after a successful Commit() confirmed safe (stdlib no-ops via
+an atomic CAS on tx.done, doesn't touch the connection), LastInsertId()
+error check confirmed a necessary correctness fix for the tx-wrap (not
+scope creep), two-function shape matches the spec decision verbatim.
+
+Note: while verifying this session, corrected a wrong root-cause diagnosis
+from recipe-import-unification.md's Session 4 notes (a stale Docker volume
+from an unrelated session, not a real missing-unique-constraint bug - see
+that spec's state file and its follow-up correction commit 8377c24).
 
 ## Session 3: service.GenerateShoppingList
 Status: pending

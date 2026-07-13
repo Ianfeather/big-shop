@@ -16,6 +16,15 @@ type execer interface {
 	Exec(query string, args ...interface{}) (sql.Result, error)
 }
 
+// dbConn is the minimal interface GetAccountID needs, and so - transitively - anything
+// that calls it while also needing to write (RemoveIngredientListItems,
+// AddIngredientListItems) needs when run inside a transaction. Satisfied by both *sql.DB
+// and *sql.Tx.
+type dbConn interface {
+	execer
+	QueryRow(query string, args ...interface{}) *sql.Row
+}
+
 func getIngredientsByRecipeID(id int, db *sql.DB) ([]common.Ingredient, error) {
 	query := `
 		SELECT

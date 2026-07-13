@@ -2,7 +2,9 @@ package service
 
 import (
 	"fmt"
+	"log"
 	"recipes/internal/pkg/common"
+	"strconv"
 
 	"database/sql"
 )
@@ -14,6 +16,119 @@ type ListItem struct {
 	Quantity   float64
 	Department string
 	IsBought   bool
+}
+
+// CombineIngredients creates combined values/units
+//
+// TODO: temporarily duplicated from app/list.go (service can't import app, which already
+// imports service) - delete that copy, and its test in app/list_test.go, once
+// createListHandler is rewired to call GenerateShoppingList instead.
+func CombineIngredients(r []common.Recipe) map[string]*common.ListIngredient {
+	parentUnit := map[string]string{
+		"gram":       "kilogram",
+		"millilitre": "litre",
+	}
+	childUnit := map[string]string{
+		"kilogram": "gram",
+		"litre":    "millilitre",
+	}
+
+	ingredientList := make(map[string]*common.ListIngredient)
+	for _, recipe := range r {
+		for _, ingredient := range recipe.Ingredients {
+			if q, err := strconv.ParseFloat(ingredient.Quantity, 64); err == nil {
+				if childUnit, isParentUnit := childUnit[ingredient.Unit]; isParentUnit {
+					q = q * 1000
+					ingredient.Unit = childUnit
+				}
+				if existingIngredient, exists := ingredientList[ingredient.Name]; exists {
+					existingIngredient.Quantity = existingIngredient.Quantity + q
+				} else {
+					newIngredient := common.ListIngredient{
+						Unit:       ingredient.Unit,
+						Quantity:   q,
+						IsBought:   false,
+						Department: ingredient.Department,
+						RecipeID:   recipe.ID,
+					}
+					ingredientList[ingredient.Name] = &newIngredient
+				}
+			}
+		}
+	}
+
+	for key, value := range ingredientList {
+		if value.Quantity < 1000 {
+			continue
+		}
+		if parentUnit, exists := parentUnit[value.Unit]; exists {
+			ingredientList[key].Unit = parentUnit
+			ingredientList[key].Quantity = ingredientList[key].Quantity / 1000
+		}
+	}
+
+	return ingredientList
+}
+
+// GenerateShoppingList recomputes every Ingredient Item for the given set of Recipes and
+// returns the refreshed Shopping List. This is a full replace, not an add: every
+// existing Ingredient Item is discarded and recreated from this recipe set; Extra Items
+// are untouched either way (see CONTEXT.md's "Generate Shopping List"). An Ingredient
+// Item already marked bought carries that state forward if it's still present in the
+// recomputed set, so regenerating the list doesn't silently un-buy things.
+func GenerateShoppingList(recipeIDs []string, userID string, db *sql.DB) (*common.ShoppingList, error) {
+	recipes := make([]common.Recipe, 0)
+	for _, idStr := range recipeIDs {
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			return nil, err
+		}
+		recipe, err := GetRecipeByID(id, userID, db)
+		if err != nil {
+			return nil, err
+		}
+		recipes = append(recipes, *recipe)
+	}
+
+	previousIngredients, err := GetIngredientListItems(userID, db)
+	if err != nil {
+		return nil, err
+	}
+
+	combinedIngredients := CombineIngredients(recipes)
+	for name, ingredient := range combinedIngredients {
+		if previous, ok := previousIngredients[name]; ok && previous.IsBought {
+			ingredient.IsBought = true
+		}
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	if err := RemoveIngredientListItems(userID, tx); err != nil {
+		return nil, err
+	}
+	if len(combinedIngredients) > 0 {
+		if err := AddIngredientListItems(userID, combinedIngredients, tx); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	// Log shopping list history for meal planning intelligence, best-effort - a
+	// logging failure shouldn't fail the whole generate operation.
+	if intRecipeIDs, err := GetRecipeIDsFromStrings(recipeIDs); err == nil {
+		if logErr := LogShoppingListEvent(userID, "add_recipe", intRecipeIDs, db); logErr != nil {
+			log.Printf("Failed to log shopping list history: %v", logErr)
+		}
+	}
+
+	return GetShoppingList(userID, db)
 }
 
 // GetShoppingList returns the full shopping list for a user
@@ -60,7 +175,7 @@ func RemoveAllListItems(userID string, db *sql.DB) error {
 }
 
 // RemoveIngredientListItems removes all ingredient list items
-func RemoveIngredientListItems(userID string, db *sql.DB) error {
+func RemoveIngredientListItems(userID string, db dbConn) error {
 	accountID, err := GetAccountID(db, userID)
 	if err != nil {
 		fmt.Println("could not delete ingredients")
@@ -74,7 +189,7 @@ func RemoveIngredientListItems(userID string, db *sql.DB) error {
 }
 
 // AddIngredientListItems adds passed ingredients to the db
-func AddIngredientListItems(userID string, ingredients map[string]*common.ListIngredient, db *sql.DB) error {
+func AddIngredientListItems(userID string, ingredients map[string]*common.ListIngredient, db dbConn) error {
 	accountID, err := GetAccountID(db, userID)
 	if err != nil {
 		fmt.Println("could not add ingredients to shopping list")

@@ -27,7 +27,7 @@ func CreateAccount(db *sql.DB, user common.User) error {
 }
 
 // GetAccountID returns the account ID for a user
-func GetAccountID(db *sql.DB, userID string) (int, error) {
+func GetAccountID(db dbConn, userID string) (int, error) {
 	var accountID int
 	accountQuery := `SELECT account_id from account_user WHERE user_id = ? AND enabled = true;`
 	if err := db.QueryRow(accountQuery, userID).Scan(&accountID); err != nil {

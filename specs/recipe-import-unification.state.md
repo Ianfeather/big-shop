@@ -44,15 +44,34 @@ NOISE_SELECTOR/MAX_HTML_LENGTH copied from the route it'll replace) -
 resolves in Session 3, no action needed now.
 
 ## Session 3: Rewire the three routes to thin wrappers
-Status: pending
-Scope: pages/api/parse-recipe-url.js, pages/api/recipe-image.mjs (processImage only, Job wrapper untouched), pages/api/parse-recipe-text.js — all call extract.js via their adapter
+Status: done
+Scope: pages/api/parse-recipe-url.js, pages/api/recipe-image.mjs (processImage only, Job wrapper untouched, plus threading knownIngredients/knownUnits through from multipart fields), pages/api/parse-recipe-text.js — all call extract.js via their adapter. Deleted the two now-superseded lib files.
 Depends on: Session 2
-Commit:
-Notes:
+Commit: 306a3f8
+Notes: Test gate: eslint clean, npm run build clean. Real end-to-end verify
+(not mocked) - live npm run dev, OPENAI_API_KEY present in .env.local:
+parse-recipe-text and parse-recipe-url both exercised against real content
+(url via a local test HTTP server, since real-world sites truncate past
+MAX_HTML_LENGTH before reaching ingredients - pre-existing, not a
+regression, confirmed by testing the unchanged logic in isolation).
+Ingredient reconciliation, pantry-staple omission, unicode fractions,
+dual-unit metric preference all confirmed correct. Image branch verified
+directly (extractRecipe + imageToInput with a real generated image),
+bypassing the Job wrapper since Netlify Blobs isn't configured locally -
+confirms EXTRACTION_MODEL is multimodal and photo gets full catalog
+reconciliation parity with text.
+Review gate: 2 real gaps found, both folded into Session 4 (already touches
+new.js): (1) processImage now returns an object not a JSON string, so
+new.js's job-polling JSON.parse(job.result) will throw - not spelled out in
+the spec's Phase 4 bullets, added to Session 4 scope. (2) photo upload's
+FormData doesn't send knownIngredients/knownUnits yet, so this session's
+server-side threading is inert until Session 4 sends them. The isVegetarian
+-> tags mismatch in new.js the reviewer also flagged is the deliberate,
+spec-anticipated interim state (Phase 4 already covers it), not a gap.
 
 ## Session 4: Simplify client call sites
 Status: pending
-Scope: components/recipe-form/Form.js (delete matchCanonicalIngredient, plain merges), pages/recipes/new.js (read tags directly from result)
+Scope: components/recipe-form/Form.js (delete matchCanonicalIngredient, plain merges). pages/recipes/new.js: (a) fetchFromUrl reads tags directly from result instead of deriving from isVegetarian; (b) job-polling effect reads job.result directly (no second JSON.parse - it's already an object); (c) handleImageChange sends knownIngredients/knownUnits in the photo-upload FormData, closing the gap Session 3 left inert.
 Depends on: Session 3
 Commit:
 Notes:

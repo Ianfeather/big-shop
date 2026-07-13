@@ -34,7 +34,9 @@ Owns, in order: fetch each recipe via `GetRecipeByID` (still one call per id, in
 
 ### Phase 4 — Shrink the handler
 
-`app/list.go`'s `createListHandler` becomes: decode `recipeIDs` from the request body → call `service.GenerateShoppingList` → encode the result. All algorithm/SQL orchestration moves out of the `app` package entirely.
+`app/list.go`'s `createListHandler` becomes: decode `recipeIDs` from the request body → call `service.GenerateShoppingList` → encode the result. All algorithm/SQL orchestration moves out of the `app` package entirely. Also delete `app/list.go`'s now-superseded `CombineIngredients` and its test (moving the test to `service/list_test.go` alongside the function it now tests, not just deleting it — losing coverage on a refactor is a regression).
+
+**Also needed, discovered during implementation:** collapsing the handler's several distinct pre-existing error paths (bad recipe id → 400; every other failure → 500, each with its own message) into one generic `GenerateShoppingList` error would silently turn the bad-id case into a 500 too — a real HTTP-semantics regression a client shouldn't have to absorb. Fixed by having `GenerateShoppingList` return a sentinel `ErrInvalidRecipeID` for that specific case, which the handler unwraps with a plain `==` check (matching the existing convention in `app/recipe.go`'s `sql.ErrNoRows` handling) to restore the 400 — without reintroducing any orchestration into `app`.
 
 ### Phase 5 — Tests against a fake `execer`
 

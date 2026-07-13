@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"recipes/internal/pkg/common"
@@ -18,11 +19,12 @@ type ListItem struct {
 	IsBought   bool
 }
 
+// ErrInvalidRecipeID is returned by GenerateShoppingList when a recipe id can't be
+// parsed - a client error, distinct from the server errors everything else in this
+// function can return.
+var ErrInvalidRecipeID = errors.New("invalid recipe id")
+
 // CombineIngredients creates combined values/units
-//
-// TODO: temporarily duplicated from app/list.go (service can't import app, which already
-// imports service) - delete that copy, and its test in app/list_test.go, once
-// createListHandler is rewired to call GenerateShoppingList instead.
 func CombineIngredients(r []common.Recipe) map[string]*common.ListIngredient {
 	parentUnit := map[string]string{
 		"gram":       "kilogram",
@@ -81,7 +83,7 @@ func GenerateShoppingList(recipeIDs []string, userID string, db *sql.DB) (*commo
 	for _, idStr := range recipeIDs {
 		id, err := strconv.Atoi(idStr)
 		if err != nil {
-			return nil, err
+			return nil, ErrInvalidRecipeID
 		}
 		recipe, err := GetRecipeByID(id, userID, db)
 		if err != nil {

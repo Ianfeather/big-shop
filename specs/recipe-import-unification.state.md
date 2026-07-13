@@ -31,11 +31,17 @@ resolution in Session 3 by deleting those two now-superseded files once
 nothing calls them.
 
 ## Session 2: Input adapters
-Status: pending
+Status: done
 Scope: lib/recipe-import/url.js (htmlToInput), lib/recipe-import/photo.js (imageToInput), lib/recipe-import/paste.js (textToInput)
 Depends on: Session 1
-Commit:
-Notes:
+Commit: 34294ba
+Notes: Test gate: eslint clean; no runtime surface yet (Session 3 wires
+these in), verify skill deferred to Session 3 for the same reason as
+Session 1. Review gate clean - url.js confirmed byte-for-byte faithful to
+parse-recipe-url.js's existing HTML-stripping logic; photo.js/paste.js
+correct passthroughs. One noted transient duplication (url.js's
+NOISE_SELECTOR/MAX_HTML_LENGTH copied from the route it'll replace) -
+resolves in Session 3, no action needed now.
 
 ## Session 3: Rewire the three routes to thin wrappers
 Status: pending

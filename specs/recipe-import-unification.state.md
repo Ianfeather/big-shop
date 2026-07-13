@@ -89,19 +89,24 @@ around the job.result destructure, since a strict-schema object can't fail
 to destructure). Spec: 0 findings, all Phase 4 items plus both
 Session-3-necessitated fixes confirmed present and correct.
 
-Discovered but explicitly NOT fixed (outside both specs' scope - no code
-in this implementation run touches the Go backend, schema, or SQL):
-submitRecipe's POST /recipe 500s whenever an ingredient has no unit (e.g.
-"3 eggs") or, eventually, any unit at all once duplicates accumulate. Root
-cause: the `unit` table has no unique constraint on `name`
-(netlify-functions/recipes/internal/pkg/service/recipe.go's insertUnits
-upsert never dedupes as a result), so insertParts'
-`(SELECT id FROM unit WHERE name = ?)` subquery throws "Subquery returns
-more than 1 row" once 2+ rows share a name - confirmed reproducible in a
-fresh dev:full seed within a handful of saves. Compounded by AddRecipe
-having no transaction (recipe-writes-and-shopping-list-generation-seam.md's
-Phase 2 target): every failed save leaves an orphaned recipe row and
-duplicate ingredient/unit rows behind, making the next save likelier to
-fail too. Recommend a follow-up spec: unique constraint + dedup migration
-on unit.name (mirroring the prior ingredient_department fix), independent
-of and in addition to the Phase 2 transaction work already planned.
+CORRECTION (added while implementing recipe-writes-and-shopping-list-generation-seam.md,
+same run): the paragraph originally here claimed submitRecipe's POST /recipe 500s on
+save because "the unit table has no unique constraint on name." That diagnosis was
+wrong. migrations/016_unit_unique.sql already adds `ALTER TABLE unit ADD UNIQUE (name)`
+on master - confirmed by re-testing against a genuinely fresh dev:full DB (`docker
+compose down -v` first, so the MySQL container's docker-entrypoint-initdb.d scripts
+actually re-run from empty, applying every migration including 016): saving a recipe
+with a blank-unit ingredient ("3 eggs") now succeeds cleanly, and `unit` has no
+duplicate rows.
+
+The dev:full stack used for the original diagnosis (during this Session's own
+end-to-end verification) reused a stale, pre-existing `big-shop_bigshop-db-data` Docker
+volume left over from an unrelated, much earlier local session that predated migration
+016 - `docker-entrypoint-initdb.d` scripts only run against an empty data directory, so
+that stale volume never picked up 016 (or 017) and had already accumulated duplicate
+unit rows from repeated old test runs. `npm run dev:full` reuses an existing named
+volume unless `docker compose down -v` is run first; the original verification session
+didn't do that before its first run. No actual defect exists in this repo's current
+migrations for this - the claim in Session 4's commit message (4741b87) and the
+original version of this note is retracted. Apologies for the noise this may have
+caused if acted on before this correction was seen.

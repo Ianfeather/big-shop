@@ -61,3 +61,28 @@ A simple admin-only view listing ingredients with their `preferred_unit`/`averag
 
 Two cases need a notion of ingredient density (grams per millilitre) that this spec doesn't add data for: merging weight/volume sub-groups in Phase 2 (step 4 keeps them as separate lines instead), and scraper import of `cup`/ambiguous `oz`. Split out into [density-conversion.md](./density-conversion.md) as a follow-up spec rather than designed here.
 
+## Things to get right when building this
+
+Constraints and gotchas worth knowing before (re)building this, independent of any particular implementation.
+
+### Migration
+
+- A migration that adds the new columns and classifies pre-existing unit rows by name (`gram`, `kilogram`, `millilitre`, `litre`, `teaspoon`, `tablespoon` → their weight/volume type and factor) is enough — every other unit should fall through to the column defaults (`unit_type = 'count'`, `base_factor = 1`) rather than being enumerated explicitly.
+- **Gotcha: an `UPDATE ... WHERE name = ...`-style classification step in a migration only works against a database that already has those rows.** On a freshly-provisioned database, all migrations run before any fixture/seed data is inserted — so a migration that tries to classify rows by name before they exist will silently match nothing. This only shows up when a dev database is wiped and rebuilt from empty, not on every dev run, so it's easy to miss. Any local fixture data needs its classification set directly at insert time rather than relying on the migration's `UPDATE` to backfill it later.
+- The migration needs to be applied to production manually (per this repo's manual-migration workflow) *before or alongside* deploying any code that depends on the new columns — application code should not assume the schema change has landed just because the code has deployed, since deploying first would turn every request touching units/ingredients into a missing-column error rather than a graceful degradation. Verify the classification-by-name will actually match production's real unit rows before relying on it.
+
+### LLM classification of ingredients
+
+- Whatever runs the classification must complete **within the request** that creates the ingredient, not as a background/fire-and-forget task — this app runs on AWS Lambda, which can freeze the execution environment immediately after a response is sent, so anything still in flight past that point may never resume. Any approach that defers the LLM call needs to account for that platform constraint rather than assuming it'll eventually complete.
+- Classification should only fill gaps, never overwrite a value a human has already corrected — otherwise a manual audit correction can get silently clobbered by a later reclassification.
+- Classifying every *pre-existing* ingredient (as opposed to new ones going forward) should be a deliberate, manually-triggered one-off action rather than something that runs automatically as part of a migration or deploy.
+
+### Aggregation
+
+- Quantities need to support fractions and mixed numbers (e.g. "1 1/2"), not just plain decimals — this shows up regularly in real recipe data from photo extraction and scrapers. Half-unit rounding depends on quantities parsing correctly in the first place.
+- Don't merge weight and volume quantities for the same ingredient without real density data — keep them as separate shopping-list lines rather than guessing. This is the same "don't silently produce a wrong number" principle that motivates fixing the aggregation bug at all, and is why density-based conversion is deliberately a separate follow-up ([density-conversion.md](./density-conversion.md)) rather than something to guess at here.
+
+### Audit / correction UI
+
+- Since this app has no admin-role concept anywhere, a page for correcting LLM-assigned defaults doesn't need role-gating beyond normal login — just don't link it from primary navigation. Revisit only if the app ever grows a real permissions model.
+

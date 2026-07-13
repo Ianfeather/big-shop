@@ -110,3 +110,34 @@ didn't do that before its first run. No actual defect exists in this repo's curr
 migrations for this - the claim in Session 4's commit message (4741b87) and the
 original version of this note is retracted. Apologies for the noise this may have
 caused if acted on before this correction was seen.
+
+## Post-rebase re-verification (2026-07-13)
+
+Branch was rebased by the user onto an updated `master` that merged in a Huma/OpenAPI
+migration for the Go API and a new Vitest + RTL frontend test setup. Re-ran the full
+verification suite against the rebased state and found three issues, all fixed and
+committed (8133c6c, 6d3d8f5, d698c28):
+
+1. **`pages/api/parse-recipe-text.test.js`/`parse-recipe-url.test.js`** - new test
+   files merged in from the frontend-testing branch, written against the pre-Session-3
+   implementation (mocked the now-deleted `lib/extract-recipe-ingredients`/
+   `lib/extract-recipe-method`). Failed to load at all. Rewritten against the actual
+   current implementation - same test intent, updated mocks/assertions.
+2. **`app/list.go` compile error** - confirmed pre-existing on `master` itself, not
+   caused by either of my specs (`recipe-import-unification` never touches this file).
+   The Huma migration commit left one error path with a stray `http.Error(w, ...)`
+   call that doesn't compile against Huma's handler signature. Fixed with the same
+   pattern used by every other error path in the function. This was blocking the
+   entire Go API from starting.
+3. **Store Recipe 422 for URL/Photo-imported recipes** - the real find. Huma now
+   strictly validates that `notes`/`remoteUrl`/`method` keys are *present* in the
+   request body (not just non-empty) - `new.js`'s `setParsedRecipe` calls for URL and
+   Photo Import have never included every field (a latent, pre-existing gap, not
+   something this spec introduced), which the old net/http backend tolerated silently
+   but Huma now rejects with a raw "Unprocessable Entity" in the UI. Fixed at the
+   point `initialRecipe` is consumed in `Form.js` (spread onto `bareRecipe`'s defaults)
+   rather than patching every producer, so the gap can't recur. Verified live: URL
+   Import -> Store Recipe now succeeds end-to-end, confirmed persisted correctly.
+
+Full suite green after fixes: `npm run lint`, `npm test` (86/86), `npm run build`, and
+`go build`/`go vet`/`go test` (via the Docker-based Go toolchain) all clean.

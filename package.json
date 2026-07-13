@@ -9,6 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "package": "npm run lint && npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:evals": "./evals/run-evals.sh",
     "test:evals:shopping": "./evals/run-evals.sh shopping",
     "test:dave": "node evals/test-runner.js"
@@ -29,12 +31,19 @@
   },
   "devDependencies": {
     "@netlify/plugin-nextjs": "^4.41.3",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@vitejs/plugin-react": "^4.7.0",
     "cors": "^2.8.5",
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.1.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-react": "^7.33.2",
+    "jsdom": "^29.1.1",
     "node-fetch": "^3.3.2",
-    "nodemon": "^3.0.2"
+    "nodemon": "^3.0.2",
+    "vite": "^6.4.3",
+    "vitest": "^4.1.10"
   }
 }

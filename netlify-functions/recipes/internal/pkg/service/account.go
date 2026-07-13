@@ -101,10 +101,10 @@ func DisableUserAccount(db *sql.DB, user common.User) error {
 }
 
 func RemoveUserFromAccount(db *sql.DB, accountID int, user common.User) error {
-	accountQuery := `DELETE FROM user_account WHERE user_id = ? AND account_id = ?;`
-	_, err := db.Query(accountQuery, user.ID, accountID)
+	accountQuery := `DELETE FROM account_user WHERE user_id = ? AND account_id = ?;`
+	_, err := db.Exec(accountQuery, user.ID, accountID)
 	if err != nil {
-		log.Println("Error adding user to account")
+		log.Println("Error removing user from account")
 		return err
 	}
 	return nil

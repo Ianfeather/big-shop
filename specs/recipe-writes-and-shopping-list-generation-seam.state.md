@@ -83,8 +83,22 @@ Test file moved (not deleted) to preserve coverage: app/list_test.go ->
 service/list_test.go, package line changed, otherwise byte-identical.
 
 ## Session 5: Tests against a fake execer
-Status: pending
-Scope: service/recipe_test.go (new), service/list_test.go (already exists as of Session 4 - holds TestCombineIngredients, add to it rather than recreating it) — a fake execer struct recording calls. Test: failing insertParts rolls back the whole AddRecipe/EditRecipe transaction (no partial writes). Test: GenerateShoppingList's remove+add is atomic (failure in AddIngredientListItems after successful RemoveIngredientListItems doesn't leave the Shopping List empty).
+Status: done
+Scope: service/recipe_test.go (new) — fakeExecer testing insertIngredients/insertUnits/insertParts/insertTags. Scope revised mid-session (see spec doc's Phase 5, rewritten): AddRecipe/EditRecipe/GenerateShoppingList take a concrete *sql.DB (can't be faked - concrete type, not an interface) and dbConn's QueryRow returns *sql.Row (no exported constructor in database/sql) - so the rollback/atomicity properties themselves aren't fake-testable at those functions' level. Only the four execer-only helpers are.
 Depends on: Session 2, Session 3
-Commit:
+Commit: f569e66
+Notes: Test gate: go build/vet/test clean, all 14 subtests pass. Review
+gate clean, including independent verification of the *sql.Row constraint
+claim (go doc database/sql.Row - unexported fields only, no constructor)
+and confirmation the assertions are meaningful (query text + count +
+ordering, e.g. insertTags's failing-delete-skips-insert case), not
+tautological. Spec doc's Phase 5 and "Decisions made"/"Explicitly out of
+scope" sections rewritten to document the revised scope rather than leave
+a stale description of untestable-as-written scope. The actual rollback/
+atomicity properties this Phase originally wanted remain verified by
+Sessions 2 and 3's live-DB testing (see those sections above), not by a
+unit test - documented explicitly rather than silently substituted.
+
+All 5 Sessions of specs/recipe-writes-and-shopping-list-generation-seam.md
+are now done.
 Notes:

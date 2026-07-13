@@ -62,15 +62,29 @@ RemoveIngredientListItems/AddIngredientListItems - needs QueryRow. Spec
 doc corrected (Phase 3 description) to reflect both.
 
 ## Session 4: Shrink the handler
-Status: pending
+Status: done
 Scope: app/list.go createListHandler — decode recipeIDs, call service.GenerateShoppingList, encode result. All algorithm/SQL orchestration moves out of app package. Also delete app/list.go's now-superseded CombineIngredients and its test (app/list_test.go), per the Session 3 TODO.
 Depends on: Session 3
-Commit:
-Notes:
+Commit: 935a2d7
+Notes: Test gate: go build/vet/test clean, including the relocated
+TestCombineIngredients now passing under package service. Live end-to-end
+verify via real HTTP calls (dev:full, since torn down) against the actual
+(now-thin) handler, not just direct function calls: POST /shopping-list
+produced identical results to Session 3's direct-call test, and PATCH
+/shopping-list/buy + regenerate confirmed IsBought survives the real
+request path. Review gate: 1 real regression caught and fixed before
+commit - collapsing 5 distinct error paths (bad recipe id -> 400, else
+-> 500) into 1 generic 500 would have silently turned malformed recipe ids
+into a 500. Fixed with a new service.ErrInvalidRecipeID sentinel the
+handler unwraps via a plain == check (matching the existing
+sql.ErrNoRows-unwrapping convention in app/recipe.go), restoring the 400
+without putting orchestration back in app - verified live (400 vs 200).
+Test file moved (not deleted) to preserve coverage: app/list_test.go ->
+service/list_test.go, package line changed, otherwise byte-identical.
 
 ## Session 5: Tests against a fake execer
 Status: pending
-Scope: service/recipe_test.go, service/list_test.go (new) — a fake execer struct recording calls. Test: failing insertParts rolls back the whole AddRecipe/EditRecipe transaction (no partial writes). Test: GenerateShoppingList's remove+add is atomic (failure in AddIngredientListItems after successful RemoveIngredientListItems doesn't leave the Shopping List empty).
+Scope: service/recipe_test.go (new), service/list_test.go (already exists as of Session 4 - holds TestCombineIngredients, add to it rather than recreating it) — a fake execer struct recording calls. Test: failing insertParts rolls back the whole AddRecipe/EditRecipe transaction (no partial writes). Test: GenerateShoppingList's remove+add is atomic (failure in AddIngredientListItems after successful RemoveIngredientListItems doesn't leave the Shopping List empty).
 Depends on: Session 2, Session 3
 Commit:
 Notes:

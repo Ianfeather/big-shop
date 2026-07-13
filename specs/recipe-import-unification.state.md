@@ -70,8 +70,38 @@ server-side threading is inert until Session 4 sends them. The isVegetarian
 spec-anticipated interim state (Phase 4 already covers it), not a gap.
 
 ## Session 4: Simplify client call sites
-Status: pending
-Scope: components/recipe-form/Form.js (delete matchCanonicalIngredient, plain merges). pages/recipes/new.js: (a) fetchFromUrl reads tags directly from result instead of deriving from isVegetarian; (b) job-polling effect reads job.result directly (no second JSON.parse - it's already an object); (c) handleImageChange sends knownIngredients/knownUnits in the photo-upload FormData, closing the gap Session 3 left inert.
+Status: done
+Scope: components/recipe-form/Form.js (delete matchCanonicalIngredient, plain merges). pages/recipes/new.js: (a) fetchFromUrl reads tags directly from result instead of deriving from isVegetarian; (b) job-polling effect reads job.result directly (no second JSON.parse - it's already an object), and drops the now-dead try/catch around it; (c) handleImageChange sends knownIngredients/knownUnits in the photo-upload FormData, closing the gap Session 3 left inert.
 Depends on: Session 3
-Commit:
-Notes:
+Commit: 4741b87
+Notes: Test gate: eslint clean. Real end-to-end verify via a live browser
+(Playwright) against npm run dev:full (real DB + Go API + real model calls,
+not mocked): URL Import confirmed correctly checking/unchecking the
+Vegetarian tag for a vegetarian vs. non-vegetarian test recipe (screenshot
+at specs/evidence/recipe-import-unification/url-import-vegetarian-tag.png),
+pantry-staple omission and unit resolution against the real DB-backed
+catalog both correct, bulk-paste ingredient entry still works correctly
+with matchCanonicalIngredient removed client-side (server-side
+reconciliation in extract.js covers it).
+Review gate clean - Standards: 0 hard violations, a few judgement calls (one
+fixed: removed the now-dead try/catch with a stale "corrupted" error message
+around the job.result destructure, since a strict-schema object can't fail
+to destructure). Spec: 0 findings, all Phase 4 items plus both
+Session-3-necessitated fixes confirmed present and correct.
+
+Discovered but explicitly NOT fixed (outside both specs' scope - no code
+in this implementation run touches the Go backend, schema, or SQL):
+submitRecipe's POST /recipe 500s whenever an ingredient has no unit (e.g.
+"3 eggs") or, eventually, any unit at all once duplicates accumulate. Root
+cause: the `unit` table has no unique constraint on `name`
+(netlify-functions/recipes/internal/pkg/service/recipe.go's insertUnits
+upsert never dedupes as a result), so insertParts'
+`(SELECT id FROM unit WHERE name = ?)` subquery throws "Subquery returns
+more than 1 row" once 2+ rows share a name - confirmed reproducible in a
+fresh dev:full seed within a handful of saves. Compounded by AddRecipe
+having no transaction (recipe-writes-and-shopping-list-generation-seam.md's
+Phase 2 target): every failed save leaves an orphaned recipe row and
+duplicate ingredient/unit rows behind, making the next save likelier to
+fail too. Recommend a follow-up spec: unique constraint + dedup migration
+on unit.name (mirroring the prior ingredient_department fix), independent
+of and in addition to the Phase 2 transaction work already planned.

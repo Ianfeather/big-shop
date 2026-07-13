@@ -85,8 +85,8 @@ func AddIngredientListItems(userID string, ingredients map[string]*common.ListIn
 	vals := []interface{}{}
 
 	for name, val := range ingredients {
-		sqlStr += "(?, ?, 'ingredient', ?, ?, false, ?, (SELECT id from unit where name=?)),"
-		vals = append(vals, accountID, name, val.Quantity, val.Department, val.RecipeID, val.Unit)
+		sqlStr += "(?, ?, 'ingredient', ?, ?, ?, ?, (SELECT id from unit where name=?)),"
+		vals = append(vals, accountID, name, val.Quantity, val.Department, val.IsBought, val.RecipeID, val.Unit)
 	}
 
 	sqlStr = sqlStr[0 : len(sqlStr)-1]

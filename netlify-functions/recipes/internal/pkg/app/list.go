@@ -105,7 +105,20 @@ func (a *App) createListHandler(w http.ResponseWriter, req *http.Request) {
 		recipes = append(recipes, *recipe)
 	}
 
+	previousIngredients, err := service.GetIngredientListItems(userID, a.db)
+	if err != nil {
+		log.Println("Cannot get existing list items")
+		http.Error(w, "Cannot get existing list items", http.StatusInternalServerError)
+		return
+	}
+
 	combinedIngredients := CombineIngredients(recipes)
+	for name, ingredient := range combinedIngredients {
+		if previous, ok := previousIngredients[name]; ok && previous.IsBought {
+			ingredient.IsBought = true
+		}
+	}
+
 	if err := service.RemoveIngredientListItems(userID, a.db); err != nil {
 		log.Println("Cannot delete list items")
 		http.Error(w, "Cannot delete list items", http.StatusInternalServerError)

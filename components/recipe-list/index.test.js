@@ -16,7 +16,8 @@ import RecipeList from './index';
 
 async function renderList(props = {}) {
   render(<RecipeList {...props} />);
-  await waitFor(() => expect(screen.getByRole('button', { name: /Vegetarian/ })).toBeInTheDocument());
+  await userEvent.click(screen.getByRole('button', { name: /filter/i }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Vegetarian' })).toBeInTheDocument());
 }
 
 describe('RecipeList', () => {

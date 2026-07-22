@@ -1,18 +1,48 @@
+import { useState } from 'react';
+import icons from '@components/svg';
 import TagPill from '@components/tag-pill';
-import useOverflow from '@hooks/use-overflow';
 import styles from './index.module.css';
 
+const FilterIcon = icons.filter;
+
 const SidebarTagFilter = ({ onChange, tags, value }) => {
-  const [containerRef, isOverflowing] = useOverflow([tags.length]);
-  const containerClasses = `${styles.container} ${isOverflowing ? styles.overflowing : ''}`;
+  const [isOpen, setIsOpen] = useState(false);
+  const hasActiveFilter = value !== '';
+
+  const selectTag = (tag) => {
+    onChange(tag);
+    setIsOpen(false);
+  };
 
   return (
-    <div className={containerClasses} ref={containerRef}>
-      <button className={`${styles.allPill} ${value === '' ? styles.selected : ''}`} onClick={() => onChange('')}>All</button>
+    <div className={styles.container}>
+      <div className={styles.toggleRow}>
+        <button
+          type="button"
+          className={`${styles.toggle} ${hasActiveFilter ? styles.toggleActive : ''}`}
+          onClick={() => setIsOpen(!isOpen)}
+          aria-expanded={isOpen}
+        >
+          <FilterIcon className={styles.toggleIcon} />
+          Filter
+        </button>
+        {
+          hasActiveFilter && !isOpen && (
+            <TagPill tag={value} selected className={styles.activeTag} onClick={() => selectTag('')} />
+          )
+        }
+      </div>
       {
-        tags.map(tag => (
-          <TagPill key={tag} tag={tag} selected={value === tag} onClick={() => onChange(tag)} />
-        ))
+        isOpen && (
+          <div className={styles.tagGrid}>
+            <button className={`${styles.allPill} ${value === '' ? styles.selected : ''}`} onClick={() => selectTag('')}>All</button>
+            {
+              tags.map(tag => (
+                <TagPill key={tag} tag={tag} selected={value === tag} onClick={() => selectTag(tag)} />
+              ))
+            }
+          </div>
+        )
       }
     </div>
   )

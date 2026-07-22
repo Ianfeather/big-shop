@@ -8,6 +8,7 @@ import UserIcon from './user';
 import LeafIcon from './leaf';
 import BatchIcon from './batch';
 import TagIcon from './tag';
+import FilterIcon from './filter';
 
 const icons = {
   back: BackIcon,
@@ -19,7 +20,8 @@ const icons = {
   user: UserIcon,
   leaf: LeafIcon,
   batch: BatchIcon,
-  tag: TagIcon
+  tag: TagIcon,
+  filter: FilterIcon
 }
 
 export default icons;

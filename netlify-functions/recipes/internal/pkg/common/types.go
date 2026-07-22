@@ -62,10 +62,15 @@ type ListIngredient struct {
 // omitempty on ID/Name: a new user (POST /user) and an invite (POST
 // /invite) are sent by the frontend with only a subset of these fields -
 // see the ID comment on Recipe above for why that matters to Huma.
+// omitempty on Onboarded: it's server-managed and never sent by the client
+// as input (POST /user, POST /invite), so without omitempty Huma would mark
+// it required on those request bodies. On output, "false" and "absent" are
+// equivalent here since the frontend only ever checks it for truthiness.
 type User struct {
-	ID    string `json:"id,omitempty"`
-	Name  string `json:"name,omitempty"`
-	Email string `json:"email"`
+	ID        string `json:"id,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Email     string `json:"email"`
+	Onboarded bool   `json:"onboarded,omitempty"`
 }
 
 // Account holds accounts and users

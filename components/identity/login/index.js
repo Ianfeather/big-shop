@@ -6,9 +6,8 @@ export const LoginButton = () => {
   const { loginWithRedirect } = useAuth0();
 
   const handleClick = () => {
-    localStorage.setItem('app_state', 'login');
     loginWithRedirect({
-      redirectUri: `${process.env.NEXT_PUBLIC_HOST}/list`
+      redirectUri: process.env.NEXT_PUBLIC_HOST
     });
   }
 

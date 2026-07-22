@@ -38,7 +38,33 @@ func (a *App) addUser(ctx context.Context, input *UserInput) (*UserOutput, error
 		return nil, huma.Error500InternalServerError("Error creating account for user")
 	}
 
-	return &UserOutput{Body: user}, nil
+	// Re-fetch rather than echoing the input body: `onboarded` is server-managed
+	// (untouched by the upsert in AddUser for existing rows), so the caller needs
+	// the DB's current value to know whether to show the onboarding screen.
+	saved, err := service.GetUser(a.db, user.ID)
+	if err != nil {
+		log.Println("Error fetching saved user")
+		return nil, huma.Error500InternalServerError("Error fetching saved user")
+	}
+
+	return &UserOutput{Body: *saved}, nil
+}
+
+func (a *App) completeOnboarding(ctx context.Context, _ *struct{}) (*UserOutput, error) {
+	userID := ctx.Value(contextKey("userID")).(string)
+
+	if err := service.SetOnboarded(a.db, userID); err != nil {
+		log.Println("Error completing onboarding")
+		return nil, huma.Error500InternalServerError("could not complete onboarding")
+	}
+
+	saved, err := service.GetUser(a.db, userID)
+	if err != nil {
+		log.Println("Error fetching saved user")
+		return nil, huma.Error500InternalServerError("Error fetching saved user")
+	}
+
+	return &UserOutput{Body: *saved}, nil
 }
 
 func (a *App) inviteUser(ctx context.Context, input *UserInput) (*struct{}, error) {
@@ -91,6 +117,14 @@ func (a *App) registerUserRoutes(api huma.API) {
 		Summary:     "Add a user",
 		Tags:        []string{"Users"},
 	}, a.addUser)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "complete-onboarding",
+		Method:      http.MethodPatch,
+		Path:        "/user/onboarding",
+		Summary:     "Mark the current user as onboarded",
+		Tags:        []string{"Users"},
+	}, a.completeOnboarding)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "invite-user",

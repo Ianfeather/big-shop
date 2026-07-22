@@ -2,7 +2,6 @@ import styles from './index.module.css';
 import Tabs from '@components/layout/Tabs';
 import useFetch from 'use-http'
 import { useState, useEffect, useRef } from 'react';
-import useAuth0 from '@hooks/use-auth';
 import Layout, { MainContent, Sidebar } from '@components/layout'
 import RecipeSidebar from '@components/shopping-list/Recipes';
 import ShoppingList from '@components/shopping-list/ShoppingList';
@@ -35,7 +34,6 @@ const List = () => {
   let [shoppingList, setShoppingList] = useState({});
   let [extras, setExtras] = useState({});
   let [hydrateFlag, setHydrateFlag] = useState(false);
-  const { user } = useAuth0();
   // React 18 Strict Mode double-invokes effects in dev (mount, cleanup, mount
   // again). Without this, the throwaway first mount's in-flight requests can
   // resolve after the real ones and stomp good state with stale/empty data.
@@ -158,20 +156,8 @@ const List = () => {
     }
   }
 
-  function addUserAccount() {
-    if (useMocks) return;
-    const appState = localStorage.getItem('app_state');
-    if (!appState) return;
-    if (appState === 'login') {
-      let { name, email } = user;
-      post('/user', { name, email });
-      localStorage.removeItem('app_state');
-    }
-  }
-
   useEffect(() => { hydrateShoppingList() }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { getShoppingList() }, [recipeList]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { addUserAccount() }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Layout>

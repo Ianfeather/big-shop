@@ -6,10 +6,9 @@ export const CreateAccountButton = () => {
   const { loginWithRedirect } = useAuth0();
 
   const handleClick = () => {
-    localStorage.setItem('app_state', 'login');
     loginWithRedirect({
       screen_hint: 'signup',
-      redirectUri: `${process.env.NEXT_PUBLIC_HOST}/list`
+      redirectUri: process.env.NEXT_PUBLIC_HOST
     });
   }
 

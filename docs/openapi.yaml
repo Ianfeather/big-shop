@@ -348,6 +348,8 @@ components:
           type: string
         name:
           type: string
+        onboarded:
+          type: boolean
       required:
         - email
       type: object
@@ -870,6 +872,25 @@ paths:
                 $ref: "#/components/schemas/ErrorModel"
           description: Error
       summary: Add a user
+      tags:
+        - Users
+  /user/onboarding:
+    patch:
+      operationId: complete-onboarding
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Mark the current user as onboarded
       tags:
         - Users
 servers:

@@ -1,6 +1,7 @@
 import styles from './index.module.css'
 import Item from './Item';
 import ClearList from './clear-list';
+import EmptyBasketIllustration from '@components/svg/empty-basket';
 
 const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList }) => {
 
@@ -23,7 +24,10 @@ const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList }) => {
     <>
       <h2 className={styles.heading}>Your shopping list</h2>
       { !hasListItems && (
-          <p className={styles.emptyList}>Looks like you don&apos;t need to go shopping! Select a recipe from the list to start building a new list.</p>
+          <div className={styles.emptyState}>
+            <EmptyBasketIllustration className={styles.emptyBasketIllustration} role="img" aria-label="Empty shopping basket" />
+            <p className={styles.emptyStateText}>Your shopping list is empty</p>
+          </div>
       )}
       <ul className={styles.shoppingList}>
         { ingredients.map((name, i) => (

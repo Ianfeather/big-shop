@@ -4,10 +4,11 @@ import userEvent from '@testing-library/user-event';
 import ShoppingList from './index';
 
 describe('ShoppingList', () => {
-  it('shows an empty-list message and no clear button when there is nothing to buy', () => {
+  it('shows an empty-basket illustration and no clear button when there is nothing to buy', () => {
     render(<ShoppingList shoppingList={{}} extras={{}} buyIngredient={() => {}} clearList={() => {}} />);
 
-    expect(screen.getByText(/don.t need to go shopping/i)).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /empty shopping basket/i })).toBeInTheDocument();
+    expect(screen.getByText(/your shopping list is empty/i)).toBeInTheDocument();
     expect(screen.queryByText(/clear list/i)).not.toBeInTheDocument();
   });
 

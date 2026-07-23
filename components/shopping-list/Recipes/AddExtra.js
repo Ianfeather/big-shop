@@ -19,7 +19,7 @@ const AddExtra = ({ onAdd }) => {
   }
 
   return  (
-    <div>
+    <div className={styles.panel}>
       <SidebarHeading>Non-recipe items</SidebarHeading>
       <div className={styles.extraListContainer}>
         <SidebarInput placeholder="beer, snacks..." id="extra-list-item" value={extraItem} onKeyPress={addExtraItemOnEnter} onChange={(e) => setExtraItem(e.target.value)} />

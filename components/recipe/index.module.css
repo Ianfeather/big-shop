@@ -21,7 +21,7 @@
 .amount {
   flex-shrink: 0;
   min-width: 84px;
-  padding: 2px var(--space-2);
+  padding: 4px var(--space-2);
   border-radius: var(--radius-sm);
   background: var(--color-primary-soft);
   color: var(--color-primary-muted);
@@ -51,7 +51,7 @@
 
 .step {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-3);
 }
 
@@ -67,5 +67,4 @@
   color: var(--color-primary);
   font-size: var(--text-sm);
   font-weight: bold;
-  transform: translateY(4px);
 }

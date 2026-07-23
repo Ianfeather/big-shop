@@ -11,8 +11,9 @@ const Item = ({type, name, item, bought = false, handleClick}) => {
         <span className={styles.checkMark}></span>
       </span>
       <span className={styles.itemName}>{name}</span>
-      <span className={styles.itemQuantity}>{quantity}</span>
-      <span className={styles.itemUnit}>{unit}</span>
+      {(quantity || unit) && (
+        <span className={styles.amount}>{quantity} {unit}</span>
+      )}
     </li>
   );
 };

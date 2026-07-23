@@ -9,6 +9,7 @@ import LeafIcon from './leaf';
 import BatchIcon from './batch';
 import TagIcon from './tag';
 import FilterIcon from './filter';
+import SearchIcon from './search';
 
 const icons = {
   back: BackIcon,
@@ -21,7 +22,8 @@ const icons = {
   leaf: LeafIcon,
   batch: BatchIcon,
   tag: TagIcon,
-  filter: FilterIcon
+  filter: FilterIcon,
+  search: SearchIcon
 }
 
 export default icons;

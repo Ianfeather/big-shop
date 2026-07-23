@@ -49,6 +49,30 @@ describe('RecipeList', () => {
     expect(screen.queryByText("Shepherd's Pie")).not.toBeInTheDocument();
   });
 
+  it('combines multiple selected tags with OR, not AND', async () => {
+    await renderList();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Vegetarian' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Batch Cook' }));
+
+    // Shepherd's Pie only has Batch Cook, Veggie Curry only has Vegetarian -
+    // both should still show up since either tag is enough to match.
+    expect(screen.getByText("Shepherd's Pie")).toBeInTheDocument();
+    expect(screen.getByText('Veggie Chilli')).toBeInTheDocument();
+    expect(screen.getByText('Veggie Curry')).toBeInTheDocument();
+  });
+
+  it('toggles a tag back off when clicked again', async () => {
+    await renderList();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Vegetarian' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Vegetarian' }));
+
+    expect(screen.getByText("Shepherd's Pie")).toBeInTheDocument();
+    expect(screen.getByText('Veggie Chilli')).toBeInTheDocument();
+    expect(screen.getByText('Veggie Curry')).toBeInTheDocument();
+  });
+
   it('combines search and tag filters', async () => {
     await renderList();
 
@@ -64,5 +88,19 @@ describe('RecipeList', () => {
 
     expect(screen.queryByText("Shepherd's Pie")).not.toBeInTheDocument();
     expect(screen.getByText('Veggie Chilli')).toBeInTheDocument();
+  });
+
+  it('moves selected recipes to the top of the list', async () => {
+    await renderList({ selectedIds: { '3': true } });
+
+    const items = screen.getAllByRole('listitem');
+    expect(items[0]).toHaveTextContent('Veggie Curry');
+  });
+
+  it('marks selected recipes as checked, and leaves others unmarked', async () => {
+    await renderList({ selectedIds: { '3': true } });
+
+    expect(screen.getByText('Veggie Curry').closest('li').className).toMatch(/checked/);
+    expect(screen.getByText("Shepherd's Pie").closest('li').className).not.toMatch(/checked/);
   });
 });

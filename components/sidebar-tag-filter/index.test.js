@@ -5,16 +5,16 @@ import SidebarTagFilter from './index';
 
 describe('SidebarTagFilter', () => {
   it('starts collapsed, with only the Filter toggle visible', () => {
-    render(<SidebarTagFilter tags={['Vegetarian', 'Batch Cook']} value="" onChange={() => {}} />);
+    render(<SidebarTagFilter tags={['Vegetarian', 'Batch Cook']} value={[]} onChange={() => {}} />);
 
     expect(screen.getByRole('button', { name: /filter/i })).toBeInTheDocument();
     expect(screen.queryByText('All')).not.toBeInTheDocument();
     expect(screen.queryByText('Vegetarian')).not.toBeInTheDocument();
   });
 
-  it('opens to show an All pill plus one pill per tag, and reports the selected value', async () => {
+  it('opens to show an All pill plus one pill per tag, and reports the toggled tag', async () => {
     const onChange = vi.fn();
-    render(<SidebarTagFilter tags={['Vegetarian', 'Batch Cook']} value="" onChange={onChange} />);
+    render(<SidebarTagFilter tags={['Vegetarian', 'Batch Cook']} value={[]} onChange={onChange} />);
 
     await userEvent.click(screen.getByRole('button', { name: /filter/i }));
     expect(screen.getByText('All')).toBeInTheDocument();
@@ -25,7 +25,7 @@ describe('SidebarTagFilter', () => {
 
   it('clicking All reports an empty value', async () => {
     const onChange = vi.fn();
-    render(<SidebarTagFilter tags={['Vegetarian']} value="Vegetarian" onChange={onChange} />);
+    render(<SidebarTagFilter tags={['Vegetarian']} value={['Vegetarian']} onChange={onChange} />);
 
     await userEvent.click(screen.getByRole('button', { name: /filter/i }));
     await userEvent.click(screen.getByText('All'));
@@ -33,22 +33,27 @@ describe('SidebarTagFilter', () => {
     expect(onChange).toHaveBeenCalledWith('');
   });
 
-  it('collapses the panel again once a tag is selected', async () => {
-    render(<SidebarTagFilter tags={['Vegetarian']} value="" onChange={() => {}} />);
+  it('keeps the panel open after selecting a tag, so more can be picked', async () => {
+    render(<SidebarTagFilter tags={['Vegetarian', 'Batch Cook']} value={[]} onChange={() => {}} />);
 
     await userEvent.click(screen.getByRole('button', { name: /filter/i }));
     await userEvent.click(screen.getByRole('button', { name: 'Vegetarian' }));
 
-    expect(screen.queryByText('All')).not.toBeInTheDocument();
+    expect(screen.getByText('All')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Batch Cook' })).toBeInTheDocument();
   });
 
-  it('shows the active tag next to the toggle when collapsed, and clears it on click', async () => {
-    const onChange = vi.fn();
-    render(<SidebarTagFilter tags={['Vegetarian', 'Batch Cook']} value="Vegetarian" onChange={onChange} />);
+  it('shows a count next to the toggle instead of the selected tags themselves', () => {
+    render(<SidebarTagFilter tags={['Vegetarian', 'Batch Cook']} value={['Vegetarian', 'Batch Cook']} onChange={() => {}} />);
 
-    const activeTag = screen.getByRole('button', { name: 'Vegetarian' });
-    await userEvent.click(activeTag);
+    const toggle = screen.getByRole('button', { name: /filter/i });
+    expect(toggle).toHaveTextContent('(2)');
+  });
 
-    expect(onChange).toHaveBeenCalledWith('');
+  it('shows no count when nothing is selected', () => {
+    render(<SidebarTagFilter tags={['Vegetarian']} value={[]} onChange={() => {}} />);
+
+    const toggle = screen.getByRole('button', { name: /filter/i });
+    expect(toggle).not.toHaveTextContent('(0)');
   });
 });

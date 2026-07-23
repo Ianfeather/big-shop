@@ -1,16 +1,18 @@
 .module {
-  margin-bottom: var(--space-5);
+  margin-bottom: var(--space-4);
 }
 
-.tintedPanel {
-  background: var(--color-primary-tint);
-  border-radius: var(--radius-md);
-  padding: var(--space-2);
+.panel {
+  background: white;
+  padding: var(--space-3);
 }
 
-.tintedPanel ul {
-  display: flex;
-  flex-direction: column;
+@media (min-width: 800px) {
+  .panel {
+    box-shadow: inset 4px 0 6px -6px rgba(0, 0, 0, 0.4);
+      border-bottom: 1px solid #dfceeb;
+      border-top: 1px solid #dfceeb;
+  }
 }
 
 .addButton {
@@ -29,14 +31,10 @@
 
 .extraListContainer {
   display: flex;
-  margin-bottom: var(--space-4);
 }
 
 @media( min-width: 800px) {
   .sideBarContainer {
     margin-top: 70px;
-  }
-  .module {
-    margin-bottom: 50px;
   }
 }

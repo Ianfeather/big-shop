@@ -78,14 +78,17 @@
   color: var(--gray-500);
 }
 
-.itemQuantity {
+.amount {
+  flex-shrink: 0;
+  min-width: 84px;
+  padding: 4px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: var(--gray-500);
-}
-
-.itemUnit {
-  margin-left: var(--space-1);
-  color: var(--gray-500);
+  text-align: center;
 }
 
 .emptyState {
@@ -108,4 +111,3 @@
   color: var(--gray-500);
   font-size: var(--text-base);
 }
-

@@ -7,44 +7,35 @@ const FilterIcon = icons.filter;
 
 const SidebarTagFilter = ({ onChange, tags, value }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const hasActiveFilter = value !== '';
-
-  const selectTag = (tag) => {
-    onChange(tag);
-    setIsOpen(false);
-  };
+  const selectedCount = value.length;
 
   return (
-    <div className={styles.container}>
+    <>
       <div className={styles.toggleRow}>
         <button
           type="button"
-          className={`${styles.toggle} ${hasActiveFilter ? styles.toggleActive : ''}`}
+          className={`${styles.toggle} ${selectedCount > 0 ? styles.toggleActive : ''}`}
           onClick={() => setIsOpen(!isOpen)}
           aria-expanded={isOpen}
+          aria-label={selectedCount > 0 ? `Filter (${selectedCount} selected)` : 'Filter'}
         >
           <FilterIcon className={styles.toggleIcon} />
-          Filter
+          { selectedCount > 0 && <span className={styles.count}>({selectedCount})</span> }
         </button>
-        {
-          hasActiveFilter && !isOpen && (
-            <TagPill tag={value} selected className={styles.activeTag} onClick={() => selectTag('')} />
-          )
-        }
       </div>
       {
         isOpen && (
           <div className={styles.tagGrid}>
-            <button className={`${styles.allPill} ${value === '' ? styles.selected : ''}`} onClick={() => selectTag('')}>All</button>
+            <button className={`${styles.allPill} ${selectedCount === 0 ? styles.selected : ''}`} onClick={() => onChange('')}>All</button>
             {
               tags.map(tag => (
-                <TagPill key={tag} tag={tag} selected={value === tag} onClick={() => selectTag(tag)} />
+                <TagPill key={tag} tag={tag} selected={value.includes(tag)} onClick={() => onChange(tag)} />
               ))
             }
           </div>
         )
       }
-    </div>
+    </>
   )
 }
 

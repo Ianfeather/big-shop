@@ -5,7 +5,6 @@ import { useState, useEffect, useRef } from 'react';
 import Layout, { MainContent, Sidebar } from '@components/layout'
 import RecipeSidebar from '@components/shopping-list/Recipes';
 import ShoppingList from '@components/shopping-list/ShoppingList';
-import useRecipes from '@hooks/use-recipes';
 import mocks from '../mocks';
 
 const useMocks = process.env.NEXT_PUBLIC_USE_MOCKS === 'true';
@@ -29,7 +28,6 @@ function buildMockIngredients(selectedRecipeIds) {
 }
 
 const List = () => {
-  const [recipes] = useRecipes();
   let [recipeList, setRecipeList] = useState({});
   let [shoppingList, setShoppingList] = useState({});
   let [extras, setExtras] = useState({});
@@ -166,7 +164,7 @@ const List = () => {
           <ShoppingList clearList={clearList} shoppingList={shoppingList} extras={extras} buyIngredient={buyIngredient} />
         </MainContent>
         <Sidebar name="Create & Edit">
-          <RecipeSidebar recipeList={recipeList} addExtraItem={addExtraItem} recipes={recipes} handleRecipeSelect={handleRecipeSelect}/>
+          <RecipeSidebar recipeList={recipeList} addExtraItem={addExtraItem} handleRecipeSelect={handleRecipeSelect}/>
         </Sidebar>
       </Tabs>
     </Layout>

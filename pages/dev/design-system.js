@@ -92,7 +92,16 @@ const daveMessages = [
 ];
 
 const DesignSystem = () => {
-  const [tagFilter, setTagFilter] = useState('');
+  const [tagFilter, setTagFilter] = useState([]);
+  const toggleTagFilter = (tag) => {
+    if (tag === '') {
+      setTagFilter([]);
+      return;
+    }
+    setTagFilter(current => (
+      current.includes(tag) ? current.filter(t => t !== tag) : [...current, tag]
+    ));
+  };
   const [search, setSearch] = useState('');
 
   return (
@@ -261,8 +270,8 @@ const DesignSystem = () => {
             <div className={styles.componentGrid}>
               <div className={styles.card} style={{ maxWidth: '280px' }}>
                 <SidebarHeading>All Recipes</SidebarHeading>
-                <SidebarInput placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} />
-                <SidebarTagFilter tags={['Batch Cook', 'Vegetarian']} value={tagFilter} onChange={setTagFilter} />
+                <SidebarInput icon={icons.search} placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} />
+                <SidebarTagFilter tags={['Batch Cook', 'Vegetarian']} value={tagFilter} onChange={toggleTagFilter} />
                 <ul>
                   <ListItem id="ds-item-1" name="Shepherd's Pie" tags={['Batch Cook']} checked={false} onClick={() => {}} />
                   <ListItem id="ds-item-2" name="Veggie Chilli" tags={['Vegetarian', 'Batch Cook']} checked={true} onClick={() => {}} />

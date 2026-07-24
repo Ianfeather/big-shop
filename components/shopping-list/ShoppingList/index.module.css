@@ -25,6 +25,12 @@
   padding: var(--space-3);
   margin: 0 calc(var(--space-3) * -1) var(--space-1);
   transition: background-color 0.12s ease;
+  width: 100%;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: inherit;
 }
 
 .item:hover {

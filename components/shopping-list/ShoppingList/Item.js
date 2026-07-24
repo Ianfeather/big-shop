@@ -6,14 +6,16 @@ const Item = ({type, name, item, bought = false, handleClick}) => {
   const className = `${styles.item} ${bought ? styles.bought : ''}`;
 
   return (
-    <li className={className} key={name} onClick={() => handleClick(name, type)}>
-      <span className={styles.check} aria-hidden="true">
-        <span className={styles.checkMark}></span>
-      </span>
-      <span className={styles.itemName}>{name}</span>
-      {(quantity || unit) && (
-        <span className={styles.amount}>{quantity} {unit}</span>
-      )}
+    <li key={name}>
+      <button type="button" role="checkbox" aria-checked={bought} className={className} onClick={() => handleClick(name, type)}>
+        <span className={styles.check} aria-hidden="true">
+          <span className={styles.checkMark}></span>
+        </span>
+        <span className={styles.itemName}>{name}</span>
+        {(quantity || unit) && (
+          <span className={styles.amount}>{quantity} {unit}</span>
+        )}
+      </button>
     </li>
   );
 };

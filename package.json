@@ -11,6 +11,9 @@
     "package": "npm run lint && npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "npm run test:e2e:stop && playwright test",
+    "test:e2e:debug": "npm run test:e2e:stop && E2E_SLOWMO=800 playwright test --headed --workers=1",
+    "test:e2e:stop": "COMPOSE_PROJECT_NAME=bigshop-e2e docker compose down --remove-orphans >/dev/null 2>&1 || true",
     "test:evals": "./evals/run-evals.sh",
     "test:evals:shopping": "./evals/run-evals.sh shopping",
     "test:dave": "node evals/test-runner.js"
@@ -32,6 +35,7 @@
   },
   "devDependencies": {
     "@netlify/plugin-nextjs": "^4.41.3",
+    "@playwright/test": "^1.61.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
@@ -44,6 +48,7 @@
     "jsdom": "^29.1.1",
     "node-fetch": "^3.3.2",
     "nodemon": "^3.0.2",
+    "typescript": "^6.0.3",
     "vite": "^6.4.3",
     "vitest": "^4.1.10"
   }

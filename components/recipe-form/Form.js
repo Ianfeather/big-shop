@@ -31,8 +31,13 @@ export default function Form({initialRecipe = {}, mode = 'new'}) {
   let [bulkError, setBulkError] = useState(null);
 
   const router = useRouter();
+  // use-http only auto-adds Content-Type: application/json for POST/PUT/PATCH,
+  // not DELETE - without this, deleteRecipe's `del('/recipe', { id })` call
+  // sends its JSON body as text/plain, which the API's content-type
+  // validation rejects with 415.
   const { get, post, put, del, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
-    cachePolicy: 'no-cache'
+    cachePolicy: 'no-cache',
+    headers: { 'Content-Type': 'application/json' }
   });
 
   const { post: postParseText, response: parseResponse, loading: parseLoading } = useFetch(`${process.env.NEXT_PUBLIC_HOST}/api/parse-recipe-text`, {

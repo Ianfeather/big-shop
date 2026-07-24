@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import type { NextApiRequest, NextApiResponse } from 'next';
 import { availableTools, executeToolCall } from './tools';
 
 const openai = new OpenAI({
@@ -39,7 +40,7 @@ When presenting recipe lists to users:
 - When users refer to recipes by position ("add the first one", "the third recipe"), use the internal ID from that position
 - Format lists with proper line breaks for readability`;
 
-export default async function handler(req, res) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -51,18 +52,20 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Messages array is required' });
     }
 
-    // Prepare messages for OpenAI
-    const openAIMessages = [
+    // Prepare messages for OpenAI. Loosely typed (any[]) rather than OpenAI's
+    // own ChatCompletionMessageParam union - this array ends up holding a mix
+    // of plain, assistant, and tool messages pushed on below.
+    const openAIMessages: any[] = [
       { role: 'system', content: DAVE_SYSTEM_PROMPT },
-      ...messages.map(msg => ({
+      ...messages.map((msg: any) => ({
         role: msg.role,
         content: msg.content
       }))
     ];
 
     // Iterative tool calling - allow multiple rounds
-    let toolMessages = [...openAIMessages];
-    let allToolCalls = [];
+    let toolMessages: any[] = [...openAIMessages];
+    let allToolCalls: any[] = [];
     let totalToolsUsed = 0;
     const maxIterations = 5; // Prevent infinite loops
     let iteration = 0;
@@ -73,7 +76,7 @@ export default async function handler(req, res) {
       const completion = await openai.chat.completions.create({
         model: 'gpt-3.5-turbo',
         messages: toolMessages,
-        tools: availableTools,
+        tools: availableTools as any,
         tool_choice: 'auto',
         temperature: 0.7,
         max_tokens: 1000,
@@ -100,8 +103,11 @@ export default async function handler(req, res) {
         });
       }
 
-      // Execute all tool calls for this iteration
-      for (const toolCall of assistantMessage.tool_calls) {
+      // Execute all tool calls for this iteration. availableTools only ever
+      // defines type: 'function' tools, so every call here is a
+      // ChatCompletionMessageFunctionToolCall, never the SDK's other
+      // (custom-tool) variant of ChatCompletionMessageToolCall.
+      for (const toolCall of assistantMessage.tool_calls as OpenAI.ChatCompletionMessageFunctionToolCall[]) {
         try {
           const args = JSON.parse(toolCall.function.arguments);
           const result = await executeToolCall(toolCall.function.name, args, authToken, useMockApi);
@@ -122,21 +128,22 @@ export default async function handler(req, res) {
 
           totalToolsUsed++;
         } catch (error) {
-          console.error(`Tool ${toolCall.function.name} failed:`, error.message);
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`Tool ${toolCall.function.name} failed:`, message);
 
           toolMessages.push({
             role: 'tool',
             tool_call_id: toolCall.id,
             content: JSON.stringify({
               success: false,
-              error: error.message
+              error: message
             })
           });
 
           allToolCalls.push({
             name: toolCall.function.name,
             arguments: JSON.parse(toolCall.function.arguments),
-            error: error.message
+            error: message
           });
         }
       }
@@ -163,7 +170,7 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error('Dave chat error:', error);
 
-    if (error.code === 'insufficient_quota') {
+    if ((error as { code?: string })?.code === 'insufficient_quota') {
       return res.status(400).json({
         error: 'OpenAI API quota exceeded. Please check your OpenAI account.'
       });

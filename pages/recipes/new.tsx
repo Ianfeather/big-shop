@@ -2,20 +2,21 @@ import Spinner from '@components/recipe-form/spinner';
 import Form from '@components/recipe-form/Form';
 import Layout, { MainContent } from '@components/layout'
 import styles from './index.module.css';
-import { useState, useRef, useEffect } from 'react';
+import { ChangeEvent, useState, useRef, useEffect } from 'react';
 import Button from '@components/button';
-import useFetch from 'use-http'
+import useFetch, { CachePolicies } from 'use-http'
 import PhotoIcon from '@components/svg/photo';
 import useIngredientMetadata from '@hooks/use-ingredient-metadata';
+import type { Recipe as RecipeModel } from '../../types/models';
 
 // Helper function to resize image
-const resizeImage = (file) => {
+const resizeImage = (file: File): Promise<Blob> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
-    reader.onload = (event) => {
+    reader.onload = () => {
       const img = new Image();
-      img.src = event.target.result;
+      img.src = reader.result as string;
       img.onload = () => {
         const canvas = document.createElement('canvas');
         let width = img.width;
@@ -39,11 +40,12 @@ const resizeImage = (file) => {
         canvas.width = width;
         canvas.height = height;
 
-        const ctx = canvas.getContext('2d');
+        // A freshly created canvas's 2d context is never null in practice.
+        const ctx = canvas.getContext('2d')!;
         ctx.drawImage(img, 0, 0, width, height);
 
         // Recursive function to create blob with quality adjustment
-        const createBlob = (quality) => {
+        const createBlob = (quality: number): Promise<Blob | null> => {
           return new Promise((resolveBlob) => {
             canvas.toBlob((blob) => {
               if (!blob) {
@@ -78,46 +80,80 @@ const resizeImage = (file) => {
   });
 };
 
-const SOURCE_TABS = [
+const SOURCE_TABS: { id: 'url' | 'camera' | 'manual'; label: string }[] = [
   { id: 'url', label: 'Recipe Link' },
   { id: 'camera', label: 'Import from Camera' },
   { id: 'manual', label: 'Enter Manually' },
 ];
 
+interface ParsedIngredient {
+  name?: string;
+  quantity?: string;
+  unit?: string;
+}
+
+interface ParseUrlResult {
+  name?: string;
+  ingredients?: ParsedIngredient[];
+  method?: string;
+  tags?: string[];
+  error?: string;
+}
+
+interface ImageJobStatus {
+  status: 'completed' | 'failed' | 'processing';
+  result?: { name?: string; ingredients?: ParsedIngredient[]; method?: string; tags?: string[] };
+  error?: string;
+}
+
+// Extraction results (from either source) carry loosely-shaped ingredients -
+// same normalization Form.tsx's appendIngredients already does for
+// bulk-paste extraction, applied here for URL/photo extraction too.
+function normalizeParsedIngredients(ingredients?: ParsedIngredient[]): RecipeModel['ingredients'] {
+  return (ingredients || []).map(({ name, quantity, unit }) => ({
+    name: name || '',
+    quantity: quantity || '',
+    unit: unit || ''
+  }));
+}
+
 const NewRecipe = () => {
   const title = 'Add New Recipe';
-  const [activeTab, setActiveTab] = useState('url');
-  const [APIError, setAPIError] = useState(null);
-  const [errorDetails, setErrorDetails] = useState(null);
-  const [parsedRecipe, setParsedRecipe] = useState(null);
-  const [processingJob, setProcessingJob] = useState(null);
+  const [activeTab, setActiveTab] = useState<'url' | 'camera' | 'manual'>('url');
+  const [APIError, setAPIError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
+  const [parsedRecipe, setParsedRecipe] = useState<Partial<RecipeModel> | null>(null);
+  const [processingJob, setProcessingJob] = useState<{ jobId: string } | null>(null);
   const [urlValue, setUrlValue] = useState('');
   const [urlFetched, setUrlFetched] = useState('');
-  const imageInput = useRef(null);
+  const imageInput = useRef<HTMLInputElement>(null);
   const { ingredients: knownIngredients, units: knownUnits } = useIngredientMetadata();
 
+  // post (form upload -> {jobId}) and get (job status poll -> ImageJobStatus)
+  // share this instance with different response shapes - same rationale as
+  // Form.tsx's shared useFetch instance.
   const { post, get, response, loading, error } = useFetch(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image`, {
-    cachePolicy: 'no-cache',
+    cachePolicy: CachePolicies.NO_CACHE,
   });
 
-  const { post: postUrl, response: urlResponse, loading: urlLoading } = useFetch(`${process.env.NEXT_PUBLIC_HOST}/api/parse-recipe-url`, {
-    cachePolicy: 'no-cache',
+  const { post: postUrl, response: urlResponse, loading: urlLoading } = useFetch<ParseUrlResult>(`${process.env.NEXT_PUBLIC_HOST}/api/parse-recipe-url`, {
+    cachePolicy: CachePolicies.NO_CACHE,
   });
 
   // Poll for job status
   useEffect(() => {
-    let pollInterval;
+    let pollInterval: ReturnType<typeof setInterval>;
 
     if (processingJob) {
       pollInterval = setInterval(async () => {
         const { jobId } = processingJob;
-        const job = await get(`?jobId=${jobId}`);
+        const job: ImageJobStatus = await get(`?jobId=${jobId}`);
 
         if (job.status === 'completed') {
           clearInterval(pollInterval);
           setProcessingJob(null);
-          const { name, ingredients, method, tags } = job.result;
-          setParsedRecipe({ name, ingredients, method, tags });
+          const { name, ingredients, method, tags } = job.result || {};
+          setParsedRecipe({ name, ingredients: normalizeParsedIngredients(ingredients), method, tags });
         } else if (job.status === 'failed') {
           clearInterval(pollInterval);
           setProcessingJob(null);
@@ -136,11 +172,11 @@ const NewRecipe = () => {
   }, [processingJob, get]);
 
   const handleImageClick = () => {
-    imageInput.current.click();
+    imageInput.current?.click();
   }
 
-  const handleImageChange = async (event) => {
-    const file = event.target.files[0];
+  const handleImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (!file) {
       return;
     }
@@ -166,7 +202,7 @@ const NewRecipe = () => {
       formData.append('knownIngredients', JSON.stringify(knownIngredients));
       formData.append('knownUnits', JSON.stringify(knownUnits));
 
-      const { jobId } = await post(formData);
+      const { jobId }: { jobId: string } = await post(formData);
 
       if (error) {
         setAPIError('Network error');
@@ -188,7 +224,7 @@ const NewRecipe = () => {
     }
   };
 
-  const fetchFromUrl = async (rawUrl) => {
+  const fetchFromUrl = async (rawUrl: string) => {
     const trimmed = (rawUrl || '').trim();
     if (!trimmed || trimmed === urlFetched) return;
 
@@ -213,7 +249,7 @@ const NewRecipe = () => {
     setUrlFetched(trimmed);
     setParsedRecipe({
       name: result.name || '',
-      ingredients: result.ingredients || [],
+      ingredients: normalizeParsedIngredients(result.ingredients),
       method: result.method || '',
       remoteUrl: parsedUrl.href,
       tags: result.tags || []

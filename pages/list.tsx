@@ -1,16 +1,17 @@
 import styles from './index.module.css';
 import Tabs from '@components/layout/Tabs';
-import useFetch from 'use-http'
-import { useState, useEffect, useRef } from 'react';
+import useFetch, { CachePolicies } from 'use-http'
+import { ChangeEvent, useState, useEffect, useRef } from 'react';
 import Layout, { MainContent, Sidebar } from '@components/layout'
 import RecipeSidebar from '@components/shopping-list/Recipes';
 import ShoppingList from '@components/shopping-list/ShoppingList';
 import mocks from '../mocks';
+import type { ListIngredient } from '../types/models';
 
 const useMocks = process.env.NEXT_PUBLIC_USE_MOCKS === 'true';
 
-function buildMockIngredients(selectedRecipeIds) {
-  const ingredients = {};
+function buildMockIngredients(selectedRecipeIds: string[]): Record<string, ListIngredient> {
+  const ingredients: Record<string, ListIngredient> = {};
   selectedRecipeIds.forEach(id => {
     const recipe = mocks.recipes.find(r => String(r.id) === String(id));
     if (!recipe) return;
@@ -27,10 +28,26 @@ function buildMockIngredients(selectedRecipeIds) {
   return ingredients;
 }
 
+// The untyped get/post/patch/del below are shared across four endpoints
+// (GET/POST /shopping-list, PATCH /shopping-list/buy, DELETE
+// /shopping-list/clear, POST /shopping-list/extra) with different response
+// shapes - same rationale as Form.tsx's shared useFetch instance.
+interface ShoppingListResult {
+  recipes: string[];
+  ingredients: Record<string, ListIngredient>;
+  extras: Record<string, ListIngredient>;
+}
+
+interface ListState {
+  recipes?: string[];
+  ingredients?: Record<string, ListIngredient>;
+  extras?: Record<string, ListIngredient>;
+}
+
 const List = () => {
-  let [recipeList, setRecipeList] = useState({});
-  let [shoppingList, setShoppingList] = useState({});
-  let [extras, setExtras] = useState({});
+  let [recipeList, setRecipeList] = useState<Record<string, boolean>>({});
+  let [shoppingList, setShoppingList] = useState<Record<string, ListIngredient>>({});
+  let [extras, setExtras] = useState<Record<string, ListIngredient>>({});
   let [hydrateFlag, setHydrateFlag] = useState(false);
   // React 18 Strict Mode double-invokes effects in dev (mount, cleanup, mount
   // again). Without this, the throwaway first mount's in-flight requests can
@@ -41,7 +58,7 @@ const List = () => {
     return () => { cancelledRef.current = true; };
   }, []);
 
-  const handleRecipeSelect = (e) => {
+  const handleRecipeSelect = (e: ChangeEvent<HTMLInputElement>) => {
     const newList = { ...recipeList,
       [e.target.id]: !recipeList[e.target.id]
     };
@@ -49,15 +66,15 @@ const List = () => {
   };
 
   const { get, post, patch, del, response } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
-    cachePolicy: 'no-cache'
+    cachePolicy: CachePolicies.NO_CACHE
   });
 
-  const setListState = (ingredients, extras) => {
+  const setListState = (ingredients: Record<string, ListIngredient>, extras: Record<string, ListIngredient>) => {
     setShoppingList(ingredients);
     setExtras(extras);
   }
 
-  async function buyIngredient(name, type) {
+  async function buyIngredient(name: string, type: 'ingredient' | 'extra') {
     const list = type === 'ingredient' ? shoppingList : extras;
     const newList = {
       ...list,
@@ -82,10 +99,10 @@ const List = () => {
     }
   }
 
-  const getListState = async () => {
+  const getListState = async (): Promise<ListState> => {
     if (useMocks) return {};
 
-    const result = await get('/shopping-list');
+    const result: ShoppingListResult = await get('/shopping-list');
     if (cancelledRef.current) return {};
     if (response.ok && result.recipes.length) {
       setListState(result.ingredients, result.extras);
@@ -99,7 +116,7 @@ const List = () => {
     const { recipes = [], extras = {} } = await getListState();
     if (cancelledRef.current) return;
     setHydrateFlag(true);
-    setRecipeList(recipes.reduce((acc, recipe) => {
+    setRecipeList(recipes.reduce<Record<string, boolean>>((acc, recipe) => {
       acc[recipe] = true;
       return acc;
     }, {}));
@@ -126,7 +143,7 @@ const List = () => {
       return;
     }
 
-    const result = await post('/shopping-list', selectedRecipes);
+    const result: ShoppingListResult = await post('/shopping-list', selectedRecipes);
     if (!cancelledRef.current && response.ok) {
       setListState(result.ingredients, result.extras);
     }
@@ -135,15 +152,18 @@ const List = () => {
   async function clearList() {
     setShoppingList({});
     setExtras({});
-    setRecipeList([]);
+    setRecipeList({});
     if (!useMocks) del('/shopping-list/clear');
   }
 
-  function addExtraItem(extraItem) {
+  function addExtraItem(extraItem: string) {
     if (!extraItem) { return; }
+    // Extra Items carry placeholder quantity/unit/department/recipe_id
+    // values (see CONTEXT.md's Shopping List Item entry) - never rendered
+    // for an extra (ShoppingList/Item.tsx only reads them for 'ingredient').
     const newList = {
       ...extras,
-      [extraItem]: { quantity: '', unit: '' }
+      [extraItem]: { quantity: 0, unit: '', department: '', recipe_id: 0, isBought: false }
     };
     setExtras(newList);
     if (!useMocks) {

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { GetServerSideProps } from 'next';
 import Layout, { MainContent } from '@components/layout';
 import Button from '@components/button';
 import Message from '@components/message';
@@ -8,7 +9,7 @@ import SidebarTagFilter from '@components/sidebar-tag-filter';
 import ListItem from '@components/sidebar-item';
 import TagPill from '@components/tag-pill';
 import Spinner from '@components/recipe-form/spinner';
-import DaveChat from '@components/dave-chat';
+import DaveChat, { DaveMessage } from '@components/dave-chat';
 import icons from '@components/svg';
 import styles from './design-system.module.css';
 
@@ -16,12 +17,12 @@ import styles from './design-system.module.css';
 // a living reference for the tokens defined in pages/styles.css and the
 // shared components in components/, so changes to either stay visible in
 // one place instead of drifting silently across features.
-export async function getServerSideProps() {
+export const getServerSideProps: GetServerSideProps = async () => {
   if (process.env.NODE_ENV === 'production') {
     return { notFound: true };
   }
   return { props: {} };
-}
+};
 
 const colorGroups = [
   {
@@ -86,14 +87,14 @@ const radiusScale = [
   ['--radius-round', '50%'],
 ];
 
-const daveMessages = [
+const daveMessages: DaveMessage[] = [
   { id: 1, role: 'assistant', content: "Hi! I'm Dave. Want help planning meals for the week?", timestamp: '2026-01-01T12:00:00Z' },
   { id: 2, role: 'user', content: 'Something with the chilli I already have please.', timestamp: '2026-01-01T12:01:00Z' },
 ];
 
 const DesignSystem = () => {
-  const [tagFilter, setTagFilter] = useState([]);
-  const toggleTagFilter = (tag) => {
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
+  const toggleTagFilter = (tag: string) => {
     if (tag === '') {
       setTagFilter([]);
       return;

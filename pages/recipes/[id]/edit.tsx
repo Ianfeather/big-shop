@@ -3,16 +3,18 @@ import RecipeList from '@components/recipe-list'
 import Button from '@components/button';
 import useRecipe from '@hooks/use-recipe';
 import Form from '@components/recipe-form/Form';
-import useRecipes from '@hooks/use-recipes';
 import { useRouter } from 'next/router';
 import styles from '../index.module.css';
 
 
 const Recipes = () => {
   const router = useRouter()
-  const { id } = router.query
+  // RecipeList (below) always fetches its own recipes via useRecipes()
+  // internally and has no `recipes` prop - a `recipes={...}` pass-through
+  // here was dead. router.query.id is only ever a single string on this
+  // route (never an array - not a catch-all route).
+  const { id } = router.query as { id: string };
   const [recipe] = useRecipe(id);
-  const [recipes] = useRecipes();
 
   return (
     <Layout pageTitle={"Recipes"}>
@@ -23,7 +25,7 @@ const Recipes = () => {
           <Form initialRecipe={recipe} mode="edit" />
         </MainContent>
         <Sidebar>
-          <RecipeList recipes={recipes} />
+          <RecipeList />
         </Sidebar>
       </Grid>
     </Layout>

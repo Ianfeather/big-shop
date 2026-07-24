@@ -1,7 +1,7 @@
 import { KeyboardEvent, useState, useRef, useEffect } from 'react';
 import styles from './index.module.css';
 
-interface DaveMessage {
+export interface DaveMessage {
   id: number;
   role: 'user' | 'assistant';
   content: string;

@@ -1,22 +1,23 @@
 import styles from './account.module.css';
-import useFetch from 'use-http'
+import useFetch, { CachePolicies } from 'use-http'
 import { useState, useEffect } from 'react';
 import Invite from '@components/invite';
 import useAuth0 from '@hooks/use-auth';
 import Layout, { MainContent, Sidebar } from '@components/layout'
 import Button from '@components/button';
+import type { Invite as InviteModel } from '../types/models';
 
 const List = () => {
-  let [invites, setInvites] = useState([]);
+  let [invites, setInvites] = useState<InviteModel[]>([]);
   let [invitee, setInvitee] = useState('');
-  let [successMessage, setSuccessMessage] = useState(false);
+  let [successMessage, setSuccessMessage] = useState<string | false>(false);
   const { user } = useAuth0();
-  const { get, post, patch, del, response } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
-    cachePolicy: 'no-cache'
+  const { get, post, patch, del, response } = useFetch<InviteModel[]>(process.env.NEXT_PUBLIC_API_HOST, {
+    cachePolicy: CachePolicies.NO_CACHE
   });
 
   // TODO: Error handling
-  async function handleAccept(token) {
+  async function handleAccept(token: string) {
     // Next steps:
     // add user menu
     post('/invite/accept', { token });
@@ -24,7 +25,7 @@ const List = () => {
     setSuccessMessage('Great! You are now part of the same account and have a shared set of recipes.');
   }
 
-  async function handleReject(token) {
+  async function handleReject(token: string) {
     post('/invite/reject', { token });
     setInvites(invites.filter(invite => invite.token != token));
   }
@@ -46,7 +47,7 @@ const List = () => {
   return (
     <Layout>
       <MainContent name="Shopping List">
-        <h1>Hi {user.name}! You can use this page to customize your account.</h1>
+        <h1>Hi {user?.name}! You can use this page to customize your account.</h1>
         <div className={styles.twoColumnGrid}>
           { !!invites.length && (
             <div className={styles.accountModule}>

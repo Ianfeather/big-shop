@@ -36,10 +36,17 @@ export default function Layout({ children, pageTitle = 'Big Shop' }: LayoutProps
   )
 }
 
-export const Grid = ({children, ...props}: HTMLAttributes<HTMLDivElement>) => <div className={styles.grid} {...props}>{children}</div>
-export const Sidebar = ({children, ...props}: HTMLAttributes<HTMLDivElement>) => <div className={styles.sideBarContainer} {...props}>{children}</div>
+// Not a real div attribute - several pages pass `name` as a semantic label
+// on Grid/Sidebar/MainContent; it's spread onto the div unused, same as
+// Tabs' `name` convention.
+interface SemanticContainerProps extends HTMLAttributes<HTMLDivElement> {
+  name?: string;
+}
 
-interface MainContentProps extends HTMLAttributes<HTMLDivElement> {
+export const Grid = ({children, ...props}: SemanticContainerProps) => <div className={styles.grid} {...props}>{children}</div>
+export const Sidebar = ({children, ...props}: SemanticContainerProps) => <div className={styles.sideBarContainer} {...props}>{children}</div>
+
+interface MainContentProps extends SemanticContainerProps {
   fullHeight?: boolean;
 }
 

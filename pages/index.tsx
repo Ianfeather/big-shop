@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
-import useFetch from 'use-http';
+import useFetch, { CachePolicies } from 'use-http';
 import styles from './index.module.css';
 import Button from '@components/button'
 import Layout, { MainContent } from '@components/layout'
 import useAuth0 from '@hooks/use-auth';
 import { LoginButton } from '@components/identity/login';
 import { CreateAccountButton } from '@components/identity/create';
+import type { User } from '../types/models';
 
 const useMocks = process.env.NEXT_PUBLIC_USE_MOCKS === 'true';
 
@@ -27,9 +28,9 @@ const Index = () => {
   // null while we're still checking onboarded status (or mocks bypass isn't
   // resolved yet) - kept blank rather than flashing the marketing copy at an
   // already-onboarded user who's about to be redirected to /list.
-  const [status, setStatus] = useState(null); // null | 'onboarding' | 'redirecting'
-  const { post, patch, response } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
-    cachePolicy: 'no-cache'
+  const [status, setStatus] = useState<'onboarding' | 'redirecting' | null>(null);
+  const { post, patch, response } = useFetch<User>(process.env.NEXT_PUBLIC_API_HOST, {
+    cachePolicy: CachePolicies.NO_CACHE
   });
 
   useEffect(() => {
@@ -41,6 +42,7 @@ const Index = () => {
     }
 
     async function resolveOnboarding() {
+      if (!user) return;
       const { name, email } = user;
       const saved = await post('/user', { name, email });
       if (response.ok && saved && saved.onboarded) {

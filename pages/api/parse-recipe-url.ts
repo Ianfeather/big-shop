@@ -1,7 +1,8 @@
+import type { NextApiRequest, NextApiResponse } from 'next';
 import { extractRecipe } from '../../lib/recipe-import/extract';
 import { htmlToInput } from '../../lib/recipe-import/url';
 
-export default async function handler(req, res) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -29,6 +30,6 @@ export default async function handler(req, res) {
     res.status(200).json(result);
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
   }
 }

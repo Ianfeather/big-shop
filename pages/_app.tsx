@@ -1,20 +1,24 @@
 import './styles.css'
 import 'swagger-ui-react/swagger-ui.css'
+import type { AppProps } from 'next/app';
 import { Auth0Provider } from "@auth0/auth0-react";
-import { Provider as FetchProvider } from 'use-http';
+import { Provider as FetchProvider, Interceptors } from 'use-http';
 import { useRouter } from 'next/router';
 import { useEffect } from 'react';
 import useAuth0, { authDisabled } from '@hooks/use-auth';
 
-const InnerApp = ({ Component, pageProps }) => {
+const InnerApp = ({ Component, pageProps }: Pick<AppProps, 'Component' | 'pageProps'>) => {
   const { isAuthenticated, isLoading, getAccessTokenSilently } = useAuth0();
   const router = useRouter();
 
-  const fetchOptions = {
+  const fetchOptions: { interceptors: Interceptors } = {
     interceptors: {
       request: async ({ options }) => {
         const token = await getAccessTokenSilently();
-        options.headers.Authorization = `Bearer ${token}`
+        // use-http always passes a plain headers object here in practice,
+        // not a Headers instance or a [string, string][] tuple array (the
+        // other members of RequestInit['headers']'s union type).
+        (options.headers as Record<string, string>).Authorization = `Bearer ${token}`
         return options
       }
     }
@@ -37,7 +41,7 @@ const InnerApp = ({ Component, pageProps }) => {
   )
 }
 
-export default function App({ Component, pageProps, router }) {
+export default function App({ Component, pageProps, router }: AppProps) {
   const domain = process.env.NEXT_PUBLIC_AUTH0_DOMAIN;
   const clientId = process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID;
   const audience = process.env.NEXT_PUBLIC_AUTH0_AUDIENCE;
@@ -56,10 +60,13 @@ export default function App({ Component, pageProps, router }) {
     return content;
   }
 
+  // Only reached with authDisabled false, i.e. real Auth0 is required and
+  // configured (CLAUDE.md documents these as required env vars for the auth
+  // flow) - domain/clientId are typed as required by Auth0Provider.
   return (
     <Auth0Provider
-      domain={domain}
-      clientId={clientId}
+      domain={domain!}
+      clientId={clientId!}
       audience={audience}
       redirectUri={process.env.NEXT_PUBLIC_HOST}
       useRefreshTokens={true}

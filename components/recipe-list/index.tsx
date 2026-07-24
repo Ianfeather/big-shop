@@ -16,7 +16,7 @@ const useMocks = process.env.NEXT_PUBLIC_USE_MOCKS === 'true';
 interface RecipeListProps {
   handleRecipeSelect?: ChangeEventHandler<HTMLInputElement>;
   filterFn?: (recipe: RecipeSummary) => boolean;
-  selectedIds?: Record<number, boolean>;
+  selectedIds?: Record<string, boolean>;
 }
 
 const RecipeList = ({ handleRecipeSelect, filterFn = () => true, selectedIds = {} }: RecipeListProps) => {

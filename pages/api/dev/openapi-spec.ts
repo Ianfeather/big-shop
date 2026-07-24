@@ -1,9 +1,10 @@
 import fs from 'fs';
 import path from 'path';
+import type { NextApiRequest, NextApiResponse } from 'next';
 
 // Serves the committed docs/openapi.yaml as-is, for pages/dev/api-docs.js to
 // render. Dev-only, same as that page - see its comment for why.
-export default function handler(req, res) {
+export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (process.env.NODE_ENV === 'production') {
     return res.status(404).end();
   }

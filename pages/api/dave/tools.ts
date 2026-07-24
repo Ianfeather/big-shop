@@ -3,14 +3,14 @@
 /**
  * Search recipes in the user's collection
  */
-export async function searchRecipes({ query = '', tags = '' }, authToken, useMockApi = false) {
+export async function searchRecipes({ query = '', tags = '' }: { query?: string; tags?: string }, authToken: string, useMockApi = false) {
   try {
     // Use mock API for testing, otherwise use remote API
     const apiHost = useMockApi ? 'http://localhost:3001' : process.env.NEXT_PUBLIC_API_HOST;
 
     // For now, just fetch all recipes and filter client-side
     // TODO: Add proper search parameters to the API
-    const headers = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (!useMockApi) {
       headers['Authorization'] = `Bearer ${authToken}`;
     }
@@ -21,17 +21,17 @@ export async function searchRecipes({ query = '', tags = '' }, authToken, useMoc
       throw new Error(`API request failed: ${response.status}`);
     }
 
-    const allRecipes = await response.json();
+    const allRecipes: any[] = await response.json();
 
     // Simple client-side filtering for now
     let filteredRecipes = allRecipes;
 
     if (query) {
       const searchTerm = query.toLowerCase();
-      filteredRecipes = allRecipes.filter(recipe =>
+      filteredRecipes = allRecipes.filter((recipe: any) =>
         recipe.name.toLowerCase().includes(searchTerm) ||
         recipe.description?.toLowerCase().includes(searchTerm) ||
-        recipe.ingredients?.some(ing =>
+        recipe.ingredients?.some((ing: any) =>
           ing.name.toLowerCase().includes(searchTerm)
         )
       );
@@ -39,8 +39,8 @@ export async function searchRecipes({ query = '', tags = '' }, authToken, useMoc
 
     if (tags) {
       const searchTags = tags.toLowerCase();
-      filteredRecipes = filteredRecipes.filter(recipe =>
-        recipe.tags?.some(tag =>
+      filteredRecipes = filteredRecipes.filter((recipe: any) =>
+        recipe.tags?.some((tag: any) =>
           tag.toLowerCase().includes(searchTags)
         )
       );
@@ -49,7 +49,7 @@ export async function searchRecipes({ query = '', tags = '' }, authToken, useMoc
 
     return {
       success: true,
-      recipes: filteredRecipes.map((recipe, index) => ({
+      recipes: filteredRecipes.map((recipe: any, index: number) => ({
         id: recipe.id,
         name: recipe.name,
         description: recipe.description,
@@ -67,7 +67,7 @@ export async function searchRecipes({ query = '', tags = '' }, authToken, useMoc
   } catch (error) {
     return {
       success: false,
-      error: error.message,
+      error: error instanceof Error ? error.message : String(error),
       message: 'Failed to search recipes'
     };
   }
@@ -76,12 +76,12 @@ export async function searchRecipes({ query = '', tags = '' }, authToken, useMoc
 /**
  * Get detailed recipe information
  */
-export async function getRecipeDetails({ recipeId }, authToken, useMockApi = false) {
+export async function getRecipeDetails({ recipeId }: { recipeId: string }, authToken: string, useMockApi = false) {
   try {
     // Use mock API for testing, otherwise use remote API
     const apiHost = useMockApi ? 'http://localhost:3001' : process.env.NEXT_PUBLIC_API_HOST;
 
-    const headers = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (!useMockApi) {
       headers['Authorization'] = `Bearer ${authToken}`;
     }
@@ -101,7 +101,7 @@ export async function getRecipeDetails({ recipeId }, authToken, useMockApi = fal
   } catch (error) {
     return {
       success: false,
-      error: error.message,
+      error: error instanceof Error ? error.message : String(error),
       message: 'Failed to get recipe details'
     };
   }
@@ -110,11 +110,11 @@ export async function getRecipeDetails({ recipeId }, authToken, useMockApi = fal
 /**
  * Get historical shopping list patterns for meal planning
  */
-export async function getShoppingHistory(args, authToken, useMockApi = false) {
+export async function getShoppingHistory(args: unknown, authToken: string, useMockApi = false) {
   try {
     const apiHost = useMockApi ? 'http://localhost:3001' : process.env.NEXT_PUBLIC_API_HOST;
 
-    const headers = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (!useMockApi) {
       headers['Authorization'] = `Bearer ${authToken}`;
     }
@@ -135,7 +135,7 @@ export async function getShoppingHistory(args, authToken, useMockApi = false) {
   } catch (error) {
     return {
       success: false,
-      error: error.message,
+      error: error instanceof Error ? error.message : String(error),
       message: 'Failed to get shopping history'
     };
   }
@@ -144,13 +144,13 @@ export async function getShoppingHistory(args, authToken, useMockApi = false) {
 /**
  * Create shopping list from selected recipes
  */
-export async function createShoppingList({ recipeIds }, authToken, useMockApi = false) {
+export async function createShoppingList({ recipeIds }: { recipeIds: string[] }, authToken: string, useMockApi = false) {
   try {
     // Use mock API for testing, otherwise use remote API
     const apiHost = useMockApi ? 'http://localhost:3001' : process.env.NEXT_PUBLIC_API_HOST;
 
     // First, fetch existing shopping list
-    const headers = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (!useMockApi) {
       headers['Authorization'] = `Bearer ${authToken}`;
     }
@@ -167,7 +167,7 @@ export async function createShoppingList({ recipeIds }, authToken, useMockApi = 
     const combinedRecipeIds = [...new Set([...existingRecipeIds, ...recipeIds])];
 
     // Create/update shopping list with combined recipes
-    const postHeaders = { 'Content-Type': 'application/json' };
+    const postHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
     if (!useMockApi) {
       postHeaders['Authorization'] = `Bearer ${authToken}`;
     }
@@ -195,7 +195,7 @@ export async function createShoppingList({ recipeIds }, authToken, useMockApi = 
   } catch (error) {
     return {
       success: false,
-      error: error.message,
+      error: error instanceof Error ? error.message : String(error),
       message: 'Failed to update shopping list'
     };
   }
@@ -285,7 +285,7 @@ export const availableTools = [
 ];
 
 // Execute tool calls
-export async function executeToolCall(toolName, args, authToken, useMockApi = false) {
+export async function executeToolCall(toolName: string, args: any, authToken: string, useMockApi = false) {
   switch (toolName) {
     case 'search_recipes':
       return await searchRecipes(args, authToken, useMockApi);

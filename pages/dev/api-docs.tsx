@@ -1,4 +1,5 @@
 import dynamic from 'next/dynamic';
+import type { GetServerSideProps } from 'next';
 import Layout, { MainContent } from '@components/layout';
 import styles from './api-docs.module.css';
 
@@ -7,12 +8,12 @@ import styles from './api-docs.module.css';
 // generated from the Go API's own route/type definitions (see
 // technical-architecture.md and follow-ups.md item 7) rather than hand
 // written, so this always reflects what internal/pkg/app actually does.
-export async function getServerSideProps() {
+export const getServerSideProps: GetServerSideProps = async () => {
   if (process.env.NODE_ENV === 'production') {
     return { notFound: true };
   }
   return { props: {} };
-}
+};
 
 // swagger-ui-react reaches for `window`/`document` on import, so it can only
 // ever run client-side.

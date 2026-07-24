@@ -2,12 +2,12 @@ import styles from './dave.module.css';
 import { useState, useEffect } from 'react';
 import useAuth0 from '@hooks/use-auth';
 import Layout, { MainContent, Sidebar } from '@components/layout'
-import DaveChat from '@components/dave-chat';
+import DaveChat, { DaveMessage } from '@components/dave-chat';
 import useRecipes from '@hooks/use-recipes';
 
 const Dave = () => {
   const [recipes] = useRecipes();
-  const [messages, setMessages] = useState([
+  const [messages, setMessages] = useState<DaveMessage[]>([
     {
       id: 1,
       role: 'assistant',
@@ -18,9 +18,9 @@ const Dave = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { user, getAccessTokenSilently } = useAuth0();
 
-  const sendMessage = async (userMessage) => {
+  const sendMessage = async (userMessage: string) => {
     // Add user message to conversation
-    const userMessageObj = {
+    const userMessageObj: DaveMessage = {
       id: Date.now(),
       role: 'user', 
       content: userMessage,
@@ -51,7 +51,7 @@ const Dave = () => {
       const data = await response.json();
       
       if (data?.message) {
-        const assistantMessage = {
+        const assistantMessage: DaveMessage = {
           id: Date.now() + 1,
           role: 'assistant',
           content: data.message.content,
@@ -64,7 +64,7 @@ const Dave = () => {
       
     } catch (error) {
       console.error('Error sending message:', error);
-      const errorMessage = {
+      const errorMessage: DaveMessage = {
         id: Date.now() + 1,
         role: 'assistant',
         content: "Sorry, I'm having trouble connecting right now. Please try again in a moment.",

@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
 
 vi.mock('../../lib/recipe-import/extract', () => ({
   extractRecipe: vi.fn()
@@ -7,22 +8,28 @@ vi.mock('../../lib/recipe-import/extract', () => ({
 import { extractRecipe } from '../../lib/recipe-import/extract';
 import handler from './parse-recipe-text';
 
-function mockRes() {
-  const res = {};
-  res.status = vi.fn(() => res);
-  res.json = vi.fn(() => res);
-  return res;
+const mockedExtractRecipe = extractRecipe as unknown as Mock;
+
+function mockReq(overrides: Partial<NextApiRequest>): NextApiRequest {
+  return overrides as NextApiRequest;
+}
+
+function mockRes(): NextApiResponse {
+  const res: Partial<NextApiResponse> = {};
+  res.status = vi.fn(() => res) as unknown as NextApiResponse['status'];
+  res.json = vi.fn(() => res) as unknown as NextApiResponse['json'];
+  return res as NextApiResponse;
 }
 
 beforeEach(() => {
-  extractRecipe.mockReset();
+  mockedExtractRecipe.mockReset();
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
 describe('parse-recipe-text handler', () => {
   it('rejects non-POST methods', async () => {
     const res = mockRes();
-    await handler({ method: 'GET', body: {} }, res);
+    await handler(mockReq({ method: 'GET', body: {} }), res);
 
     expect(res.status).toHaveBeenCalledWith(405);
     expect(res.json).toHaveBeenCalledWith({ error: 'Method not allowed' });
@@ -30,7 +37,7 @@ describe('parse-recipe-text handler', () => {
 
   it('requires non-blank text', async () => {
     const res = mockRes();
-    await handler({ method: 'POST', body: { text: '   ' } }, res);
+    await handler(mockReq({ method: 'POST', body: { text: '   ' } }), res);
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({ error: 'text is required' });
@@ -38,7 +45,7 @@ describe('parse-recipe-text handler', () => {
   });
 
   it('extracts and returns ingredients on success', async () => {
-    extractRecipe.mockResolvedValue({
+    mockedExtractRecipe.mockResolvedValue({
       name: '',
       ingredients: [{ name: 'egg', quantity: '2', unit: '' }],
       method: '',
@@ -46,7 +53,7 @@ describe('parse-recipe-text handler', () => {
     });
     const res = mockRes();
 
-    await handler({ method: 'POST', body: { text: '2 eggs', knownIngredients: ['egg'], knownUnits: [] } }, res);
+    await handler(mockReq({ method: 'POST', body: { text: '2 eggs', knownIngredients: ['egg'], knownUnits: [] } }), res);
 
     expect(extractRecipe).toHaveBeenCalledWith({
       input: { type: 'text', text: '2 eggs' },
@@ -58,10 +65,10 @@ describe('parse-recipe-text handler', () => {
   });
 
   it('returns a 500 with the error message when extraction fails', async () => {
-    extractRecipe.mockRejectedValue(new Error('boom'));
+    mockedExtractRecipe.mockRejectedValue(new Error('boom'));
     const res = mockRes();
 
-    await handler({ method: 'POST', body: { text: '2 eggs' } }, res);
+    await handler(mockReq({ method: 'POST', body: { text: '2 eggs' } }), res);
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({ error: 'boom' });

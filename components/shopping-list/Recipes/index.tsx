@@ -4,7 +4,7 @@ import AddExtra from './AddExtra';
 import Recipes from '@components/recipe-list';
 
 interface RecipeListProps {
-  recipeList: Record<number, boolean>;
+  recipeList: Record<string, boolean>;
   handleRecipeSelect: ChangeEventHandler<HTMLInputElement>;
   addExtraItem: (item: string) => void;
   className?: string;

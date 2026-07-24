@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 import {
   searchRecipes,
   getRecipeDetails,
@@ -7,8 +7,12 @@ import {
   executeToolCall
 } from './tools';
 
-function jsonResponse(body, ok = true) {
+function jsonResponse(body: any, ok = true) {
   return { ok, status: ok ? 200 : 500, json: async () => body };
+}
+
+function mockedFetch(): Mock {
+  return fetch as unknown as Mock;
 }
 
 beforeEach(() => {
@@ -26,7 +30,7 @@ const recipes = [
 
 describe('searchRecipes', () => {
   it('filters by query across name/description/ingredients and shapes the result', async () => {
-    fetch.mockResolvedValueOnce(jsonResponse(recipes));
+    mockedFetch().mockResolvedValueOnce(jsonResponse(recipes));
 
     const result = await searchRecipes({ query: 'chicken' }, 'token', true);
 
@@ -38,15 +42,15 @@ describe('searchRecipes', () => {
   });
 
   it('filters by tags', async () => {
-    fetch.mockResolvedValueOnce(jsonResponse(recipes));
+    mockedFetch().mockResolvedValueOnce(jsonResponse(recipes));
 
     const result = await searchRecipes({ tags: 'vegetarian' }, 'token', true);
 
-    expect(result.recipes.map(r => r.id)).toEqual(['2']);
+    expect(result.recipes!.map(r => r.id)).toEqual(['2']);
   });
 
   it('returns all recipes with a default message when no query/tags given', async () => {
-    fetch.mockResolvedValueOnce(jsonResponse(recipes));
+    mockedFetch().mockResolvedValueOnce(jsonResponse(recipes));
 
     const result = await searchRecipes({}, 'token', true);
 
@@ -55,7 +59,7 @@ describe('searchRecipes', () => {
   });
 
   it('returns a failure result when the API responds with an error', async () => {
-    fetch.mockResolvedValueOnce(jsonResponse(null, false));
+    mockedFetch().mockResolvedValueOnce(jsonResponse(null, false));
 
     const result = await searchRecipes({}, 'token', true);
 
@@ -69,7 +73,7 @@ describe('searchRecipes', () => {
 
 describe('getRecipeDetails', () => {
   it('returns the recipe on success', async () => {
-    fetch.mockResolvedValueOnce(jsonResponse({ id: '1', name: 'Chicken Curry' }));
+    mockedFetch().mockResolvedValueOnce(jsonResponse({ id: '1', name: 'Chicken Curry' }));
 
     const result = await getRecipeDetails({ recipeId: '1' }, 'token', true);
 
@@ -77,7 +81,7 @@ describe('getRecipeDetails', () => {
   });
 
   it('returns a failure result when the request errors', async () => {
-    fetch.mockResolvedValueOnce(jsonResponse(null, false));
+    mockedFetch().mockResolvedValueOnce(jsonResponse(null, false));
 
     const result = await getRecipeDetails({ recipeId: 'missing' }, 'token', true);
 
@@ -88,7 +92,7 @@ describe('getRecipeDetails', () => {
 
 describe('getShoppingHistory', () => {
   it('summarises recent/favorite recipe counts', async () => {
-    fetch.mockResolvedValueOnce(jsonResponse({ recent_recipes: [1, 2], favorite_recipes: [1] }));
+    mockedFetch().mockResolvedValueOnce(jsonResponse({ recent_recipes: [1, 2], favorite_recipes: [1] }));
 
     const result = await getShoppingHistory({}, 'token', true);
 
@@ -99,7 +103,7 @@ describe('getShoppingHistory', () => {
 
 describe('createShoppingList', () => {
   it('merges new recipe ids with the existing list, deduping, and reports "added to"', async () => {
-    fetch
+    mockedFetch()
       .mockResolvedValueOnce(jsonResponse({ recipes: ['1'] })) // existing list GET
       .mockResolvedValueOnce(jsonResponse({ recipes: ['1', '2'] })); // POST response
 
@@ -107,12 +111,12 @@ describe('createShoppingList', () => {
 
     expect(result.success).toBe(true);
     expect(result.message).toBe('Shopping list added to 2 recipes. Total recipes: 2');
-    const [, postCall] = fetch.mock.calls;
+    const [, postCall] = mockedFetch().mock.calls;
     expect(JSON.parse(postCall[1].body)).toEqual(['1', '2']);
   });
 
   it('reports "created for" when there was no existing list', async () => {
-    fetch
+    mockedFetch()
       .mockResolvedValueOnce(jsonResponse(null, false)) // existing list fetch fails -> treated as empty
       .mockResolvedValueOnce(jsonResponse({ recipes: ['3'] }));
 
@@ -122,7 +126,7 @@ describe('createShoppingList', () => {
   });
 
   it('returns a failure result when the final update request fails', async () => {
-    fetch
+    mockedFetch()
       .mockResolvedValueOnce(jsonResponse({ recipes: [] }))
       .mockResolvedValueOnce(jsonResponse(null, false));
 
@@ -135,7 +139,7 @@ describe('createShoppingList', () => {
 
 describe('executeToolCall', () => {
   it('dispatches to the named tool', async () => {
-    fetch.mockResolvedValueOnce(jsonResponse(recipes));
+    mockedFetch().mockResolvedValueOnce(jsonResponse(recipes));
 
     const result = await executeToolCall('search_recipes', { query: 'chilli' }, 'token', true);
 

@@ -7,3 +7,6 @@ export type Unit = components['schemas']['Unit'];
 export type Invite = components['schemas']['Invite'];
 export type ListIngredient = components['schemas']['ListIngredient'];
 export type Ingredient = components['schemas']['Ingredient'];
+export type User = components['schemas']['User'];
+export type Account = components['schemas']['Account'];
+export type ShoppingList = components['schemas']['ShoppingList'];

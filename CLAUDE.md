@@ -135,13 +135,10 @@ Frontend unit/component tests (Vitest + React Testing Library):
 npm run test         # run once
 npm run test:watch   # watch mode
 ```
-Config is `vitest.config.js`. Components/hooks/tests in this codebase write
-JSX in plain `.js` files (not `.jsx`), which neither Vite's built-in esbuild
-plugin nor `@vitejs/plugin-react`'s babel pass transforms out of the box —
-`vitest.config.js` has a small custom `jsx-in-js` plugin that runs every
-non-`node_modules` `.js` file through esbuild's JSX transform to handle this.
-Test files live next to the file under test (e.g. `components/button/index.test.js`,
-`hooks/use-page-visibility.test.js`) — see those two for the established
+Config is `vitest.config.js`. Components/hooks/tests in this codebase are
+TypeScript (`.tsx`/`.ts`, see `follow-ups.md` #9). Test files live next to
+the file under test (e.g. `components/button/index.test.tsx`,
+`hooks/use-page-visibility.test.ts`) — see those two for the established
 pattern.
 
 End-to-end tests (Playwright):
@@ -150,9 +147,8 @@ npm run test:e2e         # headless, fast - what CI/normal validation should use
 npm run test:e2e:debug   # headed, slowed down (E2E_SLOWMO) - for stepping through a scenario visually
 ```
 Config is `playwright.config.ts`; specs live in `e2e/` (`recipe.spec.ts`,
-`shopping-list.spec.ts`), written in TypeScript with its own scoped
-`e2e/tsconfig.json` — the rest of the frontend is plain `.js` (see the "Convert
-to TypeScript" item in `follow-ups.md`), so this doesn't preempt that decision.
+`shopping-list.spec.ts`), with its own scoped `e2e/tsconfig.json` separate
+from the root `tsconfig.json`.
 Requires Docker: `webServer` in the config auto-starts `npm run dev:full`
 against pinned ports with its own `COMPOSE_PROJECT_NAME=bigshop-e2e`, so it
 won't collide with another worktree's stack; `test:e2e`/`test:e2e:debug` both

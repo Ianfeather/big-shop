@@ -18,10 +18,37 @@ Commit screenshots/recordings to the branch under `specs/evidence/<spec-slug>/` 
 
 ## Embedding in the PR body
 
-`gh pr create` has no image-upload step of its own. Reference the committed files with a relative markdown image link from the repo root, e.g.:
+`gh pr create` has no image-upload step of its own.
+
+**Do not use a relative markdown image link** (e.g.
+`![...](../specs/evidence/unit-normalisation/list-after-regen.png)`) while the
+PR is still open. A PR/issue body isn't tied to any specific commit, so
+GitHub resolves relative links in it against the repository's **default
+branch** (`master`), not the PR's head branch — not the "current file"
+resolution rules that apply inside a rendered file like a README. Evidence
+committed only on the feature branch doesn't exist on `master` yet, so the
+image 404s and shows as a broken link in the rendered PR, even though the
+file is genuinely committed and pushed. (Older evidence links elsewhere in
+this repo that *do* render only work because those PRs have since merged —
+that's not proof the relative-link approach works pre-merge.)
+
+Instead, reference the file via an absolute `raw.githubusercontent.com` URL
+pinned to the commit SHA that has the evidence committed:
 
 ```markdown
-![Shopping list after regeneration](../specs/evidence/unit-normalisation/list-after-regen.png)
+![Shopping list after regeneration](https://raw.githubusercontent.com/<owner>/<repo>/<commit-sha>/specs/evidence/unit-normalisation/list-after-regen.png)
 ```
 
-GitHub resolves that against the PR's branch and renders it inline — no separate upload needed as long as the file is genuinely committed on that branch before the PR is opened.
+Get the SHA with `git rev-parse HEAD` right after committing the evidence
+(and before pushing is fine — push first, then build the URL). Pinning to
+the commit rather than the branch name keeps the link stable even if the
+branch is later force-pushed or rebased. Verify the URL actually resolves
+before relying on it:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" "https://raw.githubusercontent.com/<owner>/<repo>/<commit-sha>/<path>"
+```
+
+A `200` confirms the image will render; anything else (404 while GitHub
+finishes propagating a fresh push, or a wrong path) means fix it before
+handing off the PR.

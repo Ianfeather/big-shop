@@ -3,6 +3,20 @@ import Item from './Item';
 import ClearList from './clear-list';
 import EmptyBasketIllustration from '@components/svg/empty-basket';
 
+// Shopping order: non-perishables first, vegetables last since they bruise
+// if left sitting in the trolley/bags. Departments not in this list (or a
+// missing department) sort after everything else.
+const DEPARTMENT_ORDER = ['meat and fish', 'other', 'vegetables'];
+
+function departmentPriority(department) {
+  const index = DEPARTMENT_ORDER.indexOf(department);
+  return index === -1 ? DEPARTMENT_ORDER.length : index;
+}
+
+function sortByDepartment(shoppingList) {
+  return (_a, _b) => departmentPriority(shoppingList[_a].department) - departmentPriority(shoppingList[_b].department);
+}
+
 const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList }) => {
 
   const boughtItems = Object.keys(shoppingList).filter((name => shoppingList[name].isBought));
@@ -12,13 +26,7 @@ const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList }) => {
 
   const ingredients = Object.keys(shoppingList)
     .filter((name => !shoppingList[name].isBought))
-    .sort(function sortByDepartment(_a, _b) {
-      let a = shoppingList[_a];
-      let b = shoppingList[_b];
-      if (a.department === b.department) return 0
-      if (b.department === 'vegetables') return 1
-      if (!b.department || a.department === 'vegetables') return -1
-    });
+    .sort(sortByDepartment(shoppingList));
 
   return (
     <>

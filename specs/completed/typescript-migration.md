@@ -8,7 +8,7 @@ The Go API's OpenAPI spec is already committed and kept honest: `docs/openapi.ya
 
 `vitest.config.js` has a custom `jsx-in-js` esbuild plugin solely because JSX currently lives in plain `.js` files, which neither Vite's default esbuild handling nor `@vitejs/plugin-react` treats as JSX by extension. `.tsx` files don't need this — esbuild's loader is extension-driven, so once a file is renamed `.tsx` it's handled automatically.
 
-The design/decision work for this migration was done via a grilling session and is recorded in [ADR-0002](../docs/adr/0002-typescript-migration.md) — this spec turns that decision into an ordered, sessionable execution plan. **Do not re-derive the strategy below; it's already decided.**
+The design/decision work for this migration was done via a grilling session and is recorded in [ADR-0002](../../docs/adr/0002-typescript-migration.md) — this spec turns that decision into an ordered, sessionable execution plan. **Do not re-derive the strategy below; it's already decided.**
 
 ## Proposed approach
 
@@ -44,7 +44,7 @@ Cleanup once nothing `.js`/`.mjs` remains in the converted scope:
 
 ## Decisions made (grilled — do not re-litigate without a load-bearing reason)
 
-Full rationale in [ADR-0002](../docs/adr/0002-typescript-migration.md). Summary:
+Full rationale in [ADR-0002](../../docs/adr/0002-typescript-migration.md). Summary:
 
 - **Strategy**: one bounded full sweep (this spec's 4 phases), not incremental `allowJs`/`checkJs` adoption. `strict: true` from Phase 1, not a later tightening pass.
 - **Scope**: `pages/`, `components/`, `hooks/`, and `pages/api/*` including their tests. Root config files (`next.config.js`, `vitest.config.js`, `evals/*`, `scripts/*`) are out of scope.

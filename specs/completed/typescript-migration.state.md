@@ -1,8 +1,8 @@
 ---
-spec: specs/typescript-migration.md
-status: in-progress
+spec: specs/completed/typescript-migration.md
+status: complete
 branch: implement/typescript-migration
-pr:
+pr: https://github.com/Ianfeather/big-shop/pull/58
 ---
 
 ## Session 1: Tooling, config, and codegen

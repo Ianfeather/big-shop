@@ -1,4 +1,4 @@
-import { useAuth0 } from '@auth0/auth0-react';
+import { useAuth0, RedirectLoginOptions, LogoutOptions } from '@auth0/auth0-react';
 
 export const authDisabled = process.env.NEXT_PUBLIC_DISABLE_AUTH === 'true';
 
@@ -25,8 +25,8 @@ interface UseAuthResult {
   isAuthenticated: boolean;
   isLoading: boolean;
   user?: { sub?: string; name?: string; email?: string };
-  loginWithRedirect: () => void;
-  logout: () => void;
+  loginWithRedirect: (options?: RedirectLoginOptions) => void;
+  logout: (options?: LogoutOptions) => void;
   getAccessTokenSilently: () => Promise<string>;
 }
 

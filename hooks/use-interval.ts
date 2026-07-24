@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import usePageVisibility from './use-page-visibility';
 
-function useInterval(callback, delay, pauseOnHide = true) {
-  const savedCallback = useRef();
+function useInterval(callback: () => void, delay: number | null, pauseOnHide = true) {
+  const savedCallback = useRef<(() => void) | undefined>(undefined);
   const isVisible = usePageVisibility();
 
   // Remember the latest callback.
@@ -16,7 +16,9 @@ function useInterval(callback, delay, pauseOnHide = true) {
     if (pauseOnHide && !isVisible) return;
 
     function tick() {
-      savedCallback.current();
+      // The first effect above always runs (and sets .current) before this
+      // one on mount, so it's set by the time any interval tick can fire.
+      savedCallback.current!();
     }
     if (delay !== null) {
       let id = setInterval(tick, delay);

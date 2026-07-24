@@ -17,6 +17,8 @@ const useMockAuth0 = () => ({
   getAccessTokenSilently: async () => 'local-dev-token',
 });
 
-// When NEXT_PUBLIC_DISABLE_AUTH=true, every consumer gets a fixed "logged in"
-// user instead of talking to Auth0, so local dev never hits the login screen.
-export default authDisabled ? useMockAuth0 : useAuth0;
+// Every consumer in this codebase only reaches for this subset of Auth0's
+// real (much larger) context shape, so the export is narrowed to exactly
+// that — letting the mock branch above satisfy the same type as the real
+// useAuth0 without having to fake every field Auth0 exposes.
+export default (authDisabled ? useMockAuth0 : useAuth0) as typeof useMockAuth0;

@@ -1,13 +1,14 @@
-import useFetch from 'use-http'
+import useFetch, { CachePolicies } from 'use-http';
 import { useState, useEffect } from 'react';
 import mocks from '../mocks';
+import type { RecipeSummary } from '../types/models';
 
 const useMocks = process.env.NEXT_PUBLIC_USE_MOCKS === 'true';
 
 const useRecipes = () => {
-  let [recipes, setRecipes] = useState([]);
-  const { get, response } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
-    cachePolicy: 'no-cache'
+  let [recipes, setRecipes] = useState<RecipeSummary[]>([]);
+  const { get, response } = useFetch<RecipeSummary[]>(process.env.NEXT_PUBLIC_API_HOST, {
+    cachePolicy: CachePolicies.NO_CACHE
   });
 
   useEffect(() => {
@@ -28,7 +29,7 @@ const useRecipes = () => {
     // after the real one and stomp good data with an aborted/empty result.
     return () => { cancelled = true };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  return [recipes];
+  return [recipes] as const;
 };
 
 export default useRecipes;

@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import usePageVisibility from './use-page-visibility';
 
-function setHidden(hidden) {
+function setHidden(hidden: boolean) {
   Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
 }
 

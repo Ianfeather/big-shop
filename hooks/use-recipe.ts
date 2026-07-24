@@ -1,13 +1,16 @@
-import useFetch from 'use-http'
+import useFetch, { CachePolicies } from 'use-http';
 import { useState, useEffect } from 'react';
 import mocks from '../mocks';
+import type { Recipe } from '../types/models';
 
 const useMocks = process.env.NEXT_PUBLIC_USE_MOCKS === 'true';
 
-const useRecipe = (id) => {
-  let [recipe, setRecipe] = useState({ tags: [], ingredients: [] });
-  const { get, response } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
-    cachePolicy: 'no-cache'
+const useRecipe = (id: string | number) => {
+  // Partial, not Recipe: until the fetch/mock lookup resolves (or if it
+  // never matches), all we have is this placeholder shape.
+  let [recipe, setRecipe] = useState<Partial<Recipe>>({ tags: [], ingredients: [] });
+  const { get, response } = useFetch<Recipe>(process.env.NEXT_PUBLIC_API_HOST, {
+    cachePolicy: CachePolicies.NO_CACHE
   });
 
   useEffect(() => {
@@ -30,7 +33,7 @@ const useRecipe = (id) => {
     return () => { cancelled = true };
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return [recipe, setRecipe];
+  return [recipe, setRecipe] as const;
 }
 
 export default useRecipe;

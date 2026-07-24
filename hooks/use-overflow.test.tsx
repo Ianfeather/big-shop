@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import useOverflow from './use-overflow';
 
-let observedCallback;
+let observedCallback: () => void;
 
 class FakeResizeObserver {
-  constructor(callback) {
+  constructor(callback: () => void) {
     observedCallback = callback;
   }
   observe() {}
@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 function TestTarget() {
-  const [ref, isOverflowing] = useOverflow([]);
+  const [ref, isOverflowing] = useOverflow<HTMLDivElement>([]);
   return <div ref={ref} data-testid="target">{isOverflowing ? 'overflowing' : 'fine'}</div>;
 }
 

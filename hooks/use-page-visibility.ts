@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-function usePageVisibility() {
+function usePageVisibility(): boolean {
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {

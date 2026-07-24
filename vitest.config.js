@@ -20,6 +20,12 @@ function jsxInJs() {
 }
 
 export default defineConfig({
+  // .tsx files are handled natively by esbuild (no plugin needed, unlike the
+  // .js case above) — this just makes sure it uses the automatic runtime too,
+  // consistent with jsxInJs, instead of esbuild's classic-transform default.
+  esbuild: {
+    jsx: 'automatic'
+  },
   plugins: [jsxInJs()],
   resolve: {
     alias: {

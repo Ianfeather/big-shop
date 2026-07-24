@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, DependencyList, RefObject } from 'react';
 
 // Tracks whether an element's content overflows its box, so a scrollable
 // row can show a fade/affordance only when there's actually more to scroll to.
-export default function useOverflow(deps = []) {
-  const ref = useRef(null);
+export default function useOverflow<T extends Element = Element>(
+  deps: DependencyList = []
+): [RefObject<T>, boolean] {
+  const ref = useRef<T>(null);
   const [isOverflowing, setIsOverflowing] = useState(false);
 
   useEffect(() => {
@@ -11,7 +13,9 @@ export default function useOverflow(deps = []) {
     if (!el) return;
 
     function checkOverflow() {
-      setIsOverflowing(el.scrollWidth > el.clientWidth + 1);
+      const current = ref.current;
+      if (!current) return;
+      setIsOverflowing(current.scrollWidth > current.clientWidth + 1);
     }
 
     checkOverflow();

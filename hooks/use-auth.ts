@@ -18,7 +18,18 @@ const useMockAuth0 = () => ({
 });
 
 // Every consumer in this codebase only reaches for this subset of Auth0's
-// real (much larger) context shape, so the export is narrowed to exactly
-// that — letting the mock branch above satisfy the same type as the real
-// useAuth0 without having to fake every field Auth0 exposes.
-export default (authDisabled ? useMockAuth0 : useAuth0) as typeof useMockAuth0;
+// real (much larger) context shape. Declaring it explicitly — rather than
+// `as`-casting the ternary result — lets TypeScript actually check that both
+// the real useAuth0 and the mock satisfy it, instead of just trusting it.
+interface UseAuthResult {
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  user?: { sub?: string; name?: string; email?: string };
+  loginWithRedirect: () => void;
+  logout: () => void;
+  getAccessTokenSilently: () => Promise<string>;
+}
+
+const useAuth: () => UseAuthResult = authDisabled ? useMockAuth0 : useAuth0;
+
+export default useAuth;

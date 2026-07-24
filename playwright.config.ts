@@ -5,7 +5,11 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
   retries: process.env.CI ? 1 : 0,
-  reporter: 'list',
+  // Locally, 'list' is enough - failures are visible right in the terminal.
+  // In CI there's no terminal to look back at, so also write an HTML report
+  // (with the trace viewer for any 'on-first-retry' traces) that the
+  // workflow uploads as an artifact.
+  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   // Next.js dev compiles each route on-demand on its first request, and Air
   // (the Go API's hot-reloader) does its own rebuild on first hit too - both
   // are cold-start costs specific to `next dev`/`dev:full`, not the app being

@@ -52,6 +52,7 @@ const Recipe = ({ recipe }: { recipe: Partial<RecipeModel> }) => {
       <p>{recipe.notes}</p>
       <div className={styles.container}>
         {
+          // Recipe.tags can be null (nullable in the OpenAPI schema).
           (recipe.tags || []).map(tag => (
             <TagPill key={tag} tag={tag} />
           ))

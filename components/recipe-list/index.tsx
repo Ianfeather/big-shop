@@ -74,6 +74,8 @@ const RecipeList = ({ handleRecipeSelect, filterFn = () => true, selectedIds = {
       if (tagsFilter.length === 0) {
         return true;
       }
+      // RecipeSummary.tags can be null (nullable in the OpenAPI schema, same
+      // as Recipe.tags/ingredients elsewhere in this migration).
       return (recipeTags ?? []).some(tag => tagsFilter.includes(tag))
     });
 
@@ -94,6 +96,8 @@ const RecipeList = ({ handleRecipeSelect, filterFn = () => true, selectedIds = {
       <div className={styles.recipeList}>
         <ul>
           {
+            // tags null -> undefined so ListItem's tags = [] default kicks in (JS
+            // defaults only trigger on undefined, not null).
             orderedRecipes.map(recipe => <ListItem {...recipe} tags={recipe.tags ?? undefined} key={recipe.id} checked={!!selectedIds[recipe.id]} variant="panel" onClick={onClick}/>)
           }
         </ul>

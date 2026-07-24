@@ -178,6 +178,9 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
       setBulkError(result?.error || 'Failed to parse ingredients');
       return;
     }
+    // result/result.ingredients are typed optional (ParseTextResult) even
+    // though they're always present once parseResponse.ok - TS can't
+    // correlate that with a check on a separate variable.
     appendIngredients(result?.ingredients || []);
     setBulkText('');
   }

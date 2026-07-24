@@ -80,7 +80,7 @@ const RecipeList = ({ handleRecipeSelect, filterFn = () => true, selectedIds = {
   return (
     <div className={styles.panel}>
       <div className={styles.filterRow}>
-        <SidebarHeading>All Recipes</SidebarHeading>
+        <SidebarHeading className={styles.filterHeading}>All Recipes</SidebarHeading>
         <SidebarTagFilter onChange={toggleTagFilter} value={tagsFilter} tags={tags}/>
       </div>
       <SidebarInput icon={icons.search} placeholder="Search..." onChange={(e) => setSidebarFilter(e.target.value)} value={sidebarFilter} />

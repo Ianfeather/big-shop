@@ -1,7 +1,7 @@
 import styles from './index.module.css';
 
-const SidebarHeading = ({ children, tone = 'default' }) => {
-  const className = `${styles.heading} ${tone === 'tinted' ? styles.tinted : ''}`;
+const SidebarHeading = ({ children, tone = 'default', className: extraClassName = '' }) => {
+  const className = `${styles.heading} ${tone === 'tinted' ? styles.tinted : ''} ${extraClassName}`;
   return (
     <h4 className={className}>{children}</h4>
   )

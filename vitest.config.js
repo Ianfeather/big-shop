@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig, configDefaults } from 'vitest/config';
 import { transformWithEsbuild } from 'vite';
 import path from 'path';
 
@@ -31,6 +31,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.js'],
     globals: true,
-    css: true
+    css: true,
+    // e2e/ holds Playwright specs (run via `npm run test:e2e`), not Vitest ones.
+    exclude: [...configDefaults.exclude, 'e2e/**']
   }
 });

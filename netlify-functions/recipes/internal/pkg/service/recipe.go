@@ -134,6 +134,9 @@ func GetRecipeBySlug(slug string, userID string, db *sql.DB) (*common.Recipe, er
 
 		recipe.Ingredients = ingredients
 	}
+	if recipe.ID == 0 {
+		return nil, sql.ErrNoRows
+	}
 	return recipe, nil
 }
 
@@ -201,13 +204,11 @@ func GetRecipeByID(id int, userID string, db *sql.DB) (*common.Recipe, error) {
 			return nil, err
 		}
 
-		log.Println("ingredients")
-		log.Println(ingredients)
-
 		recipe.Ingredients = ingredients
 	}
-	log.Println("recipe")
-	log.Println(recipe)
+	if recipe.ID == 0 {
+		return nil, sql.ErrNoRows
+	}
 	return recipe, nil
 }
 

@@ -2,23 +2,25 @@
 
 set -e
 
+check_drift() {
+	local committed_file=$1 regen_cmd=$2 regen_hint=$3
+	echo "Checking $committed_file is up to date..."
+	if ! diff -u "$committed_file" <(eval "$regen_cmd"); then
+		echo "$committed_file is out of date. Regenerate it with:"
+		echo "  $regen_hint"
+		exit 1
+	fi
+}
+
 npm run package
 cd netlify-functions/recipes
 go fmt ./...
 go test ./... -v
 
-echo "Checking docs/openapi.yaml is up to date with app.go..."
-if ! diff -u ../../docs/openapi.yaml <(go run . openapi); then
-	echo "docs/openapi.yaml is out of date. Regenerate it with:"
-	echo "  cd netlify-functions/recipes && go run . openapi > ../../docs/openapi.yaml"
-	exit 1
-fi
+check_drift ../../docs/openapi.yaml "go run . openapi" \
+	"cd netlify-functions/recipes && go run . openapi > ../../docs/openapi.yaml"
 
 cd ../..
 
-echo "Checking types/api.d.ts is up to date with docs/openapi.yaml..."
-if ! diff -u types/api.d.ts <(npx openapi-typescript docs/openapi.yaml); then
-	echo "types/api.d.ts is out of date. Regenerate it with:"
-	echo "  npm run generate:api-types"
-	exit 1
-fi
+check_drift types/api.d.ts "npx openapi-typescript docs/openapi.yaml" \
+	"npm run generate:api-types"

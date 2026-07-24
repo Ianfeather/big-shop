@@ -16,7 +16,8 @@ npm run dev:full     # docker compose (local MySQL + Go API) + Next.js, one comm
 npm run build        # Build production frontend
 npm run start        # Start production server
 npm run lint         # Run ESLint
-npm run package      # Lint and build (used in deployment)
+npm run typecheck    # Run tsc --noEmit
+npm run package      # Lint, typecheck, and build (used in deployment)
 ```
 
 ### Full Stack Development

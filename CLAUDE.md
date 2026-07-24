@@ -141,7 +141,33 @@ plugin nor `@vitejs/plugin-react`'s babel pass transforms out of the box —
 non-`node_modules` `.js` file through esbuild's JSX transform to handle this.
 Test files live next to the file under test (e.g. `components/button/index.test.js`,
 `hooks/use-page-visibility.test.js`) — see those two for the established
-pattern. No e2e framework is set up yet.
+pattern.
+
+End-to-end tests (Playwright, local only for now — see follow-ups.md #12
+for the deferred remote/CI stage):
+```bash
+npm run test:e2e         # headless, fast - what CI/normal validation should use
+npm run test:e2e:debug   # headed, slowed down (E2E_SLOWMO) - for stepping through a scenario visually
+```
+Config is `playwright.config.ts`; specs live in `e2e/` (`recipe.spec.ts`,
+`shopping-list.spec.ts`), written in TypeScript with its own scoped
+`e2e/tsconfig.json` — the rest of the frontend is plain `.js` (see the "Convert
+to TypeScript" item in `follow-ups.md`), so this doesn't preempt that decision.
+Requires Docker: `webServer` in the config auto-starts `npm run dev:full`
+against pinned ports with its own `COMPOSE_PROJECT_NAME=bigshop-e2e`, so it
+won't collide with another worktree's stack; `test:e2e`/`test:e2e:debug` both
+run `test:e2e:stop` first to tear down any containers left over from an
+interrupted previous run (otherwise `dev-full.sh`'s own auto-increment-on-
+collision port logic silently drifts to different ports than the ones pinned
+in `e2e/env.ts`). Covers the core Recipe CRUD and Shopping List flows only
+(add/edit/delete a Recipe; add/remove a Recipe on the list, add an Extra Item,
+mark/un-mark an item bought, clear the list) — Dave, tag-filter browsing, and
+Recipe Import are deliberately out of scope (see the top of `e2e/recipe.spec.ts`
+and `e2e/shopping-list.spec.ts` for why). Run this whenever a change touches
+recipe creation/editing/deletion or shopping-list behavior — Vitest alone
+won't catch a regression that only shows up going through the real API
+(e.g. a mismatched request content-type, as `follow-ups.md` #12 notes was
+caught this way).
 
 Evals:
 ```bash

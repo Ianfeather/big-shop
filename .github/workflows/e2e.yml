@@ -1,0 +1,63 @@
+name: E2E
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # --ignore-scripts: @netlify/plugin-nextjs (devDependency, needed only
+      # so netlify.toml's plugin resolves locally for Netlify's own deploy
+      # build) pulls in the ancient, unmaintained @netlify/esbuild@0.14.39.
+      # Its postinstall can't locate/fetch its own Linux binary and fails
+      # `npm ci` outright on every platform tested (verified in a plain
+      # node:22-bookworm container, both linux-64 and linux-arm64 - not a
+      # registry flake). Nothing this workflow needs (esbuild via Next's
+      # webpack build, Playwright's browser download below) requires a
+      # postinstall step from npm ci itself to work.
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      # playwright.config.ts's webServer runs `npm run dev:full`, which
+      # brings up MySQL + the Go API via docker compose (pinned to ports
+      # from e2e/env.ts, project name `bigshop-e2e`) and Next.js natively -
+      # same stack used for `npm run test:e2e` locally, just without the
+      # dev-only auto-increment-on-collision port fallback ever kicking in
+      # on a fresh runner.
+      - name: Run e2e tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Tear down docker compose stack
+        if: ${{ !cancelled() }}
+        run: npm run test:e2e:stop

@@ -143,8 +143,7 @@ Test files live next to the file under test (e.g. `components/button/index.test.
 `hooks/use-page-visibility.test.js`) — see those two for the established
 pattern.
 
-End-to-end tests (Playwright, local only for now — see follow-ups.md #12
-for the deferred remote/CI stage):
+End-to-end tests (Playwright):
 ```bash
 npm run test:e2e         # headless, fast - what CI/normal validation should use
 npm run test:e2e:debug   # headed, slowed down (E2E_SLOWMO) - for stepping through a scenario visually
@@ -168,6 +167,15 @@ recipe creation/editing/deletion or shopping-list behavior — Vitest alone
 won't catch a regression that only shows up going through the real API
 (e.g. a mismatched request content-type, as `follow-ups.md` #12 notes was
 caught this way).
+
+Also runs in CI via `.github/workflows/e2e.yml` on every pull request
+(plus manual `workflow_dispatch`): same `npm run test:e2e` command, on a
+fresh `ubuntu-latest` runner, so it needs no secrets — `.env.development`'s
+committed defaults (`NEXT_PUBLIC_DISABLE_AUTH=true` etc.) are enough to bring
+the stack up standalone. `reporter` in `playwright.config.ts` adds an HTML
+report under `CI` (plain `list` isn't useful without a terminal to scroll
+back through); the workflow uploads it, plus any failure traces, as build
+artifacts. Not yet wired up as a required check — see follow-ups.md #13.
 
 Evals:
 ```bash

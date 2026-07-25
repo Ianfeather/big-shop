@@ -16,7 +16,8 @@ npm run dev:full     # docker compose (local MySQL + Go API) + Next.js, one comm
 npm run build        # Build production frontend
 npm run start        # Start production server
 npm run lint         # Run ESLint
-npm run package      # Lint and build (used in deployment)
+npm run typecheck    # Run tsc --noEmit
+npm run package      # Lint, typecheck, and build (used in deployment)
 ```
 
 ### Full Stack Development
@@ -107,12 +108,34 @@ Go server validates JWTs against the real Auth0 tenant
 
 **Known rough edge (dev-only):** `next.config.js` has `reactStrictMode: true`,
 which double-invokes effects in development. Combined with `use-http`'s
-abort-on-unmount behavior, a hard page reload on `/recipes`, `/recipes/[id]`,
-or `/list` can occasionally render empty if the aborted first call's state
-resolves after the real one. Client-side `<Link>` navigation is unaffected in
-practice. Doesn't happen in production (Strict Mode's double-invoke is a dev
-build only). Not something this setup work fixed — the real-API path was
-never previously exercised locally, so this was never observable before.
+abort-on-unmount behavior (it registers `request.abort` as the cleanup of a
+mount effect, aborting whatever's in flight on that hook instance — see
+`useFetch.js`'s `useEffect(() => request.abort, [])`), Strict Mode's
+first-pass effect fires its requests, then its cleanup immediately aborts
+them, before the second pass fires the real ones. A hard page reload on
+`/recipes`, `/recipes/[id]`, or `/list` can occasionally render empty if the
+aborted first call's state resolves after the real one. Client-side `<Link>`
+navigation is unaffected in practice. Doesn't happen in production (Strict
+Mode's double-invoke is a dev build only). Not something this setup work
+fixed — the real-API path was never previously exercised locally, so this
+was never observable before.
+
+Where a component fires multiple concurrent requests off one shared
+`useFetch` instance, this is worse than "occasionally empty": each call's
+own resolved value (`undefined` if aborted) is the only reliable per-call
+signal — the hook's single `response`/`error` is shared across every call on
+that instance, so it reflects whichever call last updated it, not each one
+individually, and gating multiple `setState`s behind one `response.ok` check
+can update state from a *different* call than the one just aborted. This bit
+`components/recipe-form/Form.tsx`'s `getUnitsTagsAndIngredients` in
+practice — deterministically, every dev load, not just occasionally — since
+it fired three concurrent `get()`s and gated all three `setState`s on one
+shared `response.ok`, crashing with `Cannot read properties of undefined
+(reading 'map')` when Strict Mode's first pass got aborted but a *later*
+call (from the second pass) had already flipped the shared `response.ok` to
+true by the time the first pass's own check ran. Fixed by checking each
+result for `undefined` individually instead of gating on `response.ok` —
+the general lesson for any future concurrent-call-on-one-instance code here.
 
 **Environment variables:**
 - Copy from `.env.development` for local development
@@ -134,13 +157,10 @@ Frontend unit/component tests (Vitest + React Testing Library):
 npm run test         # run once
 npm run test:watch   # watch mode
 ```
-Config is `vitest.config.js`. Components/hooks/tests in this codebase write
-JSX in plain `.js` files (not `.jsx`), which neither Vite's built-in esbuild
-plugin nor `@vitejs/plugin-react`'s babel pass transforms out of the box —
-`vitest.config.js` has a small custom `jsx-in-js` plugin that runs every
-non-`node_modules` `.js` file through esbuild's JSX transform to handle this.
-Test files live next to the file under test (e.g. `components/button/index.test.js`,
-`hooks/use-page-visibility.test.js`) — see those two for the established
+Config is `vitest.config.js`. Components/hooks/tests in this codebase are
+TypeScript (`.tsx`/`.ts`, see `follow-ups.md` #9). Test files live next to
+the file under test (e.g. `components/button/index.test.tsx`,
+`hooks/use-page-visibility.test.ts`) — see those two for the established
 pattern.
 
 End-to-end tests (Playwright):
@@ -149,9 +169,8 @@ npm run test:e2e         # headless, fast - what CI/normal validation should use
 npm run test:e2e:debug   # headed, slowed down (E2E_SLOWMO) - for stepping through a scenario visually
 ```
 Config is `playwright.config.ts`; specs live in `e2e/` (`recipe.spec.ts`,
-`shopping-list.spec.ts`), written in TypeScript with its own scoped
-`e2e/tsconfig.json` — the rest of the frontend is plain `.js` (see the "Convert
-to TypeScript" item in `follow-ups.md`), so this doesn't preempt that decision.
+`shopping-list.spec.ts`), with its own scoped `e2e/tsconfig.json` separate
+from the root `tsconfig.json`.
 Requires Docker: `webServer` in the config auto-starts `npm run dev:full`
 against pinned ports with its own `COMPOSE_PROJECT_NAME=bigshop-e2e`, so it
 won't collide with another worktree's stack; `test:e2e`/`test:e2e:debug` both

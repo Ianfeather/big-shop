@@ -12,7 +12,11 @@ interface ButtonProps {
   children?: ReactNode;
   href?: string;
   icon?: string;
-  style?: string;
+  // Only 'primary'/'danger' exist as classes in index.module.css - a
+  // mismatched value here silently produces the literal string "undefined"
+  // in the rendered className (styles[style] on a missing key) rather than
+  // failing, so this is typed narrowly instead of as `string`.
+  style?: 'primary' | 'danger';
   outline?: boolean;
   iconOnly?: boolean;
   [key: string]: unknown;

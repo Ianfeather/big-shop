@@ -95,17 +95,17 @@
 
 .sourceTab {
   border: none;
-  background-color: var(--light-purple);
+  background-color: var(--color-primary-soft);
   padding: 8px 16px;
   border-radius: 20px;
   font-size: 14px;
   font-weight: bold;
-  color: var(--purple);
+  color: var(--color-primary);
   cursor: pointer;
 }
 
 .sourceTabActive {
-  background-color: var(--purple);
+  background-color: var(--color-primary);
   color: #fff;
 }
 
@@ -137,5 +137,5 @@
 }
 
 .sourceInputGroup input:focus {
-  border-bottom: 2px solid var(--purple);
+  border-bottom: 2px solid var(--color-primary);
 }

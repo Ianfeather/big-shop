@@ -108,12 +108,34 @@ Go server validates JWTs against the real Auth0 tenant
 
 **Known rough edge (dev-only):** `next.config.js` has `reactStrictMode: true`,
 which double-invokes effects in development. Combined with `use-http`'s
-abort-on-unmount behavior, a hard page reload on `/recipes`, `/recipes/[id]`,
-or `/list` can occasionally render empty if the aborted first call's state
-resolves after the real one. Client-side `<Link>` navigation is unaffected in
-practice. Doesn't happen in production (Strict Mode's double-invoke is a dev
-build only). Not something this setup work fixed — the real-API path was
-never previously exercised locally, so this was never observable before.
+abort-on-unmount behavior (it registers `request.abort` as the cleanup of a
+mount effect, aborting whatever's in flight on that hook instance — see
+`useFetch.js`'s `useEffect(() => request.abort, [])`), Strict Mode's
+first-pass effect fires its requests, then its cleanup immediately aborts
+them, before the second pass fires the real ones. A hard page reload on
+`/recipes`, `/recipes/[id]`, or `/list` can occasionally render empty if the
+aborted first call's state resolves after the real one. Client-side `<Link>`
+navigation is unaffected in practice. Doesn't happen in production (Strict
+Mode's double-invoke is a dev build only). Not something this setup work
+fixed — the real-API path was never previously exercised locally, so this
+was never observable before.
+
+Where a component fires multiple concurrent requests off one shared
+`useFetch` instance, this is worse than "occasionally empty": each call's
+own resolved value (`undefined` if aborted) is the only reliable per-call
+signal — the hook's single `response`/`error` is shared across every call on
+that instance, so it reflects whichever call last updated it, not each one
+individually, and gating multiple `setState`s behind one `response.ok` check
+can update state from a *different* call than the one just aborted. This bit
+`components/recipe-form/Form.tsx`'s `getUnitsTagsAndIngredients` in
+practice — deterministically, every dev load, not just occasionally — since
+it fired three concurrent `get()`s and gated all three `setState`s on one
+shared `response.ok`, crashing with `Cannot read properties of undefined
+(reading 'map')` when Strict Mode's first pass got aborted but a *later*
+call (from the second pass) had already flipped the shared `response.ok` to
+true by the time the first pass's own check ran. Fixed by checking each
+result for `undefined` individually instead of gating on `response.ok` —
+the general lesson for any future concurrent-call-on-one-instance code here.
 
 **Environment variables:**
 - Copy from `.env.development` for local development

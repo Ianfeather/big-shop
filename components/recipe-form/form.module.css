@@ -253,7 +253,7 @@
 
 .bulkTextarea:focus {
   outline: none;
-  border-color: var(--purple);
+  border-color: var(--color-primary);
 }
 
 .bulkError {

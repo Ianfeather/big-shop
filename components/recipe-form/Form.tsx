@@ -103,17 +103,22 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
       setIngredients(mocks.ingredients.map(i => i.name));
       return;
     }
-    const [_units, _tags, _ingredients]: [Unit[], string[], { name: string }[]] = await Promise.all([
+    // units/tags/ingredients are typed optional because get() resolves to
+    // undefined on a failed *or aborted* request - in dev, React Strict
+    // Mode's double-invoked effect aborts this first call via use-http's
+    // abort-on-unmount (see CLAUDE.md's "Known rough edge"), so relying on
+    // this shared useFetch instance's single `response.ok` to gate all
+    // three would be wrong: it reflects whichever of the three (across
+    // either invocation) last resolved, not each one individually. Check
+    // each result on its own instead.
+    const [_units, _tags, _ingredients]: [Unit[] | undefined, string[] | undefined, { name: string }[] | undefined] = await Promise.all([
       get('/units'),
       get('/tags'),
       get('/ingredients')
     ]);
-    if (response.ok) {
-      setUnits(_units.map(unit => ({...unit, name: capitalize(unit.name)})));
-      setTags(_tags);
-      setIngredients(_ingredients.map(i => i.name));
-    }
-
+    if (_units) setUnits(_units.map(unit => ({...unit, name: capitalize(unit.name)})));
+    if (_tags) setTags(_tags);
+    if (_ingredients) setIngredients(_ingredients.map(i => i.name));
   }
   useEffect(() => { getUnitsTagsAndIngredients() }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -281,7 +286,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
                 onChange={(e) => setBulkText(e.target.value)}
               />
               <Button
-                style="blue"
+                style="primary"
                 icon="tick"
                 className={`${parseLoading ? styles.loading : ''}`}
                 onClick={handleParseIngredients}
@@ -350,7 +355,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
       </div>
 
       <div className={styles.buttonContainer}>
-        <Button style="green" icon="tick" className={`${loading ? styles.loading : ''}`} onClick={submitRecipe}>
+        <Button style="primary" icon="tick" className={`${loading ? styles.loading : ''}`} onClick={submitRecipe}>
           { mode === 'edit' ? 'Update Recipe' : 'Store Recipe'}
         </Button>
 
@@ -371,7 +376,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
         {
           mode === 'edit' && (
             <div>
-              <Button style="red" icon="trash" onClick={deleteRecipe}>Delete Recipe</Button>
+              <Button style="danger" icon="trash" onClick={deleteRecipe}>Delete Recipe</Button>
               {
                 deleted && <span>Deleted</span>
               }

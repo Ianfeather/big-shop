@@ -31,16 +31,10 @@ const Recipes = () => {
   }, [router.isReady, id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <Layout pageTitle={"Recipes"}>
-      { toastMessage && (
-        // Rendered as a sibling above Grid, not inside MainContent: MainContent
-        // is `position: relative` and the Edit button below is positioned
-        // absolutely against it, so a Toast inside would shift the heading
-        // down without moving Edit, overlapping the two.
-        <div className={styles.toastWrapper}>
-          <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
-        </div>
-      )}
+    <Layout
+      pageTitle={"Recipes"}
+      toast={toastMessage && <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />}
+    >
       <Grid>
         <MainContent>
           <h1 className={styles.title}>{recipe.name}</h1>

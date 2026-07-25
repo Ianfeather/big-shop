@@ -20,10 +20,6 @@
   margin: 0;
 }
 
-.toastWrapper {
-  padding: var(--space-4) var(--space-4) 0;
-}
-
 .topRightButton {
   position: absolute;
   top: var(--space-5);

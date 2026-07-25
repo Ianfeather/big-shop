@@ -12,7 +12,17 @@ services:
       - ./docker/mysql-seed:/seed:ro
       - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      # -h 127.0.0.1 (not "localhost") is deliberate: the MySQL client treats
+      # the literal host "localhost" as "connect via the Unix socket", and the
+      # official image's entrypoint runs docker-entrypoint-initdb.d (our
+      # migrate-and-seed script) against a temporary, --skip-networking mysqld
+      # that still binds that same socket file before the real, fully-networked
+      # server starts. A "-h localhost" ping can therefore report Healthy
+      # against that temporary instance while migrations/seeding are still
+      # running, which then lets `api` (depends_on: service_healthy) start
+      # against a half-initialized DB. Forcing TCP via "127.0.0.1" only
+      # succeeds once the real server (post-init) is listening.
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
       interval: 5s
       timeout: 5s
       retries: 20

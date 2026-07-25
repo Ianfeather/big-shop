@@ -58,6 +58,23 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+      # Only useful signal we have when "API did not become healthy in time"
+      # fires (see follow-ups.md #21) - dumps whatever db/api logged before
+      # the stack gets torn down below. COMPOSE_PROJECT_NAME must match what
+      # e2e/env.ts pins Playwright's webServer to, or this targets nothing.
+      - name: Dump docker compose logs
+        if: failure()
+        run: COMPOSE_PROJECT_NAME=bigshop-e2e docker compose logs db api > docker-compose.log 2>&1 || true
+
+      - name: Upload docker compose logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-compose-logs
+          path: docker-compose.log
+          retention-days: 14
+          if-no-files-found: ignore
+
       - name: Tear down docker compose stack
         if: ${{ !cancelled() }}
         run: npm run test:e2e:stop

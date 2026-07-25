@@ -5,6 +5,7 @@ import ListItem from '../sidebar-item';
 import SidebarInput from '../sidebar-input';
 import SidebarTagFilter from '../sidebar-tag-filter';
 import SidebarHeading from '../sidebar-heading';
+import Button from '@components/button';
 import useRecipes from '@hooks/use-recipes';
 import useFetch, { CachePolicies } from 'use-http'
 import mocks from '../../mocks';
@@ -17,9 +18,13 @@ interface RecipeListProps {
   handleRecipeSelect?: ChangeEventHandler<HTMLInputElement>;
   filterFn?: (recipe: RecipeSummary) => boolean;
   selectedIds?: Record<string, boolean>;
+  // The Shopping List's recipe picker (components/shopping-list/Recipes)
+  // reuses this component for selection, not recipe management - it opts
+  // out, since "Add new recipe" doesn't belong in that context.
+  showAddButton?: boolean;
 }
 
-const RecipeList = ({ handleRecipeSelect, filterFn = () => true, selectedIds = {} }: RecipeListProps) => {
+const RecipeList = ({ handleRecipeSelect, filterFn = () => true, selectedIds = {}, showAddButton = true }: RecipeListProps) => {
   const router = useRouter()
   const [recipes] = useRecipes();
   const [tags, setTags] = useState<string[]>([]);
@@ -88,6 +93,9 @@ const RecipeList = ({ handleRecipeSelect, filterFn = () => true, selectedIds = {
 
   return (
     <div className={styles.panel}>
+      { showAddButton && (
+        <Button href="/recipes/new" style="primary" icon="tick" className={styles.addRecipeButton}>Add new recipe</Button>
+      )}
       <div className={styles.filterRow}>
         <SidebarHeading className={styles.filterHeading}>All Recipes</SidebarHeading>
         <SidebarTagFilter onChange={toggleTagFilter} value={tagsFilter} tags={tags}/>

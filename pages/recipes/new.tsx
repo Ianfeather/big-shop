@@ -292,7 +292,7 @@ const NewRecipe = () => {
                 onBlur={(e) => fetchFromUrl(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); fetchFromUrl(urlValue); } }}
               />
-              <Button style="primary" icon="tick" onClick={(e) => { e.preventDefault(); fetchFromUrl(urlValue); }}>
+              <Button style="primary" icon="tick" disabled={urlLoading} onClick={(e) => { e.preventDefault(); fetchFromUrl(urlValue); }}>
                 Fetch
                 { urlLoading && <Spinner className={styles.loadingIngredients}>Fetching...</Spinner>}
               </Button>
@@ -311,7 +311,7 @@ const NewRecipe = () => {
               className={styles.fileInput}
               onChange={handleImageChange}
             />
-            <Button style="primary" onClick={handleImageClick}>
+            <Button style="primary" disabled={loading || !!processingJob} onClick={handleImageClick}>
               <PhotoIcon className={styles.photoIcon} />
               Take or upload a photo
               { (loading || processingJob) && <Spinner className={styles.loadingIngredients}>Processing image...</Spinner>}

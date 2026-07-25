@@ -17,7 +17,7 @@ const RecipeList = ({ recipeList, handleRecipeSelect, addExtraItem, className = 
         <AddExtra onAdd={addExtraItem} />
       </div>
       <div className={styles.module}>
-        <Recipes selectedIds={recipeList} handleRecipeSelect={handleRecipeSelect} />
+        <Recipes selectedIds={recipeList} handleRecipeSelect={handleRecipeSelect} showAddButton={false} />
       </div>
     </div>
   )

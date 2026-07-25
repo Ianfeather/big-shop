@@ -386,6 +386,17 @@ export interface components {
             id: number;
             users: components["schemas"]["User"][] | null;
         };
+        CreatedResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /.netlify/functions/recipes/schemas/CreatedResponse.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            id: number;
+            status: string;
+        };
         DeleteRecipeInputBody: {
             /**
              * Format: uri
@@ -864,7 +875,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SimpleResponse"];
+                    "application/json": components["schemas"]["CreatedResponse"];
                 };
             };
             /** @description Error */

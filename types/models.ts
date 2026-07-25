@@ -10,3 +10,4 @@ export type Ingredient = components['schemas']['Ingredient'];
 export type User = components['schemas']['User'];
 export type Account = components['schemas']['Account'];
 export type ShoppingList = components['schemas']['ShoppingList'];
+export type CreatedResponse = components['schemas']['CreatedResponse'];

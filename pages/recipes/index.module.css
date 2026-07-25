@@ -7,12 +7,12 @@
 .introHeader {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-1);
 }
 
 .introHeading {
   font-size: var(--text-2xl);
-  margin: 0 0 var(--space-1);
+  margin: 0;
 }
 
 .introSubheading {
@@ -20,19 +20,8 @@
   margin: 0;
 }
 
-.introButton {
-  align-self: flex-start;
-}
-
-@media (min-width: 500px) {
-  .introHeader {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .introButton {
-    align-self: center;
-  }
+.toastWrapper {
+  padding: var(--space-4) var(--space-4) 0;
 }
 
 .topRightButton {

@@ -6,7 +6,7 @@ import Button from '@components/button';
 import Message from '@components/message';
 import Spinner from './spinner';
 import mocks from '../../mocks';
-import type { Recipe as RecipeModel, Ingredient, Unit } from '../../types/models';
+import type { Recipe as RecipeModel, Ingredient, Unit, CreatedResponse } from '../../types/models';
 
 const useMocks = process.env.NEXT_PUBLIC_USE_MOCKS === 'true';
 
@@ -62,7 +62,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
 
   let useInitialRecipe = Object.keys(initialRecipe).length > 0;
   let [recipe, setRecipe] = useState<FormRecipe>(useInitialRecipe ? normalizeInitialRecipe(initialRecipe, bareRecipe) : bareRecipe);
-  let [saved, setSaved] = useState(false);
+  let [saving, setSaving] = useState(false);
   let [units, setUnits] = useState<FormUnit[]>([]);
   let [tags, setTags] = useState<string[]>([]);
   let [ingredients, setIngredients] = useState<string[]>([]);
@@ -81,7 +81,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
   // not DELETE - without this, deleteRecipe's `del('/recipe', { id })` call
   // sends its JSON body as text/plain, which the API's content-type
   // validation rejects with 415.
-  const { get, post, put, del, response, loading, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
+  const { get, post, put, del, response, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
     cachePolicy: CachePolicies.NO_CACHE,
     headers: { 'Content-Type': 'application/json' }
   });
@@ -201,14 +201,21 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
 
   async function submitRecipe(e: MouseEvent) {
     e.preventDefault();
+    setSaving(true);
     if (mode === 'edit') {
       await put('/recipe', recipe)
+      if (response.ok) {
+        return router.push(`/recipes/${recipe.id}?stored=updated`);
+      }
     } else {
-      await post('/recipe', recipe)
+      // POST /recipe returns the new recipe's id (CreatedResponse) so we can
+      // redirect straight to its detail page without a follow-up GET.
+      const result: CreatedResponse = await post('/recipe', recipe)
+      if (response.ok) {
+        return router.push(`/recipes/${result.id}?stored=new`);
+      }
     }
-    if (response.ok) {
-      setSaved(true);
-    }
+    setSaving(false);
   }
 
   async function deleteRecipe(e: MouseEvent) {
@@ -226,11 +233,6 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
       ...recipe,
       ingredients: recipe.ingredients.filter(ingredient => ingredient.name !== name)
     })
-  }
-
-  function resetForm(e: MouseEvent) {
-    e.preventDefault();
-    setRecipe(bareRecipe);
   }
 
   if (mode === 'edit' && !recipe.id) {
@@ -355,24 +357,10 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
       </div>
 
       <div className={styles.buttonContainer}>
-        <Button style="primary" icon="tick" className={`${loading ? styles.loading : ''}`} onClick={submitRecipe}>
-          { mode === 'edit' ? 'Update Recipe' : 'Store Recipe'}
+        <Button style="primary" icon="tick" disabled={saving} onClick={submitRecipe}>
+          { mode === 'edit' ? 'Update Recipe' : 'Save Recipe'}
+          { saving && <Spinner className={styles.loadingIngredients}>Saving...</Spinner>}
         </Button>
-
-        { saved && (
-          <>
-            <div className={styles.stored}>
-              { mode === 'edit' ? 'Updated!' : 'Stored!'}
-            </div>
-            { mode === 'new' &&
-              <div>
-                <Button className={`${styles.addAnotherRecipe}`} onClick={resetForm}>
-                  Add another recipe
-                </Button>
-              </div>
-            }
-          </>
-        )}
         {
           mode === 'edit' && (
             <div>

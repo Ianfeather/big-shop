@@ -14,17 +14,17 @@ test.describe('shopping list', () => {
   const ingredientName = `e2e ingredient ${runId}`;
   const extraName = `e2e extra ${runId}`;
   const recipeName = `E2E Shopping List Recipe ${runId}`;
-  // A second, always-selected recipe. pages/list.js's getShoppingList()
-  // bails out without calling the API when the selection becomes empty
-  // (`if (!selectedRecipes.length) return;`), so deselecting your *only*
-  // recipe never actually clears its ingredients from what's displayed -
-  // see follow-ups.md. Keeping a second recipe selected throughout means
-  // the "remove a recipe" test exercises the realistic, common case
-  // (removing one of several) rather than that edge case.
+  // A second recipe, kept selected throughout the "remove a recipe" test so
+  // that one exercises the realistic, common case (removing one of several).
+  // The zero-recipes-selected edge case (previously buggy - see follow-ups.md
+  // #14) gets its own dedicated test below, run first while the list is empty.
   const keepAliveIngredientName = `e2e keep-alive ingredient ${runId}`;
   const keepAliveRecipeName = `E2E Shopping List Keep-alive Recipe ${runId}`;
+  const soloIngredientName = `e2e solo ingredient ${runId}`;
+  const soloRecipeName = `E2E Shopping List Solo Recipe ${runId}`;
   let recipeId: number;
   let keepAliveRecipeId: number;
+  let soloRecipeId: number;
 
   test.beforeAll(async ({ request }) => {
     await clearShoppingList(request);
@@ -36,12 +36,26 @@ test.describe('shopping list', () => {
       name: keepAliveRecipeName,
       ingredients: [{ name: keepAliveIngredientName, quantity: '1', unit: 'unit' }],
     });
+    soloRecipeId = await createRecipe(request, {
+      name: soloRecipeName,
+      ingredients: [{ name: soloIngredientName, quantity: '1', unit: 'unit' }],
+    });
   });
 
   test.afterAll(async ({ request }) => {
     await clearShoppingList(request);
     await deleteRecipeById(request, recipeId);
     await deleteRecipeById(request, keepAliveRecipeId);
+    await deleteRecipeById(request, soloRecipeId);
+  });
+
+  test('deselecting your only selected recipe clears its ingredients', async ({ page }) => {
+    await page.goto('/list');
+    await page.getByRole('checkbox', { name: soloRecipeName }).click({ force: true });
+    await expect(page.getByRole('checkbox', { name: soloIngredientName })).toBeVisible();
+
+    await page.getByRole('checkbox', { name: soloRecipeName }).click({ force: true });
+    await expect(page.getByRole('checkbox', { name: soloIngredientName })).toHaveCount(0);
   });
 
   test('add a recipe to the shopping list', async ({ page }) => {

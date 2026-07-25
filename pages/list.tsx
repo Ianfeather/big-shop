@@ -51,6 +51,11 @@ const List = () => {
   // again). Without this, the throwaway first mount's in-flight requests can
   // resolve after the real ones and stomp good state with stale/empty data.
   const cancelledRef = useRef(false);
+  // getShoppingList() also fires on the very first mount (recipeList starts
+  // as {}), before hydrateShoppingList's fetch has populated it from the
+  // server. Without this guard that fires a regenerate call with an empty
+  // recipe list and wipes out whatever was actually stored server-side.
+  const hasHydratedRef = useRef(false);
   useEffect(() => {
     cancelledRef.current = false;
     return () => { cancelledRef.current = true; };
@@ -142,6 +147,7 @@ const List = () => {
   async function hydrateShoppingList() {
     const { recipes = [], extras = {} } = await getListState();
     if (cancelledRef.current) return;
+    hasHydratedRef.current = true;
     setHydrateFlag(true);
     setRecipeList(recipes.reduce<Record<string, boolean>>((acc, recipe) => {
       acc[recipe] = true;
@@ -151,6 +157,9 @@ const List = () => {
   }
 
   async function getShoppingList() {
+    if (!hasHydratedRef.current) {
+      return;
+    }
     // This isn't an ideal way of handling the interaction between this function and hydrateShoppingList
     // The problem is that hydrating will often lead to a change in the recipes which this fn depends on
     // However the way the shoppinglist calculation works is based on recipe id only so calling this function
@@ -161,9 +170,6 @@ const List = () => {
       return;
     }
     const selectedRecipes = Object.keys(recipeList).filter(k => !!recipeList[k]);
-    if (!selectedRecipes.length) {
-      return;
-    }
 
     if (useMocks) {
       setListState(buildMockIngredients(selectedRecipes), extras);

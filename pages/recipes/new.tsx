@@ -7,7 +7,7 @@ import Button from '@components/button';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import PhotoIcon from '@components/svg/photo';
 import useIngredientMetadata from '@hooks/use-ingredient-metadata';
-import { localApiPost, localApiPostFormData, localApiGet } from '../../lib/api-client';
+import { nextApiPost, nextApiPostFormData, nextApiGet } from '../../lib/api-client';
 import type { Recipe as RecipeModel } from '../../types/models';
 
 // Helper function to resize image
@@ -132,12 +132,12 @@ const NewRecipe = () => {
 
   const uploadImageMutation = useMutation({
     mutationFn: (formData: FormData) =>
-      localApiPostFormData<{ jobId: string }>(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image`, formData)
+      nextApiPostFormData<{ jobId: string }>(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image`, formData)
   });
 
   const parseUrlMutation = useMutation({
     mutationFn: (payload: { url: string; knownIngredients: string[]; knownUnits: string[] }) =>
-      localApiPost<ParseUrlResult>(`${process.env.NEXT_PUBLIC_HOST}/api/parse-recipe-url`, payload)
+      nextApiPost<ParseUrlResult>(`${process.env.NEXT_PUBLIC_HOST}/api/parse-recipe-url`, payload)
   });
 
   // Poll for job status - refetchInterval stops itself once the job settles
@@ -147,7 +147,7 @@ const NewRecipe = () => {
   const jobStatusQuery = useQuery<ImageJobStatus>({
     queryKey: ['recipe-image-job', processingJob?.jobId],
     enabled: !!processingJob,
-    queryFn: () => localApiGet<ImageJobStatus>(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image?jobId=${processingJob!.jobId}`),
+    queryFn: () => nextApiGet<ImageJobStatus>(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image?jobId=${processingJob!.jobId}`),
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       return status === 'completed' || status === 'failed' ? false : 2000;

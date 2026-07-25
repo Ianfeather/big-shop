@@ -9,7 +9,7 @@ import useUnits from '@hooks/use-units';
 import useTags from '@hooks/use-tags';
 import useIngredientNames from '@hooks/use-ingredient-names';
 import useAuth from '@hooks/use-auth';
-import { apiPost, apiPut, apiDelete, localApiPost } from '../../lib/api-client';
+import { apiPost, apiPut, apiDelete, nextApiPost } from '../../lib/api-client';
 import type { Recipe as RecipeModel, Ingredient, CreatedResponse } from '../../types/models';
 
 const capitalize = (str: string) => {
@@ -111,7 +111,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
 
   const parseTextMutation = useMutation({
     mutationFn: (payload: { text: string; knownIngredients: string[]; knownUnits: string[] }) =>
-      localApiPost<ParseTextResult>(`${process.env.NEXT_PUBLIC_HOST}/api/parse-recipe-text`, payload)
+      nextApiPost<ParseTextResult>(`${process.env.NEXT_PUBLIC_HOST}/api/parse-recipe-text`, payload)
   });
 
   const loading = saveMutation.isPending;

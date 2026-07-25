@@ -2,9 +2,10 @@
 // site - see follow-ups.md #20. Two families:
 //  - apiGet/apiPost/apiPut/apiPatch/apiDelete: the Go API (NEXT_PUBLIC_API_HOST),
 //    bearer-token authenticated.
-//  - localApiGet/localApiPost/localApiPostFormData: same-origin Next.js API
-//    routes (pages/api/*), unauthenticated (those routes don't check a
-//    token) and error-shaped as `{ error: string }` on failure.
+//  - nextApiGet/nextApiPost/nextApiPostFormData: this app's own Next.js API
+//    routes (pages/api/*, see technical-architecture.md's "Next.js API
+//    Routes" section), unauthenticated (those routes don't check a token)
+//    and error-shaped as `{ error: string }` on failure.
 
 async function parseBody(res: Response): Promise<unknown> {
   const text = await res.text();
@@ -41,7 +42,7 @@ export const apiPut = <T>(path: string, token: string, body?: unknown) => apiMut
 export const apiPatch = <T>(path: string, token: string, body?: unknown) => apiMutate<T>('PATCH', path, token, body);
 export const apiDelete = <T>(path: string, token: string, body?: unknown) => apiMutate<T>('DELETE', path, token, body);
 
-async function handleLocalResponse<T>(res: Response, label: string): Promise<T> {
+async function handleNextApiResponse<T>(res: Response, label: string): Promise<T> {
   const data = await parseBody(res);
   if (!res.ok) {
     throw new Error((data as { error?: string } | undefined)?.error ?? `${label} failed with status ${res.status}`);
@@ -49,21 +50,21 @@ async function handleLocalResponse<T>(res: Response, label: string): Promise<T> 
   return data as T;
 }
 
-export async function localApiGet<T>(url: string): Promise<T> {
+export async function nextApiGet<T>(url: string): Promise<T> {
   const res = await fetch(url);
-  return handleLocalResponse<T>(res, `GET ${url}`);
+  return handleNextApiResponse<T>(res, `GET ${url}`);
 }
 
-export async function localApiPost<T>(url: string, body: unknown): Promise<T> {
+export async function nextApiPost<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   });
-  return handleLocalResponse<T>(res, `POST ${url}`);
+  return handleNextApiResponse<T>(res, `POST ${url}`);
 }
 
-export async function localApiPostFormData<T>(url: string, formData: FormData): Promise<T> {
+export async function nextApiPostFormData<T>(url: string, formData: FormData): Promise<T> {
   const res = await fetch(url, { method: 'POST', body: formData });
-  return handleLocalResponse<T>(res, `POST ${url}`);
+  return handleNextApiResponse<T>(res, `POST ${url}`);
 }

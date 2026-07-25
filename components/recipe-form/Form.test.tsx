@@ -25,18 +25,18 @@ vi.mock('../../lib/api-client', () => ({
   apiPost: vi.fn(),
   apiPut: vi.fn(),
   apiDelete: vi.fn(),
-  localApiPost: vi.fn()
+  nextApiPost: vi.fn()
 }));
 
 import useAuth from '@hooks/use-auth';
-import { apiPost, apiPut, apiDelete, localApiPost } from '../../lib/api-client';
+import { apiPost, apiPut, apiDelete, nextApiPost } from '../../lib/api-client';
 import Form from './Form';
 
 const mockedUseAuth = useAuth as unknown as Mock;
 const mockedApiPost = apiPost as unknown as Mock;
 const mockedApiPut = apiPut as unknown as Mock;
 const mockedApiDelete = apiDelete as unknown as Mock;
-const mockedLocalApiPost = localApiPost as unknown as Mock;
+const mockedNextApiPost = nextApiPost as unknown as Mock;
 
 beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_API_HOST', 'http://api.test');
@@ -46,7 +46,7 @@ beforeEach(() => {
   mockedApiPost.mockResolvedValue({ status: 'ok', id: 42 });
   mockedApiPut.mockResolvedValue({});
   mockedApiDelete.mockResolvedValue({});
-  mockedLocalApiPost.mockReset();
+  mockedNextApiPost.mockReset();
 });
 
 afterEach(() => {
@@ -102,7 +102,7 @@ describe('Form', () => {
   });
 
   it('parses bulk-pasted ingredients and appends them to the list', async () => {
-    mockedLocalApiPost.mockResolvedValue({ ingredients: [{ name: 'egg', quantity: '2', unit: '' }] });
+    mockedNextApiPost.mockResolvedValue({ ingredients: [{ name: 'egg', quantity: '2', unit: '' }] });
     await renderForm();
 
     await userEvent.type(screen.getByLabelText('Ingredients'), '2 eggs');
@@ -113,7 +113,7 @@ describe('Form', () => {
   });
 
   it('shows an error and keeps the typed text when bulk parsing fails', async () => {
-    mockedLocalApiPost.mockRejectedValue(new Error('Could not parse that'));
+    mockedNextApiPost.mockRejectedValue(new Error('Could not parse that'));
     await renderForm();
 
     await userEvent.type(screen.getByLabelText('Ingredients'), '2 eggs');

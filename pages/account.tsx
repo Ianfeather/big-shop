@@ -1,8 +1,9 @@
 import styles from './account.module.css';
-import useFetch, { CachePolicies } from 'use-http'
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
 import Invite from '@components/invite';
 import useAuth0 from '@hooks/use-auth';
+import { apiGet, apiPost } from '../lib/api-client';
 import Layout, { MainContent, Sidebar } from '@components/layout'
 import Button from '@components/button';
 import type { Invite as InviteModel } from '../types/models';
@@ -11,38 +12,65 @@ const List = () => {
   let [invites, setInvites] = useState<InviteModel[]>([]);
   let [invitee, setInvitee] = useState('');
   let [successMessage, setSuccessMessage] = useState<string | false>(false);
-  const { user } = useAuth0();
-  const { get, post, patch, del, response } = useFetch<InviteModel[]>(process.env.NEXT_PUBLIC_API_HOST, {
-    cachePolicy: CachePolicies.NO_CACHE
+  const { user, getAccessTokenSilently } = useAuth0();
+
+  const { data: fetchedInvites } = useQuery<InviteModel[]>({
+    queryKey: ['invites'],
+    queryFn: async () => {
+      const token = await getAccessTokenSilently();
+      return apiGet<InviteModel[]>('/invites', token);
+    }
+  });
+
+  // invites stays local state, seeded from the query result: accept/reject
+  // optimistically remove an entry from this list without waiting on (or
+  // invalidating/refetching from) the mutation's response, same as before.
+  useEffect(() => {
+    if (fetchedInvites?.length) {
+      setInvites(fetchedInvites);
+    }
+  }, [fetchedInvites]);
+
+  const acceptMutation = useMutation({
+    mutationFn: async (token: string) => {
+      const accessToken = await getAccessTokenSilently();
+      return apiPost('/invite/accept', accessToken, { token });
+    }
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: async (token: string) => {
+      const accessToken = await getAccessTokenSilently();
+      return apiPost('/invite/reject', accessToken, { token });
+    }
+  });
+
+  const inviteMutation = useMutation({
+    mutationFn: async (email: string) => {
+      const accessToken = await getAccessTokenSilently();
+      return apiPost('/invite', accessToken, { email });
+    }
   });
 
   // TODO: Error handling
-  async function handleAccept(token: string) {
+  function handleAccept(token: string) {
     // Next steps:
     // add user menu
-    post('/invite/accept', { token });
+    acceptMutation.mutate(token);
     setInvites(invites.filter(invite => invite.token != token));
     setSuccessMessage('Great! You are now part of the same account and have a shared set of recipes.');
   }
 
-  async function handleReject(token: string) {
-    post('/invite/reject', { token });
+  function handleReject(token: string) {
+    rejectMutation.mutate(token);
     setInvites(invites.filter(invite => invite.token != token));
   }
 
-  async function handleInvite() {
-    post('/invite', { email: invitee });
+  function handleInvite() {
+    inviteMutation.mutate(invitee);
     setSuccessMessage(`An invite is on its way to ${invitee}`);
     setInvitee('');
   }
-
-  async function fetchInvites() {
-    const result = await get('/invites');
-    if (response.ok && result.length) {
-      setInvites(result);
-    }
-  }
-  useEffect(() => { fetchInvites() }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Layout>

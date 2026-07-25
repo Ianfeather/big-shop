@@ -4,9 +4,10 @@ import Layout, { MainContent } from '@components/layout'
 import styles from './index.module.css';
 import { ChangeEvent, useState, useRef, useEffect } from 'react';
 import Button from '@components/button';
-import useFetch, { CachePolicies } from 'use-http'
+import { useMutation, useQuery } from '@tanstack/react-query';
 import PhotoIcon from '@components/svg/photo';
 import useIngredientMetadata from '@hooks/use-ingredient-metadata';
+import { nextApiPost, nextApiPostFormData, nextApiGet } from '../../lib/api-client';
 import type { Recipe as RecipeModel } from '../../types/models';
 
 // Helper function to resize image
@@ -129,47 +130,44 @@ const NewRecipe = () => {
   const imageInput = useRef<HTMLInputElement>(null);
   const { ingredients: knownIngredients, units: knownUnits } = useIngredientMetadata();
 
-  // post (form upload -> {jobId}) and get (job status poll -> ImageJobStatus)
-  // share this instance with different response shapes - same rationale as
-  // Form.tsx's shared useFetch instance.
-  const { post, get, response, loading, error } = useFetch(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image`, {
-    cachePolicy: CachePolicies.NO_CACHE,
+  const uploadImageMutation = useMutation({
+    mutationFn: (formData: FormData) =>
+      nextApiPostFormData<{ jobId: string }>(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image`, formData)
   });
 
-  const { post: postUrl, response: urlResponse, loading: urlLoading } = useFetch<ParseUrlResult>(`${process.env.NEXT_PUBLIC_HOST}/api/parse-recipe-url`, {
-    cachePolicy: CachePolicies.NO_CACHE,
+  const parseUrlMutation = useMutation({
+    mutationFn: (payload: { url: string; knownIngredients: string[]; knownUnits: string[] }) =>
+      nextApiPost<ParseUrlResult>(`${process.env.NEXT_PUBLIC_HOST}/api/parse-recipe-url`, payload)
   });
 
-  // Poll for job status
-  useEffect(() => {
-    let pollInterval: ReturnType<typeof setInterval>;
-
-    if (processingJob) {
-      pollInterval = setInterval(async () => {
-        const { jobId } = processingJob;
-        const job: ImageJobStatus = await get(`?jobId=${jobId}`);
-
-        if (job.status === 'completed') {
-          clearInterval(pollInterval);
-          setProcessingJob(null);
-          const { name, ingredients, method, tags } = job.result || {};
-          setParsedRecipe({ name, ingredients: normalizeParsedIngredients(ingredients), method, tags });
-        } else if (job.status === 'failed') {
-          clearInterval(pollInterval);
-          setProcessingJob(null);
-          setAPIError('Processing failed');
-          setErrorDetails(job.error || 'An error occurred while processing the image.');
-        }
-        // If still processing, continue polling
-      }, 2000); // Poll every 2 seconds
+  // Poll for job status - refetchInterval stops itself once the job settles
+  // (completed/failed), and `enabled` (via queryKey) stops it the moment
+  // processingJob is cleared below, so there's no manual setInterval/cleanup
+  // to manage the way there was with use-http.
+  const jobStatusQuery = useQuery<ImageJobStatus>({
+    queryKey: ['recipe-image-job', processingJob?.jobId],
+    enabled: !!processingJob,
+    queryFn: () => nextApiGet<ImageJobStatus>(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image?jobId=${processingJob!.jobId}`),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === 'completed' || status === 'failed' ? false : 2000;
     }
+  });
 
-    return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval);
-      }
-    };
-  }, [processingJob, get]);
+  useEffect(() => {
+    const job = jobStatusQuery.data;
+    if (!job) return;
+
+    if (job.status === 'completed') {
+      setProcessingJob(null);
+      const { name, ingredients, method, tags } = job.result || {};
+      setParsedRecipe({ name, ingredients: normalizeParsedIngredients(ingredients), method, tags });
+    } else if (job.status === 'failed') {
+      setProcessingJob(null);
+      setAPIError('Processing failed');
+      setErrorDetails(job.error || 'An error occurred while processing the image.');
+    }
+  }, [jobStatusQuery.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleImageClick = () => {
     imageInput.current?.click();
@@ -202,23 +200,11 @@ const NewRecipe = () => {
       formData.append('knownIngredients', JSON.stringify(knownIngredients));
       formData.append('knownUnits', JSON.stringify(knownUnits));
 
-      const { jobId }: { jobId: string } = await post(formData);
-
-      if (error) {
-        setAPIError('Network error');
-        setErrorDetails('Failed to connect to the server. Please check your internet connection and try again.');
-        return;
-      }
-
-      if (!response.ok) {
-        setAPIError('Failed to start processing');
-        setErrorDetails('An unexpected error occurred. Please try again.');
-        return;
-      }
+      const { jobId } = await uploadImageMutation.mutateAsync(formData);
 
       // Start polling for the job
       setProcessingJob({ jobId });
-    } catch (error) {
+    } catch {
       setAPIError('Failed to process image');
       setErrorDetails('An unexpected error occurred. Please try again.');
     }
@@ -238,22 +224,21 @@ const NewRecipe = () => {
 
     setAPIError(null);
     setErrorDetails(null);
-    const result = await postUrl({ url: parsedUrl.href, knownIngredients, knownUnits });
 
-    if (!urlResponse.ok) {
+    try {
+      const result = await parseUrlMutation.mutateAsync({ url: parsedUrl.href, knownIngredients, knownUnits });
+      setUrlFetched(trimmed);
+      setParsedRecipe({
+        name: result.name || '',
+        ingredients: normalizeParsedIngredients(result.ingredients),
+        method: result.method || '',
+        remoteUrl: parsedUrl.href,
+        tags: result.tags || []
+      });
+    } catch (err) {
       setAPIError('Failed to fetch recipe');
-      setErrorDetails(result?.error || 'Could not extract a recipe from that link. Please check it and try again, or use Enter Manually.');
-      return;
+      setErrorDetails(err instanceof Error ? err.message : 'Could not extract a recipe from that link. Please check it and try again, or use Enter Manually.');
     }
-
-    setUrlFetched(trimmed);
-    setParsedRecipe({
-      name: result.name || '',
-      ingredients: normalizeParsedIngredients(result.ingredients),
-      method: result.method || '',
-      remoteUrl: parsedUrl.href,
-      tags: result.tags || []
-    });
   };
 
   return (
@@ -292,9 +277,9 @@ const NewRecipe = () => {
                 onBlur={(e) => fetchFromUrl(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); fetchFromUrl(urlValue); } }}
               />
-              <Button style="primary" icon="tick" disabled={urlLoading} onClick={(e) => { e.preventDefault(); fetchFromUrl(urlValue); }}>
+              <Button style="primary" icon="tick" disabled={parseUrlMutation.isPending} onClick={(e) => { e.preventDefault(); fetchFromUrl(urlValue); }}>
                 Fetch
-                { urlLoading && <Spinner className={styles.loadingIngredients}>Fetching...</Spinner>}
+                { parseUrlMutation.isPending && <Spinner className={styles.loadingIngredients}>Fetching...</Spinner>}
               </Button>
             </div>
           </div>
@@ -311,10 +296,10 @@ const NewRecipe = () => {
               className={styles.fileInput}
               onChange={handleImageChange}
             />
-            <Button style="primary" disabled={loading || !!processingJob} onClick={handleImageClick}>
+            <Button style="primary" disabled={uploadImageMutation.isPending || !!processingJob} onClick={handleImageClick}>
               <PhotoIcon className={styles.photoIcon} />
               Take or upload a photo
-              { (loading || processingJob) && <Spinner className={styles.loadingIngredients}>Processing image...</Spinner>}
+              { (uploadImageMutation.isPending || processingJob) && <Spinner className={styles.loadingIngredients}>Processing image...</Spinner>}
             </Button>
           </div>
         )}

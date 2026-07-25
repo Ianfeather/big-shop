@@ -1,10 +1,12 @@
 import styles from './index.module.css';
 import Tabs from '@components/layout/Tabs';
-import useFetch, { CachePolicies } from 'use-http'
+import { useMutation } from '@tanstack/react-query';
 import { ChangeEvent, useState, useEffect, useRef } from 'react';
 import Layout, { MainContent, Sidebar } from '@components/layout'
 import RecipeSidebar from '@components/shopping-list/Recipes';
 import ShoppingList from '@components/shopping-list/ShoppingList';
+import useAuth0 from '@hooks/use-auth';
+import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api-client';
 import mocks from '../mocks';
 import type { ListIngredient } from '../types/models';
 
@@ -28,10 +30,6 @@ function buildMockIngredients(selectedRecipeIds: string[]): Record<string, ListI
   return ingredients;
 }
 
-// The untyped get/post/patch/del below are shared across four endpoints
-// (GET/POST /shopping-list, PATCH /shopping-list/buy, DELETE
-// /shopping-list/clear, POST /shopping-list/extra) with different response
-// shapes - same rationale as Form.tsx's shared useFetch instance.
 interface ShoppingListResult {
   recipes: string[];
   ingredients: Record<string, ListIngredient>;
@@ -65,8 +63,34 @@ const List = () => {
     setRecipeList(newList);
   };
 
-  const { get, post, patch, del, response } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
-    cachePolicy: CachePolicies.NO_CACHE
+  const { getAccessTokenSilently } = useAuth0();
+
+  const buyMutation = useMutation({
+    mutationFn: async (vars: { name: string; isBought: boolean }) => {
+      const token = await getAccessTokenSilently();
+      return apiPatch('/shopping-list/buy', token, vars);
+    }
+  });
+
+  const regenerateMutation = useMutation({
+    mutationFn: async (selectedRecipes: string[]) => {
+      const token = await getAccessTokenSilently();
+      return apiPost<ShoppingListResult>('/shopping-list', token, selectedRecipes);
+    }
+  });
+
+  const clearMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getAccessTokenSilently();
+      return apiDelete('/shopping-list/clear', token);
+    }
+  });
+
+  const addExtraMutation = useMutation({
+    mutationFn: async (vars: { name: string; isBought: boolean }) => {
+      const token = await getAccessTokenSilently();
+      return apiPost('/shopping-list/extra', token, vars);
+    }
   });
 
   const setListState = (ingredients: Record<string, ListIngredient>, extras: Record<string, ListIngredient>) => {
@@ -91,22 +115,25 @@ const List = () => {
 
     if (useMocks) return;
 
-    try {
-      await patch('/shopping-list/buy', { name, isBought: newList[name].isBought });
-    } catch (e) {
+    buyMutation.mutate({ name, isBought: newList[name].isBought }, {
       // todo: move the bought item back into not-bought
-      console.error(e);
-    }
+      onError: (e) => console.error(e)
+    });
   }
 
   const getListState = async (): Promise<ListState> => {
     if (useMocks) return {};
 
-    const result: ShoppingListResult = await get('/shopping-list');
-    if (cancelledRef.current) return {};
-    if (response.ok && result.recipes.length) {
-      setListState(result.ingredients, result.extras);
-      return result;
+    try {
+      const token = await getAccessTokenSilently();
+      const result = await apiGet<ShoppingListResult>('/shopping-list', token);
+      if (cancelledRef.current) return {};
+      if (result.recipes.length) {
+        setListState(result.ingredients, result.extras);
+        return result;
+      }
+    } catch (e) {
+      console.error(e);
     }
     return {};
   }
@@ -143,9 +170,13 @@ const List = () => {
       return;
     }
 
-    const result: ShoppingListResult = await post('/shopping-list', selectedRecipes);
-    if (!cancelledRef.current && response.ok) {
-      setListState(result.ingredients, result.extras);
+    try {
+      const result = await regenerateMutation.mutateAsync(selectedRecipes);
+      if (!cancelledRef.current) {
+        setListState(result.ingredients, result.extras);
+      }
+    } catch (e) {
+      console.error(e);
     }
   }
 
@@ -153,7 +184,7 @@ const List = () => {
     setShoppingList({});
     setExtras({});
     setRecipeList({});
-    if (!useMocks) del('/shopping-list/clear');
+    if (!useMocks) clearMutation.mutate();
   }
 
   function addExtraItem(extraItem: string) {
@@ -167,10 +198,7 @@ const List = () => {
     };
     setExtras(newList);
     if (!useMocks) {
-      post('/shopping-list/extra', {
-        name: extraItem,
-        isBought: false
-      });
+      addExtraMutation.mutate({ name: extraItem, isBought: false });
     }
   }
 

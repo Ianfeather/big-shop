@@ -2,28 +2,15 @@ import './styles.css'
 import 'swagger-ui-react/swagger-ui.css'
 import type { AppProps } from 'next/app';
 import { Auth0Provider } from "@auth0/auth0-react";
-import { Provider as FetchProvider, Interceptors } from 'use-http';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useRouter } from 'next/router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import useAuth0, { authDisabled } from '@hooks/use-auth';
 import { requireEnv } from '../lib/env';
 
 const InnerApp = ({ Component, pageProps }: Pick<AppProps, 'Component' | 'pageProps'>) => {
-  const { isAuthenticated, isLoading, getAccessTokenSilently } = useAuth0();
+  const { isAuthenticated, isLoading } = useAuth0();
   const router = useRouter();
-
-  const fetchOptions: { interceptors: Interceptors } = {
-    interceptors: {
-      request: async ({ options }) => {
-        const token = await getAccessTokenSilently();
-        // use-http always passes a plain headers object here in practice,
-        // not a Headers instance or a [string, string][] tuple array (the
-        // other members of RequestInit['headers']'s union type).
-        (options.headers as Record<string, string>).Authorization = `Bearer ${token}`
-        return options
-      }
-    }
-  };
 
   useEffect(() => {
     if (!isAuthenticated && !isLoading) {
@@ -35,15 +22,20 @@ const InnerApp = ({ Component, pageProps }: Pick<AppProps, 'Component' | 'pagePr
     return false;
   }
 
-  return (
-    <FetchProvider url={process.env.NEXT_PUBLIC_API_HOST} options={fetchOptions}>
-      <Component {...pageProps} />
-    </FetchProvider>
-  )
+  return <Component {...pageProps} />;
 }
 
 export default function App({ Component, pageProps, router }: AppProps) {
   const behindAuth = router.route !== '/';
+
+  // Created once per app instance (not per render) - every hooks/use-*.ts
+  // query and useMutation call site reads/writes via this client (see
+  // follow-ups.md #20). Each hook fetches its own auth token rather than
+  // relying on a shared request interceptor (use-http's old FetchProvider,
+  // now removed).
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: { queries: { refetchOnWindowFocus: false } }
+  }));
 
   const content = behindAuth ? (
     <InnerApp Component={Component} pageProps={pageProps} />
@@ -51,11 +43,17 @@ export default function App({ Component, pageProps, router }: AppProps) {
     <Component {...pageProps} />
   );
 
+  const wrappedContent = (
+    <QueryClientProvider client={queryClient}>
+      {content}
+    </QueryClientProvider>
+  );
+
   // With auth disabled, useAuth0() resolves to a fixed mock user rather than
   // talking to Auth0, so there's no need to mount the real provider - or
   // validate its env vars - at all.
   if (authDisabled) {
-    return content;
+    return wrappedContent;
   }
 
   // Only reached with authDisabled false, i.e. real Auth0 is required
@@ -76,7 +74,7 @@ export default function App({ Component, pageProps, router }: AppProps) {
       useRefreshTokens={true}
       cacheLocation="localstorage"
     >
-      {content}
+      {wrappedContent}
     </Auth0Provider>
   )
 }

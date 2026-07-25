@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
-import useFetch, { CachePolicies } from 'use-http';
+import { useMutation } from '@tanstack/react-query';
 import styles from './index.module.css';
 import Button from '@components/button'
 import Layout, { MainContent } from '@components/layout'
 import useAuth0 from '@hooks/use-auth';
+import { apiPost, apiPatch } from '../lib/api-client';
 import { LoginButton } from '@components/identity/login';
 import { CreateAccountButton } from '@components/identity/create';
 import type { User } from '../types/models';
@@ -23,14 +24,25 @@ const LoggedOutState = () => (
 );
 
 const Index = () => {
-  const { isAuthenticated, isLoading, user } = useAuth0();
+  const { isAuthenticated, isLoading, user, getAccessTokenSilently } = useAuth0();
   const router = useRouter();
   // null while we're still checking onboarded status (or mocks bypass isn't
   // resolved yet) - kept blank rather than flashing the marketing copy at an
   // already-onboarded user who's about to be redirected to /list.
   const [status, setStatus] = useState<'onboarding' | 'redirecting' | null>(null);
-  const { post, patch, response } = useFetch<User>(process.env.NEXT_PUBLIC_API_HOST, {
-    cachePolicy: CachePolicies.NO_CACHE
+
+  const saveUserMutation = useMutation({
+    mutationFn: async (payload: { name?: string; email?: string }) => {
+      const token = await getAccessTokenSilently();
+      return apiPost<User>('/user', token, payload);
+    }
+  });
+
+  const completeOnboardingMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getAccessTokenSilently();
+      return apiPatch('/user/onboarding', token);
+    }
   });
 
   useEffect(() => {
@@ -44,16 +56,16 @@ const Index = () => {
     async function resolveOnboarding() {
       if (!user) return;
       const { name, email } = user;
-      const saved = await post('/user', { name, email });
-      if (response.ok && saved && saved.onboarded) {
+      const saved = await saveUserMutation.mutateAsync({ name, email }).catch(() => undefined);
+      if (saved?.onboarded) {
         setStatus('redirecting');
         router.replace('/list');
-      } else {
-        // First-time user: show the onboarding screen once, and mark them
-        // onboarded in the background so their next login skips straight to /list.
-        setStatus('onboarding');
-        patch('/user/onboarding');
+        return;
       }
+      // First-time user: show the onboarding screen once, and mark them
+      // onboarded in the background so their next login skips straight to /list.
+      setStatus('onboarding');
+      completeOnboardingMutation.mutate();
     }
     resolveOnboarding();
   }, [isLoading, isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps

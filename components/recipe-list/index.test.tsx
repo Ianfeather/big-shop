@@ -10,10 +10,7 @@ const recipes = [
 ];
 
 vi.mock('@hooks/use-recipes', () => ({ default: () => [recipes] }));
-vi.mock('use-http', () => ({
-  default: () => ({ get: vi.fn(async () => ['Vegetarian', 'Batch Cook']), response: { ok: true } }),
-  CachePolicies: { NO_CACHE: 'no-cache' }
-}));
+vi.mock('@hooks/use-tags', () => ({ default: () => ['Vegetarian', 'Batch Cook'] }));
 vi.mock('next/router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 import RecipeList from './index';

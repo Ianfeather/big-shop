@@ -5,7 +5,7 @@ import type { Recipe } from '../types/models';
 
 const useMocks = process.env.NEXT_PUBLIC_USE_MOCKS === 'true';
 
-const useRecipe = (id: string | number) => {
+const useRecipe = (id: string | number | undefined) => {
   // Partial, not Recipe: until the fetch/mock lookup resolves (or if it
   // never matches), all we have is this placeholder shape.
   let [recipe, setRecipe] = useState<Partial<Recipe>>({ tags: [], ingredients: [] });
@@ -14,6 +14,8 @@ const useRecipe = (id: string | number) => {
   });
 
   useEffect(() => {
+    if (id === undefined) return;
+
     let cancelled = false;
 
     async function getRecipe() {

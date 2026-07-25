@@ -6,6 +6,7 @@ import { Provider as FetchProvider, Interceptors } from 'use-http';
 import { useRouter } from 'next/router';
 import { useEffect } from 'react';
 import useAuth0, { authDisabled } from '@hooks/use-auth';
+import { requireEnv } from '../lib/env';
 
 const InnerApp = ({ Component, pageProps }: Pick<AppProps, 'Component' | 'pageProps'>) => {
   const { isAuthenticated, isLoading, getAccessTokenSilently } = useAuth0();
@@ -42,10 +43,6 @@ const InnerApp = ({ Component, pageProps }: Pick<AppProps, 'Component' | 'pagePr
 }
 
 export default function App({ Component, pageProps, router }: AppProps) {
-  const domain = process.env.NEXT_PUBLIC_AUTH0_DOMAIN;
-  const clientId = process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID;
-  const audience = process.env.NEXT_PUBLIC_AUTH0_AUDIENCE;
-
   const behindAuth = router.route !== '/';
 
   const content = behindAuth ? (
@@ -55,18 +52,25 @@ export default function App({ Component, pageProps, router }: AppProps) {
   );
 
   // With auth disabled, useAuth0() resolves to a fixed mock user rather than
-  // talking to Auth0, so there's no need to mount the real provider at all.
+  // talking to Auth0, so there's no need to mount the real provider - or
+  // validate its env vars - at all.
   if (authDisabled) {
     return content;
   }
 
-  // Only reached with authDisabled false, i.e. real Auth0 is required and
-  // configured (CLAUDE.md documents these as required env vars for the auth
-  // flow) - domain/clientId are typed as required by Auth0Provider.
+  // Only reached with authDisabled false, i.e. real Auth0 is required
+  // (CLAUDE.md documents these as required env vars for the auth flow).
+  // requireEnv fails fast with a clear error for a misconfigured deploy
+  // (e.g. a preview deploy with auth enabled but no Auth0 vars set),
+  // rather than a `!`-asserted undefined passing silently into Auth0Provider.
+  const domain = requireEnv(process.env.NEXT_PUBLIC_AUTH0_DOMAIN, 'NEXT_PUBLIC_AUTH0_DOMAIN');
+  const clientId = requireEnv(process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID, 'NEXT_PUBLIC_AUTH0_CLIENT_ID');
+  const audience = process.env.NEXT_PUBLIC_AUTH0_AUDIENCE;
+
   return (
     <Auth0Provider
-      domain={domain!}
-      clientId={clientId!}
+      domain={domain}
+      clientId={clientId}
       audience={audience}
       redirectUri={process.env.NEXT_PUBLIC_HOST}
       useRefreshTokens={true}

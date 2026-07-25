@@ -2,18 +2,16 @@ import Layout, { Grid, MainContent, Sidebar } from '@components/layout'
 import RecipeList from '@components/recipe-list'
 import Button from '@components/button';
 import useRecipe from '@hooks/use-recipe';
+import useRecipeIdParam from '@hooks/use-recipe-id-param';
 import Recipe from '@components/recipe';
-import { useRouter } from 'next/router'
 import styles from '../index.module.css';
 
 
 const Recipes = () => {
-  const router = useRouter()
   // RecipeList (below) always fetches its own recipes via useRecipes()
   // internally and has no `recipes` prop - a `recipes={...}` pass-through
-  // here was dead. router.query.id is only ever a single string on this
-  // route (never an array - not a catch-all route).
-  const { id } = router.query as { id: string };
+  // here was dead.
+  const id = useRecipeIdParam();
   const [recipe] = useRecipe(id);
 
   return (

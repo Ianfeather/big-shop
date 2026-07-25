@@ -31,4 +31,31 @@ describe('useRecipe (mocks enabled)', () => {
 
     expect(result.current[0]).toEqual({ tags: [], ingredients: [] });
   });
+
+  it('does not look anything up when id is undefined', async () => {
+    const { default: useRecipe } = await import('./use-recipe');
+    const { result } = renderHook(() => useRecipe(undefined));
+
+    expect(result.current[0]).toEqual({ tags: [], ingredients: [] });
+  });
+});
+
+describe('useRecipe (mocks disabled)', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv('NEXT_PUBLIC_USE_MOCKS', 'false');
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it('does not fetch when id is undefined', async () => {
+    const { default: useRecipe } = await import('./use-recipe');
+    renderHook(() => useRecipe(undefined));
+
+    expect(fetch).not.toHaveBeenCalled();
+  });
 });

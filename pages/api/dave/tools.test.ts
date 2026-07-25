@@ -23,20 +23,22 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// Shape matches the real GET /recipes contract (RecipeSummary: id/name/tags
+// only - no description or ingredients, see types/api.d.ts).
 const recipes = [
-  { id: '1', name: 'Chicken Curry', description: 'A mild curry', tags: ['Curry'], ingredients: [{ name: 'chicken' }] },
-  { id: '2', name: 'Veggie Chilli', description: '', tags: ['Vegetarian'], ingredients: [{ name: 'kidney beans' }] }
+  { id: '1', name: 'Chicken Curry', tags: ['Curry'] },
+  { id: '2', name: 'Veggie Chilli', tags: ['Vegetarian'] }
 ];
 
 describe('searchRecipes', () => {
-  it('filters by query across name/description/ingredients and shapes the result', async () => {
+  it('filters by query against name and shapes the result', async () => {
     mockedFetch().mockResolvedValueOnce(jsonResponse(recipes));
 
     const result = await searchRecipes({ query: 'chicken' }, 'token', true);
 
     expect(result.success).toBe(true);
     expect(result.recipes).toEqual([
-      { id: '1', name: 'Chicken Curry', description: 'A mild curry', tags: ['Curry'], displayText: '1. Chicken Curry - A mild curry', internalId: '1', position: 1 }
+      { id: '1', name: 'Chicken Curry', tags: ['Curry'], displayText: '1. Chicken Curry', internalId: '1', position: 1 }
     ]);
     expect(result.message).toBe('Found 1 recipes matching "chicken"');
   });

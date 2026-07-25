@@ -1,5 +1,8 @@
 // Tool functions for Dave to interact with the existing Big Shop APIs
 
+import type OpenAI from 'openai';
+import type { Recipe, RecipeSummary } from '../../../types/models';
+
 /**
  * Search recipes in the user's collection
  */
@@ -21,26 +24,26 @@ export async function searchRecipes({ query = '', tags = '' }: { query?: string;
       throw new Error(`API request failed: ${response.status}`);
     }
 
-    const allRecipes: any[] = await response.json();
+    // GET /recipes returns RecipeSummary[] - id/name/tags only, no
+    // description or ingredients (see types/api.d.ts). Typed as `any[]`
+    // before, this filtered/displayed a `description` field that never
+    // existed on the response, silently disabling that part of search.
+    const allRecipes: RecipeSummary[] = (await response.json()) ?? [];
 
     // Simple client-side filtering for now
     let filteredRecipes = allRecipes;
 
     if (query) {
       const searchTerm = query.toLowerCase();
-      filteredRecipes = allRecipes.filter((recipe: any) =>
-        recipe.name.toLowerCase().includes(searchTerm) ||
-        recipe.description?.toLowerCase().includes(searchTerm) ||
-        recipe.ingredients?.some((ing: any) =>
-          ing.name.toLowerCase().includes(searchTerm)
-        )
+      filteredRecipes = allRecipes.filter((recipe) =>
+        recipe.name.toLowerCase().includes(searchTerm)
       );
     }
 
     if (tags) {
       const searchTags = tags.toLowerCase();
-      filteredRecipes = filteredRecipes.filter((recipe: any) =>
-        recipe.tags?.some((tag: any) =>
+      filteredRecipes = filteredRecipes.filter((recipe) =>
+        recipe.tags?.some((tag) =>
           tag.toLowerCase().includes(searchTags)
         )
       );
@@ -49,13 +52,12 @@ export async function searchRecipes({ query = '', tags = '' }: { query?: string;
 
     return {
       success: true,
-      recipes: filteredRecipes.map((recipe: any, index: number) => ({
+      recipes: filteredRecipes.map((recipe, index) => ({
         id: recipe.id,
         name: recipe.name,
-        description: recipe.description,
         tags: recipe.tags,
         // Clean user-facing display
-        displayText: `${index + 1}. ${recipe.name}${recipe.description ? ` - ${recipe.description}` : ''}`,
+        displayText: `${index + 1}. ${recipe.name}`,
         // Internal mapping for AI (not shown to user)
         internalId: recipe.id,
         position: index + 1
@@ -92,7 +94,7 @@ export async function getRecipeDetails({ recipeId }: { recipeId: string }, authT
       throw new Error(`API request failed: ${response.status}`);
     }
 
-    const recipe = await response.json();
+    const recipe: Recipe = await response.json();
 
     return {
       success: true,
@@ -202,7 +204,7 @@ export async function createShoppingList({ recipeIds }: { recipeIds: string[] },
 }
 
 // Tool definitions for OpenAI function calling
-export const availableTools = [
+export const availableTools: OpenAI.ChatCompletionTool[] = [
   {
     type: 'function',
     function: {

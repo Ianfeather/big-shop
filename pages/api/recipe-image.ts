@@ -6,6 +6,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import type { PageConfig } from 'next';
 import { extractRecipe } from '../../lib/recipe-import/extract';
 import { imageToInput } from '../../lib/recipe-import/photo';
+import { requireEnv } from '../../lib/env';
 
 // Configure API route to handle form data
 export const config: PageConfig = {
@@ -70,6 +71,15 @@ const processImage = async (base64Image: string, knownIngredients: string[], kno
   });
 };
 
+// Fails fast with a clear error if either var is unset (e.g. a preview
+// deploy without Netlify Blobs configured), instead of the `!`-asserted
+// undefined previously being handed straight to getStore() and failing
+// unhelpfully deep inside it.
+const getBlobStoreConfig = () => ({
+  token: requireEnv(process.env.NETLIFY_BLOB_STORE_TOKEN, 'NETLIFY_BLOB_STORE_TOKEN'),
+  siteID: requireEnv(process.env.NETLIFY_SITE_ID, 'NETLIFY_SITE_ID'),
+});
+
 // Helper function to update job status.
 //
 // This previously imported a `Blobs` class from '@netlify/blobs' that does
@@ -82,10 +92,7 @@ const processImage = async (base64Image: string, knownIngredients: string[], kno
 // passed to .set() doesn't exist on this version's SetOptions either (no
 // replacement attempted here - was already inert given the above).
 const updateJobStatus = async (jobId: string, status: string, result: unknown = null, error: string | null = null) => {
-  const store = getStore({
-    token: process.env.NETLIFY_BLOB_STORE_TOKEN!,
-    siteID: process.env.NETLIFY_SITE_ID!,
-  });
+  const store = getStore(getBlobStoreConfig());
 
   const job = {
     id: jobId,
@@ -108,10 +115,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-      const store = getStore({
-        token: process.env.NETLIFY_BLOB_STORE_TOKEN!,
-        siteID: process.env.NETLIFY_SITE_ID!,
-      });
+      const store = getStore(getBlobStoreConfig());
 
       const jobData = await store.get(jobId);
 

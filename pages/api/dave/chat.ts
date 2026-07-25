@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { availableTools, executeToolCall } from './tools';
 
@@ -52,19 +53,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Messages array is required' });
     }
 
-    // Prepare messages for OpenAI. Loosely typed (any[]) rather than OpenAI's
-    // own ChatCompletionMessageParam union - this array ends up holding a mix
-    // of plain, assistant, and tool messages pushed on below.
-    const openAIMessages: any[] = [
+    // Prepare messages for OpenAI. The incoming `messages` are unvalidated
+    // request-body JSON, so each entry is cast to ChatCompletionMessageParam
+    // at this boundary rather than trusted structurally.
+    const openAIMessages: ChatCompletionMessageParam[] = [
       { role: 'system', content: DAVE_SYSTEM_PROMPT },
-      ...messages.map((msg: any) => ({
+      ...messages.map((msg: { role: string; content: string }) => ({
         role: msg.role,
         content: msg.content
-      }))
+      }) as ChatCompletionMessageParam)
     ];
 
     // Iterative tool calling - allow multiple rounds
-    let toolMessages: any[] = [...openAIMessages];
+    let toolMessages: ChatCompletionMessageParam[] = [...openAIMessages];
     let allToolCalls: any[] = [];
     let totalToolsUsed = 0;
     const maxIterations = 5; // Prevent infinite loops
@@ -76,7 +77,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const completion = await openai.chat.completions.create({
         model: 'gpt-3.5-turbo',
         messages: toolMessages,
-        tools: availableTools as any,
+        tools: availableTools,
         tool_choice: 'auto',
         temperature: 0.7,
         max_tokens: 1000,

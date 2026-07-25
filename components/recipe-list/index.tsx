@@ -1,4 +1,4 @@
-import { ChangeEventHandler, useState, useEffect } from 'react';
+import { ChangeEventHandler, useState } from 'react';
 import { useRouter } from 'next/router'
 import styles from './index.module.css';
 import ListItem from '../sidebar-item';
@@ -7,12 +7,9 @@ import SidebarTagFilter from '../sidebar-tag-filter';
 import SidebarHeading from '../sidebar-heading';
 import Button from '@components/button';
 import useRecipes from '@hooks/use-recipes';
-import useFetch, { CachePolicies } from 'use-http'
-import mocks from '../../mocks';
+import useTags from '@hooks/use-tags';
 import icons from '@components/svg';
 import type { RecipeSummary } from '../../types/models';
-
-const useMocks = process.env.NEXT_PUBLIC_USE_MOCKS === 'true';
 
 interface RecipeListProps {
   handleRecipeSelect?: ChangeEventHandler<HTMLInputElement>;
@@ -27,34 +24,9 @@ interface RecipeListProps {
 const RecipeList = ({ handleRecipeSelect, filterFn = () => true, selectedIds = {}, showAddButton = true }: RecipeListProps) => {
   const router = useRouter()
   const [recipes] = useRecipes();
-  const [tags, setTags] = useState<string[]>([]);
+  const tags = useTags();
   let [sidebarFilter, setSidebarFilter] = useState('');
   let [tagsFilter, setTagsFilter] = useState<string[]>([]);
-  const { get, response } = useFetch<string[]>(process.env.NEXT_PUBLIC_API_HOST, {
-    cachePolicy: CachePolicies.NO_CACHE
-  });
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function getTags() {
-      if (useMocks) {
-        if (!cancelled) setTags(mocks.tags);
-        return;
-      }
-      const _tags = await get('/tags');
-      if (!cancelled && response.ok) {
-        setTags(_tags);
-      }
-    }
-    getTags();
-
-    // React 18 Strict Mode double-invokes effects in dev (mount, cleanup,
-    // mount again). Without this guard, the throwaway first call can resolve
-    // after the real one and stomp good data with an aborted/empty result.
-    return () => { cancelled = true };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
 
   const onClick: ChangeEventHandler<HTMLInputElement> = handleRecipeSelect || function (e) {
     e.preventDefault();

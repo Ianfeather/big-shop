@@ -1,100 +1,74 @@
-import { ComponentProps } from 'react';
+import { ComponentProps, createElement, type ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-vi.mock('use-http', () => ({ default: vi.fn(), CachePolicies: { NO_CACHE: 'no-cache' } }));
 const pushMock = vi.fn();
 vi.mock('next/router', () => ({ useRouter: () => ({ push: pushMock }) }));
-
-import useFetch from 'use-http';
-import Form from './Form';
-
-// use-http's real type is a fixed-generic hook, nothing like the flexible
-// per-call mock shape below - the whole module is being swapped out here,
-// so this stays loosely typed rather than fighting the real signature.
-const mockedUseFetch = useFetch as unknown as Mock;
-
-interface MockMainFetch {
-  response: { ok: boolean };
-  loading: boolean;
-  error: null;
-  get: Mock;
-  post: Mock;
-  put: Mock;
-  del: Mock;
-}
-
-interface MockParseFetch {
-  response: { ok: boolean };
-  loading: boolean;
-  post: Mock;
-}
 
 const unitsMock = [{ id: 1, name: 'gram' }, { id: 2, name: '' }];
 const tagsMock = ['Vegetarian', 'Batch Cook'];
 const ingredientsMock = [{ name: 'egg' }, { name: 'flour' }];
 
-function makeMainFetch(): MockMainFetch {
-  const response = { ok: true };
-  return {
-    response,
-    loading: false,
-    error: null,
-    get: vi.fn(async (path: string) => {
-      response.ok = true;
-      if (path === '/units') return unitsMock;
-      if (path === '/tags') return tagsMock;
-      if (path === '/ingredients') return ingredientsMock;
-      return [];
-    }),
-    post: vi.fn(async () => {
-      response.ok = true;
-      return { status: 'ok', id: 42 };
-    }),
-    put: vi.fn(async () => {
-      response.ok = true;
-      return {};
-    }),
-    del: vi.fn(async () => {
-      response.ok = true;
-      return {};
-    })
-  };
-}
+// /units, /tags and /ingredients are fetched via these TanStack Query hooks
+// now (see follow-ups.md #20).
+vi.mock('@hooks/use-units', () => ({ default: () => unitsMock }));
+vi.mock('@hooks/use-tags', () => ({ default: () => tagsMock }));
+vi.mock('@hooks/use-ingredient-names', () => ({ default: () => ingredientsMock.map(i => i.name) }));
+vi.mock('@hooks/use-auth', () => ({ default: vi.fn() }));
 
-function makeParseFetch(): MockParseFetch {
-  return {
-    response: { ok: true },
-    loading: false,
-    post: vi.fn()
-  };
-}
+// POST/PUT/DELETE /recipe and POST /api/parse-recipe-text go through
+// useMutation now, wired to these - mocked at the transport boundary so the
+// real useMutation/useAuth machinery still runs.
+vi.mock('../../lib/api-client', () => ({
+  apiPost: vi.fn(),
+  apiPut: vi.fn(),
+  apiDelete: vi.fn(),
+  localApiPost: vi.fn()
+}));
 
-let mainFetch: MockMainFetch;
-let parseFetch: MockParseFetch;
+import useAuth from '@hooks/use-auth';
+import { apiPost, apiPut, apiDelete, localApiPost } from '../../lib/api-client';
+import Form from './Form';
+
+const mockedUseAuth = useAuth as unknown as Mock;
+const mockedApiPost = apiPost as unknown as Mock;
+const mockedApiPut = apiPut as unknown as Mock;
+const mockedApiDelete = apiDelete as unknown as Mock;
+const mockedLocalApiPost = localApiPost as unknown as Mock;
 
 beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_API_HOST', 'http://api.test');
   vi.stubEnv('NEXT_PUBLIC_HOST', 'http://app.test');
-  mainFetch = makeMainFetch();
-  parseFetch = makeParseFetch();
-  mockedUseFetch.mockImplementation((url?: string) => (url && url.includes('parse-recipe-text') ? parseFetch : mainFetch));
   pushMock.mockClear();
+  mockedUseAuth.mockReturnValue({ getAccessTokenSilently: vi.fn(async () => 'test-token') });
+  mockedApiPost.mockResolvedValue({ status: 'ok', id: 42 });
+  mockedApiPut.mockResolvedValue({});
+  mockedApiDelete.mockResolvedValue({});
+  mockedLocalApiPost.mockReset();
 });
 
 afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+// A fresh QueryClient per test avoids cache bleed between tests/renders.
+function createWrapper() {
+  const queryClient = new QueryClient();
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return createElement(QueryClientProvider, { client: queryClient }, children);
+  };
+}
+
 async function renderForm(props: Partial<ComponentProps<typeof Form>> = {}) {
-  render(<Form {...props} />);
+  render(<Form {...props} />, { wrapper: createWrapper() });
   await waitFor(() => expect(screen.getByText('Vegetarian')).toBeInTheDocument());
 }
 
 describe('Form', () => {
   it('renders nothing in edit mode when there is no recipe id yet', () => {
-    const { container } = render(<Form mode="edit" />);
+    const { container } = render(<Form mode="edit" />, { wrapper: createWrapper() });
     expect(container).toBeEmptyDOMElement();
   });
 
@@ -128,10 +102,7 @@ describe('Form', () => {
   });
 
   it('parses bulk-pasted ingredients and appends them to the list', async () => {
-    parseFetch.post.mockImplementation(async () => {
-      parseFetch.response.ok = true;
-      return { ingredients: [{ name: 'egg', quantity: '2', unit: '' }] };
-    });
+    mockedLocalApiPost.mockResolvedValue({ ingredients: [{ name: 'egg', quantity: '2', unit: '' }] });
     await renderForm();
 
     await userEvent.type(screen.getByLabelText('Ingredients'), '2 eggs');
@@ -142,10 +113,7 @@ describe('Form', () => {
   });
 
   it('shows an error and keeps the typed text when bulk parsing fails', async () => {
-    parseFetch.post.mockImplementation(async () => {
-      parseFetch.response.ok = false;
-      return { error: 'Could not parse that' };
-    });
+    mockedLocalApiPost.mockRejectedValue(new Error('Could not parse that'));
     await renderForm();
 
     await userEvent.type(screen.getByLabelText('Ingredients'), '2 eggs');
@@ -162,6 +130,6 @@ describe('Form', () => {
     await userEvent.click(screen.getByText('Save Recipe'));
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/recipes/42?stored=new'));
-    expect(mainFetch.post).toHaveBeenCalledWith('/recipe', expect.objectContaining({ name: 'Omelette' }));
+    expect(mockedApiPost).toHaveBeenCalledWith('/recipe', 'test-token', expect.objectContaining({ name: 'Omelette' }));
   });
 });

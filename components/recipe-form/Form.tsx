@@ -1,14 +1,16 @@
 import styles from './form.module.css';
 import { MouseEvent, useState, useEffect } from 'react';
-import useFetch, { CachePolicies } from 'use-http'
+import { useMutation } from '@tanstack/react-query';
 import { useRouter } from 'next/router'
 import Button from '@components/button';
 import Message from '@components/message';
 import Spinner from './spinner';
-import mocks from '../../mocks';
-import type { Recipe as RecipeModel, Ingredient, Unit, CreatedResponse } from '../../types/models';
-
-const useMocks = process.env.NEXT_PUBLIC_USE_MOCKS === 'true';
+import useUnits from '@hooks/use-units';
+import useTags from '@hooks/use-tags';
+import useIngredientNames from '@hooks/use-ingredient-names';
+import useAuth from '@hooks/use-auth';
+import { apiPost, apiPut, apiDelete, localApiPost } from '../../lib/api-client';
+import type { Recipe as RecipeModel, Ingredient, CreatedResponse } from '../../types/models';
 
 const capitalize = (str: string) => {
   if (!str) {
@@ -62,33 +64,58 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
 
   let useInitialRecipe = Object.keys(initialRecipe).length > 0;
   let [recipe, setRecipe] = useState<FormRecipe>(useInitialRecipe ? normalizeInitialRecipe(initialRecipe, bareRecipe) : bareRecipe);
-  let [saving, setSaving] = useState(false);
+  // units stays local state (not read directly off useUnits()) because the
+  // reconciliation effect below appends synthetic entries for units the
+  // extractor introduces that aren't in the fetched list yet (e.g. "bunch").
   let [units, setUnits] = useState<FormUnit[]>([]);
-  let [tags, setTags] = useState<string[]>([]);
-  let [ingredients, setIngredients] = useState<string[]>([]);
+  const fetchedUnits = useUnits();
+  const tags = useTags();
+  const ingredients = useIngredientNames();
   let [deleted, setDeleted] = useState(false);
   let [bulkText, setBulkText] = useState('');
   let [bulkError, setBulkError] = useState<string | null>(null);
 
   const router = useRouter();
-  // Five endpoints (/units, /tags, /ingredients, POST|PUT /recipe, DELETE
-  // /recipe) share this one instance with wildly different response shapes -
-  // use-http's TData is fixed per instance, so this stays untyped (matching
-  // use-http's own TData = any default) and each result is annotated at its
-  // own call site below instead of splitting into five instances.
-  //
-  // use-http only auto-adds Content-Type: application/json for POST/PUT/PATCH,
-  // not DELETE - without this, deleteRecipe's `del('/recipe', { id })` call
-  // sends its JSON body as text/plain, which the API's content-type
-  // validation rejects with 415.
-  const { get, post, put, del, response, error } = useFetch(process.env.NEXT_PUBLIC_API_HOST, {
-    cachePolicy: CachePolicies.NO_CACHE,
-    headers: { 'Content-Type': 'application/json' }
+  const { getAccessTokenSilently } = useAuth();
+
+  const saveMutation = useMutation({
+    mutationFn: async (recipeToSave: FormRecipe): Promise<CreatedResponse | undefined> => {
+      const token = await getAccessTokenSilently();
+      if (mode === 'edit') {
+        await apiPut('/recipe', token, recipeToSave);
+        return undefined;
+      }
+      // POST /recipe returns the new recipe's id (CreatedResponse) so we can
+      // redirect straight to its detail page without a follow-up GET.
+      return apiPost<CreatedResponse>('/recipe', token, recipeToSave);
+    },
+    onSuccess: (result) => {
+      if (mode === 'edit') {
+        router.push(`/recipes/${recipe.id}?stored=updated`);
+      } else {
+        router.push(`/recipes/${result?.id}?stored=new`);
+      }
+    }
   });
 
-  const { post: postParseText, response: parseResponse, loading: parseLoading } = useFetch<ParseTextResult>(`${process.env.NEXT_PUBLIC_HOST}/api/parse-recipe-text`, {
-    cachePolicy: CachePolicies.NO_CACHE
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getAccessTokenSilently();
+      return apiDelete('/recipe', token, { id: recipe.id });
+    },
+    onSuccess: () => {
+      setDeleted(true);
+      router.push('/recipes');
+    }
   });
+
+  const parseTextMutation = useMutation({
+    mutationFn: (payload: { text: string; knownIngredients: string[]; knownUnits: string[] }) =>
+      localApiPost<ParseTextResult>(`${process.env.NEXT_PUBLIC_HOST}/api/parse-recipe-text`, payload)
+  });
+
+  const loading = saveMutation.isPending;
+  const error = saveMutation.error || deleteMutation.error;
 
   useEffect(() => {
     if (Object.keys(initialRecipe).length > 0) {
@@ -96,31 +123,13 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
     }
   }, [initialRecipe]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function getUnitsTagsAndIngredients() {
-    if (useMocks) {
-      setUnits(mocks.units.map(unit => ({...unit, name: capitalize(unit.name)})));
-      setTags(mocks.tags);
-      setIngredients(mocks.ingredients.map(i => i.name));
-      return;
+  // Seeds units from the fetched list once it arrives; the reconciliation
+  // effect below is what appends synthetic entries on top of it.
+  useEffect(() => {
+    if (fetchedUnits.length) {
+      setUnits(fetchedUnits.map(unit => ({...unit, name: capitalize(unit.name)})));
     }
-    // units/tags/ingredients are typed optional because get() resolves to
-    // undefined on a failed *or aborted* request - in dev, React Strict
-    // Mode's double-invoked effect aborts this first call via use-http's
-    // abort-on-unmount (see CLAUDE.md's "Known rough edge"), so relying on
-    // this shared useFetch instance's single `response.ok` to gate all
-    // three would be wrong: it reflects whichever of the three (across
-    // either invocation) last resolved, not each one individually. Check
-    // each result on its own instead.
-    const [_units, _tags, _ingredients]: [Unit[] | undefined, string[] | undefined, { name: string }[] | undefined] = await Promise.all([
-      get('/units'),
-      get('/tags'),
-      get('/ingredients')
-    ]);
-    if (_units) setUnits(_units.map(unit => ({...unit, name: capitalize(unit.name)})));
-    if (_tags) setTags(_tags);
-    if (_ingredients) setIngredients(_ingredients.map(i => i.name));
-  }
-  useEffect(() => { getUnitsTagsAndIngredients() }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetchedUnits]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function updateRecipe<K extends keyof FormRecipe>(key: K, value: FormRecipe[K]) {
     const updatedRecipe = { ...recipe, [key]: value};
@@ -174,20 +183,17 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
     e.preventDefault();
     if (!bulkText.trim()) return;
     setBulkError(null);
-    const result = await postParseText({
-      text: bulkText,
-      knownIngredients: ingredients,
-      knownUnits: units.map(u => u.name)
-    });
-    if (!parseResponse.ok) {
-      setBulkError(result?.error || 'Failed to parse ingredients');
-      return;
+    try {
+      const result = await parseTextMutation.mutateAsync({
+        text: bulkText,
+        knownIngredients: ingredients,
+        knownUnits: units.map(u => u.name)
+      });
+      appendIngredients(result?.ingredients || []);
+      setBulkText('');
+    } catch (err) {
+      setBulkError(err instanceof Error ? err.message : 'Failed to parse ingredients');
     }
-    // result/result.ingredients are typed optional (ParseTextResult) even
-    // though they're always present once parseResponse.ok - TS can't
-    // correlate that with a check on a separate variable.
-    appendIngredients(result?.ingredients || []);
-    setBulkText('');
   }
 
   function updateIngredient(i: number, key: 'quantity' | 'unit', value: string) {
@@ -199,32 +205,14 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
     });
   }
 
-  async function submitRecipe(e: MouseEvent) {
+  function submitRecipe(e: MouseEvent) {
     e.preventDefault();
-    setSaving(true);
-    if (mode === 'edit') {
-      await put('/recipe', recipe)
-      if (response.ok) {
-        return router.push(`/recipes/${recipe.id}?stored=updated`);
-      }
-    } else {
-      // POST /recipe returns the new recipe's id (CreatedResponse) so we can
-      // redirect straight to its detail page without a follow-up GET.
-      const result: CreatedResponse = await post('/recipe', recipe)
-      if (response.ok) {
-        return router.push(`/recipes/${result.id}?stored=new`);
-      }
-    }
-    setSaving(false);
+    saveMutation.mutate(recipe);
   }
 
-  async function deleteRecipe(e: MouseEvent) {
+  function deleteRecipe(e: MouseEvent) {
     e.preventDefault();
-    await del('/recipe', { id: recipe.id })
-    if (response.ok) {
-      setDeleted(true);
-      return router.push('/recipes')
-    }
+    deleteMutation.mutate();
   }
 
   function deleteIngredient(e: MouseEvent, name: string) {
@@ -290,11 +278,11 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
               <Button
                 style="primary"
                 icon="tick"
-                className={`${parseLoading ? styles.loading : ''}`}
+                className={`${parseTextMutation.isPending ? styles.loading : ''}`}
                 onClick={handleParseIngredients}
               >
                 Parse ingredients
-                { parseLoading && <Spinner className={styles.loadingIngredients}>Parsing...</Spinner>}
+                { parseTextMutation.isPending && <Spinner className={styles.loadingIngredients}>Parsing...</Spinner>}
               </Button>
               { bulkError && (
                 <div className={styles.bulkError}>
@@ -357,9 +345,9 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
       </div>
 
       <div className={styles.buttonContainer}>
-        <Button style="primary" icon="tick" disabled={saving} onClick={submitRecipe}>
+        <Button style="primary" icon="tick" disabled={loading} onClick={submitRecipe}>
           { mode === 'edit' ? 'Update Recipe' : 'Save Recipe'}
-          { saving && <Spinner className={styles.loadingIngredients}>Saving...</Spinner>}
+          { loading && <Spinner className={styles.loadingIngredients}>Saving...</Spinner>}
         </Button>
         {
           mode === 'edit' && (

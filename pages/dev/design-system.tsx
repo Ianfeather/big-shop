@@ -51,7 +51,7 @@ const colorGroups = [
   {
     title: 'Semantic',
     colors: [
-      { name: '--color-success', value: '#28c17b', note: 'confirmation state, e.g. "Stored!"' },
+      { name: '--color-success', value: '#28c17b', note: 'confirmation state, e.g. "Recipe saved" toast' },
       { name: '--color-success-soft', value: '#94c3ae', note: 'pending/loading row background' },
       { name: '--color-danger-soft', value: '#f1c8c8' },
       { name: '--color-danger-border', value: '#ed9797' },

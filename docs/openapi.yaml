@@ -23,6 +23,25 @@ components:
         - id
         - users
       type: object
+    CreatedResponse:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /.netlify/functions/recipes/schemas/CreatedResponse.json
+          format: uri
+          readOnly: true
+          type: string
+        id:
+          format: int64
+          type: integer
+        status:
+          type: string
+      required:
+        - status
+        - id
+      type: object
     DeleteRecipeInputBody:
       additionalProperties: false
       properties:
@@ -577,7 +596,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SimpleResponse"
+                $ref: "#/components/schemas/CreatedResponse"
           description: Created
         default:
           content:

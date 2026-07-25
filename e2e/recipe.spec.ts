@@ -25,9 +25,11 @@ test.describe('recipe management', () => {
     await page.getByRole('button', { name: 'Enter Manually' }).click();
     await page.getByLabel('Recipe Name').fill(recipeName);
     await page.getByLabel('Method').fill('Combine everything and cook until done.');
-    await page.getByRole('button', { name: 'Store Recipe' }).click();
+    await page.getByRole('button', { name: 'Save Recipe' }).click();
 
-    await expect(page.getByText('Stored!')).toBeVisible();
+    await expect(page).toHaveURL(/\/recipes\/\d+$/);
+    await expect(page.getByRole('heading', { name: recipeName })).toBeVisible();
+    await expect(page.getByText('Recipe saved')).toBeVisible();
     await expect(findRecipeIdByName(request, recipeName)).resolves.toBeTruthy();
   });
 
@@ -49,11 +51,10 @@ test.describe('recipe management', () => {
     await page.getByLabel('Quantity').fill('350');
     await page.getByRole('button', { name: 'Update Recipe' }).click();
 
-    await expect(page.getByText('Updated!')).toBeVisible();
-    recipeName = updatedName; // so afterEach cleans up under the new name
-
-    await page.goto(`/recipes/${id}`);
+    await expect(page).toHaveURL(new RegExp(`/recipes/${id}$`));
     await expect(page.getByRole('heading', { name: updatedName })).toBeVisible();
+    await expect(page.getByText('Recipe saved')).toBeVisible();
+    recipeName = updatedName; // so afterEach cleans up under the new name
   });
 
   test('delete a recipe', async ({ page, request }) => {

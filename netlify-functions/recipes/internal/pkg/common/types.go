@@ -12,6 +12,13 @@ type SimpleResponse struct {
 	Status string `json:"status"`
 }
 
+// CreatedResponse is returned by POST /recipe so the frontend can redirect
+// to the new Recipe's detail page without a follow-up GET.
+type CreatedResponse struct {
+	Status string `json:"status"`
+	ID     int    `json:"id"`
+}
+
 // ShoppingList contains the data model for a user's list
 type ShoppingList struct {
 	Recipes     []string                   `json:"recipes"`

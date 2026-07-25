@@ -6,9 +6,13 @@ import styles from './index.module.css';
 interface LayoutProps {
   children: ReactNode;
   pageTitle?: string;
+  // Rendered as a full-viewport-width banner directly below the header, flush
+  // against it (no gap) - deliberately outside `.content`/`.container` (which
+  // are padded and width-capped) so a Toast isn't constrained to either.
+  toast?: ReactNode;
 }
 
-export default function Layout({ children, pageTitle = 'Big Shop' }: LayoutProps) {
+export default function Layout({ children, pageTitle = 'Big Shop', toast }: LayoutProps) {
   return (
     <>
       <Head>
@@ -26,6 +30,7 @@ export default function Layout({ children, pageTitle = 'Big Shop' }: LayoutProps
       </Head>
       <section className="layout">
         <Header />
+        {toast}
         <div className="content">
           <section className={styles.container}>
             {children}

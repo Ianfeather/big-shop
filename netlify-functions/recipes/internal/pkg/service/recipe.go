@@ -215,15 +215,17 @@ func GetRecipeByID(id int, userID string, db *sql.DB) (*common.Recipe, error) {
 // AddRecipe inserts recipe, ingredients into the DB. The recipe row and all of its
 // ingredient/unit/part/tag rows are written in one transaction, so a failure partway
 // through (e.g. a bad unit) doesn't leave an orphaned recipe with no Ingredient Lines.
-func AddRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
+// Returns the new recipe's ID so the caller can hand it back to the client
+// (e.g. for a post-create redirect) without a follow-up lookup.
+func AddRecipe(recipe common.Recipe, userID string, db *sql.DB) (int, error) {
 	accountID, err := GetAccountID(db, userID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	tx, err := db.Begin()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer tx.Rollback()
 
@@ -231,28 +233,31 @@ func AddRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 	res, err := tx.Exec(query, recipe.Name, common.Slugify(recipe.Name), recipe.RemoteURL, recipe.Notes, recipe.Method, accountID)
 	if err != nil {
 		fmt.Println("could not insert recipe")
-		return err
+		return 0, err
 	}
 
 	id, err := res.LastInsertId()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	recipe.ID = int(id)
 
 	if err = insertIngredients(recipe, tx); err != nil {
-		return err
+		return 0, err
 	}
 	if err = insertUnits(recipe, tx); err != nil {
-		return err
+		return 0, err
 	}
 	if err = insertParts(recipe, tx); err != nil {
-		return err
+		return 0, err
 	}
 	if err = insertTags(recipe, tx); err != nil {
-		return err
+		return 0, err
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return 0, err
+	}
+	return recipe.ID, nil
 }
 
 // EditRecipe updates recipe information. The ownership check is a precondition, run

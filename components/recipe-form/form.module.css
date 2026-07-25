@@ -162,13 +162,6 @@
   margin-left: var(--space-2);
 }
 
-.stored {
-  display: inline-block;
-  margin-left: var(--space-5);
-  color: var(--color-success);
-  font-size: var(--text-md);
-}
-
 .srOnly {
   position: absolute;
   left: -10000px;
@@ -183,12 +176,6 @@
   display: flex;
   align-items: end;
   justify-content: center;
-}
-
-.addAnotherRecipe {
-  margin-top: var(--space-4);
-  text-decoration: none;
-  background-color: var(--color-primary);
 }
 
 .required {

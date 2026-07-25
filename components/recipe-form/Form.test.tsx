@@ -4,7 +4,8 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('use-http', () => ({ default: vi.fn(), CachePolicies: { NO_CACHE: 'no-cache' } }));
-vi.mock('next/router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+const pushMock = vi.fn();
+vi.mock('next/router', () => ({ useRouter: () => ({ push: pushMock }) }));
 
 import useFetch from 'use-http';
 import Form from './Form';
@@ -49,7 +50,7 @@ function makeMainFetch(): MockMainFetch {
     }),
     post: vi.fn(async () => {
       response.ok = true;
-      return {};
+      return { status: 'ok', id: 42 };
     }),
     put: vi.fn(async () => {
       response.ok = true;
@@ -79,6 +80,7 @@ beforeEach(() => {
   mainFetch = makeMainFetch();
   parseFetch = makeParseFetch();
   mockedUseFetch.mockImplementation((url?: string) => (url && url.includes('parse-recipe-text') ? parseFetch : mainFetch));
+  pushMock.mockClear();
 });
 
 afterEach(() => {
@@ -153,14 +155,13 @@ describe('Form', () => {
     expect(screen.getByLabelText('Ingredients')).toHaveValue('2 eggs');
   });
 
-  it('shows a stored confirmation after a successful submit', async () => {
+  it('redirects to the new recipe after a successful submit', async () => {
     await renderForm();
 
     await userEvent.type(screen.getByLabelText(/Recipe Name/), 'Omelette');
-    await userEvent.click(screen.getByText('Store Recipe'));
+    await userEvent.click(screen.getByText('Save Recipe'));
 
-    await waitFor(() => expect(screen.getByText('Stored!')).toBeInTheDocument());
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/recipes/42?stored=new'));
     expect(mainFetch.post).toHaveBeenCalledWith('/recipe', expect.objectContaining({ name: 'Omelette' }));
-    expect(screen.getByText('Add another recipe')).toBeInTheDocument();
   });
 });

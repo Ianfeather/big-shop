@@ -44,6 +44,12 @@ type StatusOutput struct {
 	Body common.SimpleResponse
 }
 
+// AddRecipeOutput carries the new Recipe's ID alongside the status, so the
+// frontend can redirect straight to its detail page after a create.
+type AddRecipeOutput struct {
+	Body common.CreatedResponse
+}
+
 func (a *App) getRecipe(ctx context.Context, input *RecipeByIDInput) (*RecipeOutput, error) {
 	userID := ctx.Value(contextKey("userID")).(string)
 
@@ -65,14 +71,15 @@ func (a *App) getRecipe(ctx context.Context, input *RecipeByIDInput) (*RecipeOut
 	return &RecipeOutput{Body: *recipe}, nil
 }
 
-func (a *App) addRecipe(ctx context.Context, input *RecipeInput) (*StatusOutput, error) {
+func (a *App) addRecipe(ctx context.Context, input *RecipeInput) (*AddRecipeOutput, error) {
 	userID := ctx.Value(contextKey("userID")).(string)
 
-	if err := service.AddRecipe(input.Body, userID, a.db); err != nil {
+	id, err := service.AddRecipe(input.Body, userID, a.db)
+	if err != nil {
 		return nil, huma.Error500InternalServerError("could not insert ingredients")
 	}
 
-	return &StatusOutput{Body: common.SimpleResponse{Status: "ok"}}, nil
+	return &AddRecipeOutput{Body: common.CreatedResponse{Status: "ok", ID: id}}, nil
 }
 
 func (a *App) editRecipe(ctx context.Context, input *RecipeInput) (*StatusOutput, error) {

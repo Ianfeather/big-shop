@@ -1,6 +1,15 @@
 # Follow-up: density-based unit conversion
 
-Split out from [unit-normalisation.md](./unit-normalisation.md), which handles unit-type conversion (weight↔weight, volume↔volume) and count↔weight conversion via `ingredient.average_weight_grams`, but deliberately leaves two cases unresolved because both need a notion of *density* (grams per millilitre) that spec doesn't add:
+> **Superseded — do not build this.** The redesigned
+> [unit-normalisation.md](../unit-normalisation.md) makes density a *use* of one general
+> mechanism rather than a feature of its own: a Unit Size states how much one of a given
+> Unit of a given Ingredient comes to, so "one tablespoon of flour is 8 g" is the same kind
+> of fact as "one potato is 180 g" and "one tin of coconut milk is 400 ml". No density
+> buckets, no separate g/ml field. Kept for the record — its "coarse buckets rather than
+> per-ingredient precision" reasoning is still worth reading if per-Unit-Size curation ever
+> turns out to be too much data entry.
+
+Split out from [unit-normalisation-old.md](./unit-normalisation-old.md), which handles unit-type conversion (weight↔weight, volume↔volume) and count↔weight conversion via `ingredient.average_weight_grams`, but deliberately leaves two cases unresolved because both need a notion of *density* (grams per millilitre) that spec doesn't add:
 
 1. **Weight/volume merging within a shopping list.** Unit-normalisation's aggregation algorithm keeps a weight-typed sub-group (e.g. "50g flour") and a volume-typed sub-group (e.g. "2 tablespoons flour") for the same ingredient as separate list lines, rather than guessing a conversion — see that spec's Phase 2, step 4.
 2. **Imperial import conversion for `cup`.** The recipe scrapers (`pages/api/get-ingredients.js`) already normalize g/kg/tbsp/ml/l/tsp, but can't handle `cup` (or ambiguous `oz`, which could be weight or fluid ounce) — `cup`→metric isn't a fixed factor, it depends on what's being measured. These currently pass through unmatched and get surfaced for manual re-entry.

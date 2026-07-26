@@ -10,32 +10,46 @@ type Unit struct {
 	ID   int    `json:"id"`
 }
 
-// Unit kinds, mirroring the `unit`.`kind` enum. Named "kind" rather than
-// "dimension" because weight and volume are dimensions but relative is the
-// absence of one - see migrations/019_unit_kind.sql.
+// UnitKind mirrors the `unit`.`kind` enum. Named "kind" rather than "dimension"
+// because weight and volume are dimensions but relative is the absence of one -
+// see migrations/019_unit_kind.sql.
+type UnitKind string
+
 const (
 	// KindWeight and KindVolume mark Absolute Units - the same size whatever
 	// they measure, so Factor converts them to their dimension's base (gram,
 	// millilitre) with no knowledge of the ingredient.
-	KindWeight = "weight"
-	KindVolume = "volume"
+	KindWeight UnitKind = "weight"
+	KindVolume UnitKind = "volume"
 	// KindRelative marks a Unit whose size depends on the ingredient (a tin, a
 	// clove, a bare count). It has no Factor; converting one needs a
 	// per-ingredient Unit Size, which arrives in a later phase.
-	KindRelative = "relative"
+	KindRelative UnitKind = "relative"
 )
 
 // UnitInfo is what the Shopping List aggregation needs to know about a Unit.
 // Deliberately not in `common`: it's internal to combining a list, and never
 // appears in an API response.
 //
-// Note that comparing two UnitInfos' Kind is only meaningful for Absolute
-// Units: every Relative Unit shares KindRelative, so a tin and a pinch would
-// compare equal. Callers deciding whether two Amounts can be summed must check
-// Factor.Valid as well, not Kind alone.
+// Factor is meaningful only for an Absolute Unit, and is always 0 for a
+// Relative one - GetUnitCatalog normalises any row whose factor is NULL to
+// KindRelative, so an in-memory UnitInfo can't be an Absolute Unit with no way
+// to convert it.
 type UnitInfo struct {
-	Kind   string
-	Factor sql.NullFloat64
+	Kind   UnitKind
+	Factor float64
+}
+
+// IsAbsolute reports whether one of this Unit is the same size whatever it
+// measures, and can therefore be converted using Factor alone. The inverse is a
+// Relative Unit, which needs a per-ingredient Unit Size instead.
+//
+// Use this rather than comparing Kind directly when deciding whether two
+// Amounts combine: every Relative Unit shares KindRelative, so a tin and a
+// pinch compare equal on Kind despite having nothing to do with each other.
+// Two Units combine when both IsAbsolute and their Kinds match.
+func (u UnitInfo) IsAbsolute() bool {
+	return u.Kind == KindWeight || u.Kind == KindVolume
 }
 
 // UnitCatalog maps a Unit's name to its measurement metadata. Keyed by name
@@ -69,9 +83,21 @@ func GetUnitCatalog(db *sql.DB) (UnitCatalog, error) {
 	catalog := make(UnitCatalog)
 	for results.Next() {
 		var name string
-		var info UnitInfo
-		if err := results.Scan(&name, &info.Kind, &info.Factor); err != nil {
+		var kind UnitKind
+		var factor sql.NullFloat64
+		if err := results.Scan(&name, &kind, &factor); err != nil {
 			return nil, err
+		}
+		// A row claiming to be Absolute with no factor can't actually be
+		// converted, so treat it as Relative rather than letting a zero factor
+		// silently scale every quantity to nothing. Shouldn't happen - the two
+		// are set together in migration 019 and the dev seed - but the whole
+		// point of this type is that the aggregator can trust it.
+		info := UnitInfo{Kind: kind}
+		if factor.Valid {
+			info.Factor = factor.Float64
+		} else {
+			info.Kind = KindRelative
 		}
 		catalog[name] = info
 	}

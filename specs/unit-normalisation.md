@@ -339,7 +339,13 @@ through this call — there is no path to route around it.
 - **Keep the aggregator pure.** The seam spec established the hard way that anything taking
   a concrete `*sql.DB` cannot be faked in Go — `sql.Row` has no exported constructor. Pass
   units, Base Units and Unit Sizes in as an argument; load them in `GenerateShoppingList`.
-- Key the grouping on `ingredient_id`, not name. Name-keying is half of the current bug.
+- Key the grouping on ingredient identity **and** unit. The bug is that unit isn't part of
+  the key at all — not that the key is a name. Name is a sound identity here: `ingredient`
+  has `UNIQUE (name)` (migration 002) and every name the aggregator sees is read back from
+  that table, so name and id are bijective in this data. Keying on name avoids adding an
+  `id` to `common.Ingredient`, which is a request payload as well as a response, for no
+  observable gain. (Corrected during implementation — an earlier draft of this bullet
+  asserted name-keying was "half of the current bug", which was simply wrong.)
 - The is-bought carry-forward matches on name and still works unchanged with several rows
   per name.
 - `Item.tsx` must keep rendering Extra Items correctly — they pass no `item` at all, and

@@ -32,10 +32,25 @@ main to confirm DECIMAL scans into sql.NullFloat64 and ENUM into string,
 and that the unknown-unit fallback returns Relative; throwaway deleted.
 All of the above re-run after the rename.
 
-Review gate: run inline rather than via the code-review skill's parallel
-sub-agents - all four agent attempts died on transient API 529s, so this
-axis is weaker than intended (self-review) and worth re-running properly
-if the opportunity arises. 0 findings requiring a fix.
+Review gate: the code-review skill's parallel sub-agents initially died on
+transient API 529s (four attempts), so a self-review ran first; the real
+two-axis review was then run successfully against the committed diff.
+Findings acted on: UnitKind became a named type; IsAbsolute() now encodes
+CONTEXT.md's Absolute/Relative split instead of leaving it as a prose
+warning; UnitInfo dropped sql.NullFloat64 for a plain float64 with the
+NULL-factor row normalised to Relative at load, keeping database/sql out of
+the type the pure aggregator consumes; units_test.go added for Get's
+fallback, IsAbsolute, and the tin-vs-pinch equal-Kinds trap;
+specs/unit-normalisation.md's self-contradicting "key on ingredient_id, not
+name - name-keying is half of the current bug" bullet corrected (the claim
+was wrong: `ingredient` has UNIQUE(name), and the bug is that *unit* was
+missing from the key); technical-architecture.md migration count 17 -> 19.
+
+One finding rejected with evidence: "every column in 001-015 has a COMMENT,
+so `kind` needs one". False - `name`/`slug`/`remote_url`/`created_at`/
+`updated_at` in 001 have none, and every prior ALTER TABLE ADD COLUMN (009,
+010, 014, 018) has none. The convention is to comment a column whose meaning
+isn't self-evident; `kind` is explained at length in the migration header.
 
 One judgement call raised and then acted on: the column was originally
 `dimension ENUM('weight','volume','relative')` per the spec, which is a
@@ -49,6 +64,28 @@ callers must check Factor.Valid, not Kind alone.
 Also noted: one review sub-agent edited .claude/skills/implement/SKILL.md
 before dying (removing the reference to the nonexistent `verify` skill).
 Reverted - reviews must be read-only.
+
+Deferred findings, raised by the review and deliberately NOT fixed here:
+
+- **Seed/migration duplication has no drift guard.** Both files carry the six
+  kind/factor values and cross-reference each other, but nothing enforces
+  agreement. Raised by both axes. This will get worse in Session 4, which seeds
+  ~76 curated Unit Sizes with the same fresh-vs-existing split. The suggested
+  fix (re-apply 019's UPDATEs after the seed, making the migration the single
+  source of truth) special-cases one migration in the init script, so it should
+  be solved generally when Session 4 forces the issue - not bolted on now.
+- **`mysql --force` can hide a first-application failure.** Re-runs are safe
+  (duplicate-column ALTERs skipped, UPDATEs idempotent), but if the ALTERs ever
+  fail on a *first* application the UPDATEs fail silently too and every unit
+  stays 'relative' - wrong but plausible, with no error. **The manual production
+  apply of 019 should therefore be piped directly without `--force`**, as was
+  done against the local dev DB, so a failure actually surfaces.
+- **`insertUnits` (service/recipe.go:391) inserts `(name)` only.** An imported
+  abbreviation like "ml" or "tsp" would be created as a Relative Unit and never
+  combine with its spelled-out twin. Mitigated in practice by the extraction
+  prompt, which translates abbreviations and standardises to the known unit
+  list, but it does mean the Absolute set is closed to six exact spellings.
+  Worth revisiting if real data shows abbreviations getting through.
 
 Two things carried forward: (1) `GetAllUnits` in the same file lacks
 `defer results.Close()` and a `results.Err()` check and leaks a connection

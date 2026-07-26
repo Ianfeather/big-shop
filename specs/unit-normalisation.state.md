@@ -20,7 +20,7 @@ Branch point: `cb6eff6` (the spec/design commit).
 Status: done
 Scope: migrations/019_unit_kind.sql adds `kind` + `factor` to `unit` and classifies the six Absolute Units by name; docker/mysql-seed/dev-seed.sql sets them at insert time (migrations run before seed data on a fresh DB, so the migration's UPDATE-by-name matches nothing there); service/units.go gains a UnitCatalog loader. No behaviour change.
 Depends on: none
-Commit: (see git log - recommitted after the kind rename below)
+Commit: 570c03e
 Notes: Test gate: go fmt/vet/test clean via the api container (no Go
 toolchain on this host); no OpenAPI or api.d.ts drift. Both migration paths
 exercised against real MySQL with identical results - the fresh-database

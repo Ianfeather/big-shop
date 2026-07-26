@@ -164,6 +164,39 @@ initially looked like a Session 2 regression. Checking out the pre-Session-2
 commit and re-running was what ruled that out. Worth doing before assuming a
 green-to-red e2e test means the code under review broke it.
 
+## Review gate: Sessions 2-3
+Status: done
+Commit: 38cb407
+Notes: Two-axis code review ran successfully this time (the Session 1 attempt
+had died on API 529s). Findings acted on:
+
+- **The significant one:** a lone "1 teaspoon cumin" rendered as "5
+  millilitre". Converting to the kind's base unit is only justified when Units
+  actually differ; a single unit was never ambiguous. Since tsp<->tbsp is the
+  most common collision in the real data this was a wide display regression on
+  lines that were never broken, and only Phase 3 would have undone it. Fixed by
+  having absoluteTotal remember whether one Unit contributed. Two existing test
+  expectations had encoded the regression.
+- ParseQuantity now accepts zero (rejecting it printed a verbatim "0 gram"
+  beside the real total); negatives still surface verbatim.
+- Dead `order` slice removed - it ordered insertion into a Go map.
+- displayScale/scaleForDisplay renamed to absoluteScale/absoluteTotal.amount to
+  stop colliding with CONTEXT.md's Display Unit, a different Phase 3 concept.
+- Missing collision-category tests added (count<->weight, count<->volume,
+  weight<->volume, zero, negative, single-unit preservation): 56 -> 64 subtests.
+- CLAUDE.md paragraph splice, e2e comment that misdescribed its own serial
+  behaviour, and a CSS-module selector in Item.test.tsx.
+
+Judgement calls not acted on, with reasons:
+- **Duplicated test factory** between Item.test.tsx and index.test.tsx (3
+  lines). Extracting a shared helper for that would couple two test files for
+  less code than the import costs; self-contained test fixtures are worth more.
+- **NULL unit_id could make GetIngredientListItems' INNER JOIN drop one Amount
+  of several.** Pre-existing, and not actually reachable: unit_id is NOT NULL,
+  so a missing unit fails the INSERT loudly rather than being silently read
+  back short. Left alone rather than restructuring the read path on a
+  hypothetical.
+
 ## Session 4: Base Unit and Unit Size (spec Phase 2)
 Status: pending
 Scope: base_unit_id, ingredient_unit_size, unit.default_size, and the curated seed for the ~76 colliding ingredients.

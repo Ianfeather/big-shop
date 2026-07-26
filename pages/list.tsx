@@ -18,9 +18,10 @@ function buildMockIngredients(selectedRecipeIds: string[]): Record<string, ListI
     const recipe = mocks.recipes.find(r => String(r.id) === String(id));
     if (!recipe) return;
     recipe.ingredients.forEach(ingredient => {
+      // Mock mode doesn't combine across recipes the way the real API does -
+      // it just shows each recipe's own lines, so one Amount each.
       ingredients[ingredient.name] = {
-        unit: ingredient.unit,
-        quantity: Number(ingredient.quantity),
+        amounts: [{ quantity: String(ingredient.quantity), unit: ingredient.unit }],
         isBought: false,
         recipe_id: recipe.id,
         department: ingredient.department,
@@ -195,12 +196,12 @@ const List = () => {
 
   function addExtraItem(extraItem: string) {
     if (!extraItem) { return; }
-    // Extra Items carry placeholder quantity/unit/department/recipe_id
-    // values (see CONTEXT.md's Shopping List Item entry) - never rendered
-    // for an extra (ShoppingList/Item.tsx only reads them for 'ingredient').
+    // An Extra Item is a plain checklist entry with no meaningful amount (see
+    // CONTEXT.md's Shopping List Item entry), so it carries no Amounts at all;
+    // department/recipe_id remain placeholders, never rendered for an extra.
     const newList = {
       ...extras,
-      [extraItem]: { quantity: 0, unit: '', department: '', recipe_id: 0, isBought: false }
+      [extraItem]: { amounts: [], department: '', recipe_id: 0, isBought: false }
     };
     setExtras(newList);
     if (!useMocks) {

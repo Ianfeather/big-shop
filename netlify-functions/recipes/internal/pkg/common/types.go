@@ -56,13 +56,27 @@ type Recipe struct {
 	Tags        []string     `json:"tags"`
 }
 
-// ListIngredient is a subset of shopping List
+// Amount is a quantity paired with a Unit ("400" + "gram"). Quantity is a
+// string rather than a number so an Ingredient Line whose quantity can't be
+// parsed ("a handful") can still be shown verbatim instead of being dropped -
+// and because the underlying column is a varchar already.
+type Amount struct {
+	Quantity string `json:"quantity"`
+	Unit     string `json:"unit"`
+}
+
+// ListIngredient is a subset of shopping List.
+//
+// Amounts is a list, not a single quantity+unit, because quantities that can't
+// be combined must still both reach the shopper: "50 g + 2 tbsp flour" is one
+// Item with one checkbox and two Amounts (see CONTEXT.md's Shopping List Item,
+// and docs/adr/0005). Extra Items carry an empty Amounts - they're a plain
+// checklist entry with no meaningful quantity.
 type ListIngredient struct {
-	Unit       string  `json:"unit"`
-	Quantity   float64 `json:"quantity"`
-	IsBought   bool    `json:"isBought"`
-	RecipeID   int     `json:"recipe_id"`
-	Department string  `json:"department"`
+	Amounts    []Amount `json:"amounts"`
+	IsBought   bool     `json:"isBought"`
+	RecipeID   int      `json:"recipe_id"`
+	Department string   `json:"department"`
 }
 
 // User object

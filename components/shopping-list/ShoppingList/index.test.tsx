@@ -4,12 +4,12 @@ import userEvent from '@testing-library/user-event';
 import ShoppingList from './index';
 import type { ListIngredient } from '../../../types/models';
 
-// Extra Items carry placeholder quantity/unit/department/recipe_id values in
+// Extra Items carry no Amounts and placeholder department/recipe_id values in
 // the real API (see CONTEXT.md's Shopping List Item entry) - this mirrors
 // that so fixtures satisfy ListIngredient without pretending those fields
 // are meaningful for an extra.
 const ingredient = (overrides: Partial<ListIngredient> = {}): ListIngredient => ({
-  quantity: 0, unit: '', department: '', recipe_id: 0, isBought: false, ...overrides
+  amounts: [], department: '', recipe_id: 0, isBought: false, ...overrides
 });
 
 describe('ShoppingList', () => {
@@ -25,7 +25,7 @@ describe('ShoppingList', () => {
     const buyIngredient = vi.fn();
     render(
       <ShoppingList
-        shoppingList={{ chicken: ingredient({ quantity: 1, unit: 'kg', department: 'meat and fish' }) }}
+        shoppingList={{ chicken: ingredient({ amounts: [{ quantity: '1', unit: 'kg' }], department: 'meat and fish' }) }}
         extras={{ beer: ingredient() }}
         buyIngredient={buyIngredient}
         clearList={() => {}}
@@ -47,8 +47,8 @@ describe('ShoppingList', () => {
     render(
       <ShoppingList
         shoppingList={{
-          chicken: ingredient({ quantity: 1, unit: 'kg', department: 'meat and fish' }),
-          rice: ingredient({ quantity: 300, unit: 'gram', department: 'other', isBought: true })
+          chicken: ingredient({ amounts: [{ quantity: '1', unit: 'kg' }], department: 'meat and fish' }),
+          rice: ingredient({ amounts: [{ quantity: '300', unit: 'gram' }], department: 'other', isBought: true })
         }}
         extras={{ beer: ingredient({ isBought: true }) }}
         buyIngredient={() => {}}
@@ -67,9 +67,9 @@ describe('ShoppingList', () => {
     render(
       <ShoppingList
         shoppingList={{
-          carrot: ingredient({ quantity: 2, unit: '', department: 'vegetables' }),
-          potato: ingredient({ quantity: 1, unit: 'kg', department: 'vegetables' }),
-          chicken: ingredient({ quantity: 1, unit: 'kg', department: 'meat and fish' })
+          carrot: ingredient({ amounts: [{ quantity: '2', unit: '' }], department: 'vegetables' }),
+          potato: ingredient({ amounts: [{ quantity: '1', unit: 'kg' }], department: 'vegetables' }),
+          chicken: ingredient({ amounts: [{ quantity: '1', unit: 'kg' }], department: 'meat and fish' })
         }}
         extras={{}}
         buyIngredient={() => {}}
@@ -86,7 +86,7 @@ describe('ShoppingList', () => {
     const clearList = vi.fn();
     render(
       <ShoppingList
-        shoppingList={{ chicken: ingredient({ quantity: 1, unit: 'kg', department: 'meat and fish' }) }}
+        shoppingList={{ chicken: ingredient({ amounts: [{ quantity: '1', unit: 'kg' }], department: 'meat and fish' }) }}
         extras={{}}
         buyIngredient={() => {}}
         clearList={clearList}

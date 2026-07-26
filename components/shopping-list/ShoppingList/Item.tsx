@@ -9,9 +9,22 @@ interface ItemProps {
   handleClick: (name: string, type: 'ingredient' | 'extra') => void;
 }
 
+// An Ingredient Item carries one or more Amounts: several when some of them
+// couldn't be combined for want of a Unit Size, so "50 g + 2 tbsp" is one line
+// with one checkbox rather than a guessed-at single number (CONTEXT.md's
+// Shopping List Item, docs/adr/0005). A blank unit is the bare-count sentinel
+// ("3 eggs"), so it's dropped rather than rendered as a trailing space.
+function formatAmounts(amounts: ListIngredient['amounts'] | undefined): string {
+  return (amounts ?? [])
+    .map(({ quantity, unit }) => [quantity, unit].filter(Boolean).join(' '))
+    .filter(Boolean)
+    .join(' + ');
+}
+
 const Item = ({type, name, item, bought = false, handleClick}: ItemProps) => {
-  const quantity = type == 'ingredient' ? item?.quantity : null;
-  const unit = type == 'ingredient' ? item?.unit : null;
+  // Extra Items have no meaningful amount at all - they're a plain checklist
+  // entry, and their underlying row only carries placeholder values.
+  const amount = type === 'ingredient' ? formatAmounts(item?.amounts) : '';
   const className = `${styles.item} ${bought ? styles.bought : ''}`;
 
   return (
@@ -21,8 +34,8 @@ const Item = ({type, name, item, bought = false, handleClick}: ItemProps) => {
           <span className={styles.checkMark}></span>
         </span>
         <span className={styles.itemName}>{name}</span>
-        {(quantity || unit) && (
-          <span className={styles.amount}>{quantity} {unit}</span>
+        {amount && (
+          <span className={styles.amount}>{amount}</span>
         )}
       </button>
     </li>

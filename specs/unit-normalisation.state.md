@@ -135,11 +135,34 @@ Not fixed here - out of Phase 1 scope, and it needs a deliberate decision about
 whether deleting a Recipe should erase its Dave history.
 
 ## Session 3: Coverage for multiple Amounts, and the mock surfaces
-Status: pending
-Scope: Vitest on Item.tsx for a merged single Amount, an unmerged "50 g + 2 tbsp", and the blank bare-count unit; evals/mock-api-server.js conversion comment and behaviour; mocks/ if the new shape reaches them; e2e/shopping-list.spec.ts extended with a mixed-unit scenario proving the merge through the real API.
+Status: done
+Scope: Vitest on Item.tsx for merged/unmerged/bare-count/verbatim amounts and the one-checkbox property; e2e/shopping-list.spec.ts extended with a mixed-unit scenario proving the merge through the real API; evals/mock-api-server.js updated to the Amounts shape and to stop summing unlike units.
 Depends on: Session 2
-Commit:
-Notes: Reduced from the original plan - the Item.tsx/list.tsx/fixture changes moved into Session 2 (see its scope adjustment). Watch out for follow-up #24 when writing the e2e scenario: recipe teardown silently fails for any recipe that reached the shopping list.
+Commit: 700b392
+Notes: Reduced from the original plan - the Item.tsx/list.tsx/fixture changes
+moved into Session 2 (see its scope adjustment), so this session is coverage
+plus the mock surfaces.
+
+Test gate: 13/13 e2e (10 existing + 3 new), frontend 28 files / 106 tests, Go
+12 tests / 56 subtests, typecheck and lint clean, no drift.
+
+**Fixed a trap worth remembering:** the new e2e tests failed for a reason that
+had nothing to do with them. `test:e2e:stop` ran `docker compose down` without
+`--volumes`, and MySQL only runs docker-entrypoint-initdb.d when its data
+directory is empty - so a persisted volume pinned the e2e database to the
+schema it had when first created (2026-07-25, before migration 019). Every
+shopping-list request 500'd on the missing `kind` column and the list rendered
+empty, which looks exactly like an application bug. This is the same
+deployment-order hazard recorded at the top of this file, playing out locally,
+and it would have recurred for every future migration. Now `--volumes`, so each
+run starts freshly migrated and seeded; documented in CLAUDE.md. It also stops
+fixture recipes accumulating across runs - the e2e database had dozens from
+previous months, because teardown deletes fail silently (follow-ups.md #24).
+
+Diagnosis note for future runs: the failing test was an *existing* one, which
+initially looked like a Session 2 regression. Checking out the pre-Session-2
+commit and re-running was what ruled that out. Worth doing before assuming a
+green-to-red e2e test means the code under review broke it.
 
 ## Session 4: Base Unit and Unit Size (spec Phase 2)
 Status: pending

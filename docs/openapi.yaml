@@ -23,6 +23,17 @@ components:
         - id
         - users
       type: object
+    Amount:
+      additionalProperties: false
+      properties:
+        quantity:
+          type: string
+        unit:
+          type: string
+      required:
+        - quantity
+        - unit
+      type: object
     CreatedResponse:
       additionalProperties: false
       properties:
@@ -170,21 +181,21 @@ components:
     ListIngredient:
       additionalProperties: false
       properties:
+        amounts:
+          items:
+            $ref: "#/components/schemas/Amount"
+          type:
+            - array
+            - "null"
         department:
           type: string
         isBought:
           type: boolean
-        quantity:
-          format: double
-          type: number
         recipe_id:
           format: int64
           type: integer
-        unit:
-          type: string
       required:
-        - unit
-        - quantity
+        - amounts
         - isBought
         - recipe_id
         - department

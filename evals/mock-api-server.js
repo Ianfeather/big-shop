@@ -120,26 +120,31 @@ app.post('/shopping-list', (req, res) => {
     recipeIds.includes(recipe.id)
   );
 
+  // Mirrors the real CombineIngredients closely enough for evals: quantities
+  // only add up when they share a unit, and an Ingredient Item carries one or
+  // more Amounts so unlike units stay visible side by side rather than being
+  // summed into a wrong number. It deliberately stops short of the real
+  // service's kind/factor conversion (tsp+tbsp) - the evals don't exercise it,
+  // and duplicating the unit catalog here would just be a second thing to keep
+  // in step. See netlify-functions/recipes/internal/pkg/service/list.go.
   const combinedIngredients = {};
 
   selectedRecipes.forEach(recipe => {
     recipe.ingredients.forEach(ingredient => {
-      if (combinedIngredients[ingredient.name]) {
-        // Simple addition for testing - real app would handle unit conversion
-        const currentQty = parseFloat(combinedIngredients[ingredient.name].quantity) || 0;
-        const newQty = parseFloat(ingredient.quantity) || 0;
-        combinedIngredients[ingredient.name] = {
-          quantity: (currentQty + newQty).toString(),
-          unit: ingredient.unit,
-          isBought: false
-        };
+      const item = combinedIngredients[ingredient.name] || {
+        amounts: [],
+        isBought: false,
+        recipe_id: recipe.id,
+        department: ingredient.department || ''
+      };
+      const sameUnit = item.amounts.find(amount => amount.unit === ingredient.unit);
+      if (sameUnit) {
+        const total = (parseFloat(sameUnit.quantity) || 0) + (parseFloat(ingredient.quantity) || 0);
+        sameUnit.quantity = total.toString();
       } else {
-        combinedIngredients[ingredient.name] = {
-          quantity: ingredient.quantity,
-          unit: ingredient.unit,
-          isBought: false
-        };
+        item.amounts.push({ quantity: String(ingredient.quantity), unit: ingredient.unit });
       }
+      combinedIngredients[ingredient.name] = item;
     });
   });
 

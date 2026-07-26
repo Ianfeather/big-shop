@@ -177,7 +177,20 @@ won't collide with another worktree's stack; `test:e2e`/`test:e2e:debug` both
 run `test:e2e:stop` first to tear down any containers left over from an
 interrupted previous run (otherwise `dev-full.sh`'s own auto-increment-on-
 collision port logic silently drifts to different ports than the ones pinned
-in `e2e/env.ts`). Covers the core Recipe CRUD and Shopping List flows only
+in `e2e/env.ts`).
+
+**`test:e2e:stop` passes `--volumes`, so every run starts from a freshly
+migrated and seeded database.** That matters more than it sounds: MySQL only
+runs `docker-entrypoint-initdb.d` (and therefore `migrations/*.sql`) when the
+data directory is *empty*, so a persisted volume silently pins the e2e database
+to whatever schema existed when it was first created. Without `--volumes`, add a
+migration and the e2e suite keeps running against the old schema — failing in
+ways that look like application bugs (every shopping-list request 500s on a
+missing column, so the list just renders empty) rather than like a stale
+environment. It also stops fixture recipes accumulating across runs, which they
+did, for months, because teardown deletes fail silently (follow-ups.md #24).
+
+The suite covers the core Recipe CRUD and Shopping List flows only
 (add/edit/delete a Recipe; add/remove a Recipe on the list, add an Extra Item,
 mark/un-mark an item bought, clear the list) — Dave, tag-filter browsing, and
 Recipe Import are deliberately out of scope (see the top of `e2e/recipe.spec.ts`

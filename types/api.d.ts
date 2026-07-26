@@ -386,6 +386,10 @@ export interface components {
             id: number;
             users: components["schemas"]["User"][] | null;
         };
+        Amount: {
+            quantity: string;
+            unit: string;
+        };
         CreatedResponse: {
             /**
              * Format: uri
@@ -477,13 +481,11 @@ export interface components {
             Token: string;
         };
         ListIngredient: {
+            amounts: components["schemas"]["Amount"][] | null;
             department: string;
             isBought: boolean;
-            /** Format: double */
-            quantity: number;
             /** Format: int64 */
             recipe_id: number;
-            unit: string;
         };
         ListItem: {
             /**

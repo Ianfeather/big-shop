@@ -5,16 +5,18 @@ import (
 	"fmt"
 	"log"
 	"recipes/internal/pkg/common"
+	"sort"
 	"strconv"
 
 	"database/sql"
 )
 
-// ListItem is used to interface with the DB
+// ListItem is used to interface with the DB. One row of `list`, which is one
+// Amount - an Ingredient Item with two Amounts is two rows sharing a name.
 type ListItem struct {
 	Name       string
 	Unit       string
-	Quantity   float64
+	Quantity   string
 	Department string
 	IsBought   bool
 }
@@ -24,52 +26,205 @@ type ListItem struct {
 // function can return.
 var ErrInvalidRecipeID = errors.New("invalid recipe id")
 
-// CombineIngredients creates combined values/units
-func CombineIngredients(r []common.Recipe) map[string]*common.ListIngredient {
-	parentUnit := map[string]string{
-		"gram":       "kilogram",
-		"millilitre": "litre",
-	}
-	childUnit := map[string]string{
-		"kilogram": "gram",
-		"litre":    "millilitre",
-	}
+// absoluteScale names, per Absolute Unit kind, the unit quantities accumulate
+// in and the larger one to scale up to once there's enough of it. Deliberately
+// only the thousand-fold step (gram->kilogram, millilitre->litre) the Shopping
+// List has always done - teaspoon and tablespoon are Absolute Units of the same
+// kind, but nobody wants "50 g flour" rendered as tablespoons.
+//
+// Not called "display scale": Display Unit is a distinct concept arriving in a
+// later phase (an Ingredient's preferred Relative Unit, shown *alongside* a
+// preserved base total). This just picks between two Absolute Units and
+// replaces the total.
+//
+// Assumes each kind's base unit has factor 1, which is what makes the same
+// number serve as both the scale-up threshold and the divisor. Enforced by
+// migration 019 and asserted by absoluteTotal.amount's guard.
+var absoluteScale = map[UnitKind]struct{ base, large string }{
+	KindWeight: {base: "gram", large: "kilogram"},
+	KindVolume: {base: "millilitre", large: "litre"},
+}
 
-	ingredientList := make(map[string]*common.ListIngredient)
-	for _, recipe := range r {
-		for _, ingredient := range recipe.Ingredients {
-			if q, err := strconv.ParseFloat(ingredient.Quantity, 64); err == nil {
-				if childUnit, isParentUnit := childUnit[ingredient.Unit]; isParentUnit {
-					q = q * 1000
-					ingredient.Unit = childUnit
+// absoluteTotal accumulates one kind's Absolute Amounts, in that kind's base
+// unit, while remembering whether they all came from the same Unit.
+//
+// That last part is why this isn't a bare float64. Converting to the base unit
+// is only worth doing when Units actually differ: "2 tablespoon + 2 teaspoon"
+// has to pick a common unit and millilitres is the honest choice, but a lone
+// "1 teaspoon cumin" was never ambiguous and should stay a teaspoon rather than
+// being rewritten to "5 millilitre".
+type absoluteTotal struct {
+	total float64
+	// The single Unit every Amount so far used, or empty once two differ.
+	soleUnit string
+	seenAny  bool
+}
+
+func (a *absoluteTotal) add(unitName string, inBaseUnits float64) {
+	a.total += inBaseUnits
+	if !a.seenAny {
+		a.soleUnit = unitName
+		a.seenAny = true
+	} else if a.soleUnit != unitName {
+		a.soleUnit = ""
+	}
+}
+
+// ingredientTotals accumulates one Ingredient's Amounts while combining.
+type ingredientTotals struct {
+	absolute map[UnitKind]*absoluteTotal
+	relative map[string]float64 // summed per Relative Unit name - a tin and a pinch never merge
+	verbatim []common.Amount    // quantities that couldn't be parsed, kept as-is
+	// Department is the first non-empty one seen (an Ingredient Line can arrive
+	// without one). RecipeID is the first contributing Recipe - pre-existing
+	// behaviour, and a latent defect noted in the spec, not changed here.
+	department string
+	recipeID   int
+}
+
+// CombineIngredients merges the Ingredient Lines of every given Recipe into one
+// Ingredient Item per Ingredient, converting between Units where that's
+// possible without knowing anything about the Ingredient itself.
+//
+// Two Amounts combine when both their Units are Absolute and of the same kind -
+// so teaspoons combine with tablespoons, grams with kilograms. Everything else
+// stays a separate Amount on the same Item: a Relative Unit's size depends on
+// the Ingredient (one tin of what?), and until a later phase supplies a Unit
+// Size there's no honest conversion to make. That's why the return carries a
+// list of Amounts rather than one quantity - "50 g + 2 tbsp flour" is one line
+// with one checkbox, not a guess and not a dropped ingredient.
+//
+// Pure by design: the unit catalog is a parameter, never a query, so this stays
+// directly testable without a database (see the seam spec - a Go fake can't
+// stand in for *sql.DB).
+//
+// Keyed by Ingredient name. `ingredient` has UNIQUE (name) (migration 002) and
+// every name here was read back from that table, so name and id are bijective
+// in this data; the old bug was that Unit wasn't part of the key at all.
+func CombineIngredients(recipes []common.Recipe, units UnitCatalog) map[string]*common.ListIngredient {
+	totals := make(map[string]*ingredientTotals)
+
+	for _, recipe := range recipes {
+		for _, line := range recipe.Ingredients {
+			t, seen := totals[line.Name]
+			if !seen {
+				t = &ingredientTotals{
+					absolute:   make(map[UnitKind]*absoluteTotal),
+					relative:   make(map[string]float64),
+					department: line.Department,
+					recipeID:   recipe.ID,
 				}
-				if existingIngredient, exists := ingredientList[ingredient.Name]; exists {
-					existingIngredient.Quantity = existingIngredient.Quantity + q
-				} else {
-					newIngredient := common.ListIngredient{
-						Unit:       ingredient.Unit,
-						Quantity:   q,
-						IsBought:   false,
-						Department: ingredient.Department,
-						RecipeID:   recipe.ID,
-					}
-					ingredientList[ingredient.Name] = &newIngredient
+				totals[line.Name] = t
+			}
+			if t.department == "" {
+				t.department = line.Department
+			}
+
+			quantity, ok := ParseQuantity(line.Quantity)
+			if !ok {
+				// Unreadable, but the shopper still needs to know about it.
+				t.verbatim = append(t.verbatim, common.Amount{
+					Quantity: line.Quantity,
+					Unit:     line.Unit,
+				})
+				continue
+			}
+
+			if info := units.Get(line.Unit); info.IsAbsolute() {
+				kindTotal, ok := t.absolute[info.Kind]
+				if !ok {
+					kindTotal = &absoluteTotal{}
+					t.absolute[info.Kind] = kindTotal
 				}
+				kindTotal.add(line.Unit, quantity*info.Factor)
+			} else {
+				t.relative[line.Unit] += quantity
 			}
 		}
 	}
 
-	for key, value := range ingredientList {
-		if value.Quantity < 1000 {
+	list := make(map[string]*common.ListIngredient, len(totals))
+	for name, t := range totals {
+		list[name] = &common.ListIngredient{
+			Amounts:    t.amounts(units),
+			IsBought:   false,
+			Department: t.department,
+			RecipeID:   t.recipeID,
+		}
+	}
+	return list
+}
+
+// amounts renders one Ingredient's accumulated totals in a stable order:
+// weight, then volume, then Relative Units alphabetically, then anything
+// unparseable in the order it was read. Stable so an Item's Amounts don't
+// reshuffle between regenerations, and so table tests aren't flaky. (Ordering
+// *between* Items isn't this function's business - the Shopping List is a map,
+// and the frontend sorts by Department.)
+func (t *ingredientTotals) amounts(units UnitCatalog) []common.Amount {
+	amounts := make([]common.Amount, 0, len(t.absolute)+len(t.relative)+len(t.verbatim))
+
+	for _, kind := range []UnitKind{KindWeight, KindVolume} {
+		total, ok := t.absolute[kind]
+		if !ok {
 			continue
 		}
-		if parentUnit, exists := parentUnit[value.Unit]; exists {
-			ingredientList[key].Unit = parentUnit
-			ingredientList[key].Quantity = ingredientList[key].Quantity / 1000
+		amounts = append(amounts, total.amount(kind, units))
+	}
+
+	relativeUnits := make([]string, 0, len(t.relative))
+	for unit := range t.relative {
+		relativeUnits = append(relativeUnits, unit)
+	}
+	sort.Strings(relativeUnits)
+	for _, unit := range relativeUnits {
+		amounts = append(amounts, common.Amount{
+			Quantity: formatQuantity(t.relative[unit]),
+			Unit:     unit,
+		})
+	}
+
+	return append(amounts, t.verbatim...)
+}
+
+// amount renders an accumulated total as the single Amount a shopper reads.
+//
+// When every contributing Ingredient Line used the same Unit there was never
+// any ambiguity, so that Unit is kept: "1 teaspoon cumin" stays a teaspoon
+// rather than being rewritten to "5 millilitre". Only genuinely mixed Units
+// fall back to the kind's base unit, which is the honest common denominator
+// for "2 tablespoon + 2 teaspoon".
+//
+// Either way the thousand-fold scale-up still applies, so 1100 grams reads as
+// 1.1 kilogram exactly as it always has.
+func (a *absoluteTotal) amount(kind UnitKind, units UnitCatalog) common.Amount {
+	scale, ok := absoluteScale[kind]
+	if !ok {
+		// Unreachable: only the two Absolute kinds get here, and both are in
+		// absoluteScale. Fall back to the raw total rather than inventing a
+		// unit - "" is the bare-count sentinel and would be a lie.
+		return common.Amount{Quantity: formatQuantity(a.total), Unit: string(kind)}
+	}
+
+	large := units.Get(scale.large)
+	canScaleUp := large.IsAbsolute() && large.Factor > 0 && a.total >= large.Factor
+
+	// A single contributing Unit is preserved, except that the base unit still
+	// scales up to the larger one - nobody wants "1100 gram".
+	if a.soleUnit != "" && !(a.soleUnit == scale.base && canScaleUp) {
+		info := units.Get(a.soleUnit)
+		if info.IsAbsolute() && info.Factor > 0 {
+			return common.Amount{
+				Quantity: formatQuantity(a.total / info.Factor),
+				Unit:     a.soleUnit,
+			}
 		}
 	}
 
-	return ingredientList
+	if canScaleUp {
+		return common.Amount{Quantity: formatQuantity(a.total / large.Factor), Unit: scale.large}
+	}
+	return common.Amount{Quantity: formatQuantity(a.total), Unit: scale.base}
 }
 
 // GenerateShoppingList recomputes every Ingredient Item for the given set of Recipes and
@@ -97,7 +252,13 @@ func GenerateShoppingList(recipeIDs []string, userID string, db *sql.DB) (*commo
 		return nil, err
 	}
 
-	combinedIngredients := CombineIngredients(recipes)
+	// Loaded here and passed in, so CombineIngredients stays a pure function.
+	units, err := GetUnitCatalog(db)
+	if err != nil {
+		return nil, err
+	}
+
+	combinedIngredients := CombineIngredients(recipes, units)
 	for name, ingredient := range combinedIngredients {
 		if previous, ok := previousIngredients[name]; ok && previous.IsBought {
 			ingredient.IsBought = true
@@ -201,9 +362,21 @@ func AddIngredientListItems(userID string, ingredients map[string]*common.ListIn
 	sqlStr := "INSERT INTO list(account_id, name, type, quantity, department, is_bought, recipe_id, unit_id) VALUES "
 	vals := []interface{}{}
 
+	// One row per Amount, so an Ingredient Item that couldn't be fully combined
+	// writes several rows sharing a name. `list` has no unique constraint on
+	// name and BuyListItem matches on name alone, so those rows already behave
+	// as one checkbox - no schema change needed.
 	for name, val := range ingredients {
-		sqlStr += "(?, ?, 'ingredient', ?, ?, ?, ?, (SELECT id from unit where name=?)),"
-		vals = append(vals, accountID, name, val.Quantity, val.Department, val.IsBought, val.RecipeID, val.Unit)
+		for _, amount := range val.Amounts {
+			sqlStr += "(?, ?, 'ingredient', ?, ?, ?, ?, (SELECT id from unit where name=?)),"
+			vals = append(vals, accountID, name, amount.Quantity, val.Department, val.IsBought, val.RecipeID, amount.Unit)
+		}
+	}
+
+	// Every Ingredient Item could in principle have had no Amounts at all,
+	// which would leave the statement as a bare INSERT ... VALUES.
+	if len(vals) == 0 {
+		return nil
 	}
 
 	sqlStr = sqlStr[0 : len(sqlStr)-1]
@@ -265,33 +438,43 @@ func GetIngredientListItems(userID string, db *sql.DB) (map[string]*common.ListI
 		return nil, err
 	}
 
-	query := "SELECT list.name as name, unit.name as unit, quantity, department, is_bought as isBought FROM list INNER JOIN unit on unit_id = unit.id WHERE account_id = ? and type = 'ingredient';"
+	// ORDER BY list.id so an Ingredient Item's Amounts come back in the order
+	// they were written, rather than whatever order the storage engine feels
+	// like - otherwise "50 g + 2 tbsp" could render either way round between
+	// requests.
+	query := "SELECT list.name as name, unit.name as unit, quantity, department, is_bought as isBought FROM list INNER JOIN unit on unit_id = unit.id WHERE account_id = ? and type = 'ingredient' ORDER BY list.id;"
 	results, err := db.Query(query, accountID)
 
 	if err != nil {
 		return nil, err
 	}
+	defer results.Close()
 
-	items := make([]ListItem, 0)
-
+	// Several rows can share a name - one per Amount - and collapse back into
+	// one Ingredient Item here.
+	ingredientList := make(map[string]*common.ListIngredient)
 	for results.Next() {
 		item := ListItem{}
 		err = results.Scan(&item.Name, &item.Unit, &item.Quantity, &item.Department, &item.IsBought)
 		if err != nil {
 			return nil, err
 		}
-		items = append(items, item)
-	}
-
-	ingredientList := make(map[string]*common.ListIngredient)
-	for _, item := range items {
-		newItem := common.ListIngredient{
-			Unit:       item.Unit,
-			Quantity:   item.Quantity,
-			Department: item.Department,
-			IsBought:   item.IsBought,
+		existing, ok := ingredientList[item.Name]
+		if !ok {
+			existing = &common.ListIngredient{
+				Amounts:    make([]common.Amount, 0, 1),
+				Department: item.Department,
+				IsBought:   item.IsBought,
+			}
+			ingredientList[item.Name] = existing
 		}
-		ingredientList[item.Name] = &newItem
+		existing.Amounts = append(existing.Amounts, common.Amount{
+			Quantity: item.Quantity,
+			Unit:     item.Unit,
+		})
+	}
+	if err := results.Err(); err != nil {
+		return nil, err
 	}
 
 	return ingredientList, nil
@@ -303,32 +486,32 @@ func GetExtraListItems(userID string, db *sql.DB) (map[string]*common.ListIngred
 	if err != nil {
 		return nil, err
 	}
-	query := "SELECT list.name as name, unit.name as unit, quantity, department, is_bought as isBought FROM list INNER JOIN unit on unit_id = unit.id WHERE account_id = ? and type = 'extra';"
+	query := "SELECT list.name as name, is_bought as isBought FROM list WHERE account_id = ? and type = 'extra' ORDER BY list.id;"
 	results, err := db.Query(query, accountID)
 
 	if err != nil {
 		return nil, err
 	}
+	defer results.Close()
 
-	items := make([]ListItem, 0)
-
+	// An Extra Item is a plain checklist entry - a name and a bought state. Its
+	// row carries placeholder quantity/unit values (AddExtraListItem writes 0
+	// and the blank unit sentinel) which have never meant anything, so they're
+	// not read back and it carries no Amounts at all.
+	extrasList := make(map[string]*common.ListIngredient)
 	for results.Next() {
-		item := ListItem{}
-		err = results.Scan(&item.Name, &item.Unit, &item.Quantity, &item.Department, &item.IsBought)
-		if err != nil {
+		var name string
+		var isBought bool
+		if err := results.Scan(&name, &isBought); err != nil {
 			return nil, err
 		}
-		items = append(items, item)
-	}
-
-	extrasList := make(map[string]*common.ListIngredient)
-	for _, item := range items {
-		newItem := common.ListIngredient{
-			Unit:     item.Unit,
-			Quantity: item.Quantity,
-			IsBought: item.IsBought,
+		extrasList[name] = &common.ListIngredient{
+			Amounts:  make([]common.Amount, 0),
+			IsBought: isBought,
 		}
-		extrasList[item.Name] = &newItem
+	}
+	if err := results.Err(); err != nil {
+		return nil, err
 	}
 	return extrasList, nil
 }

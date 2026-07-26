@@ -9,9 +9,24 @@ INSERT INTO `account_user` (user_id, account_id) VALUES ('local-dev-user', 1);
 
 -- The blank-name row is a deliberate sentinel for "no unit, just a count" (e.g. "2 eggs") -
 -- part.unit_id is NOT NULL, so count-only ingredients still need a real unit row to point to.
-INSERT INTO `unit` (name) VALUES
-  (''), ('gram'), ('kilogram'), ('millilitre'), ('litre'),
-  ('teaspoon'), ('tablespoon'), ('packet'), ('whole'), ('clove'), ('pinch');
+--
+-- kind/factor are set here at insert time rather than left to
+-- migrations/019_unit_kind.sql's UPDATE-by-name. On a fresh database every
+-- migration runs before this file, so that UPDATE has no rows to match and would
+-- silently leave every unit 'relative' - which only shows up when a dev volume is
+-- wiped and rebuilt, not on a normal run. Keep these values in step with 019.
+INSERT INTO `unit` (name, kind, factor) VALUES
+  ('',           'relative', NULL),
+  ('gram',       'weight',      1),
+  ('kilogram',   'weight',   1000),
+  ('millilitre', 'volume',      1),
+  ('litre',      'volume',   1000),
+  ('teaspoon',   'volume',      5),
+  ('tablespoon', 'volume',     15),
+  ('packet',     'relative', NULL),
+  ('whole',      'relative', NULL),
+  ('clove',      'relative', NULL),
+  ('pinch',      'relative', NULL);
 
 INSERT INTO `ingredient` (name) VALUES
   ('Spaghetti'), ('Beef Mince'), ('Onion'), ('Garlic Clove'),

@@ -1,5 +1,7 @@
 # Task to normalize ingredients
 
+
+
 The key purpose of big shop is to be able to make a shopping list that combined ingredients from all of your recipes. The challenge in doing this is:
 1. Different units: ml vs oz vs whatever cups are
 2. Missing units: 200g of tomatoes vs 3 tomatoes
@@ -14,75 +16,371 @@ Here's how I'd approach each of these problems:
 
 ## Current state (why this isn't greenfield)
 
-Before proposing an approach, worth naming what's already there:
+Before proposing an approach, worth naming what's already there. Verified against the
+code and the latest production dump (`backups/pscale_dump_bigshop_main_20240319_213654`)
+as of 2026-07-26.
 
-- **There's a live correctness bug today.** `CombineIngredients` (`netlify-functions/recipes/internal/pkg/app/list.go:18-64`) sums quantities keyed by ingredient **name only** — unit isn't part of the key. Two recipes calling for "1 tablespoon garlic" and "10 gram garlic" get silently summed to `11` under whichever unit was seen first. Only gram↔kilogram and millilitre↔litre are special-cased; every other unit collision is silently wrong, and untested (`list_test.go` only covers those two pairs). `evals/mock-api-server.js` even has a comment admitting real conversion isn't implemented. Fixing this is part of solving problem 1, not a separate task.
-- **`unit` and `ingredient` tables are bare lookups today** — `unit(id, name)`, `ingredient(id, name)`. No unit type (weight/volume/count), no conversion factor, no average weight, no preferred unit. All of problem 2 and 3's data model is new.
-- **Point 1 is mostly already true on the input side.** The manual entry form's unit field is a dropdown sourced from `GET /units` — free text imperial units aren't reachable there. GPT-4 Vision photo extraction already prompts the model to map to the canonical metric-ish unit set or return blank. The gap is the recipe **scrapers** (Epicurious, Delish, Food Network are US sites): their shared `unitMap` (`pages/api/get-ingredients.js:9-16`) only knows g/kg/tbsp/ml/l/tsp — anything else (cup, oz, lb, stick) passes through unconverted and today just gets surfaced as "unmatched" for the user to manually fix via the metric dropdown.
-- **`part.quantity` and `list.quantity` are stored as `varchar(20)`** ("mixed number" per the column comment) and parsed with `strconv.ParseFloat` — a value like `"1 1/2"` fails to parse and the line is silently dropped. Any new conversion math inherits this problem and should fix it rather than build on top of it.
-- **No LLM-classify-a-new-entity pattern exists yet** in this codebase. Problem 3's "use an LLM to pick a default unit" would be new territory, though structurally similar to the existing `recipe-image.mjs` OpenAI call.
+### Problem 1 is already solved at the input boundary — what's left is the aggregation bug
+
+**Imperial no longer gets in.** Recipe Import was unified onto a single LLM extraction
+(`lib/recipe-import/extract.js`) that all three Import Sources call — the per-site
+scrapers and their partial `unitMap` (`pages/api/get-ingredients.js`,
+`pages/api/third-parties/`) **no longer exist**. That prompt already instructs the model
+to: prefer the metric figure when a recipe gives both; convert to metric when *only*
+imperial is given (oz, lb, fl oz, cup, pint, quart); use decimals rather than fractions
+and convert unicode fraction characters; take the midpoint of a range; standardize to the
+units already in use; and return a **blank** unit for a bare count ("3 tomatoes" →
+quantity `3`, unit `""`) rather than inventing a counting unit. Manual Entry's unit field
+is a `<select>` fed by `GET /units` (`components/recipe-form/Form.tsx:312`) — no free
+text.
+
+The one remaining opening is deliberate: `insertUnits` (`service/recipe.go:381`) upserts
+whatever unit string comes back, and the prompt explicitly permits inventing a new unit
+("bunch", "sprig", "head") when nothing existing fits. So the unit vocabulary is still
+open-ended — just no longer *imperial*.
+
+**The aggregation bug, however, is live.** `CombineIngredients`
+(`netlify-functions/recipes/internal/pkg/service/list.go:28-73` — moved out of
+`app/list.go` by the recipe-writes-and-shopping-list-generation-seam work) sums quantities
+keyed by ingredient **name only**; unit is not part of the key. "1 tablespoon garlic" and
+"10 gram garlic" silently sum to `11` under whichever unit was seen first. Only
+gram↔kilogram and millilitre↔litre are handled, via two hardcoded maps; every other unit
+collision is silently wrong. `list_test.go`'s single `TestCombineIngredients` covers only
+those two pairs — there is no test for a mismatched-unit collision at all, and
+`evals/mock-api-server.js:128` carries a comment admitting real conversion isn't
+implemented. A second, quieter defect sits in the same loop: a quantity that fails
+`strconv.ParseFloat` is skipped by an `if err == nil` with no `else`, so an unparseable
+line vanishes from the Shopping List with no error anywhere.
+
+So problem 1 restated for where the code actually is: **make aggregation unit-aware**, not
+"stop imperial getting in".
+
+### The unit vocabulary is tiny; the ingredient set is where the cardinality is
+
+Production has **13 unit rows**: `""` (the blank count sentinel), gram, kilogram,
+millilitre, litre, teaspoon, tablespoon, clove, tin, pinch, packet, bottle, slice —
+against ~300 ingredients and ~930 ingredient lines. Classifying units is therefore a
+hand-curation job measured in minutes, not a problem needing automation. Only the
+ingredient side has enough rows, and enough growth, to justify any.
+
+### The data model for problems 2 and 3 is entirely new
+
+`unit(id, name)` and `ingredient(id, name)` are bare lookups (`migrations/001_init.sql`).
+No unit type (weight/volume/count), no conversion factor, no average weight, no preferred
+unit, no density.
+
+### The Shopping List is keyed by item name, end-to-end
+
+One line per name, carrying exactly one quantity and one unit. `GetShoppingList` returns
+`map[string]*common.ListIngredient`; the frontend renders `Record<string, ListIngredient>`
+and displays a single `{quantity} {unit}` string
+(`components/shopping-list/ShoppingList/Item.tsx:25`); `BuyListItem` toggles bought state
+with `WHERE name = ?` (`service/list.go:342`). CONTEXT.md states this as a domain rule
+("identified by its display name alone").
+
+This matters for design: **"leave the weight lines and the volume lines as two separate
+lines" is not a small change.** It breaks the name-as-key contract in the DB, in the API
+response shape, and in the buy toggle simultaneously. Any approach that gives up on
+merging a group has to either pick one representation anyway, or change that contract on
+purpose.
+
+### Mixed-number quantities are hypothetical, not observed
+
+`part.quantity` and `list.quantity` are `varchar(20)` commented "mixed number", but every
+one of the ~930 production values parses as a plain decimal (`1`, `2`, `0.5`, `0.25`,
+`200`…). Combined with the extraction prompt now forbidding fractions, `"1 1/2"` is a risk
+worth guarding cheaply, not a live problem. The silent drop described above is the real
+defect here — the input format is not.
+
+### An LLM classifier would be this codebase's first Go-side AI call
+
+There is a well-established LLM path (`lib/recipe-import/extract.js`, called by
+`parse-recipe-url.ts`, `parse-recipe-text.ts`, `recipe-image.ts`), but it extracts *a
+recipe from a document* — nothing classifies a Global Catalog row. More constraining:
+every LLM call in this app is a **Next.js API route (Node)**, and the Go module has no
+OpenAI dependency at all, while ingredient creation happens in the **Go** service
+(`insertIngredients`, `service/recipe.go`). "Classify an ingredient when it's created"
+therefore means either introducing OpenAI to the Go service or moving the hook to the
+Next.js side — an architectural choice, not an implementation detail.
+
+### Latent defect in the same code any rewrite will touch
+
+`AddIngredientListItems` stores only the **first** contributing recipe's id per list row,
+and `GetRecipesFromList` derives the list's Recipe set from `SELECT DISTINCT recipe_id`.
+A Recipe whose every ingredient was already contributed by an earlier Recipe would
+therefore leave no row carrying its id, and drop out of the list's recipe set. Rare, and
+pre-existing rather than caused by this work — but it lives in the function being
+rewritten, so it should at least not get worse.
+
+### How bad is the problem, in real numbers
+
+Measured over the production dump: **76 of 300 ingredients (25%) are used with more than
+one Unit**, so this is a routine occurrence rather than an edge case. Grouped by what each
+would need in order to combine:
+
+| Ingredients | Requires | Examples |
+| --- | --- | --- |
+| **18** | nothing — same dimension, pure conversion | tsp↔tbsp (much the most common), g↔kg, ml↔l |
+| **16** | grams per millilitre | flour, butter, caster sugar, breadcrumbs, double cream |
+| **12** | average weight of one | potato, red onion, chicken breast, cabbage, apples |
+| **10** | a decision about `pinch` | parsley, coriander, nutmeg, cinnamon, mint |
+| **8** | count↔volume | white wine, orange juice, rosemary, salt |
+| **7** | pack size | coconut milk (ml×3, tin×3), spinach, salad dressing |
+| **2** | portion size | garlic clove, bay leaf |
+
+Two things follow. The **largest single win needs no new data at all** — teaspoon↔tablespoon
+and g↔kg conversions fix 18 ingredients for free, which is why they're Phase 1 below. And
+**weight↔volume (16) is a bigger category than count↔weight (12)**, even though count↔weight
+is what problem 2 is entirely about and weight↔volume was deferred to a separate
+`density-conversion.md` follow-up. The old plan's priorities were inverted relative to the
+data; the model below collapses both into one mechanism rather than ranking them.
 
 ## Proposed approach
 
-Splitting into phases so each lands independently and the riskiest/most novel piece (the LLM call) isn't a blocker for fixing the bug that exists today.
+### The model
 
-### Phase 1 — Schema foundations
+Four concepts, defined in [CONTEXT.md](../CONTEXT.md) and used verbatim in schema and code:
 
-Extend the two lookup tables with the metadata the later phases need:
+- **Absolute Unit** — fixed size regardless of Ingredient: gram, kilogram, millilitre,
+  litre, teaspoon, tablespoon. Carries a `kind` naming its dimension (weight or volume)
+  and a `factor` into that dimension's base (gram or millilitre).
+- **Relative Unit** — size depends on the Ingredient: the blank count sentinel, clove,
+  slice, tin, packet, bottle, pinch. No factor.
+- **Base Unit** — the Absolute Unit one Ingredient's Amounts are added up in. Gram by
+  default; millilitre for things bought by volume.
+- **Unit Size** — how much one of a given Unit of a given Ingredient comes to, expressed
+  in that Ingredient's Base Unit.
 
-- `unit`: add `unit_type` (`weight` | `volume` | `count`) and `base_factor` (numeric — how many of the table's base unit, e.g. grams for weight, millilitres for volume, one for count, does one of this unit represent). This replaces the two hardcoded conversion maps in `list.go` with data, and lets us add units later (e.g. `stick`, `cup`) without a code change.
-- `ingredient`: add `average_weight_grams` (nullable numeric) and `preferred_unit_id` (nullable FK to `unit`, single value — not varied per use-case). Nullable because the backfill (Phase 3) runs after this migration, not as part of it.
-- Fix `part.quantity` / `list.quantity` parsing to handle fractions/mixed numbers (e.g. via a small parse helper), since half-unit rounding in Phase 2 depends on quantities parsing correctly in the first place.
+The load-bearing idea is that **Unit Size is one relation, not three features**. "One
+potato is 180 g" (average weight), "one tin of coconut milk is 400 ml" (pack size) and
+"one tablespoon of flour is 8 g" (density) are the same question asked about different
+Units. Because the value is stated in the Ingredient's *own* Base Unit, `tin → 400` is
+simultaneously correct for chopped tomatoes (400 g) and coconut milk (400 ml).
 
-### Phase 2 — Rewrite the aggregation algorithm
+A Unit may declare a **default Unit Size** where it genuinely doesn't vary by Ingredient
+(pinch ≈ 0.3, clove ≈ 5, tin ≈ 400); a per-Ingredient value overrides it. Units whose size
+really does vary — packet, bottle, slice, and the blank count — declare no default and are
+strictly per-Ingredient.
 
-Replace `CombineIngredients` with a unit-aware version:
+### Schema
 
-1. Group by `ingredient_id` (not name).
-2. Within a group, split lines into sub-groups by `unit.unit_type` (`weight`, `volume`, `count`) and convert each sub-group to its own base unit using `unit.base_factor` (weight → grams, volume → millilitres, count stays as count). `unit_type` is what makes this safe — grams and millilitres aren't interchangeable without knowing the ingredient's density, so `base_factor` alone can't tell the algorithm which units are compatible to sum directly.
-3. If an ingredient has both a `weight`/`volume` sub-group and a `count` sub-group (e.g. "3 tomatoes" + "150g tomatoes"), use `ingredient.average_weight_grams` to convert the count entries to grams and merge into the weight sub-group. This is the one cross-type conversion this spec adds data for.
-4. If an ingredient has both a `weight` sub-group and a `volume` sub-group (e.g. "50g flour" + "2 tablespoons flour"), **don't merge them** — that needs a density (grams per millilitre) which isn't part of this spec. Keep them as separate shopping-list lines, same "don't silently produce a wrong number" principle as the bug fix itself.
-5. Round each combined total **up** to the nearest whole or half unit before converting back for display (per the spec's "don't combine to 1.3 tomatoes" rule) — e.g. 1.3 tomatoes → 1.5, 1.6 → 2. Rounding up rather than to nearest so the shopper never comes up short.
-6. Display in `ingredient.preferred_unit_id` if set, else fall back to today's gram/kilogram, millilitre/litre scale-up behaviour.
+```sql
+-- Absolute Units get kind + factor; Relative Units get an optional default size.
+-- `kind`, not `dimension`: weight and volume are dimensions, but 'relative' is
+-- the absence of one, and the name still reads correctly if the relative values
+-- are later split into their real sub-kinds (pack, portion, vague).
+ALTER TABLE unit ADD kind ENUM('weight','volume','relative') NOT NULL DEFAULT 'relative';
+ALTER TABLE unit ADD factor       DECIMAL(12,4) NULL;  -- absolute only: into gram / millilitre
+ALTER TABLE unit ADD default_size DECIMAL(12,4) NULL;  -- relative only: default Unit Size
 
-This directly fixes the silent-sum bug from today's implementation, independent of whether Phase 3/4 ship.
+ALTER TABLE ingredient ADD base_unit_id    INT NULL;   -- FK unit; NULL is read as gram
+ALTER TABLE ingredient ADD display_unit_id INT NULL;   -- FK unit; NULL means show in Base Unit
 
-### Phase 3 — LLM default classification, for new ingredients and backfilled onto existing ones
+CREATE TABLE ingredient_unit_size (
+  ingredient_id INT NOT NULL,
+  unit_id       INT NOT NULL,
+  size          DECIMAL(12,4) NOT NULL COMMENT 'one <unit> of <ingredient>, in its base unit',
+  PRIMARY KEY (ingredient_id, unit_id),
+  CONSTRAINT fk_ius_ingredient FOREIGN KEY (ingredient_id) REFERENCES ingredient (id),
+  CONSTRAINT fk_ius_unit       FOREIGN KEY (unit_id)       REFERENCES unit (id)
+);
+```
 
-When an ingredient is created for the first time (manual form save, photo-extraction confirm, or scraper import confirm — all three paths currently call the same ingredient-creation code, so this should hook in at that shared point rather than per-entrypoint), call an LLM once to propose `preferred_unit_id` and `average_weight_grams`. Store as a normal (non-flagged) value — audit is a separate, later concern, not a blocker to ingredients being usable immediately.
+`list` needs **no schema change at all** — it already has `quantity` and `unit_id` per row
+and has no unique constraint on `name`, so an Ingredient Item with two Amounts is simply
+two rows. `BuyListItem`'s `WHERE name = ?` already updates them together, which is exactly
+the desired one-checkbox behaviour.
 
-Once this is in place, run it as a one-off backfill against every existing ingredient too, rather than leaving pre-existing rows `NULL` until next touched — so normalization applies to the whole current ingredient set immediately, not just ingredients created going forward.
+### The algorithm
 
-### Phase 4 — Audit tooling
+`CombineIngredients` is replaced by a **pure** function — catalog data is passed in as an
+argument, never queried inside — so it stays as directly testable as it is today (see
+"Things to get right").
 
-A simple admin-only view listing ingredients with their `preferred_unit`/`average_weight_grams`, editable inline, so the LLM-assigned defaults (both the backfill and new-ingredient classifications from Phase 3) can be corrected over time. Not required for Phase 1-3 to function — ingredients work with LLM-assigned defaults immediately, this just makes them correctable.
+Per Ingredient Line:
 
-### Out of scope for now — density-based conversion
+1. Parse the quantity, accepting decimals, fractions and mixed numbers. **If it can't be
+   parsed, emit it as its own verbatim, unmergeable Amount — never drop it.**
+2. Resolve the Ingredient's Base Unit (default gram).
+3. If the Unit is Absolute *and* in the Base Unit's dimension, convert with `unit.factor`.
+   This is the free path: l→ml, kg→g, tbsp→tsp.
+4. Otherwise look up a Unit Size — the per-Ingredient row first, then the Unit's default.
+   This one path covers Relative Units *and* Absolute Units in the other dimension (a
+   tablespoon of a gram-based ingredient), which is how density stops being a separate
+   feature.
+5. If no Unit Size exists, keep the Amount as its own unmergeable Amount. Honest, and it
+   silently improves the moment a Unit Size is supplied.
 
-Two cases need a notion of ingredient density (grams per millilitre) that this spec doesn't add data for: merging weight/volume sub-groups in Phase 2 (step 4 keeps them as separate lines instead), and scraper import of `cup`/ambiguous `oz`. Split out into [density-conversion.md](./density-conversion.md) as a follow-up spec rather than designed here.
+Then, per Ingredient: sum the convertible Amounts into the Base Unit and render as
+`Display Unit → base amount in brackets` if a Display Unit is set, otherwise in the Base
+Unit, scaling up within the dimension (g→kg, ml→l) as today. Rounding:
+
+- **Relative Display Unit → round up to a whole.** You can't buy 1.5 tins, so a half is
+  never a purchasable instruction. Also guarantees the cook is never left short.
+- **Absolute Display Unit → natural precision**, no half-rounding. 1123 g reads as 1.1 kg.
+
+Any unmergeable Amounts are appended to the same Item.
+
+### Phase 1 — Unit-aware aggregation, no per-ingredient data
+
+Add `kind` and `factor` to `unit` and classify the 13 existing rows. Rewrite the
+aggregator to key on ingredient identity, group by dimension, and convert
+within a dimension via `factor`. Make a Shopping List Item carry one or more Amounts, all
+the way through `common.ListIngredient`, `GetIngredientListItems` (grouping rows by name),
+the TypeScript types and `Item.tsx`. Fix the parse-failure drop.
+
+Ships the live bug fix, merges the 18 same-dimension collisions, and turns the other 58
+from silently wrong into visibly honest — **without a single curated data point.**
+
+### Phase 2 — Base Unit and Unit Size
+
+Add `base_unit_id`, `ingredient_unit_size` and `unit.default_size`. Seed: unit-level
+defaults for pinch/clove/tin, a Base Unit of millilitre for the liquids, and per-ingredient
+Unit Sizes for the ~76 colliding ingredients. Values drafted with LLM help offline, then
+reviewed by a person and committed as a migration.
+
+Most remaining collisions now merge.
+
+### Phase 3 — Display Unit and rounding
+
+Add `display_unit_id`, the round-up rule, and the bracketed base amount in `Item.tsx`.
+This is where "800 g chopped tomatoes" becomes "2 tins (800 g)".
+
+### Phase 4 — Classification for new Ingredients
+
+Extend `lib/recipe-import/extract.js` to return, for ingredient names not in
+`knownIngredients`, a proposed Base Unit / Display Unit / Unit Sizes. These ride along on
+each `common.Ingredient` in the `POST /recipe` payload and are written inside the existing
+save transaction, **only where the existing value is absent**.
+
+The curated seed covers the 300 ingredients that exist; this covers everything new. Since
+`appendIngredients` (`components/recipe-form/Form.tsx:154`) is the only way an ingredient
+row is ever added, and it's fed exclusively by parsed output, every new Ingredient passes
+through this call — there is no path to route around it.
+
+## Decisions made (grilled — do not re-litigate without a load-bearing reason)
+
+- **Normalisation happens at read time.** `part` records what the Recipe said, verbatim,
+  forever; all conversion happens in `GenerateShoppingList`. A corrected Unit Size then
+  improves every existing Recipe with no backfill, and no original data is ever destroyed.
+- **Unit Size is one relation covering average weight, pack size and density**, rather
+  than separate scalars on `ingredient` plus a deferred density feature. Stating the value
+  in the Ingredient's own Base Unit is what makes one relation sufficient.
+- **Base Unit is per-Ingredient, defaulting to gram** — not a global "always grams".
+  Buys free l↔ml for liquids and free kg↔g for solids with zero per-ingredient data.
+- **A Shopping List Item carries one or more Amounts.** When a group can't be merged the
+  line reads "50 g + 2 tbsp" — one line, one checkbox, nothing invented and nothing
+  dropped. Costs no `list` schema change; changes the API response shape and `Item.tsx`.
+- **Unit-level default Unit Sizes exist, overridden per Ingredient.** Rejected both
+  strictly-per-Ingredient (needlessly retypes "pinch = 0.3" ten times) and defaults-only
+  (can't express counts at all, which is problem 2 in its entirety).
+- **Display Unit is a third, separate concept** from Base Unit and Unit Size, and the base
+  amount stays visible in brackets alongside it. Explicitly to defuse the tins-aren't-equal
+  risk: if a tin is really 390 g, the assumption is on screen where it can be judged.
+- **Round up to a whole for Relative Display Units; natural precision for Absolute.** A
+  deliberate departure from the original spec's "full or half units" — halves aren't
+  purchasable, so they'd only be re-rounded in the shopper's head at the shelf.
+- **Curate the seed; classify only what's new.** An LLM drafts the seed offline for human
+  review rather than writing to the database unsupervised; runtime classification is
+  reserved for ingredients that don't exist yet.
+- **Classification is folded into the existing `extract.js` call**, not a new endpoint or a
+  Go-side AI call. The Go module has no OpenAI dependency and shouldn't gain one — holding
+  a write transaction open across a call to OpenAI on Lambda is the worst available option.
+- **Classified data rides on each `common.Ingredient` in the recipe save payload.** Next.js
+  has no database access whatsoever, so the data must travel through the Go API; per-
+  ingredient fields land in the existing transaction, and `insertIngredients` already
+  iterates exactly these.
+- **Unit Sizes are global and single-locale (UK).** Recorded as a known limitation in
+  CONTEXT.md rather than designed around. Recipe Import already metricates on the way in,
+  so the exposure is narrow — Relative Units, chiefly pack sizes.
+- **"Never overwrite a human's value" is enforced as "only write where the value is
+  absent".** No provenance columns in v1: NULL-vs-set fully expresses the only rule that
+  exists, and explicit `curated`/`classified` columns can arrive with the admin panel that
+  would actually display them.
+- **No admin panel in v1.** Curated values live in a seed migration; corrections are SQL.
+  With one user and ~76 rows this is genuinely viable, and it gets the engine in front of
+  you sooner. Expect to want the panel fairly soon.
+- **Four independently shippable phases**, chosen specifically because Phase 1 fixes the
+  live correctness bug without depending on any curated data.
+- **Testing**: Go table tests over the pure aggregator (one per collision category found in
+  the real data), Vitest on `Item.tsx` for multi-Amount and bracket rendering, and an
+  extended `e2e/shopping-list.spec.ts`.
 
 ## Things to get right when building this
 
-Constraints and gotchas worth knowing before (re)building this, independent of any particular implementation.
-
 ### Migration
 
-- A migration that adds the new columns and classifies pre-existing unit rows by name (`gram`, `kilogram`, `millilitre`, `litre`, `teaspoon`, `tablespoon` → their weight/volume type and factor) is enough — every other unit should fall through to the column defaults (`unit_type = 'count'`, `base_factor = 1`) rather than being enumerated explicitly.
-- **Gotcha: an `UPDATE ... WHERE name = ...`-style classification step in a migration only works against a database that already has those rows.** On a freshly-provisioned database, all migrations run before any fixture/seed data is inserted — so a migration that tries to classify rows by name before they exist will silently match nothing. This only shows up when a dev database is wiped and rebuilt from empty, not on every dev run, so it's easy to miss. Any local fixture data needs its classification set directly at insert time rather than relying on the migration's `UPDATE` to backfill it later.
-- The migration needs to be applied to production manually (per this repo's manual-migration workflow) *before or alongside* deploying any code that depends on the new columns — application code should not assume the schema change has landed just because the code has deployed, since deploying first would turn every request touching units/ingredients into a missing-column error rather than a graceful degradation. Verify the classification-by-name will actually match production's real unit rows before relying on it.
+- **An `UPDATE ... WHERE name = ...` classification step in a migration only works against
+  a database that already has those rows.** On a fresh database every migration runs
+  *before* any seed data, so classifying units or ingredients by name matches nothing. This
+  bites Phase 1's unit classification and all of Phase 2's seed. Local fixtures must set
+  these values at insert time in `docker/mysql-seed/dev-seed.sql`; production applies them
+  as a deliberate manual step, after confirming the real rows exist.
+- Per this repo's manual-migration workflow, schema changes must reach production *before*
+  the code depending on them. Deploying first turns every units/ingredients request into a
+  missing-column error rather than degrading gracefully.
+- `unit` has `UNIQUE (name)` (migration 016) and its `id = 1` row is the **blank-name count
+  sentinel**. Classify it as Relative, and never give it a `default_size` — a count means
+  something different for every Ingredient. That row is also what `AddExtraListItem` uses
+  as a placeholder, so it must keep working untouched.
+- `ingredient` has `UNIQUE (name)`, so seeding by name is safe.
 
-### LLM classification of ingredients
+### Huma / OpenAPI
 
-- Whatever runs the classification must complete **within the request** that creates the ingredient, not as a background/fire-and-forget task — this app runs on AWS Lambda, which can freeze the execution environment immediately after a response is sent, so anything still in flight past that point may never resume. Any approach that defers the LLM call needs to account for that platform constraint rather than assuming it'll eventually complete.
-- Classification should only fill gaps, never overwrite a value a human has already corrected — otherwise a manual audit correction can get silently clobbered by a later reclassification.
-- Classifying every *pre-existing* ingredient (as opposed to new ones going forward) should be a deliberate, manually-triggered one-off action rather than something that runs automatically as part of a migration or deploy.
+- **Huma infers required-ness from JSON tags** — `common.Recipe.ID` already carries a
+  comment about exactly this. Every new field on `common.Ingredient` must be `omitempty`
+  (or a pointer), or a save request that omits them fails validation and every existing
+  client breaks.
+- `docs/openapi.yaml` is code-generated; the build's drift check will fail until it's
+  regenerated.
 
 ### Aggregation
 
-- Quantities need to support fractions and mixed numbers (e.g. "1 1/2"), not just plain decimals — this shows up regularly in real recipe data from photo extraction and scrapers. Half-unit rounding depends on quantities parsing correctly in the first place.
-- Don't merge weight and volume quantities for the same ingredient without real density data — keep them as separate shopping-list lines rather than guessing. This is the same "don't silently produce a wrong number" principle that motivates fixing the aggregation bug at all, and is why density-based conversion is deliberately a separate follow-up ([density-conversion.md](./density-conversion.md)) rather than something to guess at here.
+- **Keep the aggregator pure.** The seam spec established the hard way that anything taking
+  a concrete `*sql.DB` cannot be faked in Go — `sql.Row` has no exported constructor. Pass
+  units, Base Units and Unit Sizes in as an argument; load them in `GenerateShoppingList`.
+- Key the grouping on ingredient identity **and** unit. The bug is that unit isn't part of
+  the key at all — not that the key is a name. Name is a sound identity here: `ingredient`
+  has `UNIQUE (name)` (migration 002) and every name the aggregator sees is read back from
+  that table, so name and id are bijective in this data. Keying on name avoids adding an
+  `id` to `common.Ingredient`, which is a request payload as well as a response, for no
+  observable gain. (Corrected during implementation — an earlier draft of this bullet
+  asserted name-keying was "half of the current bug", which was simply wrong.)
+- The is-bought carry-forward matches on name and still works unchanged with several rows
+  per name.
+- `Item.tsx` must keep rendering Extra Items correctly — they pass no `item` at all, and
+  their `list` rows carry placeholder `quantity = 0` and `unit_id = 1`.
+- `evals/mock-api-server.js:128` carries a comment noting conversion isn't implemented;
+  update it and the mock's behaviour alongside the real thing.
+- Don't invent a conversion where no Unit Size exists. Emitting a second Amount is the
+  designed outcome, not a failure — it's the same "never silently produce a wrong number"
+  principle that motivates fixing the bug at all.
 
-### Audit / correction UI
+### Classification
 
-- Since this app has no admin-role concept anywhere, a page for correcting LLM-assigned defaults doesn't need role-gating beyond normal login — just don't link it from primary navigation. Revisit only if the app ever grows a real permissions model.
+- Must complete **within the request**. Lambda can freeze the execution environment the
+  moment a response is sent, so nothing may be left in flight.
+- A classification failure must never fail a recipe save. The gap simply persists, and the
+  list degrades to multiple Amounts — which is a supported state, not an error.
+- Validate what comes back against the `unit` table before writing. A model returning
+  `"cups"` as a Base Unit must be rejected, not upserted into the Global Catalog.
+- The user may delete an ingredient row in the form after extraction; classified data for a
+  name that isn't in the saved payload is simply not written.
 
+## Explicitly out of scope
+
+- **Purchase units and unit-per-purchase ratios.** A garlic bulb has no fixed number of
+  cloves, but you buy bulbs. Worth noting the Ingredient here is literally named "Garlic
+  Clove" and 48 of its 51 lines are a bare count, so the list already reads "6 Garlic
+  Clove" and the shopper infers a bulb perfectly well. This only becomes load-bearing when
+  something has to *order* the garlic automatically.
+- **Locale-scoped or Account-scoped Unit Sizes.** Deferred until there's a second locale to
+  learn the real requirements from; Account-scoping would additionally require revisiting
+  [ADR-0001](../docs/adr/0001-global-ingredient-catalog.md).
+- **The admin panel**, and the `curated`/`classified` provenance columns that only it would
+  display.
+- **Imperial display.** Storing metric leaves the door open, and the original spec is
+  explicit that it isn't wanted.
+- **Backfilling `list.recipe_id` properly** (the latent defect above), and batching
+  `GenerateShoppingList`'s N sequential recipe fetches — both pre-existing, both noted in
+  the seam spec as separate concerns.

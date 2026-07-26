@@ -239,11 +239,24 @@ with a Unit Size of 150 g; stays "75 gram + 1" without one; a lone count stays
 "1"; 1.5 kg + 1 onion scales to 1.65 kilogram.
 
 ## Session 6: Display Unit and rounding (spec Phase 3)
-Status: pending
+Status: done
 Scope: migration for ingredient.display_unit_id; render the total in the Display Unit with the base amount in brackets ("2 tins (800 g)"); round up to a whole for Relative Display Units, natural precision for Absolute.
 Depends on: Session 5
-Commit:
-Notes: Folded into this branch rather than shipped separately - agreed with the
+Commit: (see git log)
+Notes: Applied on read (GetShoppingList) rather than at generation, so a
+corrected Unit Size or Display Unit improves a list already in the database -
+the same read-time principle that keeps `part` verbatim, and it needs no `list`
+schema change.
+
+**Recurring hazard worth remembering:** the bare-count Unit's name is literally
+"", and it has now collided with a sentinel twice - baseTotal.soleUnit in
+Session 5, IngredientInfo.DisplayUnit here (where "" meant both "show as a
+count" and "no Display Unit", so onions silently rendered in grams). Any new
+"unset" signal around Units needs an explicit flag, not an empty string.
+
+Verified live: 1.5 kg of onion + 1 onion -> "11 (1.65 kilogram)".
+
+Folded into this branch rather than shipped separately - agreed with the
 user once live data showed count<->measure is the largest category (32
 ingredients) and includes the most-used ingredients in the database (onion,
 potato, carrot, lemon). Without Display Units, Phase 2 turns "3 onions" into

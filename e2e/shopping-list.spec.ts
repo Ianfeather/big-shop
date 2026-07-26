@@ -113,3 +113,79 @@ test.describe('shopping list', () => {
     await expect(page.getByText('Your shopping list is empty')).toBeVisible();
   });
 });
+
+// Separate from the suite above, with its own fixtures, because that one is
+// serial and deliberately carries list state between tests.
+//
+// This is the case Vitest can't reach: combining happens in the Go service
+// against the real unit table, so only a round trip through the actual API
+// proves the units were classified, loaded and converted correctly.
+test.describe('shopping list unit combining', () => {
+  const runId = Date.now();
+  const mergeable = `e2e mergeable ${runId}`;
+  const unmergeable = `e2e unmergeable ${runId}`;
+  const spoonsRecipeName = `E2E Spoons Recipe ${runId}`;
+  const gramsRecipeName = `E2E Grams Recipe ${runId}`;
+  let spoonsRecipeId: number;
+  let gramsRecipeId: number;
+
+  test.beforeAll(async ({ request }) => {
+    await clearShoppingList(request);
+    spoonsRecipeId = await createRecipe(request, {
+      name: spoonsRecipeName,
+      ingredients: [
+        { name: mergeable, quantity: '2', unit: 'tablespoon' },
+        { name: unmergeable, quantity: '1', unit: 'packet' },
+      ],
+    });
+    gramsRecipeId = await createRecipe(request, {
+      name: gramsRecipeName,
+      ingredients: [
+        { name: mergeable, quantity: '2', unit: 'teaspoon' },
+        { name: unmergeable, quantity: '200', unit: 'gram' },
+      ],
+    });
+  });
+
+  test.afterAll(async ({ request }) => {
+    await clearShoppingList(request);
+    // Note: these deletes currently fail silently for any recipe that reached
+    // the shopping list - see follow-ups.md #24. Harmless here because the e2e
+    // database is recreated per run, and deleteRecipeById doesn't assert.
+    await deleteRecipeById(request, spoonsRecipeId);
+    await deleteRecipeById(request, gramsRecipeId);
+  });
+
+  test('combines Absolute Units of the same kind into one amount', async ({ page }) => {
+    await page.goto('/list');
+    await page.getByRole('checkbox', { name: spoonsRecipeName }).click({ force: true });
+    await page.getByRole('checkbox', { name: gramsRecipeName }).click({ force: true });
+
+    // 2 tablespoon (30ml) + 2 teaspoon (10ml). Before unit-aware aggregation
+    // these were summed to a bare "4" under whichever unit was seen first.
+    await expect(page.getByRole('checkbox', { name: mergeable })).toContainText('40 millilitre');
+  });
+
+  test('keeps units it cannot convert as separate amounts on one line', async ({ page }) => {
+    await page.goto('/list');
+
+    // A packet's size depends on the ingredient, so there is no honest
+    // conversion to grams yet - both amounts stay, on a single checkbox.
+    const item = page.getByRole('checkbox', { name: unmergeable });
+    await expect(item).toContainText('200 gram');
+    await expect(item).toContainText('1 packet');
+    await expect(page.getByRole('checkbox', { name: unmergeable })).toHaveCount(1);
+  });
+
+  test('marks every amount of an item bought from one click', async ({ page }) => {
+    await page.goto('/list');
+    await page.getByRole('checkbox', { name: unmergeable }).click();
+
+    const bought = page.locator('h2', { hasText: 'Already bought' })
+      .locator('..')
+      .getByRole('checkbox', { name: unmergeable });
+    await expect(bought).toHaveAttribute('aria-checked', 'true');
+    await expect(bought).toContainText('200 gram');
+    await expect(bought).toContainText('1 packet');
+  });
+});

@@ -142,8 +142,8 @@ data; the model below collapses both into one mechanism rather than ranking them
 Four concepts, defined in [CONTEXT.md](../CONTEXT.md) and used verbatim in schema and code:
 
 - **Absolute Unit** — fixed size regardless of Ingredient: gram, kilogram, millilitre,
-  litre, teaspoon, tablespoon. Carries a `dimension` (weight or volume) and a `factor`
-  into that dimension's base (gram or millilitre).
+  litre, teaspoon, tablespoon. Carries a `kind` naming its dimension (weight or volume)
+  and a `factor` into that dimension's base (gram or millilitre).
 - **Relative Unit** — size depends on the Ingredient: the blank count sentinel, clove,
   slice, tin, packet, bottle, pinch. No factor.
 - **Base Unit** — the Absolute Unit one Ingredient's Amounts are added up in. Gram by
@@ -165,8 +165,11 @@ strictly per-Ingredient.
 ### Schema
 
 ```sql
--- Absolute Units get dimension + factor; Relative Units get an optional default size.
-ALTER TABLE unit ADD dimension ENUM('weight','volume','relative') NOT NULL DEFAULT 'relative';
+-- Absolute Units get kind + factor; Relative Units get an optional default size.
+-- `kind`, not `dimension`: weight and volume are dimensions, but 'relative' is
+-- the absence of one, and the name still reads correctly if the relative values
+-- are later split into their real sub-kinds (pack, portion, vague).
+ALTER TABLE unit ADD kind ENUM('weight','volume','relative') NOT NULL DEFAULT 'relative';
 ALTER TABLE unit ADD factor       DECIMAL(12,4) NULL;  -- absolute only: into gram / millilitre
 ALTER TABLE unit ADD default_size DECIMAL(12,4) NULL;  -- relative only: default Unit Size
 
@@ -220,8 +223,8 @@ Any unmergeable Amounts are appended to the same Item.
 
 ### Phase 1 — Unit-aware aggregation, no per-ingredient data
 
-Add `dimension` and `factor` to `unit` and classify the 13 existing rows. Rewrite the
-aggregator to key on `ingredient_id` rather than name, group by dimension, and convert
+Add `kind` and `factor` to `unit` and classify the 13 existing rows. Rewrite the
+aggregator to key on ingredient identity, group by dimension, and convert
 within a dimension via `factor`. Make a Shopping List Item carry one or more Amounts, all
 the way through `common.ListIngredient`, `GetIngredientListItems` (grouping rows by name),
 the TypeScript types and `Item.tsx`. Fix the parse-failure drop.

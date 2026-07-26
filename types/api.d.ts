@@ -387,6 +387,8 @@ export interface components {
             users: components["schemas"]["User"][] | null;
         };
         Amount: {
+            baseQuantity?: string;
+            baseUnit?: string;
             quantity: string;
             unit: string;
         };

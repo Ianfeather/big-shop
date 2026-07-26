@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"recipes/internal/pkg/common"
 	"sort"
 	"strconv"
@@ -272,6 +273,85 @@ func divisorFor(unit string, kind UnitKind, units UnitCatalog, info IngredientIn
 	return info.UnitSize(unit, units)
 }
 
+// ApplyDisplayUnits rewrites each Ingredient Item's Amounts into the
+// Ingredient's Display Unit where it has one, keeping the amount it was added
+// up in alongside: "2 tins" carries "800 gram".
+//
+// Applied when the Shopping List is read rather than when it's generated, so a
+// corrected Unit Size or Display Unit improves a list that's already sitting in
+// the database - the same read-time principle that keeps `part` verbatim.
+// Pure: both catalogs are parameters.
+func ApplyDisplayUnits(items map[string]*common.ListIngredient, units UnitCatalog, ingredients IngredientCatalog) {
+	for name, item := range items {
+		info := ingredients.Get(name)
+		if !info.HasDisplayUnit {
+			continue
+		}
+		display, ok := unitsPerBase(info.DisplayUnit, units, info)
+		if !ok {
+			continue
+		}
+		for i, amount := range item.Amounts {
+			if amount.Unit == info.DisplayUnit {
+				continue
+			}
+			base, ok := amountInBaseUnits(amount, units, info)
+			if !ok {
+				// Nothing to convert from - an unparseable quantity, or a Unit
+				// with no Unit Size. Left exactly as it is.
+				continue
+			}
+			item.Amounts[i] = common.Amount{
+				Quantity:     formatDisplayQuantity(base/display, info.DisplayUnit, units),
+				Unit:         info.DisplayUnit,
+				BaseQuantity: amount.Quantity,
+				BaseUnit:     amount.Unit,
+			}
+		}
+	}
+}
+
+// amountInBaseUnits reduces a rendered Amount back to the Ingredient's Base
+// Unit, reporting false when there's no honest way to.
+func amountInBaseUnits(amount common.Amount, units UnitCatalog, info IngredientInfo) (float64, bool) {
+	quantity, ok := ParseQuantity(amount.Quantity)
+	if !ok {
+		return 0, false
+	}
+	per, ok := unitsPerBase(amount.Unit, units, info)
+	if !ok {
+		return 0, false
+	}
+	return quantity * per, true
+}
+
+// unitsPerBase is how many Base Units one of the given Unit is worth - its
+// factor when it shares the Base Unit's dimension, otherwise its Unit Size.
+func unitsPerBase(unit string, units UnitCatalog, info IngredientInfo) (float64, bool) {
+	baseKind := units.Get(info.BaseUnit).Kind
+	if u := units.Get(unit); u.IsAbsolute() && u.Kind == baseKind && u.Factor > 0 {
+		return u.Factor, true
+	}
+	return info.UnitSize(unit, units)
+}
+
+// formatDisplayQuantity rounds a converted total for display.
+//
+// A Relative Display Unit rounds **up to a whole**: you can't buy 1.5 tins or
+// 1.5 chicken breasts, so a fraction is never a purchasable instruction, and
+// rounding up means the cook is never left short. An Absolute one keeps its
+// natural precision - nobody wants weights rounded to half a kilo.
+func formatDisplayQuantity(quantity float64, unit string, units UnitCatalog) string {
+	if units.Get(unit).IsAbsolute() {
+		return formatQuantity(quantity)
+	}
+	whole := math.Ceil(math.Round(quantity*1e6) / 1e6)
+	if whole < 1 {
+		whole = 1
+	}
+	return formatQuantity(whole)
+}
+
 // GenerateShoppingList recomputes every Ingredient Item for the given set of Recipes and
 // returns the refreshed Shopping List. This is a full replace, not an add: every
 // existing Ingredient Item is discarded and recreated from this recipe set; Extra Items
@@ -362,6 +442,19 @@ func GetShoppingList(userID string, db *sql.DB) (*common.ShoppingList, error) {
 		fmt.Println("could not get extra list items")
 		return nil, err
 	}
+
+	// Display Units are applied here rather than when the list is generated, so
+	// correcting a Unit Size or Display Unit improves a Shopping List that's
+	// already been generated. Extras carry no Amounts, so they're untouched.
+	units, err := GetUnitCatalog(db)
+	if err != nil {
+		return nil, err
+	}
+	ingredientCatalog, err := GetIngredientCatalog(db, units)
+	if err != nil {
+		return nil, err
+	}
+	ApplyDisplayUnits(ingredients, units, ingredientCatalog)
 
 	list := &common.ShoppingList{
 		Recipes:     recipes,

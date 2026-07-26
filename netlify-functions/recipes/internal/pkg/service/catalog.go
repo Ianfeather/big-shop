@@ -16,6 +16,16 @@ const DefaultBaseUnit = "gram"
 // Internal to aggregation, so deliberately not in `common` - none of it
 // appears in an API response.
 type IngredientInfo struct {
+	// DisplayUnit is the Unit combined totals are shown in, which is often not
+	// the one they're added up in - you buy tinned tomatoes in tins and onions
+	// by the onion. Never affects arithmetic.
+	//
+	// HasDisplayUnit is separate rather than signalled by an empty DisplayUnit,
+	// because "" is itself a real Unit - the bare-count sentinel, and one of the
+	// most useful Display Units there is ("6 onions"). Overloading the empty
+	// string here would silently mean "show onions in grams".
+	DisplayUnit    string
+	HasDisplayUnit bool
 	// BaseUnit is always an Absolute Unit with factor 1 (gram or millilitre) -
 	// see GetIngredientCatalog, which falls back to gram rather than trusting a
 	// row that says otherwise.
@@ -68,9 +78,12 @@ func GetIngredientCatalog(db *sql.DB, units UnitCatalog) (IngredientCatalog, err
 	catalog := make(IngredientCatalog)
 
 	baseUnits, err := db.Query(`
-		SELECT ingredient.name, unit.name
+		SELECT ingredient.name, base.name, display.name
 		FROM ingredient
-		INNER JOIN unit ON unit.id = ingredient.base_unit_id;
+		LEFT JOIN unit AS base ON base.id = ingredient.base_unit_id
+		LEFT JOIN unit AS display ON display.id = ingredient.display_unit_id
+		WHERE ingredient.base_unit_id IS NOT NULL
+		   OR ingredient.display_unit_id IS NOT NULL;
 	`)
 	if err != nil {
 		return nil, err
@@ -78,9 +91,14 @@ func GetIngredientCatalog(db *sql.DB, units UnitCatalog) (IngredientCatalog, err
 	defer baseUnits.Close()
 
 	for baseUnits.Next() {
-		var ingredient, baseUnit string
-		if err := baseUnits.Scan(&ingredient, &baseUnit); err != nil {
+		var ingredient string
+		var base, display sql.NullString
+		if err := baseUnits.Scan(&ingredient, &base, &display); err != nil {
 			return nil, err
+		}
+		baseUnit := base.String
+		if !base.Valid {
+			baseUnit = DefaultBaseUnit
 		}
 		// A Base Unit has to be something quantities can actually be summed in.
 		// Anything else - a Relative Unit, or an Absolute one that isn't its
@@ -89,7 +107,11 @@ func GetIngredientCatalog(db *sql.DB, units UnitCatalog) (IngredientCatalog, err
 		if info := units.Get(baseUnit); !info.IsAbsolute() || info.Factor != 1 {
 			baseUnit = DefaultBaseUnit
 		}
-		catalog[ingredient] = IngredientInfo{BaseUnit: baseUnit}
+		catalog[ingredient] = IngredientInfo{
+			BaseUnit:       baseUnit,
+			DisplayUnit:    display.String,
+			HasDisplayUnit: display.Valid,
+		}
 	}
 	if err := baseUnits.Err(); err != nil {
 		return nil, err

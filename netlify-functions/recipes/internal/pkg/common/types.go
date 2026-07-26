@@ -63,6 +63,14 @@ type Recipe struct {
 type Amount struct {
 	Quantity string `json:"quantity"`
 	Unit     string `json:"unit"`
+	// BaseQuantity/BaseUnit are the same Amount expressed in the Ingredient's
+	// Base Unit, set only when Quantity/Unit have been converted into a Display
+	// Unit - "2 tins" carries "800 gram" so an approximate Unit Size can't
+	// quietly mislead. Flat fields rather than a nested Amount to keep the
+	// generated OpenAPI schema non-recursive; omitempty so every other Amount
+	// is unchanged.
+	BaseQuantity string `json:"baseQuantity,omitempty"`
+	BaseUnit     string `json:"baseUnit,omitempty"`
 }
 
 // ListIngredient is a subset of shopping List.

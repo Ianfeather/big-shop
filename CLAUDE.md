@@ -188,7 +188,9 @@ migration and the e2e suite keeps running against the old schema — failing in
 ways that look like application bugs (every shopping-list request 500s on a
 missing column, so the list just renders empty) rather than like a stale
 environment. It also stops fixture recipes accumulating across runs, which they
-did, for months, because teardown deletes fail silently (follow-ups.md #24). Covers the core Recipe CRUD and Shopping List flows only
+did, for months, because teardown deletes fail silently (follow-ups.md #24).
+
+The suite covers the core Recipe CRUD and Shopping List flows only
 (add/edit/delete a Recipe; add/remove a Recipe on the list, add an Extra Item,
 mark/un-mark an item bought, clear the list) — Dave, tag-filter browsing, and
 Recipe Import are deliberately out of scope (see the top of `e2e/recipe.spec.ts`

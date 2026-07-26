@@ -16,9 +16,14 @@ import (
 // behaviour, where a failed strconv.ParseFloat was swallowed by an `if err ==
 // nil` with no else and the line silently vanished from the Shopping List.
 //
-// Zero and negative quantities are rejected. Neither is meaningful on a
-// shopping list, and letting a negative through would quietly subtract from
-// whatever it was summed with.
+// Zero is accepted and simply contributes nothing. Rejecting it would be worse
+// than useless: "0" parses perfectly well, so treating it as unreadable would
+// print a verbatim "0 gram" next to the real total rather than quietly adding
+// nothing to it.
+//
+// Negatives are rejected. A negative quantity is meaningless on a shopping
+// list, and accepting one would silently subtract from whatever it was summed
+// with; surfacing it verbatim at least makes the bad data visible.
 func ParseQuantity(raw string) (float64, bool) {
 	s := strings.TrimSpace(raw)
 	if s == "" {
@@ -60,7 +65,7 @@ func ParseQuantity(raw string) (float64, bool) {
 }
 
 func isUsableQuantity(v float64) bool {
-	return v > 0 && !math.IsInf(v, 0) && !math.IsNaN(v)
+	return v >= 0 && !math.IsInf(v, 0) && !math.IsNaN(v)
 }
 
 // formatQuantity renders an accumulated quantity for display, dropping the

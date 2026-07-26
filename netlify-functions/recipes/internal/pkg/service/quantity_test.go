@@ -26,9 +26,11 @@ func TestParseQuantity(t *testing.T) {
 		{"malformed fraction", "1/", 0, false},
 		{"unicode fraction is not supported", "½", 0, false},
 
-		// Neither is meaningful on a shopping list, and a negative would
-		// quietly subtract from whatever it was summed with.
-		{"zero", "0", 0, false},
+		// Zero parses fine and contributes nothing. Rejecting it would print a
+		// verbatim "0 gram" beside the real total instead of adding nothing.
+		{"zero", "0", 0, true},
+		// A negative would silently subtract from whatever it was summed with,
+		// so it's surfaced verbatim instead.
 		{"negative", "-5", 0, false},
 	}
 

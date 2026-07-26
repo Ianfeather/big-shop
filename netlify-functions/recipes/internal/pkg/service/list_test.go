@@ -46,8 +46,41 @@ func TestCombineIngredients(t *testing.T) {
 				ingredient("garlic", "1", "tablespoon"),
 				ingredient("garlic", "10", "gram"),
 			),
+			// Each side keeps its own Unit: neither was ambiguous on its own, and
+			// there's nothing to convert between weight and volume without a
+			// density. What matters is that they are two Amounts, not "11".
 			want: map[string][]common.Amount{
-				"garlic": {{Quantity: "10", Unit: "gram"}, {Quantity: "15", Unit: "millilitre"}},
+				"garlic": {{Quantity: "10", Unit: "gram"}, {Quantity: "1", Unit: "tablespoon"}},
+			},
+		},
+
+		// A line that was never ambiguous must not be rewritten. Converting to
+		// the base unit is only worth doing when Units actually differ.
+		{
+			name:    "a single unit is preserved rather than converted to the base unit",
+			recipes: lines(ingredient("cumin", "1", "teaspoon")),
+			want: map[string][]common.Amount{
+				"cumin": {{Quantity: "1", Unit: "teaspoon"}},
+			},
+		},
+		{
+			name: "several lines sharing one unit keep that unit",
+			recipes: lines(
+				ingredient("olive oil", "2", "tablespoon"),
+				ingredient("olive oil", "3", "tablespoon"),
+			),
+			want: map[string][]common.Amount{
+				"olive oil": {{Quantity: "5", Unit: "tablespoon"}},
+			},
+		},
+		{
+			name: "a single non-base unit still scales by its own factor",
+			recipes: lines(
+				ingredient("stock", "5", "litre"),
+				ingredient("stock", "1", "litre"),
+			),
+			want: map[string][]common.Amount{
+				"stock": {{Quantity: "6", Unit: "litre"}},
 			},
 		},
 
@@ -102,6 +135,42 @@ func TestCombineIngredients(t *testing.T) {
 			),
 			want: map[string][]common.Amount{
 				"chopped tomatoes": {{Quantity: "200", Unit: "gram"}, {Quantity: "2", Unit: "tin"}},
+			},
+		},
+		// count<->weight: 12 ingredients in the real data (potato, red onion,
+		// chicken breast...). Merging these needs an average weight, which is a
+		// Unit Size and therefore Phase 2 - for now they stay honest.
+		{
+			name: "a bare count and a weight stay separate until there is a Unit Size",
+			recipes: lines(
+				ingredient("potato", "3", ""),
+				ingredient("potato", "500", "gram"),
+			),
+			want: map[string][]common.Amount{
+				"potato": {{Quantity: "500", Unit: "gram"}, {Quantity: "3", Unit: ""}},
+			},
+		},
+		// count<->volume: 8 ingredients in the real data.
+		{
+			name: "a bare count and a volume stay separate",
+			recipes: lines(
+				ingredient("white wine", "1", ""),
+				ingredient("white wine", "250", "millilitre"),
+			),
+			want: map[string][]common.Amount{
+				"white wine": {{Quantity: "250", Unit: "millilitre"}, {Quantity: "1", Unit: ""}},
+			},
+		},
+		// weight<->volume: 16 ingredients, the largest category needing data.
+		// Merging these needs a density, which is also a Unit Size (ADR-0004).
+		{
+			name: "weight and volume stay separate without a density",
+			recipes: lines(
+				ingredient("flour", "50", "gram"),
+				ingredient("flour", "2", "tablespoon"),
+			),
+			want: map[string][]common.Amount{
+				"flour": {{Quantity: "50", Unit: "gram"}, {Quantity: "2", Unit: "tablespoon"}},
 			},
 		},
 		{
@@ -166,12 +235,36 @@ func TestCombineIngredients(t *testing.T) {
 				"salt": {{Quantity: "to taste", Unit: ""}},
 			},
 		},
+		// "0" parses fine, so it must contribute nothing rather than being
+		// treated as unreadable and printed verbatim beside the real total.
+		{
+			name: "a zero quantity adds nothing instead of becoming a verbatim amount",
+			recipes: lines(
+				ingredient("pepper", "0", "gram"),
+				ingredient("pepper", "5", "gram"),
+			),
+			want: map[string][]common.Amount{
+				"pepper": {{Quantity: "5", Unit: "gram"}},
+			},
+		},
+		// A negative would silently subtract, so it stays visible instead.
+		{
+			name: "a negative quantity is surfaced verbatim rather than subtracting",
+			recipes: lines(
+				ingredient("sugar", "-5", "gram"),
+				ingredient("sugar", "100", "gram"),
+			),
+			want: map[string][]common.Amount{
+				"sugar": {{Quantity: "100", Unit: "gram"}, {Quantity: "-5", Unit: "gram"}},
+			},
+		},
 
 		{
 			name:    "fractions and mixed numbers parse",
 			recipes: lines(ingredient("butter", "1 1/2", "tablespoon"), ingredient("butter", "1/2", "tablespoon")),
+			// Both lines are tablespoons, so the total stays in tablespoons.
 			want: map[string][]common.Amount{
-				"butter": {{Quantity: "30", Unit: "millilitre"}},
+				"butter": {{Quantity: "2", Unit: "tablespoon"}},
 			},
 		},
 

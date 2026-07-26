@@ -114,12 +114,17 @@ test.describe('shopping list', () => {
   });
 });
 
-// Separate from the suite above, with its own fixtures, because that one is
-// serial and deliberately carries list state between tests.
-//
 // This is the case Vitest can't reach: combining happens in the Go service
 // against the real unit table, so only a round trip through the actual API
 // proves the units were classified, loaded and converted correctly.
+//
+// A separate describe purely so it gets its own fixtures and lifecycle - not
+// because it behaves differently from the suite above. Like that one it is
+// serial and carries state deliberately: the recipe selection made by the
+// first test is what the other two then assert against. Serial mode is
+// inherited from the file-scope configure above (Playwright rejects assigning
+// it twice in one scope), and `fullyParallel: true` in playwright.config.ts
+// means losing it would silently break the two dependent tests.
 test.describe('shopping list unit combining', () => {
   const runId = Date.now();
   const mergeable = `e2e mergeable ${runId}`;

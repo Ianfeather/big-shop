@@ -71,21 +71,17 @@ describe('Item', () => {
   });
 
   it('shows no amount for an Extra Item', () => {
-    const { container } = render(
-      <Item type="extra" name="beer" handleClick={() => {}} />
-    );
+    render(<Item type="extra" name="beer" handleClick={() => {}} />);
 
-    expect(screen.getByText('beer')).toBeInTheDocument();
-    expect(container.querySelector('[class*="amount"]')).toBeNull();
+    // Nothing but the name - asserted on the rendered text rather than a CSS
+    // module class, which is an implementation detail.
+    expect(screen.getByRole('checkbox')).toHaveTextContent(/^beer$/);
   });
 
   it('shows no amount when an ingredient somehow has none', () => {
-    const { container } = render(
-      <Item type="ingredient" name="mystery" handleClick={() => {}} item={item()} />
-    );
+    render(<Item type="ingredient" name="mystery" handleClick={() => {}} item={item()} />);
 
-    expect(screen.getByText('mystery')).toBeInTheDocument();
-    expect(container.querySelector('[class*="amount"]')).toBeNull();
+    expect(screen.getByRole('checkbox')).toHaveTextContent(/^mystery$/);
   });
 
   it('marks a bought item as checked', () => {

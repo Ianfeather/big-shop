@@ -101,18 +101,45 @@ that does not exist in this environment; manual end-to-end verification was
 substituted.
 
 ## Session 2: Unit-aware aggregation with multiple Amounts
-Status: pending
+Status: done
 Scope: service/quantity.go (decimals, fractions, mixed numbers); common.Amount and ListIngredient.Amounts replacing the Unit/Quantity pair; CombineIngredients rewritten as a pure function taking the UnitCatalog, bucketing by unit kind and emitting one Amount per bucket; AddIngredientListItems writes one row per Amount and GetIngredientListItems groups them back by name; openapi.yaml + api.d.ts regenerated; Go table tests per collision category.
 Depends on: Session 1
-Commit:
-Notes: Keyed on ingredient name rather than ingredient_id - a deliberate deviation from the spec's wording, agreed during planning. `ingredient.name` is UNIQUE (migration 002) and every name here comes from that table, so it is already a canonical identity; adding an `id` to `common.Ingredient` would change a request payload for no observable gain.
+Commit: 86c9ca4
+Notes: Keyed on ingredient name rather than ingredient_id - a deliberate
+deviation from the spec's wording, agreed during planning. `ingredient.name`
+is UNIQUE (migration 002) and every name here comes from that table, so it is
+already a canonical identity; adding an `id` to `common.Ingredient` would
+change a request payload for no observable gain.
 
-## Session 3: Frontend rendering and end-to-end coverage
+**Scope adjustment:** the frontend changes needed to keep the tree compiling
+(Item.tsx rendering Amounts, list.tsx, the ShoppingList fixtures) were folded
+into this session rather than left to Session 3. Changing ListIngredient's
+shape breaks the frontend by construction, so splitting them would have left
+an intermediate commit where `npm run typecheck` fails. Session 3 is therefore
+new *coverage* and the mock/eval surfaces, not the contract catch-up.
+
+Test gate: Go 12 tests / 56 subtests; frontend 27 files / 98 tests; typecheck
+and lint clean; no OpenAPI or api.d.ts drift. Verified end-to-end against a
+live API + MySQL, not only in unit tests: 1 tbsp + 10 g garlic -> "10 gram +
+15 millilitre" (the exact case that used to read "11 tablespoon"); 500 g + 1 kg
+-> "1.5 kilogram"; 2 tin + 200 g -> two Amounts on one row, toggling bought
+together from a single PATCH by name and surviving a regenerate; "1 1/2
+tablespoon" -> "22.5 millilitre"; "a handful" kept verbatim instead of
+vanishing. Test data cleaned out of the dev DB afterwards.
+
+Found and recorded follow-up #24 while cleaning up: a Recipe that has ever been
+added to a Shopping List cannot be deleted (DeleteRecipe misses
+shopping_list_event, which has an FK to recipe). Pre-existing and user-facing;
+masked in CI because e2e/api.ts's deleteRecipeById ignores the response status.
+Not fixed here - out of Phase 1 scope, and it needs a deliberate decision about
+whether deleting a Recipe should erase its Dave history.
+
+## Session 3: Coverage for multiple Amounts, and the mock surfaces
 Status: pending
-Scope: Item.tsx renders Amounts joined with "+", suppressing the blank count unit; pages/list.tsx buildMockIngredients and mocks/ updated to the new shape; evals/mock-api-server.js conversion comment and behaviour; Vitest for merged and unmerged Amounts; e2e/shopping-list.spec.ts extended with a mixed-unit scenario.
+Scope: Vitest on Item.tsx for a merged single Amount, an unmerged "50 g + 2 tbsp", and the blank bare-count unit; evals/mock-api-server.js conversion comment and behaviour; mocks/ if the new shape reaches them; e2e/shopping-list.spec.ts extended with a mixed-unit scenario proving the merge through the real API.
 Depends on: Session 2
 Commit:
-Notes:
+Notes: Reduced from the original plan - the Item.tsx/list.tsx/fixture changes moved into Session 2 (see its scope adjustment). Watch out for follow-up #24 when writing the e2e scenario: recipe teardown silently fails for any recipe that reached the shopping list.
 
 ## Session 4: Base Unit and Unit Size (spec Phase 2)
 Status: pending

@@ -50,10 +50,20 @@ run_mysqldump() {
   # unlocked read here is no less consistent than what --single-transaction
   # would have given, and it avoids relying on LOCK TABLES/FLUSH TABLES WITH
   # READ LOCK privileges a TiDB Cloud user may not even have.
+  # --complete-insert: emit `INSERT INTO t (col, col, ...) VALUES ...` rather
+  # than a bare `INSERT INTO t VALUES ...`. Essential given --no-create-info,
+  # because the local schema is routinely *ahead* of production - that's the
+  # normal state while a migration is being developed. A positional INSERT
+  # carries production's column count and fails against a local table that has
+  # gained a column, with "Column count doesn't match value count at row 1".
+  # With explicit column names the local-only columns simply take their
+  # defaults, which is exactly right: a column production doesn't have yet has
+  # no value to sync.
   docker run --rm -e MYSQL_PWD="$TIDB_PASSWORD" mysql:8.0 \
     mysqldump -h "$TIDB_HOST" -P "$TIDB_PORT" -u "$TIDB_USER" \
     --ssl-mode=REQUIRED \
     --no-create-info \
+    --complete-insert \
     --skip-lock-tables \
     --set-gtid-purged=OFF \
     "$@"
@@ -85,6 +95,13 @@ done
 
 echo "Clearing existing recipe-related tables locally..."
 echo "(any local-only test data in these tables will be lost)"
+# Deliberately NOT truncating ingredient_unit_size: Unit Sizes are curated
+# local seed data (see specs/unit-normalisation.md), not production data, so a
+# sync should preserve them. They keep pointing at the right rows because the
+# import carries production's ingredient ids verbatim. The one rough edge: a
+# Unit Size for an ingredient production no longer has would be left orphaned,
+# since FK checks are off across the truncate - harmless until something tries
+# to enforce them.
 docker compose exec -T db mysql -uroot -proot bigshop -e "
   SET FOREIGN_KEY_CHECKS=0;
   TRUNCATE TABLE recipe_tag;

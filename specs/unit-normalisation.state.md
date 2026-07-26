@@ -1,25 +1,29 @@
 ---
 spec: specs/unit-normalisation.md
 status: in-progress
-branch: implement/unit-normalisation
-pr: https://github.com/Ianfeather/big-shop/pull/63
+branch: implement/unit-normalisation-phase-2
+pr:
 ---
 
-**Deployment order (do not lose before the PR merges):** migration 019 must be
-applied to production *before* Session 2's code deploys. Session 1 alone is safe to
-ship in either order because nothing calls `GetUnitCatalog` yet; from Session 2 on,
-code without the migration fails with `Unknown column 'kind'`.
+**Deployment order (applies to every phase of this spec):** each phase's migration must
+reach production *before* the code that reads its columns. Phase 1's migration 019 is
+applied and its code is merged, so that one is settled. Phase 2 adds columns that
+`CombineIngredients` will read, so the same rule applies again - migration first, then
+merge. The migration is additive and backward-compatible with the running code, so
+applying it ahead of the merge has no outage window; merging first does, because Netlify
+auto-deploys on push to master.
 
-This run covers **Phase 1 only** (Sessions 1-3), per the user's `/implement phase 1`.
-Sessions 4-6 map to the spec's Phases 2-4 and are left `pending` so a later run resumes
-cleanly from step 1 of the implement skill.
+Apply production migrations by piping the file directly, **never** through anything using
+`mysql --force`: it skips failing statements, so a failed ALTER would leave the following
+UPDATEs silently matching nothing.
 
-Branch point: `cb6eff6` (the spec/design commit).
+Branch point for Phase 1: `cb6eff6` (the spec/design commit).
+Branch point for Phase 2: `8e594f0` (the Phase 1 merge).
 
-**PR #63 is open covering Session 1 only** - opened early at the user's request rather
-than at the end of the run, so the schema layer can land in master while Sessions 2-3
-continue. Overall status stays `in-progress`: the spec is not complete, so this spec and
-state file do NOT move to `specs/completed/` yet.
+**Phase 1 (Sessions 1-3) is merged** - PR #63, squashed onto master as `8e594f0`, and
+migration 019 has been applied to production. Sessions 4-6 continue on a new branch,
+`implement/unit-normalisation-phase-2`, branched from that merge. Overall status stays
+`in-progress`: the spec is not complete, so it does NOT move to `specs/completed/` yet.
 
 ## Session 1: Unit kinds and factors
 Status: done

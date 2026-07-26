@@ -38,6 +38,12 @@ const (
 type UnitInfo struct {
 	Kind   UnitKind
 	Factor float64
+	// DefaultSize is a Unit Size to fall back on for Relative Units whose size
+	// genuinely doesn't vary by Ingredient - a pinch is a pinch. 0 means none,
+	// which is the right answer for packet, bottle, slice and the bare count,
+	// where the size depends entirely on what's being measured. Always
+	// overridden by a Unit Size curated for a specific Ingredient.
+	DefaultSize float64
 }
 
 // IsAbsolute reports whether one of this Unit is the same size whatever it
@@ -74,7 +80,7 @@ func (c UnitCatalog) Get(name string) UnitInfo {
 // passing into CombineIngredients. The aggregation itself stays pure - it takes
 // this as an argument and never queries.
 func GetUnitCatalog(db *sql.DB) (UnitCatalog, error) {
-	results, err := db.Query("SELECT name, kind, factor FROM unit;")
+	results, err := db.Query("SELECT name, kind, factor, default_size FROM unit;")
 	if err != nil {
 		return nil, err
 	}
@@ -84,8 +90,8 @@ func GetUnitCatalog(db *sql.DB) (UnitCatalog, error) {
 	for results.Next() {
 		var name string
 		var kind UnitKind
-		var factor sql.NullFloat64
-		if err := results.Scan(&name, &kind, &factor); err != nil {
+		var factor, defaultSize sql.NullFloat64
+		if err := results.Scan(&name, &kind, &factor, &defaultSize); err != nil {
 			return nil, err
 		}
 		// A row claiming to be Absolute with no factor can't actually be
@@ -98,6 +104,9 @@ func GetUnitCatalog(db *sql.DB) (UnitCatalog, error) {
 			info.Factor = factor.Float64
 		} else {
 			info.Kind = KindRelative
+		}
+		if defaultSize.Valid {
+			info.DefaultSize = defaultSize.Float64
 		}
 		catalog[name] = info
 	}

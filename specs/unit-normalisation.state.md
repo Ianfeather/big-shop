@@ -201,23 +201,51 @@ Judgement calls not acted on, with reasons:
   back short. Left alone rather than restructuring the read path on a
   hypothetical.
 
-## Session 4: Base Unit and Unit Size (spec Phase 2)
-Status: pending
-Scope: base_unit_id, ingredient_unit_size, unit.default_size, and the curated seed for the ~76 colliding ingredients.
+## Session 4: Phase 2 schema (Unit Size)
+Status: done
+Scope: migrations/020_unit_size.sql - unit.default_size, ingredient.base_unit_id, and the ingredient_unit_size table. No values seeded.
 Depends on: Session 3
-Commit:
-Notes: Out of scope for this run.
+Commit: 4fe0998
+Notes: Applied to the local dev DB. Not yet applied to production - it must go
+in before Session 5's code merges, per the deployment-order note above.
 
-## Session 5: Display Unit and rounding (spec Phase 3)
+Same commit fixes scripts/sync-from-prod.sh, which would have failed against
+this migration: mysqldump --no-create-info emits a positional INSERT carrying
+production's column count, so any locally-added column breaks the import with
+"Column count doesn't match value count". --complete-insert fixes it for this
+migration and every future one, since local is always ahead of prod while a
+migration is in development. Verified by simulating both table shapes locally.
+
+## Session 5: Aggregator uses Base Unit and Unit Size
 Status: pending
-Scope: display_unit_id, round-up-to-whole for Relative Display Units, bracketed base amount in Item.tsx.
+Scope: an IngredientCatalog loader (base unit + unit sizes, keyed by ingredient name); CombineIngredients converts everything it can into the ingredient's Base Unit rather than bucketing per unit kind; a Unit Size resolves per-ingredient first, then the Unit's default; anything with no Unit Size stays a separate Amount exactly as today. Single-unit preservation from Phase 1 carries over.
 Depends on: Session 4
 Commit:
-Notes: Out of scope for this run.
+Notes:
 
-## Session 6: Classification for new Ingredients (spec Phase 4)
+## Session 6: Display Unit and rounding (spec Phase 3)
 Status: pending
-Scope: extract.js proposes Base Unit / Display Unit / Unit Sizes for unseen ingredient names; carried on common.Ingredient in the save payload; written only where absent.
+Scope: migration for ingredient.display_unit_id; render the total in the Display Unit with the base amount in brackets ("2 tins (800 g)"); round up to a whole for Relative Display Units, natural precision for Absolute.
 Depends on: Session 5
 Commit:
-Notes: Out of scope for this run.
+Notes: Folded into this branch rather than shipped separately - agreed with the
+user once live data showed count<->measure is the largest category (32
+ingredients) and includes the most-used ingredients in the database (onion,
+potato, carrot, lemon). Without Display Units, Phase 2 turns "3 onions" into
+grams, so the two only read correctly together.
+
+## Session 7: Curated data seed
+Status: pending
+Scope: draft Base Units, Display Units and Unit Sizes for the colliding ingredients against live data; put them to the user for review; commit the reviewed values as a migration.
+Depends on: Session 6
+Commit:
+Notes: The review step is the point of this session - per the spec's decisions,
+an LLM drafts and a person approves, rather than values being written
+unsupervised. Live data to curate against: 120 colliding ingredients of 436.
+
+## Session 8: Classification for new Ingredients (spec Phase 4)
+Status: pending
+Scope: extract.js proposes Base Unit / Display Unit / Unit Sizes for unseen ingredient names; carried on common.Ingredient in the save payload; written only where absent.
+Depends on: Session 7
+Commit:
+Notes: Not in this run.

@@ -217,11 +217,26 @@ migration and every future one, since local is always ahead of prod while a
 migration is in development. Verified by simulating both table shapes locally.
 
 ## Session 5: Aggregator uses Base Unit and Unit Size
-Status: pending
+Status: done
 Scope: an IngredientCatalog loader (base unit + unit sizes, keyed by ingredient name); CombineIngredients converts everything it can into the ingredient's Base Unit rather than bucketing per unit kind; a Unit Size resolves per-ingredient first, then the Unit's default; anything with no Unit Size stays a separate Amount exactly as today. Single-unit preservation from Phase 1 carries over.
 Depends on: Session 4
-Commit:
-Notes:
+Commit: (see git log)
+Notes: Two design corrections worth remembering.
+
+(1) A first attempt made Base Unit one bucket per Ingredient defaulting to
+gram, which quietly broke volume-only ingredients - tsp+tbsp of soy sauce
+stopped combining because volume no longer matched the default weight base,
+undoing a Phase 1 conversion. Totals are kept per Absolute kind instead, with
+Unit Sizes bridging into the Ingredient's own kind. The existing tests caught
+it.
+
+(2) Phase 1 signalled "units differed" with an empty soleUnit. Safe while only
+Absolute Units entered the bucket; not once Relative Units do, because the
+bare-count Unit's name is literally "". Needed an explicit `mixed` flag.
+
+Verified live against synced production data: 1 onion + 75 g merges to 225 gram
+with a Unit Size of 150 g; stays "75 gram + 1" without one; a lone count stays
+"1"; 1.5 kg + 1 onion scales to 1.65 kilogram.
 
 ## Session 6: Display Unit and rounding (spec Phase 3)
 Status: pending

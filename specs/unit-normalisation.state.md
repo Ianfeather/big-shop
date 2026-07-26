@@ -2,7 +2,7 @@
 spec: specs/unit-normalisation.md
 status: in-progress
 branch: implement/unit-normalisation
-pr:
+pr: https://github.com/Ianfeather/big-shop/pull/63
 ---
 
 **Deployment order (do not lose before the PR merges):** migration 019 must be
@@ -16,6 +16,11 @@ cleanly from step 1 of the implement skill.
 
 Branch point: `cb6eff6` (the spec/design commit).
 
+**PR #63 is open covering Session 1 only** - opened early at the user's request rather
+than at the end of the run, so the schema layer can land in master while Sessions 2-3
+continue. Overall status stays `in-progress`: the spec is not complete, so this spec and
+state file do NOT move to `specs/completed/` yet.
+
 ## Session 1: Unit kinds and factors
 Status: done
 Scope: migrations/019_unit_kind.sql adds `kind` + `factor` to `unit` and classifies the six Absolute Units by name; docker/mysql-seed/dev-seed.sql sets them at insert time (migrations run before seed data on a fresh DB, so the migration's UPDATE-by-name matches nothing there); service/units.go gains a UnitCatalog loader. No behaviour change.
@@ -28,9 +33,9 @@ path in an isolated throwaway compose project (COMPOSE_PROJECT_NAME=
 bigshop-migcheck, torn down with -v afterwards, so the local dev volume and
 its non-seed recipe survived), the existing-database path applied to the
 local dev DB. GetUnitCatalog run against the real schema via a throwaway
-main to confirm DECIMAL scans into sql.NullFloat64 and ENUM into string,
-and that the unknown-unit fallback returns Relative; throwaway deleted.
-All of the above re-run after the rename.
+main to confirm DECIMAL and ENUM scan correctly and that the unknown-unit
+fallback returns Relative; throwaway deleted. All of the above re-run after
+the rename, and again after the review fixes changed the scan.
 
 Review gate: the code-review skill's parallel sub-agents initially died on
 transient API 529s (four attempts), so a self-review ran first; the real
@@ -58,8 +63,9 @@ category error - weight and volume are dimensions, 'relative' is the
 absence of one. Renamed to `kind` after discussion with the user, and the
 spec updated to match. Done before any merge, so no second migration was
 needed. The related trap (every Relative Unit shares KindRelative, so a tin
-and a pinch compare equal on Kind alone) is now documented on UnitInfo:
-callers must check Factor.Valid, not Kind alone.
+and a pinch compare equal on Kind alone) was first documented as a comment
+on UnitInfo and then, after the review, encoded properly as IsAbsolute() -
+two Units combine when both IsAbsolute() and their Kinds match.
 
 Also noted: one review sub-agent edited .claude/skills/implement/SKILL.md
 before dying (removing the reference to the nonexistent `verify` skill).

@@ -176,6 +176,16 @@ func CombineIngredients(recipes []common.Recipe, units UnitCatalog, ingredients 
 				// mechanism.
 				t.bucket(t.baseKind).add(line.Unit, quantity*size)
 			case unit.IsAbsolute():
+				if density, ok := info.UnitSize(kindBaseUnit[unit.Kind], units); ok {
+					// A Unit Size on the *other* dimension's base unit is a
+					// density ("one millilitre of flour is 0.53g"), and every
+					// Unit of that dimension derives from it - so curating one
+					// value covers teaspoon, tablespoon and millilitre at once
+					// rather than needing a row each, which is both less work
+					// and impossible to leave half-done.
+					t.bucket(t.baseKind).add(line.Unit, quantity*unit.Factor*density)
+					break
+				}
 				// Absolute but a different dimension, with no density to bridge
 				// it. Still combines with its own kind, so tsp+tbsp merge even
 				// when nothing has been curated for this Ingredient.
@@ -329,10 +339,20 @@ func amountInBaseUnits(amount common.Amount, units UnitCatalog, info IngredientI
 // factor when it shares the Base Unit's dimension, otherwise its Unit Size.
 func unitsPerBase(unit string, units UnitCatalog, info IngredientInfo) (float64, bool) {
 	baseKind := units.Get(info.BaseUnit).Kind
-	if u := units.Get(unit); u.IsAbsolute() && u.Kind == baseKind && u.Factor > 0 {
+	u := units.Get(unit)
+	if u.IsAbsolute() && u.Kind == baseKind && u.Factor > 0 {
 		return u.Factor, true
 	}
-	return info.UnitSize(unit, units)
+	if size, ok := info.UnitSize(unit, units); ok {
+		return size, true
+	}
+	// Cross-dimension: derive from the Ingredient's density, if it has one.
+	if u.IsAbsolute() && u.Factor > 0 {
+		if density, ok := info.UnitSize(kindBaseUnit[u.Kind], units); ok {
+			return u.Factor * density, true
+		}
+	}
+	return 0, false
 }
 
 // formatDisplayQuantity rounds a converted total for display.

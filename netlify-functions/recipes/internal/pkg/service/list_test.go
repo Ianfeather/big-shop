@@ -449,3 +449,25 @@ func TestCombineIngredientsEmptyInput(t *testing.T) {
 		t.Errorf("expected no ingredients but got %v", got)
 	}
 }
+
+// A Unit Size on the other dimension's base unit is a density, and every Unit
+// of that dimension derives from it - so one curated value covers millilitre,
+// teaspoon and tablespoon rather than needing a row each.
+func TestCombineIngredientsDerivesVolumeUnitsFromDensity(t *testing.T) {
+	recipes := lines(
+		ingredient("plain flour", "100", "gram"),
+		ingredient("plain flour", "2", "tablespoon"), // 30ml
+		ingredient("plain flour", "1", "teaspoon"),   // 5ml
+	)
+	catalog := IngredientCatalog{
+		"plain flour": {BaseUnit: "gram", UnitSizes: map[string]float64{"millilitre": 0.53}},
+	}
+
+	got := CombineIngredients(recipes, testUnits(), catalog)["plain flour"].Amounts
+
+	// 100g + 30ml*0.53 + 5ml*0.53 = 100 + 15.9 + 2.65
+	want := []common.Amount{{Quantity: "118.55", Unit: "gram"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("expected %v but got %v", want, got)
+	}
+}

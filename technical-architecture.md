@@ -120,7 +120,6 @@ NEXT_PUBLIC_AUTH0_CLIENT_ID=HxkTOH3ZYxjbsgrVI4ii1CV2TQx7hk9G
 NEXT_PUBLIC_AUTH0_AUDIENCE=https://big-shop-api
 NEXT_PUBLIC_HOST=http://localhost:3000
 DISABLE_AUTH=false
-USE_MOCKS=false
 ```
 
 **Production (`.env.production`):**

@@ -10,7 +10,6 @@ import { LoginButton } from '@components/identity/login';
 import { CreateAccountButton } from '@components/identity/create';
 import type { User } from '../types/models';
 
-const useMocks = process.env.NEXT_PUBLIC_USE_MOCKS === 'true';
 
 const OnboardingState = () => (
   <Button type="link" href="/list" style="primary">Start building your shopping list</Button>
@@ -26,9 +25,9 @@ const LoggedOutState = () => (
 const Index = () => {
   const { isAuthenticated, isLoading, user, getAccessTokenSilently } = useAuth0();
   const router = useRouter();
-  // null while we're still checking onboarded status (or mocks bypass isn't
-  // resolved yet) - kept blank rather than flashing the marketing copy at an
-  // already-onboarded user who's about to be redirected to /list.
+  // null while we're still checking onboarded status - kept blank rather than
+  // flashing the marketing copy at an already-onboarded user who's about to be
+  // redirected to /list.
   const [status, setStatus] = useState<'onboarding' | 'redirecting' | null>(null);
 
   const saveUserMutation = useMutation({
@@ -47,11 +46,6 @@ const Index = () => {
 
   useEffect(() => {
     if (isLoading || !isAuthenticated) return;
-
-    if (useMocks) {
-      setStatus('onboarding');
-      return;
-    }
 
     async function resolveOnboarding() {
       if (!user) return;

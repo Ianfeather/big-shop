@@ -1,10 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import useAuth from './use-auth';
 import { apiGet } from '../lib/api-client';
-import mocks from '../mocks';
 import type { Recipe } from '../types/models';
 
-const useMocks = process.env.NEXT_PUBLIC_USE_MOCKS === 'true';
 
 const bareRecipe: Partial<Recipe> = { tags: [], ingredients: [] };
 
@@ -22,9 +20,6 @@ const useRecipe = (id: string | number | undefined) => {
     // - skip the fetch/mock lookup entirely rather than looking up "undefined".
     enabled: id !== undefined,
     queryFn: async () => {
-      if (useMocks) {
-        return mocks.recipes.find(r => String(r.id) === String(id) || r.slug === id) ?? null;
-      }
       const token = await getAccessTokenSilently();
       return apiGet<Recipe>(`/recipe/${id}`, token);
     }

@@ -77,31 +77,12 @@ when done — don't run bare `docker compose down`/migrations/`exec` against
 whatever project happens to already be running unless you've confirmed via
 `docker inspect` that it's actually this worktree's stack.
 
-**Faster-but-shallower path — JSON mocks, no backend at all:**
-1. In `.env.local`, set:
-   - `NEXT_PUBLIC_DISABLE_AUTH=true` — both `pages/_app.js` and every consumer of
-     `hooks/use-auth.js` (a thin wrapper around `@auth0/auth0-react`'s `useAuth0`)
-     resolve to a fixed mock user instead of mounting the real `Auth0Provider`.
-     Must be `NEXT_PUBLIC_`-prefixed — Next.js strips non-prefixed env vars from
-     the client bundle, so an unprefixed flag only takes effect during SSR and
-     causes a hydration mismatch (this bit us once: `/list` would flash its
-     content then get redirected back to `/`).
-   - `NEXT_PUBLIC_USE_MOCKS=true` — serves canned data from `mocks/*.json`
-     instead of calling the Go API, for `/recipes`, `/list`, and the new-recipe
-     form's unit dropdown and tag picker. Mutations (save/delete recipe,
-     invites, account) still hit the real API even with mocks on.
-
-     There is no ingredient autosuggest, and no `mocks/ingredients.json`. The
-     canonical Ingredient/Unit names that Recipe Import feeds the model — the
-     list that stops it coining a second name for something the catalog
-     already has — are read from the database inside the API routes, by
-     `lib/recipe-import/known-names.ts`, on every request. The client is not
-     asked for them and cannot override them, in any mode. That means import
-     under mocks still canonicalises against real data, which matters because
-     saving hits the real API even with mocks on, so a mock-mode import writes
-     genuine rows.
-
-2. `npm run dev` — no Docker, no DB, no Go API needed at all.
+**There is no mocks mode.** `NEXT_PUBLIC_USE_MOCKS` and `mocks/*.json` are gone
+— `npm run dev:full` made them redundant, and they had started to mislead: the
+mock Shopping List reimplemented ingredient combining, incorrectly and by its
+own admission, right through the work that made real combining correct. Run
+against the real stack, or against a synced copy of production
+(`scripts/sync-from-prod.sh`).
 
 **Manual path** (what `dev:full` automates, useful if you want the API/DB
 outside Docker): `go run . dev` inside `netlify-functions/recipes/` starts a

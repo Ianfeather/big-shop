@@ -48,6 +48,7 @@ func getIngredientsByRecipeID(id int, db *sql.DB) ([]common.Ingredient, error) {
 		log.Println(err)
 		return nil, err
 	}
+	defer results.Close()
 
 	for results.Next() {
 		var department sql.NullString
@@ -89,6 +90,7 @@ func GetRecipeBySlug(slug string, userID string, db *sql.DB) (*common.Recipe, er
 		log.Println("Error querying recipe")
 		return nil, err
 	}
+	defer results.Close()
 	for results.Next() {
 		var remoteURL sql.NullString
 		var notes sql.NullString
@@ -160,6 +162,7 @@ func GetRecipeByID(id int, userID string, db *sql.DB) (*common.Recipe, error) {
 		log.Println("Error querying recipe")
 		return nil, err
 	}
+	defer results.Close()
 
 	for results.Next() {
 		var remoteURL sql.NullString

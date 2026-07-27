@@ -38,6 +38,7 @@ func GetInvites(db *sql.DB, email string) (i []common.Invite, e error) {
 		log.Println(err)
 		return nil, err
 	}
+	defer results.Close()
 
 	invites := make([]common.Invite, 0)
 
@@ -48,6 +49,9 @@ func GetInvites(db *sql.DB, email string) (i []common.Invite, e error) {
 			return nil, err
 		}
 		invites = append(invites, invite)
+	}
+	if err := results.Err(); err != nil {
+		return nil, err
 	}
 	return invites, nil
 

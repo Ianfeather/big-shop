@@ -11,6 +11,7 @@ func GetAllTags(db *sql.DB) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer results.Close()
 
 	tags := []string{}
 
@@ -21,6 +22,9 @@ func GetAllTags(db *sql.DB) ([]string, error) {
 			return nil, err
 		}
 		tags = append(tags, tag)
+	}
+	if err := results.Err(); err != nil {
+		return nil, err
 	}
 	return tags, nil
 }

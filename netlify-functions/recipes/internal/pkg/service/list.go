@@ -598,6 +598,7 @@ func GetRecipesFromList(userID string, db *sql.DB) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer results.Close()
 
 	recipes := make([]string, 0)
 	for results.Next() {

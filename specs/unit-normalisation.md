@@ -17,8 +17,10 @@ Here's how I'd approach each of these problems:
 ## Current state (why this isn't greenfield)
 
 Before proposing an approach, worth naming what's already there. Verified against the
-code and the latest production dump (`backups/pscale_dump_bigshop_main_20240319_213654`)
-as of 2026-07-26.
+code and, at the time of writing, the 2024 production dump
+(`backups/pscale_dump_bigshop_main_20240319_213654`). **The figures below were later
+re-measured against live data** synced on 2026-07-26 - see "How bad is the problem" for
+the corrected numbers, which differ enough to have changed the phasing.
 
 ### Problem 1 is already solved at the input boundary — what's left is the aggregation bug
 
@@ -237,14 +239,16 @@ within a dimension via `factor`. Make a Shopping List Item carry one or more Amo
 the way through `common.ListIngredient`, `GetIngredientListItems` (grouping rows by name),
 the TypeScript types and `Item.tsx`. Fix the parse-failure drop.
 
-Ships the live bug fix, merges the 18 same-dimension collisions, and turns the other 58
-from silently wrong into visibly honest — **without a single curated data point.**
+Ships the live bug fix, merges the same-dimension collisions (36 ingredients on live data),
+and turns the rest from silently wrong into visibly honest — **without a single curated
+data point.**
 
 ### Phase 2 — Base Unit and Unit Size
 
 Add `base_unit_id`, `ingredient_unit_size` and `unit.default_size`. Seed: unit-level
 defaults for pinch/clove/tin, a Base Unit of millilitre for the liquids, and per-ingredient
-Unit Sizes for the ~76 colliding ingredients. Values drafted with LLM help offline, then
+Unit Sizes for the colliding ingredients (120 on live data, of which 84 need values).
+Values drafted with LLM help offline, then
 reviewed by a person and committed as a migration.
 
 Most remaining collisions now merge.
@@ -259,7 +263,9 @@ This is where "800 g chopped tomatoes" becomes "2 tins (800 g)".
 Extend `lib/recipe-import/extract.js` to return, for ingredient names not in
 `knownIngredients`, a proposed Base Unit / Display Unit / Unit Sizes. These ride along on
 each `common.Ingredient` in the `POST /recipe` payload and are written inside the existing
-save transaction, **only where the existing value is absent**.
+save transaction, **only for Ingredients that have no Ingredient Lines yet** - see the
+corrected entry under "Decisions made" for why "where the existing value is absent" was not
+a sufficient guard.
 
 The curated seed covers the 300 ingredients that exist; this covers everything new. Since
 `appendIngredients` (`components/recipe-form/Form.tsx:154`) is the only way an ingredient
@@ -268,9 +274,19 @@ through this call — there is no path to route around it.
 
 ## Decisions made (grilled — do not re-litigate without a load-bearing reason)
 
-- **Normalisation happens at read time.** `part` records what the Recipe said, verbatim,
-  forever; all conversion happens in `GenerateShoppingList`. A corrected Unit Size then
-  improves every existing Recipe with no backfill, and no original data is ever destroyed.
+- **Normalisation happens at read time.** `part` is not rewritten *as part of combining* -
+  all conversion happens in `GenerateShoppingList`, so a corrected Unit Size improves every
+  existing Recipe with no backfill.
+
+  **Qualified during Phase 2.** The original wording was "verbatim, forever… no original
+  data is ever destroyed", and migrations 022-024 do destroy some: they correct eight
+  mis-entered lines, consolidate three garlic ingredients, and rewrite every `packet` and
+  `bottle` line to a real measure. Those are *data corrections*, not normalisation - "1
+  packet coriander" never recorded whether that was 30g or 100g, so there was no faithful
+  original to preserve. The read-time principle still governs the aggregation, which is
+  what it was for. But the consequence is real and was not free: correcting a pack size is
+  no longer a one-row Unit Size edit, and the pre-conversion values exist only in the
+  backup taken before those migrations ran.
 - **Unit Size is one relation covering average weight, pack size and density**, rather
   than separate scalars on `ingredient` plus a deferred density feature. Stating the value
   in the Ingredient's own Base Unit is what makes one relation sufficient.

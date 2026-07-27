@@ -44,7 +44,7 @@ interface FormProps {
 }
 
 interface ParseTextResult {
-  ingredients?: { name?: string; quantity?: string; unit?: string }[];
+  ingredients?: Partial<Ingredient>[];
   error?: string;
 }
 

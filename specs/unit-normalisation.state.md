@@ -281,7 +281,7 @@ unsupervised. Live data to curate against: 120 colliding ingredients of 436.
 
 ## Session 8: Classification for new Ingredients (spec Phase 4)
 Status: done
-Scope: extract.js proposes Base Unit / Display Unit / Unit Sizes for unseen ingredient names; carried on common.Ingredient in the save payload; written only where absent.
+Scope: extract.js proposes Base Unit / Display Unit / Unit Sizes for unseen ingredient names; carried on common.Ingredient in the save payload; written only for Ingredients that have no Ingredient Lines yet.
 Depends on: Session 7
 Commit: (see git log)
 Notes: extract.js proposes baseUnit/displayUnit/unitSizes for names not in

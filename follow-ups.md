@@ -32,3 +32,11 @@ Items 1–21 have all been resolved — see [`follow-ups-resolved.md`](./follow-
 
     Found while checking a report of two "garlic powder" ingredients. There is only one - the query output that prompted it grouped by ingredient *and unit*, so a single ingredient used with two units printed on two rows. Worth recording so nobody goes looking for a duplicate that was never there.
 
+27. **A curated Ingredient with no Ingredient Lines can be reclassified by an import.** Phase 4 restricts classification to Ingredients that have no rows in `part`, on the reasoning that those are new. `DeleteRecipe` removes an Ingredient's `part` rows without removing the Ingredient, so deleting the last Recipe that used something leaves it curated but line-less - and the next import mentioning it can then overwrite its Base Unit, Display Unit and Unit Sizes. Narrow (it needs the last user of an ingredient deleted, then a re-import proposing different values) and self-correcting once someone notices, but it is a silent data-quality regression on values a person chose.
+
+    The complete fix is the provenance column deliberately deferred in the spec's decisions: with an explicit `curated`/`classified` marker, "has a human touched this?" stops being inferred from proxies. A partial guard - also requiring no `ingredient_unit_size` rows - would cover most cases but not an Ingredient curated with only a Base Unit, and a guard that looks complete but isn't is worse than a recorded gap.
+
+28. **No ingredient is displayed in spoons, which was half the point of problem 3.** The original problem statement asked for "a preferred unit for each ingredient… teaspoon for spices but not for herbs". The mechanism for that shipped in full - `ingredient.display_unit_id` accepts any Unit - but of the ~30 Display Units curated in `025_curated_unit_sizes.sql`, every one is either the bare count or `tin`. Nothing reads in teaspoons or pinches, so spices still show as grams, and per #26 sometimes as millilitres.
+
+    This is curation, not code: setting `display_unit_id` to `teaspoon` for the spice ingredients, with the matching density already present, would do it. Worth doing alongside #26, since both are about dry goods reading badly and the same pass covers them.
+

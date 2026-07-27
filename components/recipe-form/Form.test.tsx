@@ -15,7 +15,6 @@ const ingredientsMock = [{ name: 'egg' }, { name: 'flour' }];
 // now (see follow-ups.md #20).
 vi.mock('@hooks/use-units', () => ({ default: () => unitsMock }));
 vi.mock('@hooks/use-tags', () => ({ default: () => tagsMock }));
-vi.mock('@hooks/use-ingredient-names', () => ({ default: () => ingredientsMock.map(i => i.name) }));
 vi.mock('@hooks/use-auth', () => ({ default: vi.fn() }));
 
 // POST/PUT/DELETE /recipe and POST /api/parse-recipe-text go through

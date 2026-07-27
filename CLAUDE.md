@@ -87,29 +87,20 @@ whatever project happens to already be running unless you've confirmed via
      causes a hydration mismatch (this bit us once: `/list` would flash its
      content then get redirected back to `/`).
    - `NEXT_PUBLIC_USE_MOCKS=true` — serves canned data from `mocks/*.json`
-     instead of calling the Go API, for `/recipes`, `/list`, the new-recipe
-     form's unit dropdown and tag picker, and — the one that matters —
-     `mocks/ingredients.json`. Mutations (save/delete recipe, invites,
-     account) still hit the real API even with mocks on.
+     instead of calling the Go API, for `/recipes`, `/list`, and the new-recipe
+     form's unit dropdown and tag picker. Mutations (save/delete recipe,
+     invites, account) still hit the real API even with mocks on.
 
-     There is no ingredient autosuggest any more; `mocks/ingredients.json`
-     now feeds `knownIngredients` on the Recipe Import prompt, which is what
-     tells the LLM to reuse an existing Ingredient name rather than mint a
-     near-duplicate, and what `matchCanonicalIngredient` matches against as a
-     deterministic fallback. So a stale list here doesn't just show wrong
-     names — it makes mock-mode import fragment the catalog in a way the real
-     API wouldn't, which is the exact problem migration `029` existed to clean
-     up. Regenerate it from a database rather than editing it by hand:
+     There is no ingredient autosuggest, and no `mocks/ingredients.json`. The
+     canonical Ingredient/Unit names that Recipe Import feeds the model — the
+     list that stops it coining a second name for something the catalog
+     already has — are read from the database inside the API routes, by
+     `lib/recipe-import/known-names.ts`, on every request. The client is not
+     asked for them and cannot override them, in any mode. That means import
+     under mocks still canonicalises against real data, which matters because
+     saving hits the real API even with mocks on, so a mock-mode import writes
+     genuine rows.
 
-     ```bash
-     docker compose exec -T db mysql -uroot -proot -N --default-character-set=utf8mb4 \
-       bigshop -e "SELECT name FROM ingredient ORDER BY name;" \
-       | python3 -c 'import json,sys; json.dump([{"name":n} for n in sys.stdin.read().splitlines() if n], sys.stdout, ensure_ascii=False, separators=(",",":"))' \
-       > mocks/ingredients.json
-     ```
-
-     `--default-character-set=utf8mb4` is not optional: the client otherwise
-     defaults to latin-1 and mangles the two accented names on the way out.
 2. `npm run dev` — no Docker, no DB, no Go API needed at all.
 
 **Manual path** (what `dev:full` automates, useful if you want the API/DB

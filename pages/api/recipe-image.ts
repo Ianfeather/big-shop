@@ -7,6 +7,7 @@ import type { PageConfig } from 'next';
 import { extractRecipe } from '../../lib/recipe-import/extract';
 import { imageToInput } from '../../lib/recipe-import/photo';
 import { requireEnv } from '../../lib/env';
+import { fetchKnownNames } from '../../lib/recipe-import/known-names';
 
 // Configure API route to handle form data
 export const config: PageConfig = {
@@ -52,16 +53,6 @@ function validateImage(file?: FormidableFile): asserts file is FormidableFile {
 };
 
 // formidable always returns field values as arrays; a JSON-encoded array of
-// known ingredient/unit names is sent as a single form field.
-const parseJsonField = (fields: import('formidable').Fields, name: string): string[] => {
-  const raw = fields[name]?.[0];
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
-};
 
 const processImage = async (base64Image: string, knownIngredients: string[], knownUnits: string[]) => {
   return extractRecipe({
@@ -143,8 +134,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Validate the image
     validateImage(imageFile);
 
-    const knownIngredients = parseJsonField(fields, 'knownIngredients');
-    const knownUnits = parseJsonField(fields, 'knownUnits');
+    // Read from the database rather than taken from the form fields - see
+    // lib/recipe-import/known-names.ts for why the client is no longer asked.
+    // Awaited before the job is created so a lookup failure is logged against
+    // the request that caused it, not against the background job.
+    const { knownIngredients, knownUnits } = await fetchKnownNames(req);
 
     // Read the file and convert to base64
     const imageBuffer = await fs.readFile(imageFile.filepath);

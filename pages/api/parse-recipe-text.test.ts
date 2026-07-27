@@ -5,10 +5,16 @@ vi.mock('../../lib/recipe-import/extract', () => ({
   extractRecipe: vi.fn()
 }));
 
+vi.mock('../../lib/recipe-import/known-names', () => ({
+  fetchKnownNames: vi.fn()
+}));
+
 import { extractRecipe } from '../../lib/recipe-import/extract';
+import { fetchKnownNames } from '../../lib/recipe-import/known-names';
 import handler from './parse-recipe-text';
 
 const mockedExtractRecipe = extractRecipe as unknown as Mock;
+const mockedFetchKnownNames = fetchKnownNames as unknown as Mock;
 
 function mockReq(overrides: Partial<NextApiRequest>): NextApiRequest {
   return overrides as NextApiRequest;
@@ -23,6 +29,8 @@ function mockRes(): NextApiResponse {
 
 beforeEach(() => {
   mockedExtractRecipe.mockReset();
+  mockedFetchKnownNames.mockReset();
+  mockedFetchKnownNames.mockResolvedValue({ knownIngredients: ['egg'], knownUnits: ['gram'] });
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
@@ -53,12 +61,18 @@ describe('parse-recipe-text handler', () => {
     });
     const res = mockRes();
 
-    await handler(mockReq({ method: 'POST', body: { text: '2 eggs', knownIngredients: ['egg'], knownUnits: [] } }), res);
+    // knownIngredients/knownUnits in the body are deliberately wrong here: the
+    // route must ignore whatever the client sends and use what it reads from
+    // the database, which is the whole point of moving the lookup server-side.
+    await handler(mockReq({
+      method: 'POST',
+      body: { text: '2 eggs', knownIngredients: ['stale'], knownUnits: ['stale'] }
+    }), res);
 
     expect(extractRecipe).toHaveBeenCalledWith({
       input: { type: 'text', text: '2 eggs' },
       knownIngredients: ['egg'],
-      knownUnits: []
+      knownUnits: ['gram']
     });
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ ingredients: [{ name: 'egg', quantity: '2', unit: '' }] });

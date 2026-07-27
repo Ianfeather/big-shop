@@ -1,3 +1,4 @@
+import type { Page, APIRequestContext } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { createRecipe, deleteRecipeById, clearShoppingList } from './api';
 
@@ -192,5 +193,96 @@ test.describe('shopping list unit combining', () => {
     await expect(bought).toHaveAttribute('aria-checked', 'true');
     await expect(bought).toContainText('200 gram');
     await expect(bought).toContainText('1 packet');
+  });
+});
+
+// Phase 2/3: conversion via Unit Sizes, and Display Units.
+//
+// These depend on curated data seeded in docker/mysql-seed/dev-seed.sql - not
+// on migrations, which run before any rows exist and so match nothing on a
+// fresh database. Without that seed none of this is reachable and the tests
+// below would pass just as happily with the whole feature deleted.
+test.describe('shopping list unit sizes and display units', () => {
+  const runId = Date.now();
+  const countRecipe = `E2E Count Recipe ${runId}`;
+  const weightRecipe = `E2E Weight Recipe ${runId}`;
+  const tinRecipe = `E2E Tin Recipe ${runId}`;
+  const spoonRecipe = `E2E Spoon Recipe ${runId}`;
+  let ids: number[] = [];
+
+  test.beforeAll(async ({ request }) => {
+    // Seeded in dev-seed.sql: Onion counts 150g and displays as a count;
+    // Chopped Tomatoes has tin = 400g and displays as tins; Black Pepper has a
+    // density of 0.5 g/ml.
+    ids = [
+      await createRecipe(request, { name: countRecipe, ingredients: [
+        { name: 'Onion', quantity: '2', unit: '' },
+        { name: 'Black Pepper', quantity: '1', unit: 'teaspoon' },
+      ]}),
+      await createRecipe(request, { name: weightRecipe, ingredients: [
+        { name: 'Onion', quantity: '300', unit: 'gram' },
+      ]}),
+      await createRecipe(request, { name: tinRecipe, ingredients: [
+        { name: 'Chopped Tomatoes', quantity: '1', unit: 'tin' },
+        { name: 'Black Pepper', quantity: '1', unit: 'tablespoon' },
+      ]}),
+      await createRecipe(request, { name: spoonRecipe, ingredients: [
+        { name: 'Chopped Tomatoes', quantity: '200', unit: 'gram' },
+      ]}),
+    ];
+  });
+
+  test.afterAll(async ({ request }) => {
+    await clearShoppingList(request);
+    for (const id of ids) await deleteRecipeById(request, id);
+  });
+
+  // Each test starts from an empty list and selects exactly what it needs,
+  // rather than inheriting the previous test's selection. Deselecting a recipe
+  // straight after page load races hydration - until it finishes the page
+  // thinks nothing is selected, so the click toggles the wrong way.
+  async function selectOnly(page: Page, request: APIRequestContext, ...recipes: string[]) {
+    await clearShoppingList(request);
+    await page.goto('/list');
+    for (const name of recipes) {
+      await page.getByRole('checkbox', { name }).click({ force: true });
+    }
+  }
+
+  test('a count and a weight combine once an average weight is known', async ({ page, request }) => {
+    await selectOnly(page, request, countRecipe, weightRecipe);
+
+    // 2 onions at 150g + 300g = 600g, shown as a count because that's how you
+    // buy onions, with the weight kept alongside so the estimate is visible.
+    const onion = page.getByRole('checkbox', { name: 'Onion' });
+    await expect(onion).toContainText('4');
+    await expect(onion).toContainText('600 gram');
+  });
+
+  test('a lone count is not converted just because a Unit Size exists', async ({ page, request }) => {
+    await selectOnly(page, request, countRecipe);
+
+    // Nothing to reconcile, so it stays a plain count - no conversion to grams
+    // and no bracket at all.
+    const onion = page.getByRole('checkbox', { name: 'Onion' });
+    await expect(onion).toContainText('2');
+    await expect(onion).not.toContainText('gram');
+  });
+
+  test('a weight is shown in tins, rounded up to a whole one', async ({ page, request }) => {
+    await selectOnly(page, request, tinRecipe, spoonRecipe);
+
+    // 1 tin (400g) + 200g = 600g. You can't buy 1.5 tins, so it rounds up.
+    const tomatoes = page.getByRole('checkbox', { name: 'Chopped Tomatoes' });
+    await expect(tomatoes).toContainText('2 tin');
+    await expect(tomatoes).toContainText('600 gram');
+  });
+
+  test('a density merges spoons of a dry ingredient into a weight', async ({ page, request }) => {
+    await selectOnly(page, request, countRecipe, tinRecipe);
+
+    // 1 tsp (5ml) + 1 tbsp (15ml) at 0.5 g/ml = 10g. Both derive from the one
+    // curated density rather than needing a Unit Size per spoon.
+    await expect(page.getByRole('checkbox', { name: 'Black Pepper' })).toContainText('10 gram');
   });
 });

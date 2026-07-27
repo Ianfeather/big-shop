@@ -15,18 +15,22 @@ INSERT INTO `account_user` (user_id, account_id) VALUES ('local-dev-user', 1);
 -- migration runs before this file, so that UPDATE has no rows to match and would
 -- silently leave every unit 'relative' - which only shows up when a dev volume is
 -- wiped and rebuilt, not on a normal run. Keep these values in step with 019.
-INSERT INTO `unit` (name, kind, factor) VALUES
-  ('',           'relative', NULL),
-  ('gram',       'weight',      1),
-  ('kilogram',   'weight',   1000),
-  ('millilitre', 'volume',      1),
-  ('litre',      'volume',   1000),
-  ('teaspoon',   'volume',      5),
-  ('tablespoon', 'volume',     15),
-  ('packet',     'relative', NULL),
-  ('whole',      'relative', NULL),
-  ('clove',      'relative', NULL),
-  ('pinch',      'relative', NULL);
+-- default_size follows the same rule for the same reason: migrations 020-025
+-- set these against production's rows, which don't exist yet when they run
+-- here. Keep in step with 025.
+INSERT INTO `unit` (name, kind, factor, default_size) VALUES
+  ('',           'relative', NULL, NULL),
+  ('gram',       'weight',      1, NULL),
+  ('kilogram',   'weight',   1000, NULL),
+  ('millilitre', 'volume',      1, NULL),
+  ('litre',      'volume',   1000, NULL),
+  ('teaspoon',   'volume',      5, NULL),
+  ('tablespoon', 'volume',     15, NULL),
+  ('packet',     'relative', NULL, NULL),
+  ('whole',      'relative', NULL, NULL),
+  ('clove',      'relative', NULL,    5),
+  ('pinch',      'relative', NULL,  0.5),
+  ('tin',        'relative', NULL,  400);
 
 INSERT INTO `ingredient` (name) VALUES
   ('Spaghetti'), ('Beef Mince'), ('Onion'), ('Garlic Clove'),
@@ -36,6 +40,33 @@ INSERT INTO `ingredient` (name) VALUES
 INSERT INTO `ingredient_department` (department_id, ingredient_id)
 SELECT d.id, i.id FROM `department` d, `ingredient` i
 WHERE d.name = 'vegetables' AND i.name IN ('Onion', 'Garlic Clove', 'Carrot', 'Celery');
+
+-- Curated Base Units, Display Units and Unit Sizes, mirroring what
+-- migrations/025_curated_unit_sizes.sql applies to production. Set here at
+-- insert time for the same reason as unit.kind above: 025 runs before any of
+-- these rows exist, so on a fresh database it matches nothing.
+--
+-- Without this the entire Phase 2/3 feature is unreachable locally and in e2e -
+-- no Unit Size means nothing ever converts, and the tests would pass just as
+-- happily with the feature deleted. A small but genuinely representative set:
+-- one count-to-weight ingredient, one pack size, one density, one liquid.
+UPDATE `ingredient` SET base_unit_id = (SELECT id FROM `unit` WHERE name = 'millilitre')
+WHERE name = 'Olive Oil';
+
+UPDATE `ingredient` SET display_unit_id = (SELECT id FROM `unit` WHERE name = '')
+WHERE name IN ('Onion', 'Carrot');
+UPDATE `ingredient` SET display_unit_id = (SELECT id FROM `unit` WHERE name = 'tin')
+WHERE name = 'Chopped Tomatoes';
+
+INSERT INTO `ingredient_unit_size` (ingredient_id, unit_id, size)
+SELECT i.id, u.id, v.size FROM `ingredient` i, `unit` u, (
+  SELECT 'Onion' AS ing, '' AS un, 150 AS size
+  UNION ALL SELECT 'Carrot', '', 80
+  UNION ALL SELECT 'Garlic Clove', '', 5
+  UNION ALL SELECT 'Chopped Tomatoes', 'tin', 400
+  UNION ALL SELECT 'Black Pepper', 'millilitre', 0.5
+) v
+WHERE i.name = v.ing AND u.name = v.un;
 
 INSERT INTO `ingredient_department` (department_id, ingredient_id)
 SELECT d.id, i.id FROM `department` d, `ingredient` i

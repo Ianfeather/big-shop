@@ -55,8 +55,8 @@ correct and costs nothing.
 
 ## 3. Average weight of one (the count group)
 
-33 ingredients - the largest category, and your most-used ones. (`lemon` and `pumpkin` were
-here until the recipe fixes in section 7 removed their collisions entirely.)
+32 ingredients - the largest category, and your most-used ones. (`lemon`, `pumpkin` and `garlic clove` were
+here until the fixes in sections 7 and 8 removed their collisions entirely.)
 
 | Ingredient | One of them is | Note |
 | --- | --- | --- |
@@ -73,7 +73,6 @@ here until the recipe fixes in section 7 removed their collisions entirely.)
 | chorizo | 225 | a ring |
 | curry leaves | 0.3 | one leaf |
 | egg whites | 33 | one egg white |
-| garlic clove | 5 |  |
 | ginger | 30 | a thumb |
 | lasagne sheets | 15 |  |
 | mint | 5 | a sprig |
@@ -195,7 +194,7 @@ derive from it, so there's no way to set one and forget another.
 
 What each ingredient's total is *shown* in. The base amount stays visible in brackets.
 
-**Shown as a count:** apples, avocado, bacon rashers (smoked), cabbage, carrot, chicken breast, chicken thigh, chicken thighs (boneless), egg whites, garlic clove, mozzarella, new potato, onion, plum tomato, potato, radish, red onion, ripe medium tomato, ripe tomatoes, salmon, shallot, sweet potato
+**Shown as a count:** apples, avocado, bacon rashers (smoked), cabbage, carrot, chicken breast, chicken thigh, chicken thighs (boneless), egg whites, mozzarella, new potato, onion, plum tomato, potato, radish, red onion, ripe medium tomato, ripe tomatoes, salmon, shallot, sweet potato
 
 **Shown as tins:** butterbean, coconut cream, coconut milk, kidney beans
 
@@ -220,28 +219,59 @@ bad data.
 | 4 | 89 - Porchetta w/ Salsa Verde | orange juice | `1` (count) | ingredient becomes **orange**, `1` (count) |
 | 5 | 90141 - Salmon with harissa vegetable couscous | orange juice | `0.5` (count) | ingredient becomes **orange**, `0.5` (count) |
 | 6 | 90139 - Courgette fritters and salsa verde | lemon | `0.25` millilitre | `0.25` (count) |
-| 7 | 270116 - Chicken Pad See Ew | garlic clove | `1` tablespoon | `3` clove |
-| 8 | 300120 - Creamy Sausage Pasta | garlic clove | `1` tablespoon | `3` clove |
-| 9 | 330118 - Easy Roasted Garlic Butter Chicken | garlic clove | `1` tablespoon | `3` clove |
-| 10 | 330116 - Slow-cooker Beef Stew | garlic clove | `1` tablespoon | `3` clove |
-| 11 | 330119 - Juicy Beef Rissoles | garlic clove | `1` **teaspoon** | `1` clove - a teaspoon is ~1 clove, not 3 |
-| 12 | 810116 - Pumpkin & Cauliflower Makhani | pumpkin | `1` (count) | `500` gram |
+| 7 | 810116 - Pumpkin & Cauliflower Makhani | pumpkin | `1` (count) | `500` gram |
+| 8 | 15 - Chicken, Leek & Mushroom Pie | chicken stock | `300` gram | `300` millilitre - stock isn't weighed |
+
+The five garlic-in-spoons lines are folded into the consolidation below rather than fixed
+individually.
 
 **`orange` does not exist as an ingredient** and needs creating for fixes 4 and 5.
 `orange juice` keeps one legitimate line afterwards (`100` millilitre, Brisket Tacos).
 
 ### What these fixes remove from the curation
 
+Every flagged ingredient ends up needing **nothing**. Correcting the data turns out to be a
+complete substitute for curating around it.
+
 | Ingredient | After the fix | Curation needed |
 | --- | --- | --- |
-| lemon | all 17 lines are counts | **none** - no Unit Size, no Display Unit |
+| lemon | all 17 lines are counts | **none** |
 | white wine | all millilitre | **none** |
 | worcestershire sauce | all tablespoon | **none** |
 | pumpkin | all grams | **none** |
 | orange juice | one line left | **none** |
 | orange (new) | two count lines | **none** |
-| chicken stock | still gram + millilitre + litre | base unit millilitre, plus a gram Unit Size (1.0) |
-| garlic clove | still (count) + clove | count Unit Size 5, clove default 5 - both already proposed |
+| chicken stock | all millilitre + litre, which combine for free | **none** |
+| garlic | one ingredient, one unit (see below) | **none** |
+
+## 8. Garlic - consolidate three ingredients into one
+
+Not really a Phase 2 problem; follow-up #25 arriving early. There are **three** ingredients
+for one thing, splitting 82 lines:
+
+```
+garlic          1x (count)   4x clove                                5 lines
+garlic clove   69x (count)   1x clove   4x tablespoon  1x teaspoon  75 lines
+garlic cloves   2x (count)                                           2 lines
+```
+
+**Decided: consolidate onto `garlic`, measured in `clove`.** The ingredient is garlic; clove
+is the unit. A Shopping List then reads "garlic - 10 clove", and since garlic ends up with a
+single Unit it never collides, so it needs no Unit Size at all.
+
+| Step | Operation |
+| --- | --- |
+| 1 | All `garlic clove` bare-count lines (69) - repoint to `garlic`, set unit to `clove`. Quantities are already whole cloves (1-15), so they carry over unchanged. |
+| 2 | `garlic clove` line already in `clove` (1) - repoint to `garlic` only. |
+| 3 | `garlic clove` in `tablespoon` (4) - repoint to `garlic`, unit `clove`, **quantity 1 -> 3**. A tablespoon of minced garlic is about 3 cloves. |
+| 4 | `garlic clove` in `teaspoon` (1, Juicy Beef Rissoles) - repoint to `garlic`, unit `clove`, **quantity stays 1**. A teaspoon is about 1 clove, not 3. |
+| 5 | `garlic cloves` lines (2) - repoint to `garlic`, unit `clove`. |
+| 6 | `garlic` bare-count line (1) - set unit to `clove`. |
+| 7 | **Move the department.** `garlic clove` is in `vegetables`; `garlic` has **no department at all**. Without this step garlic loses its grouping and sorts to the bottom of the list with the ungrouped items. |
+| 8 | Delete the now-empty `garlic clove` and `garlic cloves` ingredients, and their `ingredient_department` rows. |
+
+`clove` keeps its default Unit Size of 5 g. Nothing needs it today - garlic has one Unit - but
+it costs nothing and covers the case where someone later adds garlic by weight.
 
 ### Tinned pulses - decided
 

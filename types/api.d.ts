@@ -461,10 +461,15 @@ export interface components {
             type: string;
         };
         Ingredient: {
+            baseUnit?: string;
             department?: string;
+            displayUnit?: string;
             name: string;
             quantity: string;
             unit: string;
+            unitSizes?: {
+                [key: string]: number;
+            };
         };
         IngredientName: {
             name: string;

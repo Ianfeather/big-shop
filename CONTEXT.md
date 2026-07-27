@@ -42,7 +42,7 @@ A canonical, Global Catalog entry for a foodstuff (e.g. "tomato") — just an id
 _Avoid_: Using "Ingredient" for a Recipe's specific quantity of one — that's an Ingredient Line.
 
 **Ingredient Line**:
-One row of a Recipe's ingredient list: an Amount of a specific Ingredient, scoped to that one Recipe (DB table `part`). Recorded verbatim as the Recipe states it and never rewritten — normalisation happens when a Shopping List is generated, not on save. Distinct from Ingredient itself — many Ingredient Lines across many Recipes can reference the same Ingredient.
+One row of a Recipe's ingredient list: an Amount of a specific Ingredient, scoped to that one Recipe (DB table `part`). Recorded as the Recipe states it and not rewritten by combining — normalisation happens when a Shopping List is generated, not on save. (Deliberate one-off *corrections* are a different matter and have happened: migrations 022–024 fixed mis-entered lines and replaced `packet`/`bottle` with real measures, on the grounds that those never recorded a real quantity to preserve.) Distinct from Ingredient itself — many Ingredient Lines across many Recipes can reference the same Ingredient.
 _Avoid_: Ingredient (when meaning this), Part, Recipe Ingredient
 
 **Unit**:
@@ -58,7 +58,7 @@ The Absolute Unit a given Ingredient's Amounts normalise to when combined — gr
 **Unit Size**:
 How much one of a given Unit of a given Ingredient comes to, in that Ingredient's Base Unit — "one tin of coconut milk is 400ml", "one potato is 180g", "one tablespoon of flour is 8g". Deliberately one concept rather than three: average item weight, pack size and density are the same question asked about different Units. Known per Ingredient-and-Unit pair, and simply absent until someone supplies it — absent is a normal state, not an error, and an Ingredient Item just carries more than one Amount until it's filled in. A Unit may also declare a default Unit Size for cases that genuinely don't vary by Ingredient (a pinch, a clove), which a per-Ingredient value overrides.
 
-Every Unit Size, Base Unit and Display Unit is either **curated** (chosen by a person) or **classified** (proposed automatically). Curated always wins, and classification only ever fills a gap — it must never overwrite a human's answer, or a correction would silently regress.
+Every Unit Size, Base Unit and Display Unit is either **curated** (chosen by a person) or **classified** (proposed automatically). Curated always wins: classification applies only to an Ingredient nothing has been recorded against yet — in practice one that has no Ingredient Lines — so it can never overwrite a human's answer. Note this is stricter than "fills any gap": an established Ingredient with a missing value keeps missing it, because an absent value can mean *deliberately left at the default* rather than *not yet considered*.
 
 **Known limitation, not a permanent rule:** Unit Sizes are single-locale (UK) values, and part of the Global Catalog, so they're shared across every Account. A tin is 400g here and ~411g in the US; pack sizes diverge much further. Recipe Import already converts imperial to metric on the way in, so the exposure is narrow — it's Relative Units, chiefly pack units, where it bites. Scoping them (by locale, or by Account — which would mean revisiting [ADR-0001](./docs/adr/0001-global-ingredient-catalog.md)) is a legitimate future direction, deferred until there's a second locale to learn the real requirements from.
 

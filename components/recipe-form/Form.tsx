@@ -44,7 +44,7 @@ interface FormProps {
 }
 
 interface ParseTextResult {
-  ingredients?: { name?: string; quantity?: string; unit?: string }[];
+  ingredients?: Partial<Ingredient>[];
   error?: string;
 }
 
@@ -151,11 +151,20 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
     setRecipe(updatedRecipe)
   }
 
-  function appendIngredients(parsedIngredients: { name?: string; quantity?: string; unit?: string }[]) {
-    const newIngredients = parsedIngredients.map(({ name, quantity, unit }) => ({
+  // baseUnit/displayUnit/unitSizes are catalog metadata the extractor proposes
+  // for ingredients this app has never seen (see CONTEXT.md's Unit Size). They
+  // are carried straight through to the save payload rather than shown in the
+  // form: there is nothing useful for a cook to do with "one onion is 150g"
+  // while writing a recipe, and the server ignores them for any ingredient that
+  // already has values.
+  function appendIngredients(parsedIngredients: Partial<Ingredient>[]) {
+    const newIngredients = parsedIngredients.map(({ name, quantity, unit, baseUnit, displayUnit, unitSizes }) => ({
       name: (name || '').trim(),
       quantity: quantity || '',
-      unit: unit || ''
+      unit: unit || '',
+      ...(baseUnit ? { baseUnit } : {}),
+      ...(displayUnit !== undefined && displayUnit !== null ? { displayUnit } : {}),
+      ...(unitSizes ? { unitSizes } : {}),
     }));
     setRecipe(prevRecipe => ({
       ...prevRecipe,

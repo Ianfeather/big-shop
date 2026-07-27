@@ -91,6 +91,9 @@ interface ParsedIngredient {
   name?: string;
   quantity?: string;
   unit?: string;
+  baseUnit?: string;
+  displayUnit?: string;
+  unitSizes?: Record<string, number>;
 }
 
 interface ParseUrlResult {
@@ -110,11 +113,21 @@ interface ImageJobStatus {
 // Extraction results (from either source) carry loosely-shaped ingredients -
 // same normalization Form.tsx's appendIngredients already does for
 // bulk-paste extraction, applied here for URL/photo extraction too.
+// baseUnit/displayUnit/unitSizes are catalog metadata the extractor proposes for
+// ingredients this app has not seen (CONTEXT.md's Unit Size). They must survive
+// this hop: URL and Photo import reach the form through initialRecipe rather
+// than appendIngredients, so anything dropped here never reaches the save
+// payload and the ingredient is never classified. An earlier version of this
+// function destructured only name/quantity/unit and silently lost them for two
+// of the three Import Sources.
 function normalizeParsedIngredients(ingredients?: ParsedIngredient[]): RecipeModel['ingredients'] {
-  return (ingredients || []).map(({ name, quantity, unit }) => ({
+  return (ingredients || []).map(({ name, quantity, unit, baseUnit, displayUnit, unitSizes }) => ({
     name: name || '',
     quantity: quantity || '',
-    unit: unit || ''
+    unit: unit || '',
+    ...(baseUnit ? { baseUnit } : {}),
+    ...(displayUnit !== undefined && displayUnit !== null ? { displayUnit } : {}),
+    ...(unitSizes ? { unitSizes } : {}),
   }));
 }
 

@@ -170,3 +170,88 @@ func TestInsertTags(t *testing.T) {
 		}
 	})
 }
+
+func TestClassifyNewIngredients(t *testing.T) {
+	t.Run("an ingredient with no proposals issues no query", func(t *testing.T) {
+		fake := &fakeExecer{}
+		recipe := common.Recipe{Ingredients: []common.Ingredient{{Name: "flour", Quantity: "200", Unit: "gram"}}}
+		classifyNewIngredients(recipe, fake)
+		// Manual Entry and every edit of an existing Recipe land here.
+		if len(fake.queries) != 0 {
+			t.Errorf("expected no queries but got %v", fake.queries)
+		}
+	})
+
+	t.Run("every write is conditional so a curated value cannot be overwritten", func(t *testing.T) {
+		fake := &fakeExecer{}
+		recipe := common.Recipe{Ingredients: []common.Ingredient{{
+			Name: "sumac", Quantity: "2", Unit: "teaspoon",
+			BaseUnit: "gram", UnitSizes: map[string]float64{"millilitre": 0.5},
+		}}}
+		classifyNewIngredients(recipe, fake)
+
+		joined := strings.Join(fake.queries, "\n")
+		// This is the whole safety property of the phase: a value reviewed by a
+		// person in migration 025 must survive a later import proposing another.
+		if !strings.Contains(joined, "base_unit_id IS NULL") {
+			t.Error("base unit write must be conditional on the column being unset")
+		}
+		if !strings.Contains(joined, "ON DUPLICATE KEY UPDATE") {
+			t.Error("unit size write must no-op rather than overwrite an existing row")
+		}
+		// The guard that actually protects curated values. An unset-column check
+		// is not enough: NULL in base_unit_id means both "never curated" and
+		// "curated as the default, gram", so without this an import could flip
+		// onion to millilitre - which it did, against a live database, before
+		// this was added.
+		if strings.Count(joined, "NOT EXISTS (SELECT 1 FROM part") != len(fake.queries) {
+			t.Errorf("every write must be restricted to ingredients with no lines yet, got %v", fake.queries)
+		}
+		if strings.Contains(joined, "display_unit_id") {
+			t.Error("a nil DisplayUnit should be skipped, not written")
+		}
+	})
+
+	// "" is the bare-count Unit, and the most useful Display Unit there is, so
+	// a proposal of "" must reach the database rather than being mistaken for
+	// "nothing proposed".
+	t.Run("a proposed bare-count display unit is written", func(t *testing.T) {
+		fake := &fakeExecer{}
+		count := ""
+		recipe := common.Recipe{Ingredients: []common.Ingredient{{
+			Name: "sumac", DisplayUnit: &count,
+		}}}
+		classifyNewIngredients(recipe, fake)
+		if !strings.Contains(strings.Join(fake.queries, "\n"), "display_unit_id IS NULL") {
+			t.Errorf("expected a conditional display unit write, got %v", fake.queries)
+		}
+	})
+
+	t.Run("a non-positive unit size is skipped", func(t *testing.T) {
+		fake := &fakeExecer{}
+		recipe := common.Recipe{Ingredients: []common.Ingredient{{
+			Name: "sumac", UnitSizes: map[string]float64{"": 0, "millilitre": -1},
+		}}}
+		classifyNewIngredients(recipe, fake)
+		if len(fake.queries) != 0 {
+			t.Errorf("expected no queries but got %v", fake.queries)
+		}
+	})
+
+	// The spec is explicit that a classification failure must never fail a
+	// recipe save. An earlier version returned an error both callers
+	// propagated, so one bad proposal rolled back the whole recipe - and this
+	// test asserted that wrong behaviour.
+	t.Run("a failure is swallowed and the remaining writes still run", func(t *testing.T) {
+		fake := &fakeExecer{failOn: "base_unit_id"}
+		recipe := common.Recipe{Ingredients: []common.Ingredient{{
+			Name: "sumac", BaseUnit: "gram", UnitSizes: map[string]float64{"millilitre": 0.5},
+		}}}
+
+		classifyNewIngredients(recipe, fake)
+
+		if len(fake.queries) != 2 {
+			t.Errorf("expected the unit size write to still be attempted, got %v", fake.queries)
+		}
+	})
+}

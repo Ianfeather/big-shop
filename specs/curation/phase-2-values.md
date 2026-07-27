@@ -180,6 +180,6 @@ left unconverted - they'll keep showing as separate Amounts.
 | white wine | 1 line uses a bare count | Probably a bottle. Left unconverted. |
 | orange juice | 1 line uses a bare count | Probably a carton. Left unconverted. |
 | lemon | 16 counts vs 1 millilitre | The millilitre line is juice, not fruit. Base unit stays gram with a count Display Unit, and no millilitre Unit Size, so juice stays a separate Amount rather than being counted as lemons. |
-| garlic clove | 4 lines use tablespoon | Almost certainly garlic paste or minced garlic. A density is proposed but it is a guess - check these four recipes. |
+| garlic clove | 4 lines use tablespoon, 1 uses teaspoon | Almost certainly garlic paste or minced garlic, not cloves. **No density proposed**, so these stay a separate Amount: a list reads "3 + 1 tablespoon" rather than silently folding paste into a clove count. Check those five recipes - if they do mean paste, they want their own ingredient. |
 | pumpkin | whole-pumpkin weight varies hugely | 1.2kg proposed; adjust if your recipes mean a small one. |
 | kidney beans / butterbean | tin size is drained vs undrained | 400g proposed (undrained, the tin's stated weight). Drained is ~240g. If your recipes mean drained, these are ~40% over. |

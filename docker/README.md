@@ -144,6 +144,43 @@ npm run dev:full
 empty database again, and the synthetic migrate-and-seed step in
 `mysql-init/` runs fresh.
 
+## Checking for orphaned rows: `scripts/check-orphans.sh`
+
+```bash
+scripts/check-orphans.sh
+```
+
+Read-only, so it is safe against production at any time. It reports rows whose
+foreign key points at a parent row that no longer exists. Run it before a data
+migration for a baseline, and after to prove nothing was stranded.
+
+**TiDB may not enforce foreign keys the way local MySQL does**, and that
+difference is the whole reason this exists. Every constraint in
+`migrations/*.sql` is `NO ACTION`, so deleting a row that still has children
+errors out against a database built from those migrations. The same statement
+can succeed against production and leave the children dangling with no error at
+all. Migration `029` did this: it deleted `thyme sprig` while an Ingredient Line
+still referenced it, and Potato & Leek Soup silently lost its thyme. Nothing in
+the test suite could catch it, because the tests run against MySQL.
+
+The checks are derived from `information_schema` rather than hardcoded, so they
+keep covering the whole schema as constraints are added. If `declared_fks` comes
+back as `0`, the server is not tracking constraints at all - no checks could be
+derived, and that is itself the finding.
+
+The stronger habit for anything that deletes rows is to **rehearse the migration
+against a scratch copy of a backup first**, since that reproduces production's
+actual constraint behaviour rather than local MySQL's:
+
+```bash
+gzip -dc ~/big-shop-backups/<dump>/*-schema.sql.gz ~/big-shop-backups/<dump>/*.0000*.sql.gz \
+  | docker compose exec -T db mysql -uroot -proot   # into a scratch database
+```
+
+Then apply the migrations in order and compare row counts before and after. The
+count that matters is `part`: Ingredient Lines in should equal Ingredient Lines
+out unless the migration is explicitly meant to remove some.
+
 ## Taking a full backup: `scripts/backup-prod.sh`
 
 `sync-from-prod.sh` pulls *your account's* data into local dev. It is not a

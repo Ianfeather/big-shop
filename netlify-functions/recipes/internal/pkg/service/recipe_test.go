@@ -204,8 +204,8 @@ func TestClassifyNewIngredients(t *testing.T) {
 		// "curated as the default, gram", so without this an import could flip
 		// onion to millilitre - which it did, against a live database, before
 		// this was added.
-		if strings.Count(joined, "NOT EXISTS (SELECT 1 FROM part") != len(fake.queries) {
-			t.Errorf("every write must be restricted to ingredients with no lines yet, got %v", fake.queries)
+		if strings.Count(joined, "curated") != len(fake.queries) {
+			t.Errorf("every write must be restricted to uncurated ingredients, got %v", fake.queries)
 		}
 		if strings.Contains(joined, "display_unit_id") {
 			t.Error("a nil DisplayUnit should be skipped, not written")
@@ -254,4 +254,48 @@ func TestClassifyNewIngredients(t *testing.T) {
 			t.Errorf("expected the unit size write to still be attempted, got %v", fake.queries)
 		}
 	})
+}
+
+func TestCanonicalUnit(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		// The case that matters: an abbreviation became a Relative Unit with no
+		// factor, so "1 ml" never combined with "200 millilitre".
+		{"ml", "millilitre"},
+		{"g", "gram"},
+		{"tsp", "teaspoon"},
+		{"TBSP", "tablespoon"},
+		{"Kg", "kilogram"},
+		// Plurals fragment just as effectively as abbreviations.
+		{"grams", "gram"},
+		{"cloves", "clove"},
+		// Whitespace is its own fragmentation route: UNIQUE(name) is
+		// case-insensitive but not space-insensitive.
+		{"  gram  ", "gram"},
+		{" tsp", "teaspoon"},
+		// Already canonical, or genuinely unknown: left alone. An unrecognised
+		// Unit is a supported state - it simply won't combine until it has a
+		// Unit Size.
+		{"gram", "gram"},
+		{"sprig", "sprig"},
+		{"", ""},
+	} {
+		if got := canonicalUnit(tc.in); got != tc.want {
+			t.Errorf("canonicalUnit(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestWithCanonicalUnitsDoesNotMutateTheCaller(t *testing.T) {
+	original := common.Recipe{Ingredients: []common.Ingredient{{Name: "flour", Unit: "g"}}}
+
+	normalised := withCanonicalUnits(original)
+
+	if normalised.Ingredients[0].Unit != "gram" {
+		t.Errorf("expected the copy to be normalised, got %q", normalised.Ingredients[0].Unit)
+	}
+	// Ingredients is a slice, so a careless implementation would write through
+	// the shared backing array into the caller's recipe.
+	if original.Ingredients[0].Unit != "g" {
+		t.Errorf("caller's recipe was mutated: %q", original.Ingredients[0].Unit)
+	}
 }

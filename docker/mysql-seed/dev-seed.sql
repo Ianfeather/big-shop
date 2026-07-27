@@ -58,6 +58,12 @@ WHERE name IN ('Onion', 'Carrot');
 UPDATE `ingredient` SET display_unit_id = (SELECT id FROM `unit` WHERE name = 'tin')
 WHERE name = 'Chopped Tomatoes';
 
+-- Marks these as human-chosen so classification leaves them alone, mirroring
+-- migration 028. Inline for the same reason as unit.kind: 028 runs before any
+-- of these rows exist.
+UPDATE `ingredient` SET curated = TRUE
+WHERE name IN ('Olive Oil', 'Onion', 'Carrot', 'Chopped Tomatoes', 'Garlic Clove', 'Black Pepper');
+
 INSERT INTO `ingredient_unit_size` (ingredient_id, unit_id, size)
 SELECT i.id, u.id, v.size FROM `ingredient` i, `unit` u, (
   SELECT 'Onion' AS ing, '' AS un, 150 AS size

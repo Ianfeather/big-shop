@@ -276,11 +276,29 @@ func (t *ingredientTotals) kindAmount(kind UnitKind, b *baseTotal, units UnitCat
 
 // divisorFor is how many base units one of the given Unit is - the number that
 // converts an accumulated total back out for display.
+//
+// The density branch matters more than it looks: without it, sole-unit
+// preservation silently fails for any Ingredient that has one. A lone
+// "1 tablespoon chilli powder" would convert *into* grams to be summed and
+// then find no way back, rendering "7.5 gram" for a line that was never
+// ambiguous - the same regression the Phase 1 review caught, arriving by a
+// different route.
 func divisorFor(unit string, kind UnitKind, units UnitCatalog, info IngredientInfo) (float64, bool) {
-	if u := units.Get(unit); u.IsAbsolute() && u.Kind == kind && u.Factor > 0 {
+	u := units.Get(unit)
+	if u.IsAbsolute() && u.Kind == kind && u.Factor > 0 {
 		return u.Factor, true
 	}
-	return info.UnitSize(unit, units)
+	if size, ok := info.UnitSize(unit, units); ok {
+		return size, true
+	}
+	// Crossed dimensions on the way in via a density, so it has to come back
+	// out the same way.
+	if u.IsAbsolute() && u.Factor > 0 {
+		if density, ok := info.UnitSize(kindBaseUnit[u.Kind], units); ok {
+			return u.Factor * density, true
+		}
+	}
+	return 0, false
 }
 
 // ApplyDisplayUnits rewrites each Ingredient Item's Amounts into the

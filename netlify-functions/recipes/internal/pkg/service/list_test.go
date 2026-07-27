@@ -471,3 +471,37 @@ func TestCombineIngredientsDerivesVolumeUnitsFromDensity(t *testing.T) {
 		t.Errorf("expected %v but got %v", want, got)
 	}
 }
+
+// A lone Amount stays in its own Unit even when a density exists for the
+// Ingredient. Converting into the base unit to sum it is fine; failing to
+// convert back is not - "1 tablespoon chilli powder" is not "7.5 gram".
+func TestCombineIngredientsPreservesASoleUnitDespiteADensity(t *testing.T) {
+	catalog := IngredientCatalog{
+		"chilli powder": {BaseUnit: "gram", UnitSizes: map[string]float64{"millilitre": 0.5}},
+	}
+
+	for _, tc := range []struct {
+		name    string
+		recipes []common.Recipe
+		want    []common.Amount
+	}{
+		{"lone tablespoon", lines(ingredient("chilli powder", "1", "tablespoon")),
+			[]common.Amount{{Quantity: "1", Unit: "tablespoon"}}},
+		{"several tablespoons", lines(
+			ingredient("chilli powder", "1", "tablespoon"),
+			ingredient("chilli powder", "2", "tablespoon")),
+			[]common.Amount{{Quantity: "3", Unit: "tablespoon"}}},
+		// Genuinely mixed, so grams are the honest common denominator.
+		{"tablespoon and gram", lines(
+			ingredient("chilli powder", "1", "tablespoon"),
+			ingredient("chilli powder", "5", "gram")),
+			[]common.Amount{{Quantity: "12.5", Unit: "gram"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := CombineIngredients(tc.recipes, testUnits(), catalog)["chilli powder"].Amounts
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("expected %v but got %v", tc.want, got)
+			}
+		})
+	}
+}

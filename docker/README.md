@@ -172,6 +172,17 @@ subject ids and invite tokens. `backups/` is tracked in git and already holds
 seven users' email addresses from 2024, which is enough of that. The script
 refuses to write anywhere inside the working tree.
 
-Two knobs, both env vars: `BACKUP_ROOT` to change the destination, and
-`CONSISTENCY=none` if the instance rejects Dumpling's default snapshot read.
+Three knobs, all env vars: `BACKUP_ROOT` to change the destination,
+`CONSISTENCY=none` if the instance rejects Dumpling's default snapshot read, and
+`CA_FILE` if you ever need a private CA.
+
+**A Docker Desktop trap worth knowing**, since the first version of this script
+hit it: don't bind-mount the host's `/etc/ssl/cert.pem` into the container. On
+macOS `/etc` is a symlink to `/private/etc`, which is not a shared path - Docker
+silently creates an empty *directory* at the mount target instead of failing,
+and Dumpling then reports `could not read ca certificate: read /ca.pem: is a
+directory`. Mounting the resolved `/private` path is refused outright. The
+script uses the CA bundle already inside the container, which verifies TiDB
+Cloud's Let's Encrypt certificate; `CA_FILE` is copied into the output directory
+rather than mounted, because that directory is already known to be shareable.
 

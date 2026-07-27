@@ -45,16 +45,26 @@ REPO_ROOT="$(pwd)"
 DUMPLING_IMAGE="pingcap/dumpling:v8.5.0"
 BACKUP_ROOT="${BACKUP_ROOT:-$HOME/big-shop-backups}"
 
-# macOS ships the system CA bundle here; Linux usually uses the second path.
-# TiDB Cloud requires TLS, so this has to resolve to something real.
+# TLS is required by TiDB Cloud, and the container already ships a CA bundle
+# covering the public roots - TiDB Cloud's certificate is Let's Encrypt issued,
+# and `openssl s_client -starttls mysql` against the gateway verifies against
+# this bundle with return code 0. So the default needs no mount.
+#
+# Do NOT be tempted to mount the host's /etc/ssl/cert.pem here. On Docker
+# Desktop for macOS /etc is a symlink to /private/etc, which is not a shared
+# path: Docker silently creates an empty *directory* at the mount target rather
+# than failing, and Dumpling then reports "could not read ca certificate: read
+# /ca.pem: is a directory". Mounting the resolved /private path is refused
+# outright.
+CONTAINER_CA="/etc/ssl/cert.pem"
+
+# Only if you genuinely need a private CA. The file is copied into the output
+# directory rather than bind-mounted from wherever it lives, because that
+# directory is already known to be shareable - which sidesteps the whole Docker
+# Desktop file-sharing problem described above.
 CA_FILE="${CA_FILE:-}"
-if [ -z "$CA_FILE" ]; then
-  for candidate in /etc/ssl/cert.pem /etc/ssl/certs/ca-certificates.crt; do
-    [ -f "$candidate" ] && CA_FILE="$candidate" && break
-  done
-fi
-if [ ! -f "$CA_FILE" ]; then
-  echo "Could not find a CA bundle. Set CA_FILE=/path/to/ca.pem and re-run." >&2
+if [ -n "$CA_FILE" ] && [ ! -f "$CA_FILE" ]; then
+  echo "CA_FILE is set but $CA_FILE is not a file." >&2
   exit 1
 fi
 
@@ -80,6 +90,13 @@ esac
 
 mkdir -p "$OUT_DIR"
 
+CA_IN_CONTAINER="$CONTAINER_CA"
+if [ -n "$CA_FILE" ]; then
+  cp "$CA_FILE" "$OUT_DIR/.ca.pem"
+  CA_IN_CONTAINER="/backup/.ca.pem"
+  echo "Using the CA at $CA_FILE"
+fi
+
 echo "Backing up ${DB_NAME} from ${TIDB_HOST} to ${OUT_DIR} ..."
 
 # --consistency: "auto" resolves to TiDB's snapshot isolation, which needs no
@@ -96,20 +113,21 @@ docker run --rm \
   --entrypoint /bin/sh \
   -e TIDB_PASSWORD="$TIDB_PASSWORD" \
   -v "$OUT_DIR:/backup" \
-  -v "$CA_FILE:/ca.pem:ro" \
   "$DUMPLING_IMAGE" \
   -c '/dumpling \
     --host "$0" \
     --port "$1" \
     --user "$2" \
     --password "$TIDB_PASSWORD" \
-    --ca /ca.pem \
+    --ca "$5" \
     --database "$3" \
     --output /backup \
     --filetype sql \
     --consistency "$4" \
     --compress gzip' \
-  "$TIDB_HOST" "$TIDB_PORT" "$TIDB_USER" "$DB_NAME" "${CONSISTENCY:-auto}"
+  "$TIDB_HOST" "$TIDB_PORT" "$TIDB_USER" "$DB_NAME" "${CONSISTENCY:-auto}" "$CA_IN_CONTAINER"
+
+rm -f "$OUT_DIR/.ca.pem"
 
 echo
 echo "Done. Files:"

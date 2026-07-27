@@ -301,10 +301,18 @@ through this call — there is no path to route around it.
 - **Unit Sizes are global and single-locale (UK).** Recorded as a known limitation in
   CONTEXT.md rather than designed around. Recipe Import already metricates on the way in,
   so the exposure is narrow — Relative Units, chiefly pack sizes.
-- **"Never overwrite a human's value" is enforced as "only write where the value is
-  absent".** No provenance columns in v1: NULL-vs-set fully expresses the only rule that
-  exists, and explicit `curated`/`classified` columns can arrive with the admin panel that
-  would actually display them.
+- **"Never overwrite a human's value" is enforced by only classifying Ingredients that
+  don't exist yet** - detected by their having no Ingredient Lines - rather than by
+  checking whether the column is still unset. No provenance columns in v1.
+
+  **Corrected during Phase 4.** This decision originally read "only write where the value
+  is absent", on the reasoning that NULL-vs-set fully expressed the rule. It does not:
+  NULL in `base_unit_id` means both *never curated* and *curated as the default, gram*.
+  Onion is deliberately gram, so it is NULL, so an unset-column guard let an import flip it
+  to millilitre. Caught by testing against a live database; the unit tests could not have
+  found it, since they assert the shape of the SQL rather than what it means. Restricting
+  to new Ingredients is also a better fit for what the feature is for - the curated set
+  covers what exists, classification covers what arrives.
 - **No admin panel in v1.** Curated values live in a seed migration; corrections are SQL.
   With one user and ~76 rows this is genuinely viable, and it gets the engine in front of
   you sooner. Expect to want the panel fairly soon.

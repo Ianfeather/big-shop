@@ -1,12 +1,13 @@
 ---
 spec: specs/unit-normalisation.md
 status: in-progress
-branch: implement/unit-normalisation-phase-2
-pr: https://github.com/Ianfeather/big-shop/pull/64
+branch: implement/unit-normalisation-phase-4
+pr:
 ---
 
-**Status: production is fully migrated (020-025 applied 2026-07-27). The branch
-is safe to merge.**
+**Status: Phases 1-3 are merged (PRs #63, #64) and migrations 019-025 are applied to
+production. Phase 4 is in progress on `implement/unit-normalisation-phase-4`, branched
+from the #64 merge.**
 
 **Deployment order (applies to every phase of this spec):** each phase's migration must
 reach production *before* the code that reads its columns. Phase 1's migration 019 is
@@ -279,8 +280,32 @@ an LLM drafts and a person approves, rather than values being written
 unsupervised. Live data to curate against: 120 colliding ingredients of 436.
 
 ## Session 8: Classification for new Ingredients (spec Phase 4)
-Status: pending
+Status: done
 Scope: extract.js proposes Base Unit / Display Unit / Unit Sizes for unseen ingredient names; carried on common.Ingredient in the save payload; written only where absent.
 Depends on: Session 7
-Commit:
-Notes: Not in this run.
+Commit: (see git log)
+Notes: extract.js proposes baseUnit/displayUnit/unitSizes for names not in
+knownIngredients, attached to the ingredient they describe so callers carry one
+shape through to the save payload. Written by a new insertIngredientCatalog,
+ordered after insertUnits in both AddRecipe and EditRecipe so a proposed Unit
+Size can reference a Unit the same save is introducing.
+
+**Two traps, both found by testing against a live database rather than by the
+unit tests, which only assert the shape of the SQL:**
+
+(1) The guard was "only write where the column is unset". That is not enough -
+NULL in base_unit_id means both "never curated" and "curated as the default,
+gram". Onion is deliberately gram, so it is NULL, and an import flipped it to
+millilitre. Now restricted to Ingredients with no Ingredient Lines yet, i.e.
+genuinely new ones, which also matches what the feature is for. The spec's
+"Decisions made" entry has been corrected rather than quietly edited.
+
+(2) The bare-count Unit's name collided with a sentinel for the third time.
+common.Ingredient.DisplayUnit is a *string, not a string, because "" is a real
+Display Unit - the most useful one - and a plain string cannot tell "propose a
+count" from "propose nothing". Without the pointer, classification could never
+have suggested the count for onions, potatoes or carrots.
+
+Verified live: a brand-new ingredient gets base, display and Unit Size written;
+an established one has a proposed base unit, display unit and Unit Size all
+correctly rejected.

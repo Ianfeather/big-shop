@@ -135,7 +135,11 @@ components:
     Ingredient:
       additionalProperties: false
       properties:
+        baseUnit:
+          type: string
         department:
+          type: string
+        displayUnit:
           type: string
         name:
           type: string
@@ -143,6 +147,11 @@ components:
           type: string
         unit:
           type: string
+        unitSizes:
+          additionalProperties:
+            format: double
+            type: number
+          type: object
       required:
         - name
         - unit

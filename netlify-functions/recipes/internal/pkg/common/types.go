@@ -35,6 +35,28 @@ type Ingredient struct {
 	Unit       string `json:"unit"`
 	Quantity   string `json:"quantity"`
 	Department string `json:"department,omitempty"`
+	// Catalog metadata proposed by Recipe Import for an Ingredient the Global
+	// Catalog hasn't seen before - what to add it up in, what to show it as, and
+	// how big one of a given Unit of it is. See CONTEXT.md's Unit Size.
+	//
+	// Only ever fills a gap: a value already recorded for the Ingredient always
+	// wins, so a curated figure can't be overwritten by a later import. Absent
+	// on Manual Entry and on every edit of an existing Recipe.
+	//
+	// omitempty on all three, and not merely tidiness: Huma infers required-ness
+	// from JSON tags, so without it every existing client's save would fail
+	// validation for omitting them (see the ID comment on Recipe below).
+	BaseUnit string `json:"baseUnit,omitempty"`
+	// A pointer, not a string, because "" is a real Display Unit - the bare
+	// count, and the most useful one there is ("6 onions"). A plain string
+	// cannot tell "propose showing this as a count" apart from "proposed
+	// nothing", so classification could never suggest the count. nil means
+	// absent; a pointer to "" means the count.
+	//
+	// Third time this Unit's name has collided with a sentinel - see
+	// baseTotal.soleUnit and IngredientInfo.HasDisplayUnit.
+	DisplayUnit *string            `json:"displayUnit,omitempty"`
+	UnitSizes   map[string]float64 `json:"unitSizes,omitempty"`
 }
 
 // Tag contains tag fields

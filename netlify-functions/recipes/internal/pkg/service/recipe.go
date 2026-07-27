@@ -248,6 +248,9 @@ func AddRecipe(recipe common.Recipe, userID string, db *sql.DB) (int, error) {
 	if err = insertUnits(recipe, tx); err != nil {
 		return 0, err
 	}
+	if err = insertIngredientCatalog(recipe, tx); err != nil {
+		return 0, err
+	}
 	if err = insertParts(recipe, tx); err != nil {
 		return 0, err
 	}
@@ -297,6 +300,10 @@ func EditRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 	}
 
 	if err := insertUnits(recipe, tx); err != nil {
+		log.Println(err)
+		return err
+	}
+	if err := insertIngredientCatalog(recipe, tx); err != nil {
 		log.Println(err)
 		return err
 	}
@@ -444,5 +451,78 @@ func insertTags(recipe common.Recipe, db execer) error {
 		return err
 	}
 
+	return nil
+}
+
+// insertIngredientCatalog records the Base Unit, Display Unit and Unit Sizes
+// that Recipe Import proposed for Ingredients the Global Catalog hasn't seen
+// before. Nothing to do for Manual Entry or for editing an existing Recipe,
+// where the payload carries none.
+//
+// Applies only to Ingredients that did not exist before this save, detected by
+// their having no Ingredient Lines yet. insertParts runs after this, and
+// EditRecipe deletes its old parts after it too, so at this point a genuinely
+// new Ingredient has zero rows in `part` and an established one has at least
+// one.
+//
+// That check, rather than "is the column still unset", is load-bearing. NULL in
+// base_unit_id means two different things: never curated, and curated as the
+// default of gram. Onion is deliberately gram, so it is NULL, so an
+// unset-column guard would happily let an import flip it to millilitre - which
+// is exactly what happened when this was first written and tested against a
+// live database. Restricting to new Ingredients also matches what the feature
+// is for: the curated set covers what exists, this covers what arrives.
+//
+// The ON DUPLICATE KEY no-op on Unit Sizes is kept as a second line of defence.
+//
+// Must run after insertUnits: a proposed Unit Size can reference a Unit this
+// same save is introducing, and the INSERT ... SELECT below matches nothing if
+// the Unit row doesn't exist yet.
+func insertIngredientCatalog(recipe common.Recipe, db execer) error {
+	for _, ingredient := range recipe.Ingredients {
+		if ingredient.BaseUnit != "" {
+			// The subquery yields NULL for a Unit that doesn't exist, which
+			// leaves the column NULL rather than writing nonsense - so an
+			// invented Base Unit is inert instead of corrupting the catalog.
+			query := `
+				UPDATE ingredient SET base_unit_id = (SELECT id FROM unit WHERE name = ?)
+				WHERE name = ? AND base_unit_id IS NULL
+				  AND NOT EXISTS (SELECT 1 FROM part WHERE part.ingredient_id = ingredient.id);`
+			if _, err := db.Exec(query, ingredient.BaseUnit, ingredient.Name); err != nil {
+				fmt.Println("could not set ingredient base unit")
+				return err
+			}
+		}
+
+		if ingredient.DisplayUnit != nil {
+			query := `
+				UPDATE ingredient SET display_unit_id = (SELECT id FROM unit WHERE name = ?)
+				WHERE name = ? AND display_unit_id IS NULL
+				  AND NOT EXISTS (SELECT 1 FROM part WHERE part.ingredient_id = ingredient.id);`
+			if _, err := db.Exec(query, *ingredient.DisplayUnit, ingredient.Name); err != nil {
+				fmt.Println("could not set ingredient display unit")
+				return err
+			}
+		}
+
+		for unit, size := range ingredient.UnitSizes {
+			if size <= 0 {
+				continue
+			}
+			// INSERT ... SELECT so a missing Ingredient or Unit simply matches
+			// no rows, and ON DUPLICATE KEY as a deliberate no-op so an existing
+			// Unit Size wins over the proposal.
+			query := `
+				INSERT INTO ingredient_unit_size (ingredient_id, unit_id, size)
+				SELECT i.id, u.id, ? FROM ingredient i, unit u
+				WHERE i.name = ? AND u.name = ?
+				  AND NOT EXISTS (SELECT 1 FROM part WHERE part.ingredient_id = i.id)
+				ON DUPLICATE KEY UPDATE ingredient_unit_size.ingredient_id = ingredient_unit_size.ingredient_id;`
+			if _, err := db.Exec(query, size, ingredient.Name, unit); err != nil {
+				fmt.Println("could not set ingredient unit size")
+				return err
+			}
+		}
+	}
 	return nil
 }

@@ -2,12 +2,17 @@
 spec: specs/unit-normalisation.md
 status: in-progress
 branch: implement/unit-normalisation-phase-4
-pr:
+pr: https://github.com/Ianfeather/big-shop/pull/65
 ---
 
-**Status: Phases 1-3 are merged (PRs #63, #64) and migrations 019-025 are applied to
-production. Phase 4 is in progress on `implement/unit-normalisation-phase-4`, branched
-from the #64 merge.**
+**Status: every session in this spec is implemented.** Phases 1-3 are merged (PRs #63,
+#64) and migrations 019-025 are applied to production; Phase 4 is open as PR #65 and needs
+no migration. Once #65 merges, this spec and state file move to `specs/completed/`.
+
+What is deliberately *not* done, and is recorded in follow-ups rather than here: #26 (dry
+goods rendering as millilitres), #27 (a line-less curated Ingredient can be reclassified)
+and #28 (nothing is displayed in spoons - the mechanism for the original problem 3 shipped,
+the curation did not).
 
 **Deployment order (applies to every phase of this spec):** each phase's migration must
 reach production *before* the code that reads its columns. Phase 1's migration 019 is

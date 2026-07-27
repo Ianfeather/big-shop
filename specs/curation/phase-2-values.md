@@ -206,13 +206,52 @@ Some collisions are **data-entry errors rather than real unit variety**. Adding 
 would legitimise the mistake and silently produce a wrong number, so these are deliberately
 left unconverted - they'll keep showing as separate Amounts.
 
-| Ingredient | Issue | What I did |
+Recipe ids are linkable at `/recipes/<id>`.
+
+### Bare counts on things that aren't countable
+
+| Ingredient | Line | Recipe | Read |
+| --- | --- | --- | --- |
+| chicken stock | `1` (count) | 70 - Kung Pao Chicken | A stock **cube** or **pot**, entered without a unit. |
+| white wine | `1` (count) | 94 - Spicy Sausage Rice | A glass, or a splash. Unlikely to be a bottle in a rice dish. |
+| worcestershire sauce | `4` (count) | 720116 - Chicken Madras | **Quantity is 4, not 1** - so not a bottle. Almost certainly 4 teaspoons or dashes. |
+| orange juice | `1` (count) | 89 - Porchetta w/ Salsa Verde | Plausibly *the juice of 1 orange* rather than an error. |
+| orange juice | `0.5` (count) | 90141 - Salmon with harissa vegetable couscous | Same - juice of half an orange. A count of **oranges**, not cartons. |
+
+The two orange juice lines may not be errors at all; "juice of 1 orange" is a normal way to
+write a recipe. If you read them that way, orange juice wants an average-weight-style Unit
+Size (juice of one orange is roughly 70 ml) rather than being left alone. Your call - it's
+the only one of these five I'd genuinely consider converting.
+
+### Corrections to my own earlier reading
+
+| Ingredient | Line | Recipe | What I got wrong |
+| --- | --- | --- | --- |
+| lemon | `0.25` millilitre | 90139 - Courgette fritters and salsa verde | I said this was a juice line. It isn't - **0.25 ml is a quarter of a millilitre**, which is nothing. It's near-certainly meant to be a quarter of a *lemon*, i.e. the unit is wrong, not the ingredient. Fix the recipe; no Unit Size needed, and lemon's count Display Unit is fine. |
+
+### Garlic clove measured in spoons
+
+Five lines, all quantity 1, almost certainly **minced garlic or garlic paste** rather than
+cloves - probably how the source recipes were written when imported.
+
+| Line | Recipe |
+| --- | --- |
+| `1` tablespoon | 270116 - Chicken Pad See Ew |
+| `1` tablespoon | 300120 - Creamy Sausage Pasta |
+| `1` tablespoon | 330118 - Easy Roasted Garlic Butter Chicken |
+| `1` tablespoon | 330116 - Slow-cooker Beef Stew |
+| `1` teaspoon | 330119 - Juicy Beef Rissoles |
+
+No density proposed, so a list reads "3 + 1 tablespoon" rather than folding paste into a
+clove count. If these do mean paste, they want their own ingredient - one tablespoon of
+minced garlic is about 3 cloves, so leaving them as "garlic clove" and adding a density
+would also be defensible.
+
+### Values I'm unsure of rather than errors
+
+| Ingredient | Why | Recipes |
 | --- | --- | --- |
-| chicken stock | 1 line uses a bare count | A count of stock is almost certainly a stock *cube* or *pot* entered without a unit. No Unit Size proposed - fix the recipe instead, or the count silently becomes a weight. |
-| worcestershire sauce | 1 line uses a bare count | Probably meant a bottle, or a tablespoon. Left unconverted. |
-| white wine | 1 line uses a bare count | Probably a bottle. Left unconverted. |
-| orange juice | 1 line uses a bare count | Probably a carton. Left unconverted. |
-| lemon | 16 counts vs 1 millilitre | The millilitre line is juice, not fruit. Base unit stays gram with a count Display Unit, and no millilitre Unit Size, so juice stays a separate Amount rather than being counted as lemons. |
-| garlic clove | 4 lines use tablespoon, 1 uses teaspoon | Almost certainly garlic paste or minced garlic, not cloves. **No density proposed**, so these stay a separate Amount: a list reads "3 + 1 tablespoon" rather than silently folding paste into a clove count. Check those five recipes - if they do mean paste, they want their own ingredient. |
-| pumpkin | whole-pumpkin weight varies hugely | 1.2kg proposed; adjust if your recipes mean a small one. |
-| kidney beans / butterbean | tin size is drained vs undrained | 400g proposed (undrained, the tin's stated weight). Drained is ~240g. If your recipes mean drained, these are ~40% over. |
+| pumpkin | Only two lines: `1` (count) and `150` gram. A whole pumpkin in a curry is unlikely - 1200 g proposed may be far too high, and the other recipe's 150 g suggests these are wedges. | 810116 - Pumpkin & Cauliflower Makhani (count); 68 - Thai Red Curry (150 g) |
+| tinned pulses | 400 g is the tin's **stated** weight; **drained** is ~240 g. If your recipes mean drained, every one of these is ~65% over. Six separate bean ingredients are affected. | 570117 Baked Beans in Spicy Tomato Sauce (arrocina, 1); 570116 White bean stew (butter beans, 2); 120118 One Pot Smoky Cod (butterbean, 1); 66 Gigantes with tomatoes and greens (gigantes, 2); 9 Pasta with Beans and Kale (haricot, 1); 111 Carribean Vegan Jerk Chilli (kidney, 1); 4 Chilli Con Carne (kidney, 1) |
+
+Note `butter beans` and `butterbean` are separate ingredients - another one for follow-up #25.

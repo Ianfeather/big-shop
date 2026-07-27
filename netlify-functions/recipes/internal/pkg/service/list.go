@@ -329,12 +329,21 @@ func ApplyDisplayUnits(items map[string]*common.ListIngredient, units UnitCatalo
 				// with no Unit Size. Left exactly as it is.
 				continue
 			}
-			item.Amounts[i] = common.Amount{
-				Quantity:     formatDisplayQuantity(base/display, info.DisplayUnit, units),
-				Unit:         info.DisplayUnit,
-				BaseQuantity: amount.Quantity,
-				BaseUnit:     amount.Unit,
+			converted := common.Amount{
+				Quantity: formatDisplayQuantity(base/display, info.DisplayUnit, units),
+				Unit:     info.DisplayUnit,
 			}
+			// The bracket exists to expose an assumption - a Unit Size, which is
+			// an estimate someone chose. An exact conversion between two Absolute
+			// Units of the same dimension involves no estimate, so showing it is
+			// noise: "6 teaspoon (2 tablespoon)" tells the shopper nothing, while
+			// "5 teaspoon (12.5 gram)" shows the density it relied on.
+			from, to := units.Get(amount.Unit), units.Get(info.DisplayUnit)
+			if !(from.IsAbsolute() && to.IsAbsolute() && from.Kind == to.Kind) {
+				converted.BaseQuantity = amount.Quantity
+				converted.BaseUnit = amount.Unit
+			}
+			item.Amounts[i] = converted
 		}
 	}
 }

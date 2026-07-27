@@ -120,14 +120,33 @@ UPDATE `ingredient` SET name = 'chicken' WHERE name = 'chicken ';  -- 200 gram i
 UPDATE `ingredient` SET name = 'bbq sauce' WHERE name = 'bbq sauce ';  -- 250 millilitre in Oven Baked Ribs
 UPDATE `ingredient` SET name = 'oil' WHERE name = ' oil';  -- 3 tablespoon, twice, in curry recipes
 
+-- 'cumin powder' -> 'ground cumin': 1 line into 13, the same jar under a third
+-- name. Missed by the original duplicate scan, which groups by string
+-- similarity - 'cumin powder' and 'ground cumin' share only the one word.
+UPDATE `part` SET ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'ground cumin')
+WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'cumin powder') x);
+INSERT INTO `ingredient_department` (department_id, ingredient_id)
+SELECT idp.department_id, (SELECT id FROM `ingredient` WHERE name = 'ground cumin')
+FROM `ingredient_department` idp
+WHERE idp.ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'cumin powder') x)
+  AND NOT EXISTS (SELECT 1 FROM (SELECT ingredient_id FROM `ingredient_department`) y
+                  WHERE y.ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'ground cumin'));
+DELETE FROM `ingredient_department` WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'cumin powder') x);
+DELETE FROM `ingredient_unit_size`  WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'cumin powder') x);
+DELETE FROM `ingredient` WHERE name = 'cumin powder';
+
 -- 'thyme sprig' -> 'thyme': a unit wearing an ingredient's name. Its single
 -- line is '1' with a blank unit in Potato & Leek Soup, so it repoints like any
 -- other merge - the same treatment 'thyme leaf' gets above.
 --
 -- This sat in the orphan list below until a rehearsal against a production copy
--- caught it. Deleting it left the Ingredient Line pointing at an ingredient row
--- that no longer exists - no error, and the recipe simply loses its thyme, since
--- every read of a Recipe's lines joins `ingredient`.
+-- caught it, and it fails differently depending on where you run it. Replayed
+-- against the production dump the DELETE succeeded and left the Ingredient Line
+-- pointing at a row that no longer exists, so the recipe silently loses its
+-- thyme - every read of a Recipe's lines joins `ingredient`. Against a database
+-- built from this repo's own migrations, fk_part_ingredient_id is enforced and
+-- the same DELETE errors out mid-migration instead. Neither is acceptable, and
+-- the first is the one production would have got.
 UPDATE `part` SET ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'thyme')
 WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'thyme sprig') x);
 DELETE FROM `ingredient_department` WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'thyme sprig') x);
@@ -143,38 +162,22 @@ DELETE FROM `ingredient` WHERE name IN ('mixed seed', 'mustard seed', 'basil lea
 -- (`coriander seeds`, `cumin seeds`), but a bare spice name and its "ground "
 -- prefix are the same jar, so those fragments are folded together.
 
--- 'ground cumin' -> 'cumin': the winner is the SMALLER side here (1 line vs 12)
--- and, unlike every other merge in this file, the loser is the curated one -
--- `ground cumin` carries the density and teaspoon Display Unit while `cumin`
--- carries nothing. The DELETE below would drop them, so they are copied across
--- first. IFNULL, not an unconditional SET, so this cannot overwrite a curated
--- value on the winner if one is ever added before this runs.
-UPDATE `ingredient` SET
-  base_unit_id = IFNULL(base_unit_id,
-    (SELECT v FROM (SELECT base_unit_id AS v FROM `ingredient` WHERE name = 'ground cumin') a)),
-  display_unit_id = IFNULL(display_unit_id,
-    (SELECT v FROM (SELECT display_unit_id AS v FROM `ingredient` WHERE name = 'ground cumin') b))
-WHERE name = 'cumin';
-INSERT INTO `ingredient_unit_size` (ingredient_id, unit_id, size)
-SELECT (SELECT id FROM `ingredient` WHERE name = 'cumin'), s.unit_id, s.size
-FROM (SELECT ingredient_id, unit_id, size FROM `ingredient_unit_size`) s
-WHERE s.ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ground cumin') x)
-  AND NOT EXISTS (SELECT 1 FROM (SELECT ingredient_id, unit_id FROM `ingredient_unit_size`) y
-                  WHERE y.ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'cumin')
-                    AND y.unit_id = s.unit_id);
-
--- 'ground cumin' -> 'cumin': 12 lines folded into 1; `cumin seeds` stays separate
-UPDATE `part` SET ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'cumin')
-WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ground cumin') x);
+-- 'cumin' -> 'ground cumin': 1 line into 12. The longer name wins, against the
+-- usual preference for the shorter one, because `cumin seeds` also exists and
+-- a bare `cumin` is ambiguous next to it. It is also the curated side already,
+-- carrying the density and teaspoon Display Unit that 026 and 027 set, so
+-- nothing has to be copied across.
+UPDATE `part` SET ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'ground cumin')
+WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'cumin') x);
 INSERT INTO `ingredient_department` (department_id, ingredient_id)
-SELECT idp.department_id, (SELECT id FROM `ingredient` WHERE name = 'cumin')
+SELECT idp.department_id, (SELECT id FROM `ingredient` WHERE name = 'ground cumin')
 FROM `ingredient_department` idp
-WHERE idp.ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ground cumin') x)
+WHERE idp.ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'cumin') x)
   AND NOT EXISTS (SELECT 1 FROM (SELECT ingredient_id FROM `ingredient_department`) y
-                  WHERE y.ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'cumin'));
-DELETE FROM `ingredient_department` WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ground cumin') x);
-DELETE FROM `ingredient_unit_size`  WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ground cumin') x);
-DELETE FROM `ingredient` WHERE name = 'ground cumin';
+                  WHERE y.ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'ground cumin'));
+DELETE FROM `ingredient_department` WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'cumin') x);
+DELETE FROM `ingredient_unit_size`  WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'cumin') x);
+DELETE FROM `ingredient` WHERE name = 'cumin';
 
 -- 'ground turmeric' -> 'turmeric': 1 line into 15; turmeric is sold ground either way
 UPDATE `part` SET ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'turmeric')
@@ -229,8 +232,11 @@ COMMIT;
 --   coriander / ground coriander / coriander seeds - fresh coriander (density
 --     0.2, sold by the packet) really is a different purchase from the ground
 --     spice (0.5, measured in spoons), so these stay apart
---   cumin seeds - whole, not the ground jar
+--   cumin seeds - whole, not the ground jar (`cumin` merged into
+--     `ground cumin`, the more precise of the two)
 --   thyme / dried thyme
+--   chilli powder (15 lines) / chilli (1) - the powder against what reads as a
+--     fresh chilli, alongside `red chilli` and `green chilli`
 --   egg / egg whites / egg yolk
 --   onion / onion powder / onion seeds / onion paste / spring onion
 --   ginger / ginger & garlic paste

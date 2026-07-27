@@ -190,11 +190,27 @@ missing column, so the list just renders empty) rather than like a stale
 environment. It also stops fixture recipes accumulating across runs, which they
 did, for months, because teardown deletes fail silently (follow-ups.md #24).
 
-The suite covers the core Recipe CRUD and Shopping List flows only
-(add/edit/delete a Recipe; add/remove a Recipe on the list, add an Extra Item,
-mark/un-mark an item bought, clear the list) — Dave, tag-filter browsing, and
-Recipe Import are deliberately out of scope (see the top of `e2e/recipe.spec.ts`
-and `e2e/shopping-list.spec.ts` for why). Run this whenever a change touches
+The suite covers the core Recipe CRUD and Shopping List flows (add/edit/delete a
+Recipe; add/remove a Recipe on the list, add an Extra Item, mark/un-mark an item
+bought, clear the list), plus all three Recipe Import Sources in
+`e2e/recipe-import.spec.ts`. Dave and tag-filter browsing remain out of scope.
+
+**Import is covered without any LLM call**: Playwright intercepts the Next.js
+API routes (`/api/parse-recipe-url`, `/api/parse-recipe-text`,
+`/api/recipe-image` and its polling request) and returns canned JSON. That
+exercises every line between the extractor and the save payload, which is where
+the bugs have actually been — two Phase 4 defects lived there and no test caught
+either. All three Sources are covered rather than one because they use two
+different code paths (Manual Entry's paste box goes through
+`appendIngredients`; URL and Photo set `initialRecipe`), and the last bug was
+present in two of the three.
+
+**A spec that touches the Shopping List must not run alongside
+`shopping-list.spec.ts`.** Under `DISABLE_AUTH` the list is one mutable resource
+shared by the whole account, and Playwright runs spec *files* in parallel —
+`shopping-list.spec.ts` guards itself with serial mode within its own file, but
+nothing stops another file stomping it. `recipe-import.spec.ts` therefore
+asserts on the captured save payload rather than on the rendered list. Run this whenever a change touches
 recipe creation/editing/deletion or shopping-list behavior — Vitest alone
 won't catch a regression that only shows up going through the real API
 (e.g. a mismatched request content-type, as `follow-ups.md` #12 notes was

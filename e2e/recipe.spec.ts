@@ -36,7 +36,8 @@ test.describe('recipe management', () => {
   test('edit a recipe', async ({ page, request }) => {
     recipeName = uniqueName('Edit');
     // Ingredients come from the API, not the UI's bulk-parse box - that box
-    // makes a real LLM call, which is out of scope for these flows.
+    // makes a real LLM call, which is out of scope for these flows - see
+    // e2e/recipe-import.spec.ts, which covers import with the route stubbed.
     const id = await createRecipe(request, {
       name: recipeName,
       method: 'Original method.',

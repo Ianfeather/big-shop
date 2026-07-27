@@ -1,13 +1,12 @@
 ---
 spec: specs/unit-normalisation.md
-status: in-progress
+status: complete
 branch: implement/unit-normalisation-phase-4
-pr: https://github.com/Ianfeather/big-shop/pull/65
+pr: https://github.com/Ianfeather/big-shop/pull/63, #64, #65
 ---
 
-**Status: every session in this spec is implemented.** Phases 1-3 are merged (PRs #63,
-#64) and migrations 019-025 are applied to production; Phase 4 is open as PR #65 and needs
-no migration. Once #65 merges, this spec and state file move to `specs/completed/`.
+**Status: complete.** All four phases merged - PR #63 (Phase 1), #64 (Phases 2+3), #65
+(Phase 4) - and migrations 019-025 applied to production.
 
 What is deliberately *not* done, and is recorded in follow-ups rather than here: #26 (dry
 goods rendering as millilitres), #27 (a line-less curated Ingredient can be reclassified)

@@ -1,6 +1,6 @@
 import type { Page, APIRequestContext } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { createRecipe, deleteRecipeById, clearShoppingList } from './api';
+import { createRecipe, deleteRecipeById, clearShoppingList, addRecipesToList } from './api';
 
 // Under DISABLE_AUTH every request resolves to the same dev Account, so the
 // Shopping List is one singleton mutable resource shared across this whole
@@ -100,6 +100,22 @@ test.describe('shopping list', () => {
 
     await expect(page.getByRole('checkbox', { name: ingredientName })).toHaveCount(0);
     await expect(page.getByRole('checkbox', { name: keepAliveIngredientName })).toBeVisible();
+  });
+
+  // Regression: shopping_list_event has a foreign key to recipe, and
+  // DeleteRecipe did not clear it - so any Recipe that had ever been added to a
+  // list could not be deleted (follow-ups.md #24). It went unnoticed for months
+  // because teardown ignored the response status; deleteRecipeById now asserts.
+  test('a recipe that has been on the list can still be deleted', async ({ request }) => {
+    const throwaway = `E2E Deletable ${runId}`;
+    const id = await createRecipe(request, {
+      name: throwaway,
+      ingredients: [{ name: `e2e deletable ingredient ${runId}`, quantity: '1', unit: 'gram' }],
+    });
+
+    // Being on a list is what used to make this fail.
+    await addRecipesToList(request, [id, recipeId]);
+    await deleteRecipeById(request, id);
   });
 
   test('clear the list', async ({ page }) => {

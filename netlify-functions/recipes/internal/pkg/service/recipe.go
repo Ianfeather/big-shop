@@ -353,6 +353,20 @@ func DeleteRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 		return err
 	}
 
+	// And its Shopping List Events. migrations/015 puts a foreign key on
+	// shopping_list_event.recipe_id, so without this the DELETE below fails with
+	// "Cannot delete or update a parent row" for any Recipe that has ever been
+	// added to a list - which is every Recipe anyone has actually cooked from.
+	//
+	// Deleting rather than nulling the column: the rows only exist to let Dave
+	// infer Recent and Favorite Recipes, `recipe_usage_summary` filters on
+	// `recipe_id IS NOT NULL`, and a Recipe that no longer exists cannot be
+	// suggested - so a nulled row would be dead weight. It also matches what
+	// this function already does with the Recipe's parts, tags and list items.
+	if _, err := db.Exec("DELETE FROM shopping_list_event WHERE recipe_id=? AND account_id=?;", recipe.ID, accountID); err != nil {
+		return err
+	}
+
 	if _, err := db.Exec("DELETE FROM recipe WHERE id=? and account_id = ?;", recipe.ID, accountID); err != nil {
 		return err
 	}

@@ -33,6 +33,10 @@ way, vanishing into a total measured in tens of grams. Its real job is to stop a
 
 13 ingredients. Everything else stays gram (the default).
 
+`orange juice`, `white wine` and `worcestershire sauce` stop colliding once section 7's
+recipe fixes land, so their Base Unit is no longer load-bearing - kept anyway, since it's
+correct and costs nothing.
+
 | Ingredient |
 | --- |
 | almond milk |
@@ -51,7 +55,8 @@ way, vanishing into a total measured in tens of grams. Its real job is to stop a
 
 ## 3. Average weight of one (the count group)
 
-35 ingredients - the largest category, and your most-used ones.
+33 ingredients - the largest category, and your most-used ones. (`lemon` and `pumpkin` were
+here until the recipe fixes in section 7 removed their collisions entirely.)
 
 | Ingredient | One of them is | Note |
 | --- | --- | --- |
@@ -71,14 +76,12 @@ way, vanishing into a total measured in tens of grams. Its real job is to stop a
 | garlic clove | 5 |  |
 | ginger | 30 | a thumb |
 | lasagne sheets | 15 |  |
-| lemon | 100 | the fruit; its millilitre lines are juice - see flags |
 | mint | 5 | a sprig |
 | mozzarella | 125 | a ball |
 | new potato | 50 |  |
 | onion | 150 |  |
 | plum tomato | 70 |  |
 | potato | 180 |  |
-| pumpkin | 1200 | a whole one - wide variance, check |
 | radish | 15 |  |
 | red onion | 150 |  |
 | ripe medium tomato | 120 |  |
@@ -192,7 +195,7 @@ derive from it, so there's no way to set one and forget another.
 
 What each ingredient's total is *shown* in. The base amount stays visible in brackets.
 
-**Shown as a count:** apples, avocado, bacon rashers (smoked), cabbage, carrot, chicken breast, chicken thigh, chicken thighs (boneless), egg whites, garlic clove, lemon, mozzarella, new potato, onion, plum tomato, potato, pumpkin, radish, red onion, ripe medium tomato, ripe tomatoes, salmon, shallot, sweet potato
+**Shown as a count:** apples, avocado, bacon rashers (smoked), cabbage, carrot, chicken breast, chicken thigh, chicken thighs (boneless), egg whites, garlic clove, mozzarella, new potato, onion, plum tomato, potato, radish, red onion, ripe medium tomato, ripe tomatoes, salmon, shallot, sweet potato
 
 **Shown as tins:** butterbean, coconut cream, coconut milk, kidney beans
 
@@ -200,58 +203,59 @@ What each ingredient's total is *shown* in. The base amount stays visible in bra
 
 **Shown as bottles:** *none* - same reasoning as packets.
 
-## 7. Flagged - please check these
+## 7. Agreed recipe fixes
 
-Some collisions are **data-entry errors rather than real unit variety**. Adding a Unit Size
-would legitimise the mistake and silently produce a wrong number, so these are deliberately
-left unconverted - they'll keep showing as separate Amounts.
+Reviewed and decided. These are **recipe data corrections, not curation** - the stored line
+doesn't say what the recipe means, and no Unit Size can fix that. Applying them removes five
+ingredients from the curation set entirely, which is a better outcome than curating around
+bad data.
 
-Recipe ids are linkable at `/recipes/<id>`.
+**Nothing here has been applied.** These touch production recipe data.
 
-### Bare counts on things that aren't countable
+| # | Recipe | Ingredient | Now | Should be |
+| --- | --- | --- | --- | --- |
+| 1 | 70 - Kung Pao Chicken | chicken stock | `1` (count) | `30` millilitre |
+| 2 | 94 - Spicy Sausage Rice | white wine | `1` (count) | `100` millilitre |
+| 3 | 720116 - Chicken Madras | worcestershire sauce | `4` (count) | `1` tablespoon |
+| 4 | 89 - Porchetta w/ Salsa Verde | orange juice | `1` (count) | ingredient becomes **orange**, `1` (count) |
+| 5 | 90141 - Salmon with harissa vegetable couscous | orange juice | `0.5` (count) | ingredient becomes **orange**, `0.5` (count) |
+| 6 | 90139 - Courgette fritters and salsa verde | lemon | `0.25` millilitre | `0.25` (count) |
+| 7 | 270116 - Chicken Pad See Ew | garlic clove | `1` tablespoon | `3` clove |
+| 8 | 300120 - Creamy Sausage Pasta | garlic clove | `1` tablespoon | `3` clove |
+| 9 | 330118 - Easy Roasted Garlic Butter Chicken | garlic clove | `1` tablespoon | `3` clove |
+| 10 | 330116 - Slow-cooker Beef Stew | garlic clove | `1` tablespoon | `3` clove |
+| 11 | 330119 - Juicy Beef Rissoles | garlic clove | `1` **teaspoon** | `1` clove - a teaspoon is ~1 clove, not 3 |
+| 12 | 810116 - Pumpkin & Cauliflower Makhani | pumpkin | `1` (count) | `500` gram |
 
-| Ingredient | Line | Recipe | Read |
-| --- | --- | --- | --- |
-| chicken stock | `1` (count) | 70 - Kung Pao Chicken | A stock **cube** or **pot**, entered without a unit. |
-| white wine | `1` (count) | 94 - Spicy Sausage Rice | A glass, or a splash. Unlikely to be a bottle in a rice dish. |
-| worcestershire sauce | `4` (count) | 720116 - Chicken Madras | **Quantity is 4, not 1** - so not a bottle. Almost certainly 4 teaspoons or dashes. |
-| orange juice | `1` (count) | 89 - Porchetta w/ Salsa Verde | Plausibly *the juice of 1 orange* rather than an error. |
-| orange juice | `0.5` (count) | 90141 - Salmon with harissa vegetable couscous | Same - juice of half an orange. A count of **oranges**, not cartons. |
+**`orange` does not exist as an ingredient** and needs creating for fixes 4 and 5.
+`orange juice` keeps one legitimate line afterwards (`100` millilitre, Brisket Tacos).
 
-The two orange juice lines may not be errors at all; "juice of 1 orange" is a normal way to
-write a recipe. If you read them that way, orange juice wants an average-weight-style Unit
-Size (juice of one orange is roughly 70 ml) rather than being left alone. Your call - it's
-the only one of these five I'd genuinely consider converting.
+### What these fixes remove from the curation
 
-### Corrections to my own earlier reading
-
-| Ingredient | Line | Recipe | What I got wrong |
-| --- | --- | --- | --- |
-| lemon | `0.25` millilitre | 90139 - Courgette fritters and salsa verde | I said this was a juice line. It isn't - **0.25 ml is a quarter of a millilitre**, which is nothing. It's near-certainly meant to be a quarter of a *lemon*, i.e. the unit is wrong, not the ingredient. Fix the recipe; no Unit Size needed, and lemon's count Display Unit is fine. |
-
-### Garlic clove measured in spoons
-
-Five lines, all quantity 1, almost certainly **minced garlic or garlic paste** rather than
-cloves - probably how the source recipes were written when imported.
-
-| Line | Recipe |
-| --- | --- |
-| `1` tablespoon | 270116 - Chicken Pad See Ew |
-| `1` tablespoon | 300120 - Creamy Sausage Pasta |
-| `1` tablespoon | 330118 - Easy Roasted Garlic Butter Chicken |
-| `1` tablespoon | 330116 - Slow-cooker Beef Stew |
-| `1` teaspoon | 330119 - Juicy Beef Rissoles |
-
-No density proposed, so a list reads "3 + 1 tablespoon" rather than folding paste into a
-clove count. If these do mean paste, they want their own ingredient - one tablespoon of
-minced garlic is about 3 cloves, so leaving them as "garlic clove" and adding a density
-would also be defensible.
-
-### Values I'm unsure of rather than errors
-
-| Ingredient | Why | Recipes |
+| Ingredient | After the fix | Curation needed |
 | --- | --- | --- |
-| pumpkin | Only two lines: `1` (count) and `150` gram. A whole pumpkin in a curry is unlikely - 1200 g proposed may be far too high, and the other recipe's 150 g suggests these are wedges. | 810116 - Pumpkin & Cauliflower Makhani (count); 68 - Thai Red Curry (150 g) |
-| tinned pulses | 400 g is the tin's **stated** weight; **drained** is ~240 g. If your recipes mean drained, every one of these is ~65% over. Six separate bean ingredients are affected. | 570117 Baked Beans in Spicy Tomato Sauce (arrocina, 1); 570116 White bean stew (butter beans, 2); 120118 One Pot Smoky Cod (butterbean, 1); 66 Gigantes with tomatoes and greens (gigantes, 2); 9 Pasta with Beans and Kale (haricot, 1); 111 Carribean Vegan Jerk Chilli (kidney, 1); 4 Chilli Con Carne (kidney, 1) |
+| lemon | all 17 lines are counts | **none** - no Unit Size, no Display Unit |
+| white wine | all millilitre | **none** |
+| worcestershire sauce | all tablespoon | **none** |
+| pumpkin | all grams | **none** |
+| orange juice | one line left | **none** |
+| orange (new) | two count lines | **none** |
+| chicken stock | still gram + millilitre + litre | base unit millilitre, plus a gram Unit Size (1.0) |
+| garlic clove | still (count) + clove | count Unit Size 5, clove default 5 - both already proposed |
 
-Note `butter beans` and `butterbean` are separate ingredients - another one for follow-up #25.
+### Tinned pulses - decided
+
+Use the **stated** tin weight, not drained. 400 g is how you buy them, so the `tin` default
+of 400 stands and none of the six bean ingredients needs an override.
+
+### How to apply
+
+Two routes, and the safer one is probably not SQL:
+
+- **Edit the twelve lines in the live app.** They go through the normal save path, which is
+  transactional and validated, and `orange` gets created by the existing upsert with no
+  special handling. Twelve lines across eleven recipes is maybe fifteen minutes.
+- **SQL against production**, which is faster but hand-writes an ingredient insert and
+  eleven part updates against live data, with a backup first.
+
+Note `butter beans` and `butterbean` are separate ingredients - one for follow-up #25.

@@ -40,3 +40,24 @@ Items 1–21 have all been resolved — see [`follow-ups-resolved.md`](./follow-
 
     This is curation, not code: setting `display_unit_id` to `teaspoon` for the spice ingredients, with the matching density already present, would do it. Worth doing alongside #26, since both are about dry goods reading badly and the same pass covers them.
 
+29. **Extend the e2e suite to cover Recipe Import.** Currently excluded: `e2e/recipe.spec.ts:39` says import "makes a real LLM call, which is out of scope for these flows", and CLAUDE.md records the same. That reasoning was sound when the suite was written and is now the largest coverage hole in the app.
+
+    **Why it matters specifically for `specs/unit-normalisation.md`.** Phase 4's entire mechanism lives in this untested path. Classification only ever happens via `extract.js` → the form → `POST /recipe`; nothing else can trigger it. So the feature that keeps the ingredient catalog from going stale has no end-to-end coverage at all, and neither does the `NOT EXISTS (SELECT 1 FROM part …)` guard in `classifyNewIngredients` - the thing standing between an import and the ~100 curated values in `migrations/025_curated_unit_sizes.sql`.
+
+    That is not hypothetical. **Both Phase 4 bugs lived in exactly this path and neither was caught by any test:**
+
+    - `normalizeParsedIngredients` in `pages/recipes/new.tsx` dropped `baseUnit`/`displayUnit`/`unitSizes`, so URL and Photo import silently classified nothing. Found by review, not by tests.
+    - A classification failure rolled back the whole recipe save, against the spec's explicit rule. The unit test written for it asserted the wrong behaviour.
+
+    The first is the shape of bug e2e exists to catch: pure plumbing, spanning three files and two languages, where every individual piece is correct. It also shows why testing one Import Source is not enough - **the three sources use two different code paths** (Manual Entry's paste box calls `appendIngredients`; URL and Photo set `initialRecipe` via `normalizeParsedIngredients`), and the bug was present in two of three. A test covering only the paste box would have passed while the other two were broken.
+
+    Neither the Go unit tests nor the Vitest suite can close this. The Go tests assert the *shape* of SQL strings, not what it means - the state file admits as much, and it is why the base-unit overwrite bug reached a live database. The existing `pages/api/parse-recipe-*.test.ts` mock `extractRecipe` itself, so they exercise the handler and nothing downstream of it.
+
+    **The stated blocker does not apply.** No LLM call is needed to test the plumbing. Playwright can intercept the Next.js API routes and return canned JSON:
+
+    - `/api/parse-recipe-text` — Manual Entry's bulk paste (`Form.tsx:114`)
+    - `/api/parse-recipe-url` — URL Import (`new.tsx:153`)
+    - `/api/recipe-image` — Photo Import, plus its polling endpoint (`new.tsx:148`, `:163`)
+
+    A fixture response carrying `baseUnit`, `displayUnit` and `unitSizes` for a novel ingredient name, asserted through to the shopping list, would have caught both bugs. Worth doing for all three sources rather than one, precisely because their plumbing diverges. A separate, opt-in spec making a real LLM call (skipped unless a flag is set) would be a reasonable addition on top, but is not the valuable part - the deterministic plumbing test is.
+

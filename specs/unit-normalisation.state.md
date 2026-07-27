@@ -5,6 +5,9 @@ branch: implement/unit-normalisation-phase-2
 pr:
 ---
 
+**Status: production is fully migrated (020-025 applied 2026-07-27). The branch
+is safe to merge.**
+
 **Deployment order (applies to every phase of this spec):** each phase's migration must
 reach production *before* the code that reads its columns. Phase 1's migration 019 is
 applied and its code is merged, so that one is settled. Phase 2 adds columns that
@@ -263,11 +266,15 @@ potato, carrot, lemon). Without Display Units, Phase 2 turns "3 onions" into
 grams, so the two only read correctly together.
 
 ## Session 7: Curated data seed
-Status: pending
+Status: done
 Scope: draft Base Units, Display Units and Unit Sizes for the colliding ingredients against live data; put them to the user for review; commit the reviewed values as a migration.
 Depends on: Session 6
-Commit:
-Notes: The review step is the point of this session - per the spec's decisions,
+Commit: (see git log)
+Notes: **Migrations 020-025 were applied to production on 2026-07-27**, ahead of
+the code merging - the correct order, since Sessions 5 and 6 read columns that
+would otherwise not exist.
+
+The review step is the point of this session - per the spec's decisions,
 an LLM drafts and a person approves, rather than values being written
 unsupervised. Live data to curate against: 120 colliding ingredients of 436.
 

@@ -2,7 +2,7 @@
 spec: specs/unit-normalisation.md
 status: in-progress
 branch: implement/unit-normalisation-phase-2
-pr:
+pr: https://github.com/Ianfeather/big-shop/pull/64
 ---
 
 **Status: production is fully migrated (020-025 applied 2026-07-27). The branch

@@ -20,3 +20,15 @@ Items 1–21 have all been resolved — see [`follow-ups-resolved.md`](./follow-
 
     Merging means repointing `part.ingredient_id` and deleting the loser, plus its `ingredient_department` rows - the same shape as migration `011_plurals.sql`, which did exactly this by hand in 2020. Trimming names on write in `insertIngredients` would stop the whitespace class recurring.
 
+26. **Dry ingredients used only in volume units render as millilitres.** Phase 2 curated a density for every ingredient in the weight-volume collision group - those had a gram line forcing the issue. Ingredients used *exclusively* in volume units never surfaced as needing one, but they still combine into their dimension's base unit, so a Shopping List with both "1 tbsp paprika" and "2 tsp paprika" on it reads **"25 millilitre paprika"** rather than "13 gram". Correct arithmetic, wrong unit for a powder.
+
+    Only bites when one list uses two different volume units for the same ingredient - a single unit is preserved as-is - so it is cosmetic rather than wrong, and strictly better than the pre-Phase-1 behaviour of summing them to a bogus "3 tablespoon".
+
+    Affected and **dry**, so wanting a density: `ginger` (16 lines), `paprika` (13), `ground cumin` (12), `ground coriander` (8), `smoked paprika` (6), `pine nuts` (4), `sesame seeds` (4), `garlic powder` (4), `sage` (3), `onion powder` (3), `mix powder` (3), `dried thyme` (3), `peanut butter` (3), `chia seeds` (2), `baking powder` (2).
+
+    Affected but genuinely **liquid**, where millilitres is right and nothing is needed: `vegetable stock`, `passata`, `single cream`, `fish sauce`, `shaoxing wine`, `tamari sauce`, `white vinegar`, `white wine vinegar`, `lemon juice`, `ghee`, `milk`, `water`, `canola oil`.
+
+    Fix is a density each, in the same shape as the values already in `migrations/025_curated_unit_sizes.sql`. Note `ginger` already has an average weight there (30g per thumb) but no density, so its grated-by-the-spoon lines and its whole-thumb lines currently sit in different buckets.
+
+    Found while checking a report of two "garlic powder" ingredients. There is only one - the query output that prompted it grouped by ingredient *and unit*, so a single ingredient used with two units printed on two rows. Worth recording so nobody goes looking for a duplicate that was never there.
+

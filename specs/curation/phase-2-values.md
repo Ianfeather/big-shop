@@ -15,11 +15,19 @@ liquid, in which case millilitres.
 
 Set once on the Unit, override per ingredient if wrong. These three cover ~34 ingredients.
 
-| Unit | Default size | Why |
-| --- | --- | --- |
-| `pinch` | 0.5 | a pinch is a pinch, whatever it's of |
-| `clove` | 5 | a garlic clove; the only ingredients using it are garlic |
-| `tin` | 400 | standard UK tin - correct for both 400g tomatoes and 400ml coconut milk, since the number is in each ingredient's own base unit |
+**These values are in each ingredient's own Base Unit, not in grams as such** — which is
+why one number can be right for two different dimensions. In practice:
+
+| Unit | Default size | Reads as | Why |
+| --- | --- | --- | --- |
+| `pinch` | 0.5 | **grams**, always | All 20 ingredients using it are dry goods — herbs, spices, sugar, salt. Nothing volume-based is ever pinched, so this is only ever 0.5 g. |
+| `clove` | 5 | **grams**, always | Only ever garlic. |
+| `tin` | 400 | **grams or millilitres**, depending | 10 of its 12 users are weight-based (400 g of chopped tomatoes, kidney beans, tuna); coconut milk and coconut cream are volume-based, where the same 400 correctly means 400 ml. This is the one place the base-unit-relative rule currently does real work. |
+
+A note on precision: `pinch` barely matters. Its biggest users are fresh coriander and
+parsley, and a typical shopping list has one or two pinches on it — under a gram either
+way, vanishing into a total measured in tens of grams. Its real job is to stop a stray
+"2 pinch" cluttering a line that already says "1 packet", not to be accurate.
 
 ## 2. Liquids - Base Unit becomes millilitre
 

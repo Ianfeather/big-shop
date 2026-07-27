@@ -505,3 +505,55 @@ func TestCombineIngredientsPreservesASoleUnitDespiteADensity(t *testing.T) {
 		})
 	}
 }
+
+// The documented ordering - weight, then volume, then Relative Units
+// alphabetically, then anything unparseable in input order - is only
+// incidentally exercised by the two-Amount cases above. This pins it with every
+// bucket populated at once, which is also the worst case a shopper can see.
+//
+// The volume lines are deliberately two different Units: with only one, sole-unit
+// preservation would keep it as "2 tablespoon" rather than converting, which is
+// correct but would not exercise the conversion path alongside the ordering.
+func TestCombineIngredientsOrdersEveryKindOfAmount(t *testing.T) {
+	recipes := lines(
+		ingredient("mystery", "1", "tin"),
+		ingredient("mystery", "a handful", "gram"),
+		ingredient("mystery", "2", "tablespoon"),
+		ingredient("mystery", "1", "teaspoon"),
+		ingredient("mystery", "100", "gram"),
+		ingredient("mystery", "3", "pinch"),
+	)
+
+	got := CombineIngredients(recipes, testUnits(), nil)["mystery"].Amounts
+
+	want := []common.Amount{
+		{Quantity: "100", Unit: "gram"},      // weight first
+		{Quantity: "35", Unit: "millilitre"}, // then volume: 2 tbsp + 1 tsp,
+		//                                        genuinely mixed, so it converts
+		{Quantity: "3", Unit: "pinch"},        // then relative, alphabetically
+		{Quantity: "1", Unit: "tin"},          // "pinch" < "tin"
+		{Quantity: "a handful", Unit: "gram"}, // unparseable last
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("expected %v but got %v", want, got)
+	}
+}
+
+// The mirror of the density case: an Ingredient bought by volume, with a stray
+// line recorded by weight. The Unit Size runs gram->millilitre here, the
+// opposite direction to every other density test.
+func TestCombineIngredientsConvertsWeightIntoAVolumeBaseUnit(t *testing.T) {
+	catalog := IngredientCatalog{
+		"double cream": {BaseUnit: "millilitre", UnitSizes: map[string]float64{"gram": 1.0}},
+	}
+
+	got := CombineIngredients(lines(
+		ingredient("double cream", "200", "millilitre"),
+		ingredient("double cream", "100", "gram"),
+	), testUnits(), catalog)["double cream"].Amounts
+
+	want := []common.Amount{{Quantity: "300", Unit: "millilitre"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("expected %v but got %v", want, got)
+	}
+}

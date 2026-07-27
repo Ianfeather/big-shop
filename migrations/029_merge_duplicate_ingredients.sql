@@ -41,18 +41,23 @@ DELETE FROM `ingredient_department` WHERE ingredient_id = (SELECT id FROM (SELEC
 DELETE FROM `ingredient_unit_size`  WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'cloves') x);
 DELETE FROM `ingredient` WHERE name = 'cloves';
 
--- 'spring onion' -> 'spring onions': 15 lines vs 1; plural wins here because that is the established spelling
-UPDATE `part` SET ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'spring onions')
-WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'spring onion') x);
+-- 'spring onions' -> 'spring onion': the plural is the current majority (15
+-- lines to 1), but extract.js's prompt mandates "Lowercase and singular" and
+-- matchCanonicalIngredient compares exact strings with no plural handling, so
+-- every future import produces the singular and would fragment again against a
+-- plural catalog entry. The convention that governs what arrives next beats the
+-- current majority.
+UPDATE `part` SET ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'spring onion')
+WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'spring onions') x);
 INSERT INTO `ingredient_department` (department_id, ingredient_id)
-SELECT idp.department_id, (SELECT id FROM `ingredient` WHERE name = 'spring onions')
+SELECT idp.department_id, (SELECT id FROM `ingredient` WHERE name = 'spring onion')
 FROM `ingredient_department` idp
-WHERE idp.ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'spring onion') x)
+WHERE idp.ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'spring onions') x)
   AND NOT EXISTS (SELECT 1 FROM (SELECT ingredient_id FROM `ingredient_department`) y
-                  WHERE y.ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'spring onions'));
-DELETE FROM `ingredient_department` WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'spring onion') x);
-DELETE FROM `ingredient_unit_size`  WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'spring onion') x);
-DELETE FROM `ingredient` WHERE name = 'spring onion';
+                  WHERE y.ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'spring onion'));
+DELETE FROM `ingredient_department` WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'spring onions') x);
+DELETE FROM `ingredient_unit_size`  WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'spring onions') x);
+DELETE FROM `ingredient` WHERE name = 'spring onions';
 
 -- 'parsley leaves' -> 'parsley': 24 lines vs 1
 UPDATE `part` SET ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'parsley')
@@ -115,9 +120,100 @@ UPDATE `ingredient` SET name = 'chicken' WHERE name = 'chicken ';  -- 200 gram i
 UPDATE `ingredient` SET name = 'bbq sauce' WHERE name = 'bbq sauce ';  -- 250 millilitre in Oven Baked Ribs
 UPDATE `ingredient` SET name = 'oil' WHERE name = ' oil';  -- 3 tablespoon, twice, in curry recipes
 
--- Orphans: no Ingredient Lines at all, so nothing to repoint.
-DELETE FROM `ingredient_department` WHERE ingredient_id IN (SELECT id FROM (SELECT id FROM `ingredient` WHERE name IN ('mixed seed', 'mustard seed', 'basil leaf', 'thyme sprig')) x);
-DELETE FROM `ingredient` WHERE name IN ('mixed seed', 'mustard seed', 'basil leaf', 'thyme sprig');
+-- 'thyme sprig' -> 'thyme': a unit wearing an ingredient's name. Its single
+-- line is '1' with a blank unit in Potato & Leek Soup, so it repoints like any
+-- other merge - the same treatment 'thyme leaf' gets above.
+--
+-- This sat in the orphan list below until a rehearsal against a production copy
+-- caught it. Deleting it left the Ingredient Line pointing at an ingredient row
+-- that no longer exists - no error, and the recipe simply loses its thyme, since
+-- every read of a Recipe's lines joins `ingredient`.
+UPDATE `part` SET ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'thyme')
+WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'thyme sprig') x);
+DELETE FROM `ingredient_department` WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'thyme sprig') x);
+DELETE FROM `ingredient_unit_size`  WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'thyme sprig') x);
+DELETE FROM `ingredient` WHERE name = 'thyme sprig';
+
+-- Orphans: verified to have no Ingredient Lines at all, so nothing to repoint.
+DELETE FROM `ingredient_department` WHERE ingredient_id IN (SELECT id FROM (SELECT id FROM `ingredient` WHERE name IN ('mixed seed', 'mustard seed', 'basil leaf')) x);
+DELETE FROM `ingredient` WHERE name IN ('mixed seed', 'mustard seed', 'basil leaf');
+
+-- Second round of merges, from a review of the "deliberately NOT merged" list
+-- at the foot of this file. Ground-vs-whole is a real distinction and is kept
+-- (`coriander seeds`, `cumin seeds`), but a bare spice name and its "ground "
+-- prefix are the same jar, so those fragments are folded together.
+
+-- 'ground cumin' -> 'cumin': the winner is the SMALLER side here (1 line vs 12)
+-- and, unlike every other merge in this file, the loser is the curated one -
+-- `ground cumin` carries the density and teaspoon Display Unit while `cumin`
+-- carries nothing. The DELETE below would drop them, so they are copied across
+-- first. IFNULL, not an unconditional SET, so this cannot overwrite a curated
+-- value on the winner if one is ever added before this runs.
+UPDATE `ingredient` SET
+  base_unit_id = IFNULL(base_unit_id,
+    (SELECT v FROM (SELECT base_unit_id AS v FROM `ingredient` WHERE name = 'ground cumin') a)),
+  display_unit_id = IFNULL(display_unit_id,
+    (SELECT v FROM (SELECT display_unit_id AS v FROM `ingredient` WHERE name = 'ground cumin') b))
+WHERE name = 'cumin';
+INSERT INTO `ingredient_unit_size` (ingredient_id, unit_id, size)
+SELECT (SELECT id FROM `ingredient` WHERE name = 'cumin'), s.unit_id, s.size
+FROM (SELECT ingredient_id, unit_id, size FROM `ingredient_unit_size`) s
+WHERE s.ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ground cumin') x)
+  AND NOT EXISTS (SELECT 1 FROM (SELECT ingredient_id, unit_id FROM `ingredient_unit_size`) y
+                  WHERE y.ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'cumin')
+                    AND y.unit_id = s.unit_id);
+
+-- 'ground cumin' -> 'cumin': 12 lines folded into 1; `cumin seeds` stays separate
+UPDATE `part` SET ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'cumin')
+WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ground cumin') x);
+INSERT INTO `ingredient_department` (department_id, ingredient_id)
+SELECT idp.department_id, (SELECT id FROM `ingredient` WHERE name = 'cumin')
+FROM `ingredient_department` idp
+WHERE idp.ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ground cumin') x)
+  AND NOT EXISTS (SELECT 1 FROM (SELECT ingredient_id FROM `ingredient_department`) y
+                  WHERE y.ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'cumin'));
+DELETE FROM `ingredient_department` WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ground cumin') x);
+DELETE FROM `ingredient_unit_size`  WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ground cumin') x);
+DELETE FROM `ingredient` WHERE name = 'ground cumin';
+
+-- 'ground turmeric' -> 'turmeric': 1 line into 15; turmeric is sold ground either way
+UPDATE `part` SET ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'turmeric')
+WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ground turmeric') x);
+INSERT INTO `ingredient_department` (department_id, ingredient_id)
+SELECT idp.department_id, (SELECT id FROM `ingredient` WHERE name = 'turmeric')
+FROM `ingredient_department` idp
+WHERE idp.ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ground turmeric') x)
+  AND NOT EXISTS (SELECT 1 FROM (SELECT ingredient_id FROM `ingredient_department`) y
+                  WHERE y.ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'turmeric'));
+DELETE FROM `ingredient_department` WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ground turmeric') x);
+DELETE FROM `ingredient_unit_size`  WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ground turmeric') x);
+DELETE FROM `ingredient` WHERE name = 'ground turmeric';
+
+-- 'ground chilli flakes' -> 'chilli flakes': 1 line into 9; flakes are flakes
+UPDATE `part` SET ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'chilli flakes')
+WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ground chilli flakes') x);
+INSERT INTO `ingredient_department` (department_id, ingredient_id)
+SELECT idp.department_id, (SELECT id FROM `ingredient` WHERE name = 'chilli flakes')
+FROM `ingredient_department` idp
+WHERE idp.ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ground chilli flakes') x)
+  AND NOT EXISTS (SELECT 1 FROM (SELECT ingredient_id FROM `ingredient_department`) y
+                  WHERE y.ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'chilli flakes'));
+DELETE FROM `ingredient_department` WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ground chilli flakes') x);
+DELETE FROM `ingredient_unit_size`  WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ground chilli flakes') x);
+DELETE FROM `ingredient` WHERE name = 'ground chilli flakes';
+
+-- 'chicken or ham stock' -> 'chicken stock': the single line was a recipe-level ambiguity, resolved in favour of chicken
+UPDATE `part` SET ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'chicken stock')
+WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'chicken or ham stock') x);
+INSERT INTO `ingredient_department` (department_id, ingredient_id)
+SELECT idp.department_id, (SELECT id FROM `ingredient` WHERE name = 'chicken stock')
+FROM `ingredient_department` idp
+WHERE idp.ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'chicken or ham stock') x)
+  AND NOT EXISTS (SELECT 1 FROM (SELECT ingredient_id FROM `ingredient_department`) y
+                  WHERE y.ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'chicken stock'));
+DELETE FROM `ingredient_department` WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'chicken or ham stock') x);
+DELETE FROM `ingredient_unit_size`  WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'chicken or ham stock') x);
+DELETE FROM `ingredient` WHERE name = 'chicken or ham stock';
 
 -- Recompute the curated marker: a merge can move curated values onto a winner
 -- that was not previously flagged.
@@ -130,23 +226,18 @@ COMMIT;
 
 -- Deliberately NOT merged - these look similar and are different purchases:
 --
---   coriander / ground coriander / coriander seeds
---   cumin / ground cumin / cumin seeds
+--   coriander / ground coriander / coriander seeds - fresh coriander (density
+--     0.2, sold by the packet) really is a different purchase from the ground
+--     spice (0.5, measured in spoons), so these stay apart
+--   cumin seeds - whole, not the ground jar
 --   thyme / dried thyme
---   turmeric / ground turmeric
---   chilli flakes / ground chilli flakes
 --   egg / egg whites / egg yolk
---   onion / onion powder / onion seeds / onion paste / spring onions
+--   onion / onion powder / onion seeds / onion paste / spring onion
 --   ginger / ginger & garlic paste
 --   chicken / chicken breast / chicken leg / chicken thigh /
 --     chicken thighs (boneless) / chicken bones / chicken stock
---
--- Two worth a human eye, left alone because either answer is defensible:
---   * `chicken thigh` (2 lines) vs `chicken thighs (boneless)` (8) - bone-in and
---     boneless are different things to buy, but the shorter name may well mean
---     the boneless one.
---   * `chicken or ham stock` (1 line) - probably meant `chicken stock`, but that
---     is a recipe decision, not a catalog one.
+--   `chicken thigh` (2 lines) vs `chicken thighs (boneless)` (8) - bone-in and
+--     boneless are genuinely different things to buy.
 --
 -- Verification - should return no rows:
 --   SELECT name FROM ingredient WHERE name <> TRIM(name);

@@ -91,25 +91,58 @@ way, vanishing into a total measured in tens of grams. Its real job is to stop a
 | thyme | 3 | a sprig |
 | walnut halves | 2 |  |
 
-## 4. Pack sizes
+## 4. Packets - convert the data to grams instead of curating a size
 
-| Ingredient | Unit | Size | Note |
+**Changed direction after review.** The draft originally proposed a Unit Size per packet
+ingredient. That produces the right shopping list, but it's the wrong place to solve it.
+
+`packet` isn't a size, it's the *absence* of one. "1 packet coriander" never recorded
+whether that was 30 g or 100 g - both exist on the shelf - so converting to grams doesn't
+destroy a faithful record, it supplies something that was never captured. A Unit Size only
+hides the same guess behind the aggregation.
+
+The deciding argument is automatic ordering: from grams you can work out which pack size to
+order, and you can still *choose* to display packets. From "1 packet" you can do neither
+without re-guessing. Grams are the recoverable direction.
+
+So: rewrite these `part` rows to grams, and don't set `packet` as a Display Unit - showing
+"2 packet" when packets come in several sizes is confidently unhelpful.
+
+**This is the one change here that touches production data and is hard to undo.** Take a
+backup first, and note that 10 of these ingredients are used by a single recipe each and
+never collide with another Unit, so converting them changes no shopping list - it only makes
+the recipe read properly and keeps the catalog consistent for ordering later.
+
+| Ingredient | Lines | Also used as | Proposed grams per packet |
 | --- | --- | --- | --- |
-| asparagus | packet | 250 |  |
-| basil | packet | 30 |  |
-| cashew nuts | packet | 200 |  |
-| cherry tomato | packet | 250 |  |
-| coriander | packet | 30 |  |
-| dill | packet | 30 |  |
-| green beans | packet | 200 |  |
-| lasagne sheets | packet | 250 |  |
-| pancetta | packet | 130 |  |
-| parsley | packet | 30 |  |
-| prawns | packet | 200 |  |
-| salad dressing | bottle | 250 | base unit is millilitre |
-| shiitake mushrooms | packet | 150 |  |
-| spinach | packet | 250 |  |
-| tenderstem broccoli | packet | 200 |  |
+| coriander | 1 | gram, pinch, tbsp, tsp | 30 |
+| parsley | 2 | gram, pinch, tbsp, tsp | 30 |
+| dill | 1 | pinch, tbsp, tsp | 30 |
+| flat-leaf parsley | 1 | - (see follow-up #25, duplicate of parsley) | 30 |
+| spinach | 2 | gram | 250 |
+| green beans | 5 | (count) | 200 |
+| tenderstem broccoli | 1 | (count), gram | 200 |
+| asparagus | 1 | (count), gram | 250 |
+| cherry tomato | 1 | (count), gram | 250 |
+| prawns | 1 | (count), gram | 200 |
+| pancetta | 1 | (count), gram | 130 |
+| cashew nuts | 1 | gram | 200 |
+| shiitake mushrooms | 1 | gram | 150 |
+| lasagne sheets | 1 | (count), gram | 250 |
+| baby corn | 1 | - | 175 |
+| cooked rice | 2 | - | 250 |
+| custard | 1 | - | 500 |
+| extra firm smoked tofu | 1 | - | 200 |
+| french fries | 1 | - | 750 |
+| linguine | 1 | - | 500 |
+| round gow gee wrappers | 2 | - | 270 |
+| tortilla chips | 1 | - | 200 |
+| tortilla dough | 1 | - | 500 |
+
+Two quantities are `2` rather than `1` (cooked rice, gow gee wrappers) - those multiply.
+
+`bottle` has the same problem for `salad dressing` (1 line, 250 ml proposed) and should be
+converted the same way.
 
 ## 5. Densities (grams per millilitre)
 
@@ -163,9 +196,9 @@ What each ingredient's total is *shown* in. The base amount stays visible in bra
 
 **Shown as tins:** butterbean, coconut cream, coconut milk, kidney beans
 
-**Shown as packets:** asparagus, cashew nuts, cherry tomato, coriander, dill, green beans, lasagne sheets, pancetta, parsley, prawns, shiitake mushrooms, spinach, tenderstem broccoli
+**Shown as packets:** *none* - see section 4. Packet sizes vary by product, so a packet count is a worse instruction than a weight until an ordering system knows what's actually on the shelf.
 
-**Shown as bottles:** salad dressing
+**Shown as bottles:** *none* - same reasoning as packets.
 
 ## 7. Flagged - please check these
 

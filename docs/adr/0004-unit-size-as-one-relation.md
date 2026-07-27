@@ -10,7 +10,9 @@ The unlocking detail is that the value is stated in the Ingredient's *own* Base 
 
 The rejected alternative is written down and looks reasonable, which is the main reason this ADR exists — see `specs/archive/unit-normalisation-old.md` and `specs/archive/density-conversion.md`. That plan put `average_weight_grams` and `preferred_unit_id` on `ingredient`, handled weight↔volume merging as a *separate, later* spec built on coarse density buckets, and left informal count units (bunch, handful, pinch) explicitly unresolved because a single `average_weight_grams` couldn't represent both "1 tomato" and "1 pinch".
 
-Two things decided it. Measured against the production dataset, 76 of 300 ingredients are used with more than one Unit, and **weight↔volume (16 ingredients) is a larger category than count↔weight (12)** — so the deferred half of that plan was bigger than the half being built. And the real unit vocabulary is only 13 rows, of which 6 are absolute; everything else needed per-ingredient data anyway, which is precisely what the one relation provides.
+Two things decided it. A quarter of all ingredients are used with more than one Unit, and the categories needing curated data are all substantial — no single one dominates enough to justify building for it and deferring the rest. And the real unit vocabulary is only 13 rows, of which 6 are absolute; everything else needed per-ingredient data anyway, which is precisely what the one relation provides.
+
+**Figures corrected after the fact.** This ADR originally argued from a 2024 database dump that weight↔volume (16) was a *larger* category than count↔weight (12), and that the old plan had therefore deferred the bigger half. Live data (2026-07-26: 120 of 436 ingredients colliding) says the reverse — count↔measure is 32 against weight↔volume's 20. The decision recorded here is unaffected, and if anything better supported: one relation serving both matters more when both are large. But the specific comparison that motivated it was wrong, and is corrected here rather than left to mislead a future reader.
 
 ## Consequences
 

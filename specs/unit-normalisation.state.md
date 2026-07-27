@@ -1,25 +1,32 @@
 ---
 spec: specs/unit-normalisation.md
 status: in-progress
-branch: implement/unit-normalisation
-pr: https://github.com/Ianfeather/big-shop/pull/63
+branch: implement/unit-normalisation-phase-2
+pr: https://github.com/Ianfeather/big-shop/pull/64
 ---
 
-**Deployment order (do not lose before the PR merges):** migration 019 must be
-applied to production *before* Session 2's code deploys. Session 1 alone is safe to
-ship in either order because nothing calls `GetUnitCatalog` yet; from Session 2 on,
-code without the migration fails with `Unknown column 'kind'`.
+**Status: production is fully migrated (020-025 applied 2026-07-27). The branch
+is safe to merge.**
 
-This run covers **Phase 1 only** (Sessions 1-3), per the user's `/implement phase 1`.
-Sessions 4-6 map to the spec's Phases 2-4 and are left `pending` so a later run resumes
-cleanly from step 1 of the implement skill.
+**Deployment order (applies to every phase of this spec):** each phase's migration must
+reach production *before* the code that reads its columns. Phase 1's migration 019 is
+applied and its code is merged, so that one is settled. Phase 2 adds columns that
+`CombineIngredients` will read, so the same rule applies again - migration first, then
+merge. The migration is additive and backward-compatible with the running code, so
+applying it ahead of the merge has no outage window; merging first does, because Netlify
+auto-deploys on push to master.
 
-Branch point: `cb6eff6` (the spec/design commit).
+Apply production migrations by piping the file directly, **never** through anything using
+`mysql --force`: it skips failing statements, so a failed ALTER would leave the following
+UPDATEs silently matching nothing.
 
-**PR #63 is open covering Session 1 only** - opened early at the user's request rather
-than at the end of the run, so the schema layer can land in master while Sessions 2-3
-continue. Overall status stays `in-progress`: the spec is not complete, so this spec and
-state file do NOT move to `specs/completed/` yet.
+Branch point for Phase 1: `cb6eff6` (the spec/design commit).
+Branch point for Phase 2: `8e594f0` (the Phase 1 merge).
+
+**Phase 1 (Sessions 1-3) is merged** - PR #63, squashed onto master as `8e594f0`, and
+migration 019 has been applied to production. Sessions 4-6 continue on a new branch,
+`implement/unit-normalisation-phase-2`, branched from that merge. Overall status stays
+`in-progress`: the spec is not complete, so it does NOT move to `specs/completed/` yet.
 
 ## Session 1: Unit kinds and factors
 Status: done
@@ -197,23 +204,83 @@ Judgement calls not acted on, with reasons:
   back short. Left alone rather than restructuring the read path on a
   hypothetical.
 
-## Session 4: Base Unit and Unit Size (spec Phase 2)
-Status: pending
-Scope: base_unit_id, ingredient_unit_size, unit.default_size, and the curated seed for the ~76 colliding ingredients.
+## Session 4: Phase 2 schema (Unit Size)
+Status: done
+Scope: migrations/020_unit_size.sql - unit.default_size, ingredient.base_unit_id, and the ingredient_unit_size table. No values seeded.
 Depends on: Session 3
-Commit:
-Notes: Out of scope for this run.
+Commit: 4fe0998
+Notes: Applied to the local dev DB. Not yet applied to production - it must go
+in before Session 5's code merges, per the deployment-order note above.
 
-## Session 5: Display Unit and rounding (spec Phase 3)
-Status: pending
-Scope: display_unit_id, round-up-to-whole for Relative Display Units, bracketed base amount in Item.tsx.
+Same commit fixes scripts/sync-from-prod.sh, which would have failed against
+this migration: mysqldump --no-create-info emits a positional INSERT carrying
+production's column count, so any locally-added column breaks the import with
+"Column count doesn't match value count". --complete-insert fixes it for this
+migration and every future one, since local is always ahead of prod while a
+migration is in development. Verified by simulating both table shapes locally.
+
+## Session 5: Aggregator uses Base Unit and Unit Size
+Status: done
+Scope: an IngredientCatalog loader (base unit + unit sizes, keyed by ingredient name); CombineIngredients converts everything it can into the ingredient's Base Unit rather than bucketing per unit kind; a Unit Size resolves per-ingredient first, then the Unit's default; anything with no Unit Size stays a separate Amount exactly as today. Single-unit preservation from Phase 1 carries over.
 Depends on: Session 4
-Commit:
-Notes: Out of scope for this run.
+Commit: (see git log)
+Notes: Two design corrections worth remembering.
 
-## Session 6: Classification for new Ingredients (spec Phase 4)
+(1) A first attempt made Base Unit one bucket per Ingredient defaulting to
+gram, which quietly broke volume-only ingredients - tsp+tbsp of soy sauce
+stopped combining because volume no longer matched the default weight base,
+undoing a Phase 1 conversion. Totals are kept per Absolute kind instead, with
+Unit Sizes bridging into the Ingredient's own kind. The existing tests caught
+it.
+
+(2) Phase 1 signalled "units differed" with an empty soleUnit. Safe while only
+Absolute Units entered the bucket; not once Relative Units do, because the
+bare-count Unit's name is literally "". Needed an explicit `mixed` flag.
+
+Verified live against synced production data: 1 onion + 75 g merges to 225 gram
+with a Unit Size of 150 g; stays "75 gram + 1" without one; a lone count stays
+"1"; 1.5 kg + 1 onion scales to 1.65 kilogram.
+
+## Session 6: Display Unit and rounding (spec Phase 3)
+Status: done
+Scope: migration for ingredient.display_unit_id; render the total in the Display Unit with the base amount in brackets ("2 tins (800 g)"); round up to a whole for Relative Display Units, natural precision for Absolute.
+Depends on: Session 5
+Commit: (see git log)
+Notes: Applied on read (GetShoppingList) rather than at generation, so a
+corrected Unit Size or Display Unit improves a list already in the database -
+the same read-time principle that keeps `part` verbatim, and it needs no `list`
+schema change.
+
+**Recurring hazard worth remembering:** the bare-count Unit's name is literally
+"", and it has now collided with a sentinel twice - baseTotal.soleUnit in
+Session 5, IngredientInfo.DisplayUnit here (where "" meant both "show as a
+count" and "no Display Unit", so onions silently rendered in grams). Any new
+"unset" signal around Units needs an explicit flag, not an empty string.
+
+Verified live: 1.5 kg of onion + 1 onion -> "11 (1.65 kilogram)".
+
+Folded into this branch rather than shipped separately - agreed with the
+user once live data showed count<->measure is the largest category (32
+ingredients) and includes the most-used ingredients in the database (onion,
+potato, carrot, lemon). Without Display Units, Phase 2 turns "3 onions" into
+grams, so the two only read correctly together.
+
+## Session 7: Curated data seed
+Status: done
+Scope: draft Base Units, Display Units and Unit Sizes for the colliding ingredients against live data; put them to the user for review; commit the reviewed values as a migration.
+Depends on: Session 6
+Commit: (see git log)
+Notes: **Migrations 020-025 were applied to production on 2026-07-27**, ahead of
+the code merging - the correct order, since Sessions 5 and 6 read columns that
+would otherwise not exist.
+
+The review step is the point of this session - per the spec's decisions,
+an LLM drafts and a person approves, rather than values being written
+unsupervised. Live data to curate against: 120 colliding ingredients of 436.
+
+## Session 8: Classification for new Ingredients (spec Phase 4)
 Status: pending
 Scope: extract.js proposes Base Unit / Display Unit / Unit Sizes for unseen ingredient names; carried on common.Ingredient in the save payload; written only where absent.
-Depends on: Session 5
+Depends on: Session 7
 Commit:
-Notes: Out of scope for this run.
+Notes: Not in this run.

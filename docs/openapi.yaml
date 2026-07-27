@@ -26,6 +26,10 @@ components:
     Amount:
       additionalProperties: false
       properties:
+        baseQuantity:
+          type: string
+        baseUnit:
+          type: string
         quantity:
           type: string
         unit:

@@ -114,26 +114,34 @@ rewritten, so it should at least not get worse.
 
 ### How bad is the problem, in real numbers
 
-Measured over the production dump: **76 of 300 ingredients (25%) are used with more than
-one Unit**, so this is a routine occurrence rather than an edge case. Grouped by what each
+Measured against live production data (synced 2026-07-26 via
+`scripts/sync-from-prod.sh`): **120 of 436 ingredients (28%) are used with more than one
+Unit**, so this is a routine occurrence rather than an edge case. Grouped by what each
 would need in order to combine:
 
 | Ingredients | Requires | Examples |
 | --- | --- | --- |
-| **18** | nothing — same dimension, pure conversion | tsp↔tbsp (much the most common), g↔kg, ml↔l |
-| **16** | grams per millilitre | flour, butter, caster sugar, breadcrumbs, double cream |
-| **12** | average weight of one | potato, red onion, chicken breast, cabbage, apples |
-| **10** | a decision about `pinch` | parsley, coriander, nutmeg, cinnamon, mint |
-| **8** | count↔volume | white wine, orange juice, rosemary, salt |
-| **7** | pack size | coconut milk (ml×3, tin×3), spinach, salad dressing |
-| **2** | portion size | garlic clove, bay leaf |
+| **36** | nothing — same dimension, pure conversion | tsp↔tbsp, g↔kg, ml↔l |
+| **32** | average weight of one | onion, potato, carrot, lemon, chicken breast |
+| **20** | pack size | coconut milk, spinach, asparagus, cherry tomato |
+| **20** | grams per millilitre | flour, butter, caster sugar, breadcrumbs |
+| **10** | a decision about `pinch` | black pepper, chilli flakes, nutmeg, cinnamon |
+| **2** | two Relative Units only | garlic, green beans |
 
-Two things follow. The **largest single win needs no new data at all** — teaspoon↔tablespoon
-and g↔kg conversions fix 18 ingredients for free, which is why they're Phase 1 below. And
-**weight↔volume (16) is a bigger category than count↔weight (12)**, even though count↔weight
-is what problem 2 is entirely about and weight↔volume was deferred to a separate
-`density-conversion.md` follow-up. The old plan's priorities were inverted relative to the
-data; the model below collapses both into one mechanism rather than ranking them.
+The **largest single win needs no new data at all** — same-dimension conversions fix 36
+ingredients for free, which is what Phase 1 shipped.
+
+**Correction, recorded rather than quietly edited:** an earlier draft of this section used
+a 2024 database dump and concluded that weight↔volume (16) was a larger category than
+count↔weight (12), and therefore that the original plan's priorities were inverted. Live
+data says the opposite — count↔measure is **32**, comfortably the largest category needing
+curated data, against 20 for weight↔volume. The original problem statement's instinct
+(point 2, average weight per ingredient) was right. What this doesn't change is the design:
+one relation still serves both, and the case for that is stronger now that both categories
+are large rather than one dominating.
+
+It does change sequencing, though — see Phase 3, which the count group depends on to read
+properly.
 
 ## Proposed approach
 

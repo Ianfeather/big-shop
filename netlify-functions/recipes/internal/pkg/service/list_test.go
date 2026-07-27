@@ -35,7 +35,12 @@ func TestCombineIngredients(t *testing.T) {
 	tests := []struct {
 		name    string
 		recipes []common.Recipe
-		want    map[string][]common.Amount
+		// Both default to "nothing curated" when nil, which is the state every
+		// Ingredient is in until Phase 2's seed lands - and the state most of
+		// these cases are asserting.
+		units       UnitCatalog
+		ingredients IngredientCatalog
+		want        map[string][]common.Amount
 	}{
 		// The bug this whole change exists to fix. Quantities used to be summed
 		// keyed by ingredient name with Unit not part of the key at all, so
@@ -268,6 +273,116 @@ func TestCombineIngredients(t *testing.T) {
 			},
 		},
 
+		// --- Phase 2: with curated data, the categories above start merging ---
+
+		// count<->measure, the largest category in live data (32 ingredients,
+		// including onion, potato, carrot and lemon).
+		{
+			name: "a count merges into weight once an average weight is known",
+			recipes: lines(
+				ingredient("onion", "3", ""),
+				ingredient("onion", "150", "gram"),
+			),
+			ingredients: IngredientCatalog{
+				"onion": {BaseUnit: "gram", UnitSizes: map[string]float64{"": 150}},
+			},
+			want: map[string][]common.Amount{
+				"onion": {{Quantity: "600", Unit: "gram"}},
+			},
+		},
+		// The same rule that keeps a lone teaspoon a teaspoon has to keep a lone
+		// count a count - otherwise "3 onions" becomes "450 gram" for no reason.
+		{
+			name:    "a lone count is not converted just because a Unit Size exists",
+			recipes: lines(ingredient("onion", "3", "")),
+			ingredients: IngredientCatalog{
+				"onion": {BaseUnit: "gram", UnitSizes: map[string]float64{"": 150}},
+			},
+			want: map[string][]common.Amount{
+				"onion": {{Quantity: "3", Unit: ""}},
+			},
+		},
+		// weight<->volume, via a density expressed as a Unit Size.
+		{
+			name: "a density merges volume into weight",
+			recipes: lines(
+				ingredient("flour", "50", "gram"),
+				ingredient("flour", "2", "tablespoon"),
+			),
+			ingredients: IngredientCatalog{
+				"flour": {BaseUnit: "gram", UnitSizes: map[string]float64{"tablespoon": 8}},
+			},
+			want: map[string][]common.Amount{
+				"flour": {{Quantity: "66", Unit: "gram"}},
+			},
+		},
+		// A pack size, on an Ingredient whose Base Unit is millilitre - the same
+		// "tin = 400" reads as 400ml here and would be 400g for tinned tomatoes.
+		{
+			name: "a pack size merges into a millilitre base unit",
+			recipes: lines(
+				ingredient("coconut milk", "1", "tin"),
+				ingredient("coconut milk", "400", "millilitre"),
+			),
+			ingredients: IngredientCatalog{
+				"coconut milk": {BaseUnit: "millilitre", UnitSizes: map[string]float64{"tin": 400}},
+			},
+			want: map[string][]common.Amount{
+				"coconut milk": {{Quantity: "800", Unit: "millilitre"}},
+			},
+		},
+		// A Unit whose size genuinely doesn't vary by Ingredient can carry a
+		// default on the Unit itself rather than being repeated per Ingredient.
+		{
+			name: "a Unit's default size is used when the Ingredient has none",
+			recipes: lines(
+				ingredient("black pepper", "2", "pinch"),
+				ingredient("black pepper", "4", "gram"),
+			),
+			units: func() UnitCatalog {
+				u := testUnits()
+				u["pinch"] = UnitInfo{Kind: KindRelative, DefaultSize: 0.5}
+				return u
+			}(),
+			want: map[string][]common.Amount{
+				"black pepper": {{Quantity: "5", Unit: "gram"}},
+			},
+		},
+		// A value curated for the specific Ingredient always beats the default.
+		{
+			name: "a per-Ingredient Unit Size overrides the Unit's default",
+			recipes: lines(
+				ingredient("saffron", "2", "pinch"),
+				ingredient("saffron", "1", "gram"),
+			),
+			units: func() UnitCatalog {
+				u := testUnits()
+				u["pinch"] = UnitInfo{Kind: KindRelative, DefaultSize: 0.5}
+				return u
+			}(),
+			ingredients: IngredientCatalog{
+				"saffron": {BaseUnit: "gram", UnitSizes: map[string]float64{"pinch": 0.1}},
+			},
+			want: map[string][]common.Amount{
+				"saffron": {{Quantity: "1.2", Unit: "gram"}},
+			},
+		},
+		// Curating one Unit doesn't silently make the others convertible.
+		{
+			name: "units without a Unit Size still stay separate",
+			recipes: lines(
+				ingredient("parsley", "30", "gram"),
+				ingredient("parsley", "1", "packet"),
+				ingredient("parsley", "2", "tablespoon"),
+			),
+			ingredients: IngredientCatalog{
+				"parsley": {BaseUnit: "gram", UnitSizes: map[string]float64{"tablespoon": 4}},
+			},
+			want: map[string][]common.Amount{
+				"parsley": {{Quantity: "38", Unit: "gram"}, {Quantity: "1", Unit: "packet"}},
+			},
+		},
+
 		{
 			name: "ingredients combine across recipes",
 			recipes: []common.Recipe{
@@ -282,7 +397,11 @@ func TestCombineIngredients(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := CombineIngredients(tc.recipes, testUnits())
+			units := tc.units
+			if units == nil {
+				units = testUnits()
+			}
+			got := CombineIngredients(tc.recipes, units, tc.ingredients)
 
 			if len(got) != len(tc.want) {
 				t.Fatalf("expected %d ingredients but got %d (%v)", len(tc.want), len(got), got)
@@ -310,7 +429,7 @@ func TestCombineIngredientsCarriesDepartmentAndRecipe(t *testing.T) {
 		}},
 	}
 
-	got := CombineIngredients(recipes, testUnits())["carrot"]
+	got := CombineIngredients(recipes, testUnits(), nil)["carrot"]
 
 	if got.Department != "vegetables" {
 		t.Errorf("expected department %q but got %q", "vegetables", got.Department)
@@ -325,8 +444,116 @@ func TestCombineIngredientsCarriesDepartmentAndRecipe(t *testing.T) {
 }
 
 func TestCombineIngredientsEmptyInput(t *testing.T) {
-	got := CombineIngredients([]common.Recipe{}, testUnits())
+	got := CombineIngredients([]common.Recipe{}, testUnits(), nil)
 	if len(got) != 0 {
 		t.Errorf("expected no ingredients but got %v", got)
+	}
+}
+
+// A Unit Size on the other dimension's base unit is a density, and every Unit
+// of that dimension derives from it - so one curated value covers millilitre,
+// teaspoon and tablespoon rather than needing a row each.
+func TestCombineIngredientsDerivesVolumeUnitsFromDensity(t *testing.T) {
+	recipes := lines(
+		ingredient("plain flour", "100", "gram"),
+		ingredient("plain flour", "2", "tablespoon"), // 30ml
+		ingredient("plain flour", "1", "teaspoon"),   // 5ml
+	)
+	catalog := IngredientCatalog{
+		"plain flour": {BaseUnit: "gram", UnitSizes: map[string]float64{"millilitre": 0.53}},
+	}
+
+	got := CombineIngredients(recipes, testUnits(), catalog)["plain flour"].Amounts
+
+	// 100g + 30ml*0.53 + 5ml*0.53 = 100 + 15.9 + 2.65
+	want := []common.Amount{{Quantity: "118.55", Unit: "gram"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("expected %v but got %v", want, got)
+	}
+}
+
+// A lone Amount stays in its own Unit even when a density exists for the
+// Ingredient. Converting into the base unit to sum it is fine; failing to
+// convert back is not - "1 tablespoon chilli powder" is not "7.5 gram".
+func TestCombineIngredientsPreservesASoleUnitDespiteADensity(t *testing.T) {
+	catalog := IngredientCatalog{
+		"chilli powder": {BaseUnit: "gram", UnitSizes: map[string]float64{"millilitre": 0.5}},
+	}
+
+	for _, tc := range []struct {
+		name    string
+		recipes []common.Recipe
+		want    []common.Amount
+	}{
+		{"lone tablespoon", lines(ingredient("chilli powder", "1", "tablespoon")),
+			[]common.Amount{{Quantity: "1", Unit: "tablespoon"}}},
+		{"several tablespoons", lines(
+			ingredient("chilli powder", "1", "tablespoon"),
+			ingredient("chilli powder", "2", "tablespoon")),
+			[]common.Amount{{Quantity: "3", Unit: "tablespoon"}}},
+		// Genuinely mixed, so grams are the honest common denominator.
+		{"tablespoon and gram", lines(
+			ingredient("chilli powder", "1", "tablespoon"),
+			ingredient("chilli powder", "5", "gram")),
+			[]common.Amount{{Quantity: "12.5", Unit: "gram"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := CombineIngredients(tc.recipes, testUnits(), catalog)["chilli powder"].Amounts
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("expected %v but got %v", tc.want, got)
+			}
+		})
+	}
+}
+
+// The documented ordering - weight, then volume, then Relative Units
+// alphabetically, then anything unparseable in input order - is only
+// incidentally exercised by the two-Amount cases above. This pins it with every
+// bucket populated at once, which is also the worst case a shopper can see.
+//
+// The volume lines are deliberately two different Units: with only one, sole-unit
+// preservation would keep it as "2 tablespoon" rather than converting, which is
+// correct but would not exercise the conversion path alongside the ordering.
+func TestCombineIngredientsOrdersEveryKindOfAmount(t *testing.T) {
+	recipes := lines(
+		ingredient("mystery", "1", "tin"),
+		ingredient("mystery", "a handful", "gram"),
+		ingredient("mystery", "2", "tablespoon"),
+		ingredient("mystery", "1", "teaspoon"),
+		ingredient("mystery", "100", "gram"),
+		ingredient("mystery", "3", "pinch"),
+	)
+
+	got := CombineIngredients(recipes, testUnits(), nil)["mystery"].Amounts
+
+	want := []common.Amount{
+		{Quantity: "100", Unit: "gram"},      // weight first
+		{Quantity: "35", Unit: "millilitre"}, // then volume: 2 tbsp + 1 tsp,
+		//                                        genuinely mixed, so it converts
+		{Quantity: "3", Unit: "pinch"},        // then relative, alphabetically
+		{Quantity: "1", Unit: "tin"},          // "pinch" < "tin"
+		{Quantity: "a handful", Unit: "gram"}, // unparseable last
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("expected %v but got %v", want, got)
+	}
+}
+
+// The mirror of the density case: an Ingredient bought by volume, with a stray
+// line recorded by weight. The Unit Size runs gram->millilitre here, the
+// opposite direction to every other density test.
+func TestCombineIngredientsConvertsWeightIntoAVolumeBaseUnit(t *testing.T) {
+	catalog := IngredientCatalog{
+		"double cream": {BaseUnit: "millilitre", UnitSizes: map[string]float64{"gram": 1.0}},
+	}
+
+	got := CombineIngredients(lines(
+		ingredient("double cream", "200", "millilitre"),
+		ingredient("double cream", "100", "gram"),
+	), testUnits(), catalog)["double cream"].Amounts
+
+	want := []common.Amount{{Quantity: "300", Unit: "millilitre"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("expected %v but got %v", want, got)
 	}
 }

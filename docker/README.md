@@ -143,3 +143,46 @@ npm run dev:full
 `down -v` deletes the data volume entirely, so the next start is a genuinely
 empty database again, and the synthetic migrate-and-seed step in
 `mysql-init/` runs fresh.
+
+## Taking a full backup: `scripts/backup-prod.sh`
+
+`sync-from-prod.sh` pulls *your account's* data into local dev. It is not a
+backup - it skips `user`/`account`/`account_user` entirely and only takes one
+account's recipes. For an actual backup of everything:
+
+```bash
+scripts/backup-prod.sh
+```
+
+Prompts for the same connection details, then writes a compressed logical dump
+to `~/big-shop-backups/bigshop-<timestamp>/` - one schema file and one data
+file per table, the same layout as the older dumps in `backups/`.
+
+**It uses Dumpling, not BR.** BR is the tool people reach for and it cannot work
+against TiDB Cloud: it needs network access to every PD and TiKV node, which
+TiDB Cloud does not expose, and PingCAP's docs state plainly that manual backups
+are unsupported on serverless instances. BR's `local://` storage is also a trap
+- it writes to each TiKV node's own disk, not to the machine running the
+command. Dumpling connects over the ordinary MySQL protocol port, so it works
+unchanged.
+
+**The output deliberately lands outside the repository.** A full backup contains
+the `user`, `account_user` and `invite` tables: real email addresses, Auth0
+subject ids and invite tokens. `backups/` is tracked in git and already holds
+seven users' email addresses from 2024, which is enough of that. The script
+refuses to write anywhere inside the working tree.
+
+Three knobs, all env vars: `BACKUP_ROOT` to change the destination,
+`CONSISTENCY=none` if the instance rejects Dumpling's default snapshot read, and
+`CA_FILE` if you ever need a private CA.
+
+**A Docker Desktop trap worth knowing**, since the first version of this script
+hit it: don't bind-mount the host's `/etc/ssl/cert.pem` into the container. On
+macOS `/etc` is a symlink to `/private/etc`, which is not a shared path - Docker
+silently creates an empty *directory* at the mount target instead of failing,
+and Dumpling then reports `could not read ca certificate: read /ca.pem: is a
+directory`. Mounting the resolved `/private` path is refused outright. The
+script uses the CA bundle already inside the container, which verifies TiDB
+Cloud's Let's Encrypt certificate; `CA_FILE` is copied into the output directory
+rather than mounted, because that directory is already known to be shareable.
+

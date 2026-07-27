@@ -70,6 +70,30 @@ describe('Item', () => {
     expect(screen.getByText('20 gram + a handful gram')).toBeInTheDocument();
   });
 
+  // A Display Unit conversion keeps the amount it was added up in, so an
+  // approximate Unit Size can be judged rather than silently trusted.
+  it('shows the base amount in brackets when converted to a display unit', () => {
+    render(
+      <Item type="ingredient" name="chopped tomatoes" handleClick={() => {}}
+        item={item({ amounts: [
+          { quantity: '2', unit: 'tin', baseQuantity: '800', baseUnit: 'gram' }
+        ] })} />
+    );
+
+    expect(screen.getByText('2 tin (800 gram)')).toBeInTheDocument();
+  });
+
+  it('renders a bare-count display unit without a stray unit word', () => {
+    render(
+      <Item type="ingredient" name="onion" handleClick={() => {}}
+        item={item({ amounts: [
+          { quantity: '11', unit: '', baseQuantity: '1.65', baseUnit: 'kilogram' }
+        ] })} />
+    );
+
+    expect(screen.getByText('11 (1.65 kilogram)')).toBeInTheDocument();
+  });
+
   it('shows no amount for an Extra Item', () => {
     render(<Item type="extra" name="beer" handleClick={() => {}} />);
 

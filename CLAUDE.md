@@ -6,6 +6,7 @@ Big Shop is a recipe management and meal planning app: a Next.js 16 / React 19 f
 
 - **What this product is** (Account, Recipe, Shopping List, and the rest of the domain vocabulary) → [CONTEXT.md](./CONTEXT.md)
 - **How it's built** (DB schema, API routes, component structure, hooks, deployment, dependencies) → [technical-architecture.md](./technical-architecture.md)
+- **Known issues we don't plan to fix** (investigated, judged not worth acting on — check here before chasing a surprising error) → [known-issues.md](./known-issues.md)
 
 ## How to run and test the app
 

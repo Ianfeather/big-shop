@@ -32,7 +32,7 @@
     "openai": "^6.46.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "swagger-ui-react": "^5.32.8",
+    "swagger-ui-react": "^5.32.9",
     "uuid": "^11.1.0"
   },
   "devDependencies": {

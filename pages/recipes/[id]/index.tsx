@@ -25,6 +25,12 @@ const Recipes = () => {
   useEffect(() => {
     if (!router.isReady || !id) return;
     if (router.query.stored === 'new' || router.query.stored === 'updated') {
+      // Copied into state on purpose: the router.replace below strips the
+      // param immediately, so the toast cannot be derived from the URL - it
+      // would vanish on the same tick it appeared. Deriving it instead would
+      // mean leaving ?stored= in the address bar, which is what this is
+      // avoiding. (follow-ups.md #32)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setToastMessage('Recipe saved');
       router.replace(`/recipes/${id}`, undefined, { shallow: true });
     }

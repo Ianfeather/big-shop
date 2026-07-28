@@ -1,6 +1,6 @@
 import styles from './account.module.css';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Invite from '@components/invite';
 import useAuth0 from '@hooks/use-auth';
 import { apiGet, apiPost } from '../lib/api-client';
@@ -10,7 +10,11 @@ import Button from '@components/button';
 import type { Invite as InviteModel } from '../types/models';
 
 const List = () => {
-  let [invites, setInvites] = useState<InviteModel[]>([]);
+  // Tokens of invites this user has already accepted or rejected in this
+  // session. Kept instead of a local copy of the whole list so that accept and
+  // reject can drop a row immediately, without waiting on (or invalidating and
+  // refetching from) the mutation's response.
+  let [dismissedTokens, setDismissedTokens] = useState<string[]>([]);
   let [invitee, setInvitee] = useState('');
   let [successMessage, setSuccessMessage] = useState<string | false>(false);
   const { user, getAccessTokenSilently } = useAuth0();
@@ -24,14 +28,13 @@ const List = () => {
     }
   });
 
-  // invites stays local state, seeded from the query result: accept/reject
-  // optimistically remove an entry from this list without waiting on (or
-  // invalidating/refetching from) the mutation's response, same as before.
-  useEffect(() => {
-    if (fetchedInvites?.length) {
-      setInvites(fetchedInvites);
-    }
-  }, [fetchedInvites]);
+  // Derived rather than copied into state by an effect. That effect only ran
+  // when fetchedInvites was non-empty, so a server response of [] left the
+  // previous list on screen; deriving also drops the extra cascading render
+  // react-hooks/set-state-in-effect flagged (follow-ups.md #32).
+  const invites = (fetchedInvites ?? []).filter(
+    invite => !dismissedTokens.includes(invite.token)
+  );
 
   const acceptMutation = useMutation({
     mutationFn: async (token: string) => {
@@ -76,13 +79,13 @@ const List = () => {
     // Next steps:
     // add user menu
     acceptMutation.mutate(token);
-    setInvites(invites.filter(invite => invite.token != token));
+    setDismissedTokens(prev => [...prev, token]);
     setSuccessMessage('Great! You are now part of the same account and have a shared set of recipes.');
   }
 
   function handleReject(token: string) {
     rejectMutation.mutate(token);
-    setInvites(invites.filter(invite => invite.token != token));
+    setDismissedTokens(prev => [...prev, token]);
   }
 
   function handleInvite() {

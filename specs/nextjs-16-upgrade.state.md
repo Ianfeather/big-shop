@@ -17,7 +17,7 @@ Scope: Spec Phase 1. .node-version 18.17.0 -> 22; eslint ^8.57.0 -> ^9.39.5,
 eslint-config-prettier ^9.1.0 -> ^10.1.8; .eslintrc.json replaced by a native
 flat eslint.config.mjs preserving next/core-web-vitals + prettier.
 Depends on: none
-Commit: (this session)
+Commit: f0cb1dc
 Notes: Test gate green - eslint clean, tsc --noEmit clean, 118/118 Vitest,
 next build succeeds.
 

@@ -67,7 +67,7 @@ landed in Session 1. next ^14.1.0 -> ^16.2.12; swcMinify dropped from
 next.config.js; no --turbopack (default in 16) and no --webpack (no custom
 webpack config exists); doc version references updated.
 Depends on: Session 1
-Commit: (this session)
+Commit: 57e7829
 Notes: Test gate green - eslint clean, tsc --noEmit clean, 118/118 Vitest
 across 28 files (unchanged by the renames below), next build succeeds on
 Turbopack, and the full Playwright suite passes 21/21 against the real Go API

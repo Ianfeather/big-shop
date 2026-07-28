@@ -160,7 +160,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
     if (fetchedUnits.length) {
       setUnits(fetchedUnits.map(unit => ({...unit, name: capitalize(unit.name)})));
     }
-  }, [fetchedUnits]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetchedUnits]);
 
   function updateRecipe<K extends keyof FormRecipe>(key: K, value: FormRecipe[K]) {
     const updatedRecipe = { ...recipe, [key]: value};
@@ -217,7 +217,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
       if (!missing.length) return prevUnits;
       return [...prevUnits, ...missing.map(name => ({ id: `new-${name}`, name: capitalize(name) }))];
     });
-  }, [recipe.ingredients]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [recipe.ingredients]);
 
   async function handleParseIngredients(e: { preventDefault: () => void }) {
     e.preventDefault();

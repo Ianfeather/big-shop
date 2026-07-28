@@ -191,7 +191,7 @@ const NewRecipe = () => {
       setAPIError('Processing failed');
       setErrorDetails(job.error || 'An error occurred while processing the image.');
     }
-  }, [jobStatusQuery.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [jobStatusQuery.data]);
 
   const handleImageClick = () => {
     imageInput.current?.click();

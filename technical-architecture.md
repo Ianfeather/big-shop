@@ -200,7 +200,7 @@ NEXT_PUBLIC_HOST=https://www.bigshop.life
 - Automatic deployment via Netlify on git push
 - Build command: `./build.sh` (runs `npm run package` + Go tests)
 - Publish directory: `.next`
-- Environment: Node 14+ (`.node-version`), Go 1.23 (`netlify.toml` `GO_VERSION`, matches `go.mod`)
+- Environment: Node 22 (`.node-version`, matching both CI workflows; Next.js 16 requires >=20.9.0), Go 1.23 (`netlify.toml` `GO_VERSION`, matches `go.mod`)
 
 ## Key Dependencies
 

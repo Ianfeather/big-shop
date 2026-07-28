@@ -69,8 +69,15 @@ export default function App({ Component, pageProps, router }: AppProps) {
     <Auth0Provider
       domain={domain}
       clientId={clientId}
-      audience={audience}
-      redirectUri={process.env.NEXT_PUBLIC_HOST}
+      // SDK v2 moved the values that end up as query params on the /authorize
+      // call into this nested object, and renamed redirectUri to redirect_uri
+      // to match the wire format. domain/clientId/useRefreshTokens/
+      // cacheLocation stay top-level - they configure the client, not the
+      // authorize request.
+      authorizationParams={{
+        audience,
+        redirect_uri: process.env.NEXT_PUBLIC_HOST
+      }}
       useRefreshTokens={true}
       cacheLocation="localstorage"
     >

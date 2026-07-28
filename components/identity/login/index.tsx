@@ -7,7 +7,9 @@ export const LoginButton = () => {
 
   const handleClick = () => {
     loginWithRedirect({
-      redirectUri: process.env.NEXT_PUBLIC_HOST
+      authorizationParams: {
+        redirect_uri: process.env.NEXT_PUBLIC_HOST
+      }
     });
   }
 

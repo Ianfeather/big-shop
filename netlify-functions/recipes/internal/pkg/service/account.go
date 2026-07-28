@@ -56,6 +56,7 @@ func GetAccount(db *sql.DB, userID string) (a *common.Account, e error) {
 		log.Println("Error querying account table")
 		return nil, err
 	}
+	defer results.Close()
 
 	users := make([]common.User, 0)
 
@@ -76,11 +77,18 @@ func GetAccount(db *sql.DB, userID string) (a *common.Account, e error) {
 
 func AddUserToAccount(db *sql.DB, accountID int, user common.User) error {
 	// TODO: if the user doesn't exist in our user table we need to add them first
+	// Exec, not Query: these are writes, and Query returns an *sql.Rows that
+	// nothing closed - holding the connection until the garbage collector got
+	// to it. The first one's error was also being discarded entirely.
 	userQuery := `INSERT INTO user (id, name) VALUES (?,?) ON DUPLICATE KEY UPDATE id=id;`
-	_, err := db.Query(userQuery, user.ID, user.Name)
+	if _, err := db.Exec(userQuery, user.ID, user.Name); err != nil {
+		log.Println("Error adding user")
+		log.Println(err)
+		return err
+	}
 
 	accountQuery := `INSERT INTO account_user (user_id, account_id) VALUES (?,?);`
-	_, err = db.Query(accountQuery, user.ID, accountID)
+	_, err := db.Exec(accountQuery, user.ID, accountID)
 	if err != nil {
 		log.Println("Error adding user to account")
 		log.Println(err)

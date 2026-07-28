@@ -23,8 +23,8 @@ Lots to do here.
 - Configure the app to connect to a local db
 
 For running the UI:
-- Disable auth by setting `behindAuth` to `false` in .env.local
-- Turn on mocks with `useMocks`
+- `npm run dev:full` brings up the database, the Go API and Next.js together
+- Set `NEXT_PUBLIC_DISABLE_AUTH=true` in `.env.local` to skip Auth0 locally
 
 
 ### local db

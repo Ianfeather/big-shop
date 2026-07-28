@@ -6,8 +6,8 @@ import { ChangeEvent, useState, useRef, useEffect } from 'react';
 import Button from '@components/button';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import PhotoIcon from '@components/svg/photo';
-import useIngredientMetadata from '@hooks/use-ingredient-metadata';
 import { nextApiPost, nextApiPostFormData, nextApiGet } from '../../lib/api-client';
+import useAuth from '@hooks/use-auth';
 import type { Recipe as RecipeModel } from '../../types/models';
 
 // Helper function to resize image
@@ -141,16 +141,23 @@ const NewRecipe = () => {
   const [urlValue, setUrlValue] = useState('');
   const [urlFetched, setUrlFetched] = useState('');
   const imageInput = useRef<HTMLInputElement>(null);
-  const { ingredients: knownIngredients, units: knownUnits } = useIngredientMetadata();
+  const { getAccessTokenSilently } = useAuth();
 
+  // Both import routes read the canonical Ingredient/Unit names from the
+  // database themselves; the token is forwarded purely so they can make that
+  // call on the user's behalf.
   const uploadImageMutation = useMutation({
-    mutationFn: (formData: FormData) =>
-      nextApiPostFormData<{ jobId: string }>(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image`, formData)
+    mutationFn: async (formData: FormData) => {
+      const token = await getAccessTokenSilently();
+      return nextApiPostFormData<{ jobId: string }>(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image`, formData, token);
+    }
   });
 
   const parseUrlMutation = useMutation({
-    mutationFn: (payload: { url: string; knownIngredients: string[]; knownUnits: string[] }) =>
-      nextApiPost<ParseUrlResult>(`${process.env.NEXT_PUBLIC_HOST}/api/parse-recipe-url`, payload)
+    mutationFn: async (payload: { url: string }) => {
+      const token = await getAccessTokenSilently();
+      return nextApiPost<ParseUrlResult>(`${process.env.NEXT_PUBLIC_HOST}/api/parse-recipe-url`, payload, token);
+    }
   });
 
   // Poll for job status - refetchInterval stops itself once the job settles
@@ -210,8 +217,6 @@ const NewRecipe = () => {
 
       const formData = new FormData();
       formData.append('image', resizedBlob, file.name);
-      formData.append('knownIngredients', JSON.stringify(knownIngredients));
-      formData.append('knownUnits', JSON.stringify(knownUnits));
 
       const { jobId } = await uploadImageMutation.mutateAsync(formData);
 
@@ -239,7 +244,7 @@ const NewRecipe = () => {
     setErrorDetails(null);
 
     try {
-      const result = await parseUrlMutation.mutateAsync({ url: parsedUrl.href, knownIngredients, knownUnits });
+      const result = await parseUrlMutation.mutateAsync({ url: parsedUrl.href });
       setUrlFetched(trimmed);
       setParsedRecipe({
         name: result.name || '',

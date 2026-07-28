@@ -64,7 +64,7 @@ export interface paths {
         };
         /**
          * List ingredients
-         * @description Returns every Ingredient known to the system, used for autosuggest when adding a Recipe.
+         * @description Returns every Ingredient name known to the system. Read server-side during Recipe Import to tell the model which names already exist, so it reuses one instead of coining a near-duplicate.
          */
         get: operations["list-ingredients"];
         put?: never;

@@ -67,13 +67,15 @@ func TestApplyDisplayUnits(t *testing.T) {
 		{
 			// An Absolute Display Unit keeps its natural precision rather than
 			// being rounded to a whole - nobody wants weights to the half kilo.
+			// No bracket either: millilitre to litre is exact, so there is no
+			// estimate to expose.
 			name:  "an absolute display unit is not rounded up",
 			items: items("milk", amount("1500", "millilitre")),
 			ingredients: IngredientCatalog{
 				"milk": {BaseUnit: "millilitre", DisplayUnit: "litre", HasDisplayUnit: true},
 			},
 			want: map[string][]common.Amount{
-				"milk": {{Quantity: "1.5", Unit: "litre", BaseQuantity: "1500", BaseUnit: "millilitre"}},
+				"milk": {{Quantity: "1.5", Unit: "litre"}},
 			},
 		},
 		{
@@ -147,4 +149,32 @@ func amount(quantity, unit string) common.Amount {
 
 func items(name string, amounts ...common.Amount) map[string]*common.ListIngredient {
 	return map[string]*common.ListIngredient{name: {Amounts: amounts}}
+}
+
+// The bracket is there to expose an estimate. An exact conversion between two
+// Absolute Units of the same dimension involves none, so it would be noise.
+func TestApplyDisplayUnitsOmitsTheBracketForAnExactConversion(t *testing.T) {
+	units := testUnits()
+	catalog := IngredientCatalog{
+		"ground coriander": {BaseUnit: "gram", DisplayUnit: "teaspoon", HasDisplayUnit: true,
+			UnitSizes: map[string]float64{"millilitre": 0.5}},
+	}
+
+	t.Run("tablespoon to teaspoon is exact, so no bracket", func(t *testing.T) {
+		it := items("ground coriander", amount("2", "tablespoon"))
+		ApplyDisplayUnits(it, units, catalog)
+		want := []common.Amount{{Quantity: "6", Unit: "teaspoon"}}
+		if got := it["ground coriander"].Amounts; !reflect.DeepEqual(got, want) {
+			t.Errorf("expected %v but got %v", want, got)
+		}
+	})
+
+	t.Run("gram to teaspoon relies on a density, so the bracket stays", func(t *testing.T) {
+		it := items("ground coriander", amount("12.5", "gram"))
+		ApplyDisplayUnits(it, units, catalog)
+		want := []common.Amount{{Quantity: "5", Unit: "teaspoon", BaseQuantity: "12.5", BaseUnit: "gram"}}
+		if got := it["ground coriander"].Amounts; !reflect.DeepEqual(got, want) {
+			t.Errorf("expected %v but got %v", want, got)
+		}
+	})
 }

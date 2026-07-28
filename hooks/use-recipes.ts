@@ -1,10 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import useAuth from './use-auth';
 import { apiGet } from '../lib/api-client';
-import mocks from '../mocks';
 import type { RecipeSummary } from '../types/models';
 
-const useMocks = process.env.NEXT_PUBLIC_USE_MOCKS === 'true';
 
 const useRecipes = () => {
   const { getAccessTokenSilently } = useAuth();
@@ -15,9 +13,6 @@ const useRecipes = () => {
   const { data } = useQuery<RecipeSummary[]>({
     queryKey: ['recipes'],
     queryFn: async () => {
-      if (useMocks) {
-        return mocks.recipes.map(({ id, name, tags }) => ({ id, name, tags }));
-      }
       const token = await getAccessTokenSilently();
       return apiGet<RecipeSummary[]>('/recipes', token);
     }

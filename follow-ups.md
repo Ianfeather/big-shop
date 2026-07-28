@@ -2,40 +2,59 @@
 
 Small defects and doc-drift found while building `CONTEXT.md` from the codebase (2026-07-13). Not designed here — just flagged for later action.
 
-Items 1–21 have all been resolved — see [`follow-ups-resolved.md`](./follow-ups-resolved.md) for the full history (numbering preserved for cross-references between entries). New items go here as they're found.
+Items 1–29 have all been resolved — see [`follow-ups-resolved.md`](./follow-ups-resolved.md) for the full history (numbering preserved for cross-references between entries).
 
-22. **`GetAllUnits` leaks a connection on early return.** `service/units.go`'s `GetAllUnits` never calls `defer results.Close()`, and doesn't check `results.Err()` after the scan loop, so a row-scan failure returns partial data as if it succeeded and the underlying connection isn't released. Pre-existing; noticed while adding `GetUnitCatalog` alongside it (which does both correctly) during `specs/unit-normalisation.md` Phase 1. Same pattern is worth grepping for across the `service` package rather than fixing this one function in isolation.
+30. **Audit TanStack Query cache invalidation properly.** `invalidateQueries` appears
+    **nowhere** in this codebase. Every mutation — save Recipe, delete Recipe, mark an
+    item bought, add an Extra Item, clear the Shopping List, invite a user — writes
+    through the API and leaves every cached query untouched.
 
-23. **`insertUnits` creates unit abbreviations as separate Relative Units.** `service/recipe.go`'s `insertUnits` upserts `INSERT INTO unit (name)` only, so any unit name that reaches it gets `kind = 'relative'` and no `factor` (migration `019_unit_kind.sql` classifies exactly six spellings: gram, kilogram, millilitre, litre, teaspoon, tablespoon). If an import ever produces `"ml"`, `"g"` or `"tsp"`, it becomes a distinct Relative Unit that will never combine with its spelled-out twin on a Shopping List — silently, since an unrecognised unit is a legitimate state by design. Mitigated in practice by `lib/recipe-import/extract.js`, whose prompt translates abbreviations and standardises to the known unit list, so this is a gap in defence-in-depth rather than an observed bug. Worth either an alias table or a normalisation step in `insertUnits` if real data shows abbreviations getting through. Found by the code review of Phase 1 Session 1.
+    Most of it gets away with that by navigating afterwards, which remounts the consumer
+    and refetches (no `staleTime` is set, so the default of `0` means a remount always
+    refetches). That is luck rather than design, and it has already failed once: the
+    Recipe Import prompt's known-ingredient list was read from the `['ingredients']`
+    cache, so saving a Recipe that created new Ingredients left the *next* import unaware
+    of them, and the model would coin a second name for something created moments
+    earlier — precisely the catalog fragmentation migration `029` exists to undo. That
+    instance is now fixed structurally, by reading the list server-side in the API route
+    (`lib/recipe-import/known-names.ts`) instead of from a client cache. The bug is gone;
+    the gap that produced it is not.
 
-24. **A Recipe that has ever been added to the Shopping List cannot be deleted.** `DeleteRecipe` (`service/recipe.go`) clears `part`, `recipe_tag` and `list` rows before deleting the Recipe, but not `shopping_list_event` — and `migrations/015_shopping_list_history.sql` puts a foreign key on `shopping_list_event.recipe_id` referencing `recipe(id)`. So `DELETE /recipe` returns 500 with `Cannot delete or update a parent row` for any Recipe with history, which is every Recipe anyone has actually cooked from. Found by accident while cleaning up manual test data during `specs/unit-normalisation.md` Phase 1; **not** caused by that work. Two things make it worth prioritising: it's user-facing and silent (the UI just fails), and `e2e/api.ts`'s `deleteRecipeById` never checks the response status, so the e2e suite's `afterAll` teardown has been failing unnoticed for exactly these recipes — masked only because the e2e database is recreated per run. A fix is small (delete the event rows first, inside the existing ownership check), but `shopping_list_event` is also what Dave's Recent/Favorite Recipe inference reads, so decide deliberately whether deleting a Recipe should erase its history or the FK should become `ON DELETE SET NULL` (the column is already nullable). Asserting the status in `deleteRecipeById` should land with it, or the next regression hides the same way.
+    Worth one deliberate pass rather than case-by-case, because the question is identical
+    everywhere: for each mutation, which `queryKey`s should it invalidate, and is
+    anything relying on a navigation to paper over the answer? Live candidates:
 
-25. **Audit the ingredient catalog for entries that are the same thing.** Ingredients only combine on a Shopping List when they share a name (`ingredient` has UNIQUE (name), and `CombineIngredients` keys on it), so a near-duplicate silently splits one item into two lines forever. A normalising pass over the live catalog (472 ingredients) finds **18 groups** that look like the same ingredient, plus a straightforward data bug. Worth doing before Phase 2's curated Unit Sizes land, since every duplicate needs its own copy of every value.
+    - `['recipes']` after save/delete — currently survives on `router.push`.
+    - `['units']` after an import introduces a new Unit: the same shape as the
+      `['ingredients']` bug that already bit.
+    - `pages/list.tsx` keeps Shopping List state in `useState` alongside its mutations
+      rather than deriving it from a query at all, so it is a different question again —
+      does it want a cache, or is local state right for a page that is already the only
+      writer?
 
-    **Whitespace-damaged names — unambiguous, fix these first.** Four ingredients have leading or trailing spaces, and two of them collide with a clean version that already exists: `" oil"` and `"oil "` (alongside `"oil"`), `"chicken "`, `"bbq sauce "`. One line each. Note `insertIngredients` does not trim, and `extract.js`'s `matchCanonicalIngredient` trims the *incoming* name but compares against untrimmed stored ones — so a stored `"oil "` can never be matched and will keep collecting new lines.
+    Be deliberate rather than reflexive: sprinkling `invalidateQueries` everywhere trades
+    silent staleness for extra refetches on a page that already re-renders plenty. The
+    output should be a decision per mutation plus a line in `technical-architecture.md`
+    recording the convention, not a blanket sweep.
 
-    **Almost certainly the same ingredient:** `egg`/`eggs`, `clove`/`cloves`, `garlic clove`/`garlic cloves`, `mixed seed`/`mixed seeds`, `mustard seed`/`mustard seeds`, `spring onion`/`spring onions`, `butter beans`/`butterbean`, `basil`/`basil leaf`, `ginger`/`fresh ginger`, `onion`/`chopped onion`, `thyme`/`thyme leaf`, and the parsley family: `parsley`, `parsley leaves`, `flat-leaf parsley`, `flat-leaf parsley leaves`, `chopped fresh flat leaf parsley` — five entries for one herb.
+31. **Buying preference: prefer fresh fruit over bottled juice.** For when automated
+    buying exists. A Recipe asking for lemon juice, lime juice or orange juice should be
+    satisfiable by buying the fruit rather than a bottle, as a user-level preference
+    rather than a hard rule.
 
-    **Deliberately different, do NOT merge:** `coriander`/`ground coriander`, `cumin`/`ground cumin`, `turmeric`/`ground turmeric`, `oregano`/`dried oregano`, `thyme`/`dried thyme`, `chilli flakes`/`ground chilli flakes`, `chicken`/`whole chicken`. Fresh and ground are different purchases off different shelves, which is exactly the distinction `extract.js`'s prompt already tries to preserve ("unsalted butter is not the same purchase as butter"). An automated merge on string similarity would destroy these, so this wants a human pass, not a script.
+    The catalog already models most of what this needs, which is why it is worth writing
+    down now rather than discovering later. `lemon juice` has a Base Unit of millilitre,
+    and a Unit Size on a whole `lemon` records how much juice one fruit yields — that is
+    the same mechanism that lets "3 onions" combine with "150g onion" (see CONTEXT.md's
+    Unit Size). So the conversion "45ml lemon juice" -> "1 lemon" is already expressible;
+    what is missing is a link saying *this Ingredient can be produced from that one*, and
+    a preference saying which side to buy.
 
-    Merging means repointing `part.ingredient_id` and deleting the loser, plus its `ingredient_department` rows - the same shape as migration `011_plurals.sql`, which did exactly this by hand in 2020. Trimming names on write in `insertIngredients` would stop the whitespace class recurring.
+    Deliberately not a merge. `lemon` and `lemon juice` are different Ingredients and
+    should stay so — the recipe genuinely wants juice, and a shopper buying for a recipe
+    that needs lemon zest as well needs the fruit. The preference belongs at buying time,
+    where it can be turned off, not baked into the catalog where it cannot.
 
-26. **Dry ingredients used only in volume units render as millilitres.** Phase 2 curated a density for every ingredient in the weight-volume collision group - those had a gram line forcing the issue. Ingredients used *exclusively* in volume units never surfaced as needing one, but they still combine into their dimension's base unit, so a Shopping List with both "1 tbsp paprika" and "2 tsp paprika" on it reads **"25 millilitre paprika"** rather than "13 gram". Correct arithmetic, wrong unit for a powder.
-
-    Only bites when one list uses two different volume units for the same ingredient - a single unit is preserved as-is - so it is cosmetic rather than wrong, and strictly better than the pre-Phase-1 behaviour of summing them to a bogus "3 tablespoon".
-
-    Affected and **dry**, so wanting a density: `ginger` (16 lines), `paprika` (13), `ground cumin` (12), `ground coriander` (8), `smoked paprika` (6), `pine nuts` (4), `sesame seeds` (4), `garlic powder` (4), `sage` (3), `onion powder` (3), `mix powder` (3), `dried thyme` (3), `peanut butter` (3), `chia seeds` (2), `baking powder` (2).
-
-    Affected but genuinely **liquid**, where millilitres is right and nothing is needed: `vegetable stock`, `passata`, `single cream`, `fish sauce`, `shaoxing wine`, `tamari sauce`, `white vinegar`, `white wine vinegar`, `lemon juice`, `ghee`, `milk`, `water`, `canola oil`.
-
-    Fix is a density each, in the same shape as the values already in `migrations/025_curated_unit_sizes.sql`. Note `ginger` already has an average weight there (30g per thumb) but no density, so its grated-by-the-spoon lines and its whole-thumb lines currently sit in different buckets.
-
-    Found while checking a report of two "garlic powder" ingredients. There is only one - the query output that prompted it grouped by ingredient *and unit*, so a single ingredient used with two units printed on two rows. Worth recording so nobody goes looking for a duplicate that was never there.
-
-27. **A curated Ingredient with no Ingredient Lines can be reclassified by an import.** Phase 4 restricts classification to Ingredients that have no rows in `part`, on the reasoning that those are new. `DeleteRecipe` removes an Ingredient's `part` rows without removing the Ingredient, so deleting the last Recipe that used something leaves it curated but line-less - and the next import mentioning it can then overwrite its Base Unit, Display Unit and Unit Sizes. Narrow (it needs the last user of an ingredient deleted, then a re-import proposing different values) and self-correcting once someone notices, but it is a silent data-quality regression on values a person chose.
-
-    The complete fix is the provenance column deliberately deferred in the spec's decisions: with an explicit `curated`/`classified` marker, "has a human touched this?" stops being inferred from proxies. A partial guard - also requiring no `ingredient_unit_size` rows - would cover most cases but not an Ingredient curated with only a Base Unit, and a guard that looks complete but isn't is worse than a recorded gap.
-
-28. **No ingredient is displayed in spoons, which was half the point of problem 3.** The original problem statement asked for "a preferred unit for each ingredient… teaspoon for spices but not for herbs". The mechanism for that shipped in full - `ingredient.display_unit_id` accepts any Unit - but of the ~30 Display Units curated in `025_curated_unit_sizes.sql`, every one is either the bare count or `tin`. Nothing reads in teaspoons or pinches, so spices still show as grams, and per #26 sometimes as millilitres.
-
-    This is curation, not code: setting `display_unit_id` to `teaspoon` for the spice ingredients, with the matching density already present, would do it. Worth doing alongside #26, since both are about dry goods reading badly and the same pass covers them.
+    Worth checking when this is picked up: whether the yield Unit Sizes actually exist on
+    `lemon`, `lime` and `orange` yet, since `030` merged `freshly squeezed lemon juice`
+    into `lemon juice` but did not add any.

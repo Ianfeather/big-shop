@@ -33,6 +33,7 @@ func GetAllRecipes(db *sql.DB, userID string) ([]Recipe, error) {
 		log.Println("Error querying recipes")
 		return nil, err
 	}
+	defer results.Close()
 
 	recipes := []Recipe{}
 
@@ -55,6 +56,9 @@ func GetAllRecipes(db *sql.DB, userID string) ([]Recipe, error) {
 			r.Tags = []string{tag.String}
 		}
 		recipes = append(recipes, r)
+	}
+	if err := results.Err(); err != nil {
+		return nil, err
 	}
 	return recipes, nil
 }

@@ -7,29 +7,8 @@ import RecipeSidebar from '@components/shopping-list/Recipes';
 import ShoppingList from '@components/shopping-list/ShoppingList';
 import useAuth0 from '@hooks/use-auth';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api-client';
-import mocks from '../mocks';
 import type { ListIngredient } from '../types/models';
 
-const useMocks = process.env.NEXT_PUBLIC_USE_MOCKS === 'true';
-
-function buildMockIngredients(selectedRecipeIds: string[]): Record<string, ListIngredient> {
-  const ingredients: Record<string, ListIngredient> = {};
-  selectedRecipeIds.forEach(id => {
-    const recipe = mocks.recipes.find(r => String(r.id) === String(id));
-    if (!recipe) return;
-    recipe.ingredients.forEach(ingredient => {
-      // Mock mode doesn't combine across recipes the way the real API does -
-      // it just shows each recipe's own lines, so one Amount each.
-      ingredients[ingredient.name] = {
-        amounts: [{ quantity: String(ingredient.quantity), unit: ingredient.unit }],
-        isBought: false,
-        recipe_id: recipe.id,
-        department: ingredient.department,
-      };
-    });
-  });
-  return ingredients;
-}
 
 interface ShoppingListResult {
   recipes: string[];
@@ -119,8 +98,6 @@ const List = () => {
       setExtras(newList);
     }
 
-    if (useMocks) return;
-
     buyMutation.mutate({ name, isBought: newList[name].isBought }, {
       // todo: move the bought item back into not-bought
       onError: (e) => console.error(e)
@@ -128,8 +105,6 @@ const List = () => {
   }
 
   const getListState = async (): Promise<ListState> => {
-    if (useMocks) return {};
-
     try {
       const token = await getAccessTokenSilently();
       const result = await apiGet<ShoppingListResult>('/shopping-list', token);
@@ -172,11 +147,6 @@ const List = () => {
     }
     const selectedRecipes = Object.keys(recipeList).filter(k => !!recipeList[k]);
 
-    if (useMocks) {
-      setListState(buildMockIngredients(selectedRecipes), extras);
-      return;
-    }
-
     try {
       const result = await regenerateMutation.mutateAsync(selectedRecipes);
       if (!cancelledRef.current) {
@@ -191,7 +161,7 @@ const List = () => {
     setShoppingList({});
     setExtras({});
     setRecipeList({});
-    if (!useMocks) clearMutation.mutate();
+    clearMutation.mutate();
   }
 
   function addExtraItem(extraItem: string) {
@@ -204,9 +174,7 @@ const List = () => {
       [extraItem]: { amounts: [], department: '', recipe_id: 0, isBought: false }
     };
     setExtras(newList);
-    if (!useMocks) {
-      addExtraMutation.mutate({ name: extraItem, isBought: false });
-    }
+    addExtraMutation.mutate({ name: extraItem, isBought: false });
   }
 
   useEffect(() => { hydrateShoppingList() }, []); // eslint-disable-line react-hooks/exhaustive-deps

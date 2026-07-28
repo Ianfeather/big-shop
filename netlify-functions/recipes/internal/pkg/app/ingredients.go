@@ -42,7 +42,7 @@ func (a *App) registerIngredientsRoutes(api huma.API) {
 		Method:      http.MethodGet,
 		Path:        "/ingredients",
 		Summary:     "List ingredients",
-		Description: "Returns every Ingredient known to the system, used for autosuggest when adding a Recipe.",
+		Description: "Returns every Ingredient name known to the system. Read server-side during Recipe Import to tell the model which names already exist, so it reuses one instead of coining a near-duplicate.",
 		Tags:        []string{"Ingredients"},
 	}, a.getIngredients)
 }

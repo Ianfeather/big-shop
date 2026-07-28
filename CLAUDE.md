@@ -77,20 +77,12 @@ when done — don't run bare `docker compose down`/migrations/`exec` against
 whatever project happens to already be running unless you've confirmed via
 `docker inspect` that it's actually this worktree's stack.
 
-**Faster-but-shallower path — JSON mocks, no backend at all:**
-1. In `.env.local`, set:
-   - `NEXT_PUBLIC_DISABLE_AUTH=true` — both `pages/_app.js` and every consumer of
-     `hooks/use-auth.js` (a thin wrapper around `@auth0/auth0-react`'s `useAuth0`)
-     resolve to a fixed mock user instead of mounting the real `Auth0Provider`.
-     Must be `NEXT_PUBLIC_`-prefixed — Next.js strips non-prefixed env vars from
-     the client bundle, so an unprefixed flag only takes effect during SSR and
-     causes a hydration mismatch (this bit us once: `/list` would flash its
-     content then get redirected back to `/`).
-   - `NEXT_PUBLIC_USE_MOCKS=true` — serves canned data from `mocks/*.json`
-     instead of calling the Go API, for `/recipes`, `/list`, and the new-recipe
-     form's ingredient/unit/tag autosuggest. Mutations (save/delete recipe,
-     invites, account) still hit the real API even with mocks on.
-2. `npm run dev` — no Docker, no DB, no Go API needed at all.
+**There is no mocks mode.** `NEXT_PUBLIC_USE_MOCKS` and `mocks/*.json` are gone
+— `npm run dev:full` made them redundant, and they had started to mislead: the
+mock Shopping List reimplemented ingredient combining, incorrectly and by its
+own admission, right through the work that made real combining correct. Run
+against the real stack, or against a synced copy of production
+(`scripts/sync-from-prod.sh`).
 
 **Manual path** (what `dev:full` automates, useful if you want the API/DB
 outside Docker): `go run . dev` inside `netlify-functions/recipes/` starts a

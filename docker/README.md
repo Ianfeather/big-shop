@@ -144,6 +144,55 @@ npm run dev:full
 empty database again, and the synthetic migrate-and-seed step in
 `mysql-init/` runs fresh.
 
+## Checking for orphaned rows: `scripts/check-orphans.sh`
+
+```bash
+scripts/check-orphans.sh
+```
+
+Read-only, so it is safe against production at any time. It reports rows whose
+foreign key points at a parent row that no longer exists. Run it before a data
+migration for a baseline, and after to prove nothing was stranded.
+
+**Production does not have the constraints local MySQL has**, and that
+difference is the whole reason this exists. Every constraint in
+`migrations/*.sql` is `NO ACTION`, so deleting a row that still has children
+errors out against a database built from those migrations. TiDB declares **7
+foreign keys where local MySQL declares 15**, so the same statement can succeed
+against production and leave the children dangling with no error at all.
+Migration `029` did this: it deleted `thyme sprig` while an Ingredient Line
+still referenced it, and Potato & Leek Soup silently lost its thyme. Nothing in
+the test suite could catch it, because the tests run against MySQL.
+
+That gap is also why the check does not trust declared constraints alone -
+doing so would cover fewer than half the schema and still report clean.
+`scripts/check-orphans.sql` unions the declared foreign keys with every column
+named `<table>_id` whose table exists, giving 21 relationships against the 15
+declared locally. Expect "Relationships checked" to exceed `declared_fks`.
+
+It runs in two steps - introspect, then build and execute - rather than
+generating the checks in SQL, because **TiDB rejects `SELECT ... INTO @var`**
+outright and the dynamic-SQL version failed there while passing on MySQL. To
+read the generated SQL without running it:
+
+```bash
+docker compose exec -T db mysql -uroot -proot -N bigshop \
+  < scripts/check-orphans.sql | scripts/build-orphan-checks.py
+```
+
+The stronger habit for anything that deletes rows is to **rehearse the migration
+against a scratch copy of a backup first**, since that reproduces production's
+actual constraint behaviour rather than local MySQL's:
+
+```bash
+gzip -dc ~/big-shop-backups/<dump>/*-schema.sql.gz ~/big-shop-backups/<dump>/*.0000*.sql.gz \
+  | docker compose exec -T db mysql -uroot -proot   # into a scratch database
+```
+
+Then apply the migrations in order and compare row counts before and after. The
+count that matters is `part`: Ingredient Lines in should equal Ingredient Lines
+out unless the migration is explicitly meant to remove some.
+
 ## Taking a full backup: `scripts/backup-prod.sh`
 
 `sync-from-prod.sh` pulls *your account's* data into local dev. It is not a

@@ -123,16 +123,19 @@ func GetAllUnits(db *sql.DB) ([]Unit, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer results.Close()
 
 	units := make([]Unit, 0)
 
 	for results.Next() {
 		r := Unit{}
-		err = results.Scan(&r.ID, &r.Name)
-		if err != nil {
+		if err := results.Scan(&r.ID, &r.Name); err != nil {
 			return nil, err
 		}
 		units = append(units, r)
+	}
+	if err := results.Err(); err != nil {
+		return nil, err
 	}
 	return units, nil
 }

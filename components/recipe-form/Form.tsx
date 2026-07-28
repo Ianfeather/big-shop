@@ -7,7 +7,6 @@ import Message from '@components/message';
 import Spinner from './spinner';
 import useUnits from '@hooks/use-units';
 import useTags from '@hooks/use-tags';
-import useIngredientNames from '@hooks/use-ingredient-names';
 import useAuth from '@hooks/use-auth';
 import { apiPost, apiPut, apiDelete, nextApiPost } from '../../lib/api-client';
 import type { Recipe as RecipeModel, Ingredient, CreatedResponse } from '../../types/models';
@@ -70,7 +69,6 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
   let [units, setUnits] = useState<FormUnit[]>([]);
   const fetchedUnits = useUnits();
   const tags = useTags();
-  const ingredients = useIngredientNames();
   let [deleted, setDeleted] = useState(false);
   let [bulkText, setBulkText] = useState('');
   let [bulkError, setBulkError] = useState<string | null>(null);
@@ -109,9 +107,13 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
     }
   });
 
+  // The route reads the canonical Ingredient/Unit names from the database
+  // itself; the token is forwarded purely so it can make that call.
   const parseTextMutation = useMutation({
-    mutationFn: (payload: { text: string; knownIngredients: string[]; knownUnits: string[] }) =>
-      nextApiPost<ParseTextResult>(`${process.env.NEXT_PUBLIC_HOST}/api/parse-recipe-text`, payload)
+    mutationFn: async (payload: { text: string }) => {
+      const token = await getAccessTokenSilently();
+      return nextApiPost<ParseTextResult>(`${process.env.NEXT_PUBLIC_HOST}/api/parse-recipe-text`, payload, token);
+    }
   });
 
   const loading = saveMutation.isPending;
@@ -195,8 +197,6 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
     try {
       const result = await parseTextMutation.mutateAsync({
         text: bulkText,
-        knownIngredients: ingredients,
-        knownUnits: units.map(u => u.name)
       });
       appendIngredients(result?.ingredients || []);
       setBulkText('');

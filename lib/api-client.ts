@@ -4,8 +4,10 @@
 //    bearer-token authenticated.
 //  - nextApiGet/nextApiPost/nextApiPostFormData: this app's own Next.js API
 //    routes (pages/api/*, see technical-architecture.md's "Next.js API
-//    Routes" section), unauthenticated (those routes don't check a token)
-//    and error-shaped as `{ error: string }` on failure.
+//    Routes" section), error-shaped as `{ error: string }` on failure. These
+//    routes don't validate a token themselves, but the import ones forward
+//    one to the Go API to read canonical Ingredient/Unit names server-side
+//    (lib/recipe-import/known-names.ts), so they take an optional token.
 
 async function parseBody(res: Response): Promise<unknown> {
   const text = await res.text();
@@ -55,16 +57,24 @@ export async function nextApiGet<T>(url: string): Promise<T> {
   return handleNextApiResponse<T>(res, `GET ${url}`);
 }
 
-export async function nextApiPost<T>(url: string, body: unknown): Promise<T> {
+export async function nextApiPost<T>(url: string, body: unknown, token?: string): Promise<T> {
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
     body: JSON.stringify(body)
   });
   return handleNextApiResponse<T>(res, `POST ${url}`);
 }
 
-export async function nextApiPostFormData<T>(url: string, formData: FormData): Promise<T> {
-  const res = await fetch(url, { method: 'POST', body: formData });
+export async function nextApiPostFormData<T>(url: string, formData: FormData, token?: string): Promise<T> {
+  const res = await fetch(url, {
+    method: 'POST',
+    // No Content-Type: the browser sets it, with the multipart boundary.
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: formData
+  });
   return handleNextApiResponse<T>(res, `POST ${url}`);
 }

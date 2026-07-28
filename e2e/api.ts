@@ -46,7 +46,13 @@ export async function findRecipeIdByName(request: APIRequestContext, name: strin
 }
 
 export async function deleteRecipeById(request: APIRequestContext, id: number): Promise<void> {
-  await request.delete(`${API_HOST}/recipe`, { data: { id } });
+  // Asserted, deliberately. This silently swallowed failures for months: every
+  // Recipe that reached a Shopping List failed to delete (follow-ups.md #24)
+  // and the suite never noticed, because teardown ignored the status.
+  const res = await request.delete(`${API_HOST}/recipe`, { data: { id } });
+  if (!res.ok()) {
+    throw new Error(`Failed to delete recipe ${id}: ${res.status()} ${await res.text()}`);
+  }
 }
 
 export async function deleteRecipeByName(request: APIRequestContext, name: string): Promise<void> {
@@ -60,4 +66,11 @@ export async function deleteRecipeByName(request: APIRequestContext, name: strin
 
 export async function clearShoppingList(request: APIRequestContext): Promise<void> {
   await request.delete(`${API_HOST}/shopping-list/clear`);
+}
+
+export async function addRecipesToList(request: APIRequestContext, ids: number[]): Promise<void> {
+  const res = await request.post(`${API_HOST}/shopping-list`, { data: ids.map(String) });
+  if (!res.ok()) {
+    throw new Error(`Failed to generate shopping list: ${res.status()} ${await res.text()}`);
+  }
 }

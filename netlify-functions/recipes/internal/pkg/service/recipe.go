@@ -48,6 +48,7 @@ func getIngredientsByRecipeID(id int, db *sql.DB) ([]common.Ingredient, error) {
 		log.Println(err)
 		return nil, err
 	}
+	defer results.Close()
 
 	for results.Next() {
 		var department sql.NullString
@@ -89,6 +90,7 @@ func GetRecipeBySlug(slug string, userID string, db *sql.DB) (*common.Recipe, er
 		log.Println("Error querying recipe")
 		return nil, err
 	}
+	defer results.Close()
 	for results.Next() {
 		var remoteURL sql.NullString
 		var notes sql.NullString
@@ -160,6 +162,7 @@ func GetRecipeByID(id int, userID string, db *sql.DB) (*common.Recipe, error) {
 		log.Println("Error querying recipe")
 		return nil, err
 	}
+	defer results.Close()
 
 	for results.Next() {
 		var remoteURL sql.NullString
@@ -218,6 +221,8 @@ func GetRecipeByID(id int, userID string, db *sql.DB) (*common.Recipe, error) {
 // Returns the new recipe's ID so the caller can hand it back to the client
 // (e.g. for a post-create redirect) without a follow-up lookup.
 func AddRecipe(recipe common.Recipe, userID string, db *sql.DB) (int, error) {
+	recipe = withCanonicalUnits(recipe)
+
 	accountID, err := GetAccountID(db, userID)
 	if err != nil {
 		return 0, err
@@ -267,6 +272,8 @@ func AddRecipe(recipe common.Recipe, userID string, db *sql.DB) (int, error) {
 // deleting and reinserting the recipe's Ingredient Lines) doesn't leave the recipe with
 // no Ingredient Lines.
 func EditRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
+	recipe = withCanonicalUnits(recipe)
+
 	accountID, err := GetAccountID(db, userID)
 	if err != nil {
 		return err
@@ -347,6 +354,20 @@ func DeleteRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 
 	// Delete the recipe items from the shopping list
 	if _, err := db.Exec("DELETE FROM list WHERE recipe_id=? and account_id=?;", recipe.ID, accountID); err != nil {
+		return err
+	}
+
+	// And its Shopping List Events. migrations/015 puts a foreign key on
+	// shopping_list_event.recipe_id, so without this the DELETE below fails with
+	// "Cannot delete or update a parent row" for any Recipe that has ever been
+	// added to a list - which is every Recipe anyone has actually cooked from.
+	//
+	// Deleting rather than nulling the column: the rows only exist to let Dave
+	// infer Recent and Favorite Recipes, `recipe_usage_summary` filters on
+	// `recipe_id IS NOT NULL`, and a Recipe that no longer exists cannot be
+	// suggested - so a nulled row would be dead weight. It also matches what
+	// this function already does with the Recipe's parts, tags and list items.
+	if _, err := db.Exec("DELETE FROM shopping_list_event WHERE recipe_id=? AND account_id=?;", recipe.ID, accountID); err != nil {
 		return err
 	}
 
@@ -454,19 +475,20 @@ func insertTags(recipe common.Recipe, db execer) error {
 // before. Nothing to do for Manual Entry or for editing an existing Recipe,
 // where the payload carries none.
 //
-// Applies only to Ingredients that did not exist before this save, detected by
-// their having no Ingredient Lines yet. insertParts runs after this, and
-// EditRecipe deletes its old parts after it too, so at this point a genuinely
-// new Ingredient has zero rows in `part` and an established one has at least
-// one.
+// Applies only to Ingredients not marked `curated` - i.e. ones no person has
+// chosen values for.
 //
-// That check, rather than "is the column still unset", is load-bearing. NULL in
-// base_unit_id means two different things: never curated, and curated as the
-// default of gram. Onion is deliberately gram, so it is NULL, so an
-// unset-column guard would happily let an import flip it to millilitre - which
-// is exactly what happened when this was first written and tested against a
-// live database. Restricting to new Ingredients also matches what the feature
-// is for: the curated set covers what exists, this covers what arrives.
+// That marker replaced an earlier proxy, "the Ingredient has no Ingredient Lines
+// yet", which leaked both ways: DeleteRecipe leaves an Ingredient line-less
+// without deleting it, so a curated one could be reclassified, while an
+// uncurated one that happened to be used by a Recipe could never be classified
+// at all (follow-ups.md #27, migration 028).
+//
+// Note "is the column still unset" is *not* a sufficient guard on its own, which
+// is what the spec originally recorded. NULL in base_unit_id means both "never
+// curated" and "curated as the default, gram" - onion is deliberately gram, so
+// it is NULL, and an unset-column guard let an import flip it to millilitre when
+// this was first tested against a live database.
 //
 // The ON DUPLICATE KEY no-op on Unit Sizes is kept as a second line of defence.
 //
@@ -500,8 +522,7 @@ func classifyNewIngredients(recipe common.Recipe, db execer) {
 			query := `
 				INSERT INTO ingredient_unit_size (ingredient_id, unit_id, size)
 				SELECT i.id, u.id, ? FROM ingredient i, unit u
-				WHERE i.name = ? AND u.name = ?
-				  AND NOT EXISTS (SELECT 1 FROM part WHERE part.ingredient_id = i.id)
+				WHERE i.name = ? AND u.name = ? AND NOT i.curated
 				ON DUPLICATE KEY UPDATE ingredient_unit_size.ingredient_id = ingredient_unit_size.ingredient_id;`
 			if _, err := db.Exec(query, size, ingredient.Name, unit); err != nil {
 				log.Printf("could not set unit size %q for %q: %v", unit, ingredient.Name, err)
@@ -519,15 +540,67 @@ func classifyNewIngredients(recipe common.Recipe, db execer) {
 //
 // Two guards, both load-bearing. The subquery yields NULL for a Unit that does
 // not exist, so an invented Base Unit is inert rather than corrupting the
-// catalog. And NOT EXISTS restricts this to Ingredients with no Ingredient
-// Lines - see classifyNewIngredients for why "is the column still unset" is not
-// sufficient.
+// catalog. And `NOT curated` keeps it away from values a person chose - see
+// classifyNewIngredients for why "is the column still unset" is not sufficient.
 func setIngredientUnitColumn(db execer, column, unitName, ingredientName string) {
 	query := fmt.Sprintf(`
 		UPDATE ingredient SET %s = (SELECT id FROM unit WHERE name = ?)
-		WHERE name = ? AND %s IS NULL
-		  AND NOT EXISTS (SELECT 1 FROM part WHERE part.ingredient_id = ingredient.id);`, column, column)
+		WHERE name = ? AND %s IS NULL AND NOT curated;`, column, column)
 	if _, err := db.Exec(query, unitName, ingredientName); err != nil {
 		log.Printf("could not set %s for %q: %v", column, ingredientName, err)
 	}
+}
+
+// unitAliases maps spellings Recipe Import might produce onto the canonical Unit
+// names the catalog uses. Resolves follow-ups.md #23.
+//
+// insertUnits upserts whatever string reaches it, and migration 019 classifies
+// exactly six spellings - so an imported "ml" became a *Relative* Unit with no
+// factor, which never combines with "millilitre" on a Shopping List. Silently:
+// an unrecognised Unit is a legitimate state by design, so nothing looks wrong.
+//
+// The extraction prompt already asks for these to be expanded, and in 2.3 years
+// it never got one wrong. This is defence in depth for the day it does, or for
+// a path that doesn't go through the prompt at all.
+var unitAliases = map[string]string{
+	"g": "gram", "gr": "gram", "gm": "gram", "gms": "gram", "grams": "gram",
+	"kg": "kilogram", "kgs": "kilogram", "kilograms": "kilogram", "kilo": "kilogram",
+	"ml": "millilitre", "mls": "millilitre", "milliliter": "millilitre",
+	"milliliters": "millilitre", "millilitres": "millilitre",
+	"l": "litre", "ltr": "litre", "liter": "litre", "liters": "litre", "litres": "litre",
+	"tsp": "teaspoon", "tsps": "teaspoon", "teaspoons": "teaspoon",
+	"tbsp": "tablespoon", "tbsps": "tablespoon", "tbs": "tablespoon",
+	"tablespoons": "tablespoon",
+	"cloves":      "clove", "tins": "tin", "packets": "packet", "bottles": "bottle",
+	"slices": "slice", "pinches": "pinch",
+}
+
+// canonicalUnit resolves one Unit name to the spelling the catalog uses.
+//
+// Trimming matters independently of the alias table: `unit`.`name` is UNIQUE
+// under a case-insensitive collation, so "Gram" and "gram" cannot fragment - but
+// " gram" and "gram" are different strings and can. Four ingredients in the live
+// catalog have exactly that damage (follow-ups.md #25).
+func canonicalUnit(name string) string {
+	trimmed := strings.TrimSpace(name)
+	if canonical, ok := unitAliases[strings.ToLower(trimmed)]; ok {
+		return canonical
+	}
+	return trimmed
+}
+
+// withCanonicalUnits returns the Recipe with every Ingredient Line's Unit
+// resolved to its canonical spelling.
+//
+// Applied once, before any of the insert steps, rather than inside insertUnits:
+// insertParts resolves a Unit by name too, so normalising in one place and not
+// the other would have them disagree and the part insert would find no Unit row.
+func withCanonicalUnits(recipe common.Recipe) common.Recipe {
+	ingredients := make([]common.Ingredient, len(recipe.Ingredients))
+	copy(ingredients, recipe.Ingredients)
+	for i := range ingredients {
+		ingredients[i].Unit = canonicalUnit(ingredients[i].Unit)
+	}
+	recipe.Ingredients = ingredients
+	return recipe
 }

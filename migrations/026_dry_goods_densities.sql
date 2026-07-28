@@ -52,13 +52,31 @@ WHERE base_unit_id IS NULL
 
 COMMIT;
 
--- Verification - should return no rows, i.e. nothing dry left combining into
--- millilitres:
+-- Verification - should return no rows. An Ingredient with both weight lines
+-- and volume lines but no density has nothing to convert between them, so its
+-- amounts cannot combine and the list shows two of them side by side:
 --
---   SELECT i.name, GROUP_CONCAT(DISTINCT u.name) FROM part p
---   JOIN unit u ON u.id = p.unit_id JOIN ingredient i ON i.id = p.ingredient_id
---   WHERE u.kind = 'volume'
---     AND i.base_unit_id IS NULL
+--   SELECT i.name, GROUP_CONCAT(DISTINCT u.name ORDER BY u.name) AS units_used
+--   FROM part p JOIN unit u ON u.id = p.unit_id JOIN ingredient i ON i.id = p.ingredient_id
+--   WHERE u.kind IN ('weight', 'volume')
 --     AND i.id NOT IN (SELECT ingredient_id FROM ingredient_unit_size s
 --                      JOIN unit u2 ON u2.id = s.unit_id WHERE u2.name = 'millilitre')
---   GROUP BY i.name HAVING COUNT(DISTINCT u.name) > 1;
+--   GROUP BY i.id, i.name
+--   HAVING COUNT(DISTINCT u.kind) > 1;
+--
+-- An earlier version of this check asked a different question - volume lines on
+-- an Ingredient with no Base Unit and no density - and claimed the same "no
+-- rows". That was never true: 90 Ingredients are in that state, and the check
+-- only appeared to pass because it also required two *distinct* volume units,
+-- which almost nothing has. Running it after this migration duly returned one
+-- row, `rice vinegar` with `litre,tablespoon`, which is not a defect at all:
+-- litre and tablespoon are both kind='volume', so they combine through the
+-- volume bucket on their factors alone (1 litre + 3 tablespoon -> 1.045 litre,
+-- verified end to end). No density is involved and no Base Unit is needed.
+--
+-- The distinction the old check missed is that a missing Base Unit on a *liquid*
+-- costs nothing - millilitres are already the right answer - while on a dry good
+-- measured in spoons it costs the ability to combine with a gram line. Only the
+-- second is a problem, and only once such a line exists, which is exactly what
+-- the query above waits for. Setting Base Units on the liquids above stays
+-- belt-and-braces rather than load-bearing.

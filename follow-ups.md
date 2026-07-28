@@ -65,3 +65,28 @@ Items 1–30 have all been resolved — see [`follow-ups-resolved.md`](./follow-
     JavaScript/TypeScript rules, rather than the blanket `ignores` entry the upgrade used
     to avoid expanding scope mid-version-bump. `e2e/` has its own `tsconfig.json`
     already, so the precedent for treating it as a separate project exists.
+
+34. **`swagger-ui-react` logs a non-fatal TypeError under Turbopack.** Found while
+    upgrading to Next.js 16, which makes Turbopack the default bundler. Only affects
+    `/dev/api-docs`.
+
+    The page renders correctly — all 23 operations and 8 tag sections, no error banner —
+    but the browser console carries two copies of:
+
+    ```
+    OpenApi3_1Element.refract is not a function
+      at Object.normalize (node_modules_swagger-client_es_...)
+      at resolveSubtree (...)
+    ```
+
+    Confirmed Turbopack-specific by running the same page on the same commit under both
+    bundlers: `next dev` (Turbopack) gives 2 console errors and 23 operation blocks;
+    `next dev --webpack` gives 0 console errors and the same 23 blocks. So it is a
+    bundler interop problem with `@swagger-api/apidom-ns-openapi-3-1`'s `.mjs` sources,
+    not a regression in the spec, the page, or `swagger-ui-react`'s version.
+
+    Left alone deliberately. `pages/dev/api-docs.tsx` is dev-only — its
+    `getServerSideProps` returns `notFound` outside development — so this never reaches
+    production, and the failing code path is `$ref` resolution the Big Shop spec does not
+    depend on. Worth revisiting if the viewer ever starts rendering incompletely, or if
+    `swagger-ui-react` is upgraded and the error changes shape.

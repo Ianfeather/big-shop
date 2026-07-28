@@ -12,13 +12,13 @@ vi.mock('openai', () => ({
   }
 }));
 
-vi.mock('./tools', async () => {
-  const actual = await vi.importActual('./tools');
+vi.mock('../../../lib/dave/tools', async () => {
+  const actual = await vi.importActual('../../../lib/dave/tools');
   return { ...actual, executeToolCall: vi.fn() };
 });
 
 import handler from './chat';
-import { executeToolCall } from './tools';
+import { executeToolCall } from '../../../lib/dave/tools';
 
 const mockedExecuteToolCall = executeToolCall as unknown as Mock;
 

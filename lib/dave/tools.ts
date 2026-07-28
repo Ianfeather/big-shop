@@ -1,7 +1,7 @@
 // Tool functions for Dave to interact with the existing Big Shop APIs
 
 import type OpenAI from 'openai';
-import type { Recipe, RecipeSummary } from '../../../types/models';
+import type { Recipe, RecipeSummary } from '../../types/models';
 
 /**
  * Search recipes in the user's collection

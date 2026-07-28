@@ -6,7 +6,7 @@ For product/domain vocabulary (Account, Recipe, Shopping List, etc.), see [CONTE
 
 Big Shop is a recipe management and meal planning application with a hybrid Next.js frontend and Go API backend:
 
-- **Frontend**: Next.js 14 / React 18 with Auth0 authentication
+- **Frontend**: Next.js 16 / React 18 with Auth0 authentication
 - **Backend**: Go API deployed as AWS Lambda via Netlify Functions
 - **Database**: TiDB (MySQL-compatible) for production, local MySQL for development
 - **Deployment**: Netlify with automatic deployments from git
@@ -27,7 +27,9 @@ Big Shop is a recipe management and meal planning application with a hybrid Next
 The app uses Auth0 for authentication:
 - Public route: `/` (landing page)
 - All other routes require authentication
-- JWT tokens are automatically added to API requests via `use-http` interceptors
+- JWT tokens are fetched per call site: each `hooks/use-*.ts` query and mutation calls
+  `getAccessTokenSilently()` itself. There is no shared request interceptor (`use-http`
+  and its `FetchProvider` were removed — see `pages/_app.tsx`)
 - For local development, set `DISABLE_AUTH=true` in `.env.local`
 
 ## Go API Structure
@@ -204,6 +206,6 @@ NEXT_PUBLIC_HOST=https://www.bigshop.life
 
 ## Key Dependencies
 
-**Frontend:** `next@14`, `react@18`, `@auth0/auth0-react`, `use-http`, `react-autosuggest`, `openai`, `@netlify/blobs`
+**Frontend:** `next@16`, `react@18`, `@tanstack/react-query`, `@auth0/auth0-react`, `openai`, `@netlify/blobs`
 
 **Backend (Go):** `gorilla/mux`, `auth0/go-jwt-middleware`, `aws/aws-lambda-go`, `go-sql-driver/mysql`, `sendgrid/sendgrid-go`, `urfave/negroni`

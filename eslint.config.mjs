@@ -12,10 +12,7 @@ import prettier from 'eslint-config-prettier';
 // flat config, not a harmless duplicate.
 const config = [
   // `next lint` scoped itself to source directories implicitly. `eslint .`
-  // does not, so the directories it should never walk have to be named. .next/
-  // matters most: it holds a compiled copy of every pages/api/**/*.test.js
-  // (Next treats any .js under pages/api as a route), the same output that
-  // vitest.config.js already has to exclude for its own reasons.
+  // does not, so build output and generated trees have to be named here.
   //
   // e2e/ is excluded because it is a separate project (its own tsconfig) that
   // `next lint` never covered, and Playwright's fixture API collides head-on

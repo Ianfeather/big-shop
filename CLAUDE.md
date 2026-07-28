@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Big Shop is a recipe management and meal planning app: a Next.js 14 / React 18 frontend with Auth0 auth, a Go API backend deployed as AWS Lambda via Netlify Functions, and a TiDB (MySQL-compatible) database.
+Big Shop is a recipe management and meal planning app: a Next.js 16 / React 18 frontend with Auth0 auth, a Go API backend deployed as AWS Lambda via Netlify Functions, and a TiDB (MySQL-compatible) database.
 
 - **What this product is** (Account, Recipe, Shopping List, and the rest of the domain vocabulary) → [CONTEXT.md](./CONTEXT.md)
 - **How it's built** (DB schema, API routes, component structure, hooks, deployment, dependencies) → [technical-architecture.md](./technical-architecture.md)
@@ -98,36 +98,21 @@ in your DB for requests to resolve to an account. Without `DISABLE_AUTH`, the
 Go server validates JWTs against the real Auth0 tenant
 (`AUTH0_DOMAIN`/`AUTH0_AUDIENCE`) — impractical for local-only work.
 
-**Known rough edge (dev-only):** `next.config.js` has `reactStrictMode: true`,
-which double-invokes effects in development. Combined with `use-http`'s
-abort-on-unmount behavior (it registers `request.abort` as the cleanup of a
-mount effect, aborting whatever's in flight on that hook instance — see
-`useFetch.js`'s `useEffect(() => request.abort, [])`), Strict Mode's
-first-pass effect fires its requests, then its cleanup immediately aborts
-them, before the second pass fires the real ones. A hard page reload on
-`/recipes`, `/recipes/[id]`, or `/list` can occasionally render empty if the
-aborted first call's state resolves after the real one. Client-side `<Link>`
-navigation is unaffected in practice. Doesn't happen in production (Strict
-Mode's double-invoke is a dev build only). Not something this setup work
-fixed — the real-API path was never previously exercised locally, so this
-was never observable before.
+**Historical note (no longer a live issue):** this section used to document a
+dev-only rough edge where `reactStrictMode: true`'s double-invoked effects
+collided with `use-http`'s abort-on-unmount behaviour, so a hard reload of
+`/recipes`, `/recipes/[id]` or `/list` could render empty, and
+`components/recipe-form/Form.tsx` crashed deterministically on
+`Cannot read properties of undefined (reading 'map')` when three concurrent
+`get()`s shared one `useFetch` instance's single `response.ok`.
 
-Where a component fires multiple concurrent requests off one shared
-`useFetch` instance, this is worse than "occasionally empty": each call's
-own resolved value (`undefined` if aborted) is the only reliable per-call
-signal — the hook's single `response`/`error` is shared across every call on
-that instance, so it reflects whichever call last updated it, not each one
-individually, and gating multiple `setState`s behind one `response.ok` check
-can update state from a *different* call than the one just aborted. This bit
-`components/recipe-form/Form.tsx`'s `getUnitsTagsAndIngredients` in
-practice — deterministically, every dev load, not just occasionally — since
-it fired three concurrent `get()`s and gated all three `setState`s on one
-shared `response.ok`, crashing with `Cannot read properties of undefined
-(reading 'map')` when Strict Mode's first pass got aborted but a *later*
-call (from the second pass) had already flipped the shared `response.ok` to
-true by the time the first pass's own check ran. Fixed by checking each
-result for `undefined` individually instead of gating on `response.ok` —
-the general lesson for any future concurrent-call-on-one-instance code here.
+`use-http` has since been removed in favour of TanStack Query, which owns
+per-query state rather than sharing one `response`/`error` across every call on
+a hook instance, so neither symptom applies any more. The transferable lesson
+does: **when several concurrent calls share one hook instance, each call's own
+resolved value is the only reliable per-call signal** — never gate several
+`setState`s on one shared success flag, because it may have been set by a
+different call than the one you are handling.
 
 **Environment variables:**
 - Copy from `.env.development` for local development
@@ -154,6 +139,28 @@ TypeScript (`.tsx`/`.ts`, see `follow-ups.md` #9). Test files live next to
 the file under test (e.g. `components/button/index.test.tsx`,
 `hooks/use-page-visibility.test.ts`) — see those two for the established
 pattern.
+
+**One exception: a test colocated under `pages/` must be named `*.test.mts`,
+not `*.test.ts`.** Next.js treats *every* file under `pages/` as a route if its
+extension is in `pageExtensions` (`tsx`/`ts`/`jsx`/`js`), and a test file has no
+default export, so from Next 16 onwards it fails the build outright:
+
+```
+Type 'typeof import(".../pages/api/parse-recipe-url.test")' does not satisfy
+the constraint 'ApiRouteConfig'. Property 'default' is missing
+```
+
+`.mts` is not in `pageExtensions`, so Next ignores those files entirely, while
+Vitest still matches them by default (`**/*.{test,spec}.?(c|m)[jt]s?(x)`). See
+`pages/api/parse-recipe-url.test.mts`. `tsconfig.json`'s `include` carries a
+`pages/**/*.mts` entry so they stay type-checked.
+
+Before Next 16 this misconfiguration was silent rather than fatal — the test
+files were compiled and deployed as real (broken, unreachable) serverless
+functions. The same applied to any non-route helper module under `pages/api/`,
+which is why `lib/dave/tools.ts` lives in `lib/` rather than next to the route
+that uses it. **Put helper modules for an API route in `lib/`, never alongside
+it under `pages/api/`.**
 
 End-to-end tests (Playwright):
 ```bash

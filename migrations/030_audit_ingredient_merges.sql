@@ -4,7 +4,7 @@
 -- Same shape as 011, 023 and 029: near-duplicate names split one Shopping List
 -- item into two lines permanently, because Ingredients only combine on a name.
 --
--- Thirteen merges and six empty rows. The six carry no Ingredient Lines at all,
+-- Fifteen merges and six empty rows. The six carry no Ingredient Lines at all,
 -- so there is nothing to repoint - they are deleted outright at the foot of this
 -- file rather than merged.
 --
@@ -139,26 +139,56 @@ DELETE FROM `ingredient_department` WHERE ingredient_id = (SELECT id FROM (SELEC
 DELETE FROM `ingredient_unit_size`  WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'nice bread') x);
 DELETE FROM `ingredient` WHERE name = 'nice bread';
 
--- 'ripe medium tomato' -> 'ripe tomatoes': 2 lines into 2. Both sides are
--- curated identically - a count Unit Size of 120g and a count Display Unit - so
--- the merge is lossless.
+-- Both `ripe tomato` spellings collapse into `tomato`, which has 9 lines to their
+-- 2 each. `tomato` is the uncurated side, though, and both losers carry a count
+-- Unit Size of 120g and a count Display Unit - the third case in this catalog
+-- where a merge would throw away the curated values by deleting the wrong row.
+-- Copied across first, with IFNULL so a value on the winner would still win.
 --
--- Worth revisiting separately: `tomato` also exists with 9 lines, and nothing
--- will ever combine it with `ripe tomatoes`. The plural also fights the singular
--- naming rule in extract.js's prompt, the same trap `spring onions` was in.
--- Merging into `tomato` instead is a one-word change here, but it is a recipe
--- judgement (does "ripe" matter to these dishes?) rather than a catalog one
-UPDATE `part` SET ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'ripe tomatoes')
+-- The two losers are curated identically (120g either way), so which one this
+-- reads from does not matter.
+UPDATE `ingredient` SET
+  display_unit_id = IFNULL(display_unit_id,
+    (SELECT v FROM (SELECT display_unit_id AS v FROM `ingredient` WHERE name = 'ripe tomatoes') a))
+WHERE name = 'tomato';
+INSERT INTO `ingredient_unit_size` (ingredient_id, unit_id, size)
+SELECT (SELECT id FROM `ingredient` WHERE name = 'tomato'), s.unit_id, s.size
+FROM (SELECT ingredient_id, unit_id, size FROM `ingredient_unit_size`) s
+WHERE s.ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ripe tomatoes') x)
+  AND NOT EXISTS (SELECT 1 FROM (SELECT ingredient_id, unit_id FROM `ingredient_unit_size`) y
+                  WHERE y.ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'tomato')
+                    AND y.unit_id = s.unit_id);
+
+-- 'ripe medium tomato' -> 'tomato': 2 lines into 9. "ripe" is a quality note
+-- rather than a different purchase, and extract.js's prompt already strips
+-- preparation notes; keeping it split guaranteed the two would never combine
+UPDATE `part` SET ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'tomato')
 WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ripe medium tomato') x);
 INSERT INTO `ingredient_department` (department_id, ingredient_id)
-SELECT idp.department_id, (SELECT id FROM `ingredient` WHERE name = 'ripe tomatoes')
+SELECT idp.department_id, (SELECT id FROM `ingredient` WHERE name = 'tomato')
 FROM `ingredient_department` idp
 WHERE idp.ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ripe medium tomato') x)
   AND NOT EXISTS (SELECT 1 FROM (SELECT ingredient_id FROM `ingredient_department`) y
-                  WHERE y.ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'ripe tomatoes'));
+                  WHERE y.ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'tomato'));
 DELETE FROM `ingredient_department` WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ripe medium tomato') x);
 DELETE FROM `ingredient_unit_size`  WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ripe medium tomato') x);
 DELETE FROM `ingredient` WHERE name = 'ripe medium tomato';
+
+-- 'ripe tomatoes' -> 'tomato': 2 lines into 9, same reasoning, and it drops the
+-- plural that the singular naming rule in extract.js's prompt would fragment
+-- against on every future import - the trap `spring onions` was already in
+UPDATE `part` SET ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'tomato')
+WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ripe tomatoes') x);
+INSERT INTO `ingredient_department` (department_id, ingredient_id)
+SELECT idp.department_id, (SELECT id FROM `ingredient` WHERE name = 'tomato')
+FROM `ingredient_department` idp
+WHERE idp.ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ripe tomatoes') x)
+  AND NOT EXISTS (SELECT 1 FROM (SELECT ingredient_id FROM `ingredient_department`) y
+                  WHERE y.ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'tomato'));
+DELETE FROM `ingredient_department` WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ripe tomatoes') x);
+DELETE FROM `ingredient_unit_size`  WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'ripe tomatoes') x);
+DELETE FROM `ingredient` WHERE name = 'ripe tomatoes';
+
 
 -- 'unsalted butter or butter ghee' -> 'unsalted butter': 1 line into 1
 UPDATE `part` SET ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'unsalted butter')
@@ -229,6 +259,23 @@ DELETE FROM `ingredient_department` WHERE ingredient_id = (SELECT id FROM (SELEC
 DELETE FROM `ingredient_unit_size`  WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'garden pea') x);
 DELETE FROM `ingredient` WHERE name = 'garden pea';
 
+-- 'flour' -> 'plain flour': 4 lines into 16. Both sides are curated with the
+-- same 0.53 density, so nothing is lost. Unqualified "flour" means plain flour in
+-- every recipe using it here; `self raising flour`, `gram flour`, `white bread
+-- flour`, `oo flour` and `cornflour` stay separate, which is the distinction
+-- extract.js's prompt actually asks to preserve
+UPDATE `part` SET ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'plain flour')
+WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'flour') x);
+INSERT INTO `ingredient_department` (department_id, ingredient_id)
+SELECT idp.department_id, (SELECT id FROM `ingredient` WHERE name = 'plain flour')
+FROM `ingredient_department` idp
+WHERE idp.ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'flour') x)
+  AND NOT EXISTS (SELECT 1 FROM (SELECT ingredient_id FROM `ingredient_department`) y
+                  WHERE y.ingredient_id = (SELECT id FROM `ingredient` WHERE name = 'plain flour'));
+DELETE FROM `ingredient_department` WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'flour') x);
+DELETE FROM `ingredient_unit_size`  WHERE ingredient_id = (SELECT id FROM (SELECT id FROM `ingredient` WHERE name = 'flour') x);
+DELETE FROM `ingredient` WHERE name = 'flour';
+
 -- Empty rows: no Ingredient Lines at all, so nothing to repoint. Verified
 -- individually rather than assumed - 029 shipped with `thyme sprig` in a list
 -- like this one, and it had a line.
@@ -251,13 +298,6 @@ WHERE base_unit_id IS NOT NULL
 
 COMMIT;
 
--- Found during this audit but NOT acted on, because it needs a decision:
---
---   `flour` (4 lines) and `plain flour` (16 lines) are both curated, both with a
---   0.53 density, and are very likely the same purchase. extract.js's prompt
---   deliberately keeps "self-raising flour" apart from "flour", but says nothing
---   about plain vs unqualified - and these two will never combine.
---
 -- Verification - the merged-away names should all be gone, and nothing orphaned:
 --
 --   SELECT name FROM ingredient WHERE name IN
@@ -266,7 +306,8 @@ COMMIT;
 --      'fresh red chilli pepper', 'garden pea', 'grated parmesan',
 --      'hot chicken stock', 'leftover cooked chicken', 'lemon dressing or juice',
 --      'mix powder', 'nice bread', 'panceta', 'ripe medium tomato',
---      'skinless chicken breasts', 'unsalted butter or butter ghee');
+--      'ripe tomatoes', 'flour', 'skinless chicken breasts',
+--      'unsalted butter or butter ghee');
 --
 --   SELECT COUNT(*) FROM part p LEFT JOIN ingredient i ON i.id = p.ingredient_id
 --   WHERE i.id IS NULL;

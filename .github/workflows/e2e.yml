@@ -16,17 +16,12 @@ jobs:
           node-version: 22
           cache: npm
 
-      # --ignore-scripts: @netlify/plugin-nextjs (devDependency, needed only
-      # so netlify.toml's plugin resolves locally for Netlify's own deploy
-      # build) pulls in the ancient, unmaintained @netlify/esbuild@0.14.39.
-      # Its postinstall can't locate/fetch its own Linux binary and fails
-      # `npm ci` outright on every platform tested (verified in a plain
-      # node:22-bookworm container, both linux-64 and linux-arm64 - not a
-      # registry flake). Nothing this workflow needs (esbuild via Next's
-      # webpack build, Playwright's browser download below) requires a
-      # postinstall step from npm ci itself to work.
+      # @netlify/plugin-nextjs is a devDependency only so netlify.toml's plugin
+      # entry resolves during Netlify's own deploy build. Plain `npm ci` is
+      # fine: the --ignore-scripts workaround this step used to carry was for
+      # the v4 runtime's bundled @netlify/esbuild, which v5 does not depend on.
       - name: Install dependencies
-        run: npm ci --ignore-scripts
+        run: npm ci
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium

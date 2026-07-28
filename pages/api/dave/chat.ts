@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { availableTools, executeToolCall } from './tools';
+import { availableTools, executeToolCall } from '../../../lib/dave/tools';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,

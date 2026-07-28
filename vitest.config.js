@@ -20,14 +20,19 @@ export default defineConfig({
     globals: true,
     css: true,
     // e2e/ holds Playwright specs (run via `npm run test:e2e`), not Vitest ones.
-    // .next/ isn't excluded by configDefaults - `next build`'s output tree
-    // contains a compiled copy of every pages/api/**/*.test.js (Next.js
-    // treats any .js under pages/api as a route, so these ship as real,
-    // if unused, serverless functions - a pre-existing quirk, not something
-    // this exclude fixes). Without this, running `test` after a `build`
-    // picks up those compiled copies too and actually executes them outside
-    // Vitest's mocking setup, hitting the real OpenAI client and failing on
-    // a missing API key.
+    //
+    // .next/ isn't excluded by configDefaults, and used to matter a great deal:
+    // `next build`'s output tree contained a compiled copy of every
+    // pages/api/**/*.test.js, because Next treats any file under pages/api as a
+    // route. Running `test` after a `build` picked those copies up and executed
+    // them outside Vitest's mocking setup, hitting the real OpenAI client.
+    //
+    // That no longer happens - the API route tests are now named *.test.mts,
+    // which is outside Next's pageExtensions, so they are not routes and are
+    // not compiled (see CLAUDE.md). The exclude stays because scanning build
+    // output for tests is never right, not because the old failure could
+    // return: a test file added back under a page extension now fails
+    // `next build` outright, so no compiled copy would reach .next/ at all.
     exclude: [...configDefaults.exclude, 'e2e/**', '.next/**']
   }
 });

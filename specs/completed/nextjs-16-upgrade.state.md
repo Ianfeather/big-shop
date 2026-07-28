@@ -207,11 +207,17 @@ missed a typing change: @types/react 19 types useRef<T>(null) as
 RefObject<T | null>, so hooks/use-overflow.ts's declared return type no longer
 matched and was widened.
 
-THE SPEC'S GATE IS NOT MET. It requires "an authenticated manual pass - login,
+THE SPEC'S GATE IS NOW MET. It required "an authenticated manual pass - login,
 token refresh after a page reload, and logout, against the real Auth0 tenant"
-and says "Phase 4 is not done until someone has logged in against the real
-tenant." What was actually verified is narrower and should not be mistaken for
-it: a dev server was run with NEXT_PUBLIC_DISABLE_AUTH=false, Log In and Sign
+and said "Phase 4 is not done until someone has logged in against the real
+tenant." The repo owner confirmed auth works against the real tenant on
+2026-07-28, which is the only way this could ever have been closed - no
+automated test in this repo can reach it.
+
+Recorded below is what the branch itself was able to verify before that, kept
+because it says exactly which parts had machine-checkable evidence and which
+rested on the manual pass. A dev server was run with
+NEXT_PUBLIC_DISABLE_AUTH=false, Log In and Sign
 Up were clicked, and the outgoing /authorize request was intercepted and
 ABORTED to read its query string. Both produced redirect_uri, audience,
 response_type=code and scope including offline_access; Sign Up additionally

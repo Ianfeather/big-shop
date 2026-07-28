@@ -12,8 +12,8 @@ const useMockAuth0 = () => ({
   isAuthenticated: true,
   isLoading: false,
   user: mockUser,
-  loginWithRedirect: () => {},
-  logout: () => {},
+  loginWithRedirect: async () => {},
+  logout: async () => {},
   getAccessTokenSilently: async () => 'local-dev-token',
 });
 
@@ -25,8 +25,12 @@ interface UseAuthResult {
   isAuthenticated: boolean;
   isLoading: boolean;
   user?: { sub?: string; name?: string; email?: string };
-  loginWithRedirect: (options?: RedirectLoginOptions) => void;
-  logout: (options?: LogoutOptions) => void;
+  // Both return Promise<void> in the real SDK. The interface said `void`,
+  // which type-checked only because `void` swallows a promise - so no caller
+  // could await a login or logout without the type lying to them. Shaped to
+  // the SDK now, with the mock returning promises to match.
+  loginWithRedirect: (options?: RedirectLoginOptions) => Promise<void>;
+  logout: (options?: LogoutOptions) => Promise<void>;
   getAccessTokenSilently: () => Promise<string>;
 }
 

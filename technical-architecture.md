@@ -6,7 +6,7 @@ For product/domain vocabulary (Account, Recipe, Shopping List, etc.), see [CONTE
 
 Big Shop is a recipe management and meal planning application with a hybrid Next.js frontend and Go API backend:
 
-- **Frontend**: Next.js 16 / React 18 with Auth0 authentication
+- **Frontend**: Next.js 16 / React 19 with Auth0 authentication
 - **Backend**: Go API deployed as AWS Lambda via Netlify Functions
 - **Database**: TiDB (MySQL-compatible) for production, local MySQL for development
 - **Deployment**: Netlify with automatic deployments from git
@@ -209,6 +209,6 @@ NEXT_PUBLIC_HOST=https://www.bigshop.life
 
 ## Key Dependencies
 
-**Frontend:** `next@16`, `react@18`, `@tanstack/react-query`, `@auth0/auth0-react`, `openai`, `@netlify/blobs`
+**Frontend:** `next@16`, `react@19`, `@tanstack/react-query`, `@auth0/auth0-react@2`, `openai`, `@netlify/blobs`
 
 **Backend (Go):** `gorilla/mux`, `auth0/go-jwt-middleware`, `aws/aws-lambda-go`, `go-sql-driver/mysql`, `sendgrid/sendgrid-go`, `urfave/negroni`

@@ -12,7 +12,9 @@ const Logout = ({ className }: LogoutProps) => {
       className={`${styles.pointer} ${className}`}
       onClick={() =>
         logout({
-          returnTo: process.env.NEXT_PUBLIC_HOST,
+          logoutParams: {
+            returnTo: process.env.NEXT_PUBLIC_HOST,
+          },
         })
       }
     >

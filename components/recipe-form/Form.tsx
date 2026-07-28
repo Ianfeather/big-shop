@@ -1,5 +1,5 @@
 import styles from './form.module.css';
-import { MouseEvent, useState, useEffect } from 'react';
+import { MouseEvent, useState, useEffect, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/router'
 import Button from '@components/button';
@@ -64,10 +64,6 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
 
   let useInitialRecipe = Object.keys(initialRecipe).length > 0;
   let [recipe, setRecipe] = useState<FormRecipe>(useInitialRecipe ? normalizeInitialRecipe(initialRecipe, bareRecipe) : bareRecipe);
-  // units stays local state (not read directly off useUnits()) because the
-  // reconciliation effect below appends synthetic entries for units the
-  // extractor introduces that aren't in the fetched list yet (e.g. "bunch").
-  let [units, setUnits] = useState<FormUnit[]>([]);
   const fetchedUnits = useUnits();
   const tags = useTags();
   let [deleted, setDeleted] = useState(false);
@@ -148,19 +144,39 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
   const loading = saveMutation.isPending;
   const error = saveMutation.error || deleteMutation.error;
 
+  // Resets the form when a fresh import lands (URL/photo extraction resolves
+  // after this component has already mounted with an empty recipe). Kept as an
+  // effect deliberately: `recipe` has to stay locally editable, so it cannot be
+  // derived from the prop, and the documented alternative - remounting via a
+  // `key` on <Form> - would discard anything the cook had already typed. The
+  // extra render this causes happens once per import, not per keystroke.
   useEffect(() => {
     if (Object.keys(initialRecipe).length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see above (follow-ups.md #32)
       setRecipe(normalizeInitialRecipe(initialRecipe, bareRecipe));
     }
   }, [initialRecipe]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Seeds units from the fetched list once it arrives; the reconciliation
-  // effect below is what appends synthetic entries on top of it.
-  useEffect(() => {
-    if (fetchedUnits.length) {
-      setUnits(fetchedUnits.map(unit => ({...unit, name: capitalize(unit.name)})));
-    }
-  }, [fetchedUnits]);
+  // The fetched Unit list, plus synthetic entries for any unit the extractor
+  // introduced that isn't in the catalog yet (e.g. "bunch") - whether those
+  // ingredients arrived via appendIngredients or via initialRecipe (URL/photo
+  // import). Fetch ordering between the units request and an in-flight
+  // extraction isn't guaranteed, which is why this reconciles both sources
+  // rather than being done inline at each call site.
+  //
+  // This was previously two effects writing a `units` useState: one seeding
+  // from fetchedUnits, one appending the missing names. Nothing else ever
+  // called setUnits, so the state was pure duplication of these two inputs -
+  // deriving it removes both the state and the cascading extra render that
+  // react-hooks/set-state-in-effect was flagging (follow-ups.md #32).
+  const units: FormUnit[] = useMemo(() => {
+    const catalogUnits = fetchedUnits.map(unit => ({ ...unit, name: capitalize(unit.name) }));
+    const unitNamesInRecipe = [...new Set(recipe.ingredients.map(i => i.unit).filter(Boolean))];
+    const missing = unitNamesInRecipe.filter(
+      unit => !catalogUnits.some(u => u.name.toLowerCase() === unit.toLowerCase())
+    );
+    return [...catalogUnits, ...missing.map(name => ({ id: `new-${name}`, name: capitalize(name) }))];
+  }, [fetchedUnits, recipe.ingredients]);
 
   function updateRecipe<K extends keyof FormRecipe>(key: K, value: FormRecipe[K]) {
     const updatedRecipe = { ...recipe, [key]: value};
@@ -202,22 +218,6 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
       ingredients: [...prevRecipe.ingredients, ...newIngredients]
     }));
   }
-
-  // The extractor can introduce a unit that isn't in the units list fetched at mount (e.g.
-  // "bunch") - whether ingredients arrive via appendIngredients or via initialRecipe (URL/camera
-  // import). Reconcile reactively rather than inline in each call site, since fetch ordering
-  // between the units request and an in-flight extraction isn't guaranteed.
-  useEffect(() => {
-    const unitNamesInRecipe = [...new Set(recipe.ingredients.map(i => i.unit).filter(Boolean))];
-    if (!unitNamesInRecipe.length) return;
-    setUnits(prevUnits => {
-      const missing = unitNamesInRecipe.filter(
-        unit => !prevUnits.some(u => u.name.toLowerCase() === unit.toLowerCase())
-      );
-      if (!missing.length) return prevUnits;
-      return [...prevUnits, ...missing.map(name => ({ id: `new-${name}`, name: capitalize(name) }))];
-    });
-  }, [recipe.ingredients]);
 
   async function handleParseIngredients(e: { preventDefault: () => void }) {
     e.preventDefault();

@@ -116,6 +116,33 @@ describe('Form', () => {
     expect(checkbox).not.toBeChecked();
   });
 
+  // The Unit dropdown is the fetched catalog plus synthetic entries for any
+  // unit an imported ingredient carries that the catalog doesn't have yet
+  // (the extractor invents things like "bunch"). That reconciliation used to
+  // live in two effects writing a `units` useState; it is derived now, and
+  // these two lock the behaviour in either way - it had no direct test before.
+  it('offers the fetched catalog units for an ingredient', async () => {
+    await renderForm({ initialRecipe: editableRecipe });
+
+    const unitNames = screen.getAllByRole('option').map(o => o.textContent);
+    expect(unitNames).toContain('Gram');
+  });
+
+  it('adds a unit the catalog does not have when an ingredient uses one', async () => {
+    await renderForm({
+      initialRecipe: {
+        ...editableRecipe,
+        ingredients: [{ name: 'parsley', quantity: '1', unit: 'bunch' }]
+      }
+    });
+
+    const unitNames = screen.getAllByRole('option').map(o => o.textContent);
+    expect(unitNames).toContain('Bunch');
+    // and the catalog entries are still there alongside it
+    expect(unitNames).toContain('Gram');
+    expect(screen.getByLabelText('Unit')).toHaveValue('bunch');
+  });
+
   it('deletes an ingredient row', async () => {
     await renderForm({ initialRecipe: editableRecipe });
 

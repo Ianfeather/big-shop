@@ -178,6 +178,13 @@ const NewRecipe = () => {
     }
   });
 
+  // Drives the Photo Import job to a terminal state. TanStack Query v5 removed
+  // useQuery's onSuccess/onError, so reacting to polled data in an effect is
+  // the supported shape for this - there is no callback to move it into, and
+  // the transition genuinely is "external system changed, mirror it into
+  // state". Runs at most twice per import (completed or failed), not per poll.
+  // (follow-ups.md #32)
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const job = jobStatusQuery.data;
     if (!job) return;
@@ -192,6 +199,7 @@ const NewRecipe = () => {
       setErrorDetails(job.error || 'An error occurred while processing the image.');
     }
   }, [jobStatusQuery.data]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleImageClick = () => {
     imageInput.current?.click();

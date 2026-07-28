@@ -198,8 +198,17 @@ const List = () => {
     addExtraMutation.mutate({ name: extraItem, isBought: false });
   }
 
+  // Both of these load data on mount / on recipe-selection change, and both
+  // reach setState synchronously before their first await (getShoppingList's
+  // hydrateFlag early-return in particular). Left as-is: the hydrate/regenerate
+  // interaction they implement is the delicate part this file already warns
+  // about above - regenerating without a real recipe change deletes isBought
+  // data - and untangling it is its own piece of work, not something to do
+  // while re-enabling a lint rule. (follow-ups.md #32)
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => { hydrateShoppingList() }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { getShoppingList() }, [recipeList]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return (
     <Layout>

@@ -2,13 +2,13 @@
 spec: specs/completed/nextjs-16-upgrade.md
 status: complete
 branch: implement/nextjs-16-upgrade
-pr: https://github.com/Ianfeather/big-shop/pull/68
+pr: https://github.com/Ianfeather/big-shop/pull/68 (Phases 1-3), https://github.com/Ianfeather/big-shop/pull/69 (Phase 4)
 ---
 
-Scope note: this run covers the spec's Phases 1-3 only, in a single PR, per the
-user's instruction at kickoff. Phase 4 (React 19 + @auth0/auth0-react v2) is
-deliberately deferred to a separate run - the spec already fences it that way,
-and it is the one phase no automated test in this repo can cover
+Scope note: Phases 1-3 shipped together in PR #68 (merged as 4a01c7e), per the
+user's instruction at kickoff. Phase 4 (React 19 + @auth0/auth0-react v2) was
+deferred to its own run and is recorded as Session 4 below - the spec fences it
+that way because it is the one phase no automated test in this repo can cover
 (DISABLE_AUTH=true means every test path uses useMockAuth0).
 
 ## Session 1: Toolchain floor - Node 22 and ESLint 9 flat config
@@ -176,3 +176,81 @@ the inaccurate tsconfig reformatting claim in Session 2's notes above, now
 corrected along with the file itself. Both independently confirmed the lockfile
 shrinking by ~2000 lines is fully explained by v4's bundled tree going away,
 with nothing needed lost.
+
+## Session 4: React 18 -> 19 and Auth0 SDK v1 -> v2
+Status: done
+Scope: Spec Phase 4, run separately from Phases 1-3 and on its own branch
+(implement/react-19-upgrade). react/react-dom ^18.2.0 -> ^19.2.8, @types/react
+-> ^19.2.17, @types/react-dom -> ^19.2.3, @auth0/auth0-react ^1.2.0 -> ^2.22.0.
+Depends on: Session 3
+Commit: ffe95f9
+Notes: Static gate green - eslint clean, tsc clean, 118/118 Vitest, Turbopack
+build green, 21/21 Playwright.
+
+THE SPEC'S PHASE 4 CALL-SITE COUNT WAS WRONG, in both directions. It said "the
+SDK surface is touched in exactly two files: pages/_app.tsx and
+hooks/use-auth.ts".
+
+- It MISSED three files: components/identity/{login,create,logout}/index.tsx.
+  These are the actual Log In / Sign Up / Sign out buttons, and they reach the
+  SDK through @hooks/use-auth rather than importing @auth0/auth0-react, so the
+  import-grep that produced the spec could not see them. All three carried v1
+  shapes (redirectUri, screen_hint at the top level, returnTo) and all three
+  needed the v2 nesting. typecheck caught every one.
+- hooks/use-auth.ts needed NO change for the migration itself:
+  RedirectLoginOptions and LogoutOptions are still exported from v2 and the
+  overloaded getAccessTokenSilently stays assignable.
+
+The spec's "No React 19 codemods are expected to be needed" was narrowly true
+(no defaultProps, propTypes, string refs or ReactDOM.render anywhere) but
+missed a typing change: @types/react 19 types useRef<T>(null) as
+RefObject<T | null>, so hooks/use-overflow.ts's declared return type no longer
+matched and was widened.
+
+THE SPEC'S GATE IS NOW MET. It required "an authenticated manual pass - login,
+token refresh after a page reload, and logout, against the real Auth0 tenant"
+and said "Phase 4 is not done until someone has logged in against the real
+tenant." The repo owner confirmed auth works against the real tenant on
+2026-07-28, which is the only way this could ever have been closed - no
+automated test in this repo can reach it.
+
+Recorded below is what the branch itself was able to verify before that, kept
+because it says exactly which parts had machine-checkable evidence and which
+rested on the manual pass. A dev server was run with
+NEXT_PUBLIC_DISABLE_AUTH=false, Log In and Sign
+Up were clicked, and the outgoing /authorize request was intercepted and
+ABORTED to read its query string. Both produced redirect_uri, audience,
+response_type=code and scope including offline_access; Sign Up additionally
+carried screen_hint=signup. No page errors, so Auth0Provider mounts under
+React 19.
+
+That proves the authorizationParams restructure serialises correctly. It proves
+nothing past the redirect: no token exchange, no handleRedirectCallback, no
+getAccessTokenSilently (so no bearer token was ever produced or accepted by the
+Go API), no refresh-after-reload, and no logout at all - the Sign out button
+only renders once authenticated, so logoutParams is verified by tsc alone.
+
+One related question was settled rather than assumed, because it decides
+whether already-logged-in users get silently signed out on deploy: the
+localStorage cache key format is UNCHANGED between the auth0-spa-js the app had
+(1.22.6, via auth0-react v1.12.1) and the one it has now (2.24.0). v1 serialises
+`${prefix}::${client_id}::${audience}::${scope}`; v2 serialises
+[prefix, clientId, audience, scope, suffix].filter(Boolean).join("::"), which is
+byte-identical when suffix is undefined, as it is in this configuration. So
+existing sessions are expected to rehydrate. Still worth confirming during the
+real login pass, since matching keys do not guarantee a matching entry body.
+
+Review gate: Standards + Spec sub-agents both ran. Standards confirmed the
+migration is complete (repo-wide grep across all file types, not just SDK
+importers, finds only correctly-nested v2 forms) and found two things to fix:
+a comment in use-overflow.ts claiming callers pass the ref straight through
+when the hook has no callers but its own test, and UseAuthResult declaring
+loginWithRedirect/logout as `=> void` when the SDK returns Promise<void> -
+shaped to the mock rather than the SDK, and type-checking only because `void`
+swallows a promise. Both fixed; the interface and the mock now both return
+promises. Spec review's central finding was the gate shortfall recorded above.
+One Spec claim was itself wrong - that the v1->v2 localStorage key format
+changed and would drop sessions - disproved by the cache-key comparison above.
+New follow-up opened: #35 (swagger-ui-react's nested deps declare peers that
+exclude React 19; no actual breakage - /dev/api-docs renders identically before
+and after, with only the pre-existing #34 Turbopack errors).

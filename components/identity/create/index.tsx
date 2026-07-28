@@ -7,8 +7,10 @@ export const CreateAccountButton = () => {
 
   const handleClick = () => {
     loginWithRedirect({
-      screen_hint: 'signup',
-      redirectUri: process.env.NEXT_PUBLIC_HOST
+      authorizationParams: {
+        screen_hint: 'signup',
+        redirect_uri: process.env.NEXT_PUBLIC_HOST
+      }
     });
   }
 

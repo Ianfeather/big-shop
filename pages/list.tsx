@@ -50,6 +50,27 @@ const List = () => {
 
   const { getAccessTokenSilently } = useAuth0();
 
+  // Shopping List state stays in useState above rather than in a TanStack
+  // Query cache, and none of the mutations below invalidate anything. That is
+  // a decision, not an omission (follow-ups.md #30):
+  //
+  //  - Nothing outside this page reads Shopping List data, so there is no
+  //    second consumer to keep in sync - which is the problem a shared cache
+  //    exists to solve. The cross-page staleness that motivated #30 (['recipes'],
+  //    ['units']) is real precisely because those *are* read from several places.
+  //  - The regenerate call returns the recomputed list, so the page already
+  //    receives authoritative server state on every change that alters it.
+  //    A query alongside it would be a second copy of the same data.
+  //  - Buying an item and adding an Extra Item are deliberately optimistic:
+  //    the checkbox flips immediately and the request follows. Through a cache
+  //    that becomes the same optimistic write via setQueryData, plus rollback
+  //    plumbing, to reach the behaviour the local update already has.
+  //  - The hydrate/regenerate sequencing below (hydrateFlag, hasHydratedRef) is
+  //    ordering logic, not caching, and would survive the move unchanged.
+  //
+  // Deleting a Recipe that is on the list doesn't need invalidating here
+  // either: the list is stored server-side by recipe id and re-read on mount,
+  // so it corrects itself on the next visit.
   const buyMutation = useMutation({
     mutationFn: async (vars: { name: string; isBought: boolean }) => {
       const token = await getAccessTokenSilently();

@@ -110,6 +110,67 @@ Components are organized by feature with index files:
 | `use-interval.js` | `setInterval` wrapper that pauses when page is hidden |
 | `use-page-visibility.js` | Detect `document.visibilityState` changes |
 
+## Data Fetching & Cache Invalidation
+
+Server state goes through TanStack Query, with one `QueryClient` created per app
+instance in `pages/_app.tsx`. No `staleTime` is configured, so the default of `0`
+applies: cached data is stale the moment it arrives and any remount refetches.
+
+**Every cached `queryKey` is defined in `lib/query-keys.ts`.** Keys have two
+authors — the hook that reads one and the mutation that invalidates it — and a
+key that drifts between the two fails silently: it simply stops invalidating.
+The registry also normalises `queryKeys.recipe(id)` to a string, because reads
+pass the router param (a string) while writes pass `Recipe.id` (a number), and
+TanStack Query hashes keys structurally, so `['recipe', 5]` and `['recipe', '5']`
+would be unrelated cache entries.
+
+### The convention
+
+**Every mutation states its cache effect, including when that effect is
+"nothing".** A mutation with no `onSuccess` should carry a comment saying why,
+so the next reader can tell a decision from an oversight. Invalidate only what
+the mutation actually changes on the server — this app re-renders plenty, and a
+reflexive sweep trades silent staleness for pointless refetches.
+
+**Do not rely on a redirect to refresh the cache.** Most mutations here navigate
+afterwards, and a remount does refetch. But it serves the *stale* entry first
+and refetches behind it, so the just-saved data is briefly missing or wrong —
+and the coupling breaks the moment a mutation stops navigating.
+
+| Mutation | Invalidates | Why |
+|----------|-------------|-----|
+| Save Recipe (`components/recipe-form/Form.tsx`) | `['recipes']`, `['units']`, plus `['recipe', id]` when editing | Summary list carries name/tags; a save upserts every Unit its ingredients reference (`insertUnits`), so it can create one the cached list lacks |
+| Delete Recipe (same file) | `['recipes']`; **removes** `['recipe', id]` | Removed rather than invalidated — refetching a deleted Recipe would 404. Removing is safe with an observer still mounted: it keeps rendering its last value rather than refetching |
+| Accept invite (`pages/account.tsx`) | *everything* (`invalidateQueries()`) | Accepting moves the user into a different Account, so every cached query describes the Account they just left |
+| Reject invite (same file) | `['invites']` | The invite is deleted server-side |
+| Send invite (same file) | nothing | `GET /invites` returns invites addressed to *this* user; sending one creates a row for someone else |
+| Parse URL / photo / pasted text (`pages/recipes/new.tsx`, `Form.tsx`) | nothing | Extraction only. The Ingredients and Units an import introduces are created when the Recipe is saved, and it is the save that invalidates |
+| Save user, complete onboarding (`pages/index.tsx`) | nothing | No cached query reads User state |
+| Shopping List: buy, regenerate, clear, add extra (`pages/list.tsx`) | nothing | See below |
+
+`['tags']` is never invalidated: `GET /tags` reads the `tag` table, a fixed list
+the app never inserts into. Saving a Recipe only writes `recipe_tag` join rows.
+
+`['recipe-image-job', jobId]` is polled per job until it settles, never shared
+between call sites and never invalidated.
+
+### Why the Shopping List is not in the cache
+
+`pages/list.tsx` holds its state in `useState` rather than a query, deliberately:
+
+- Nothing outside that page reads Shopping List data, so there is no second
+  consumer to keep in sync — the problem a shared cache exists to solve. The
+  staleness that motivated this convention (`['recipes']`, `['units']`) is real
+  precisely because those *are* read from several places.
+- The regenerate call returns the recomputed list, so the page already receives
+  authoritative server state on every change that alters it.
+- Buying an item and adding an Extra Item are deliberately optimistic. Through a
+  cache that becomes the same optimistic write via `setQueryData` plus rollback
+  plumbing, to reach the behaviour the local update already has.
+
+Deleting a Recipe that is on the list needs no invalidation either: the list is
+stored server-side by recipe id and re-read on mount, so it self-corrects.
+
 ## Environment Variables
 
 **Development (`.env.development`):**

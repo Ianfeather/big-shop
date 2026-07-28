@@ -1,9 +1,10 @@
 import styles from './account.module.css';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
 import Invite from '@components/invite';
 import useAuth0 from '@hooks/use-auth';
 import { apiGet, apiPost } from '../lib/api-client';
+import { queryKeys } from '../lib/query-keys';
 import Layout, { MainContent, Sidebar } from '@components/layout'
 import Button from '@components/button';
 import type { Invite as InviteModel } from '../types/models';
@@ -13,9 +14,10 @@ const List = () => {
   let [invitee, setInvitee] = useState('');
   let [successMessage, setSuccessMessage] = useState<string | false>(false);
   const { user, getAccessTokenSilently } = useAuth0();
+  const queryClient = useQueryClient();
 
   const { data: fetchedInvites } = useQuery<InviteModel[]>({
-    queryKey: ['invites'],
+    queryKey: queryKeys.invites,
     queryFn: async () => {
       const token = await getAccessTokenSilently();
       return apiGet<InviteModel[]>('/invites', token);
@@ -35,6 +37,14 @@ const List = () => {
     mutationFn: async (token: string) => {
       const accessToken = await getAccessTokenSilently();
       return apiPost('/invite/accept', accessToken, { token });
+    },
+    onSuccess: () => {
+      // Accepting moves this user into a different Account entirely
+      // (DisableUserAccount then AddUserToAccount, server-side). Every cached
+      // query is account-scoped, so all of it now describes the Account they
+      // just left - the Recipes above all. Invalidate the lot rather than
+      // enumerate keys that would need revisiting every time one is added.
+      queryClient.invalidateQueries();
     }
   });
 
@@ -42,9 +52,18 @@ const List = () => {
     mutationFn: async (token: string) => {
       const accessToken = await getAccessTokenSilently();
       return apiPost('/invite/reject', accessToken, { token });
+    },
+    // The rejected invite is deleted server-side. handleReject already drops it
+    // from the local list below; this keeps the cache from re-seeding it on the
+    // next mount.
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.invites });
     }
   });
 
+  // No invalidation: GET /invites returns invites addressed to the current
+  // user's email, and sending one creates a row for somebody else's. The
+  // sender's own list is unchanged.
   const inviteMutation = useMutation({
     mutationFn: async (email: string) => {
       const accessToken = await getAccessTokenSilently();

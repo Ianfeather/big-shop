@@ -7,6 +7,7 @@ import Button from '@components/button';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import PhotoIcon from '@components/svg/photo';
 import { nextApiPost, nextApiPostFormData, nextApiGet } from '../../lib/api-client';
+import { queryKeys } from '../../lib/query-keys';
 import useAuth from '@hooks/use-auth';
 import type { Recipe as RecipeModel } from '../../types/models';
 
@@ -145,7 +146,10 @@ const NewRecipe = () => {
 
   // Both import routes read the canonical Ingredient/Unit names from the
   // database themselves; the token is forwarded purely so they can make that
-  // call on the user's behalf.
+  // call on the user's behalf. Both are extraction only - they write no Big
+  // Shop state, so neither invalidates anything. The Ingredients and Units an
+  // import introduces are created when the Recipe is saved, and it is
+  // Form.tsx's save that invalidates for them.
   const uploadImageMutation = useMutation({
     mutationFn: async (formData: FormData) => {
       const token = await getAccessTokenSilently();
@@ -165,7 +169,7 @@ const NewRecipe = () => {
   // processingJob is cleared below, so there's no manual setInterval/cleanup
   // to manage the way there was with use-http.
   const jobStatusQuery = useQuery<ImageJobStatus>({
-    queryKey: ['recipe-image-job', processingJob?.jobId],
+    queryKey: queryKeys.recipeImageJob(processingJob?.jobId),
     enabled: !!processingJob,
     queryFn: () => nextApiGet<ImageJobStatus>(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image?jobId=${processingJob!.jobId}`),
     refetchInterval: (query) => {

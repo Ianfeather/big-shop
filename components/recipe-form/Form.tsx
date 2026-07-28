@@ -1,6 +1,6 @@
 import styles from './form.module.css';
 import { MouseEvent, useState, useEffect } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/router'
 import Button from '@components/button';
 import Message from '@components/message';
@@ -9,6 +9,7 @@ import useUnits from '@hooks/use-units';
 import useTags from '@hooks/use-tags';
 import useAuth from '@hooks/use-auth';
 import { apiPost, apiPut, apiDelete, nextApiPost } from '../../lib/api-client';
+import { queryKeys } from '../../lib/query-keys';
 import type { Recipe as RecipeModel, Ingredient, CreatedResponse } from '../../types/models';
 
 const capitalize = (str: string) => {
@@ -75,6 +76,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
 
   const router = useRouter();
   const { getAccessTokenSilently } = useAuth();
+  const queryClient = useQueryClient();
 
   const saveMutation = useMutation({
     mutationFn: async (recipeToSave: FormRecipe): Promise<CreatedResponse | undefined> => {
@@ -88,9 +90,26 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
       return apiPost<CreatedResponse>('/recipe', token, recipeToSave);
     },
     onSuccess: (result) => {
+      // The Recipe summary list carries name and tags, both editable here, and
+      // gains a whole entry on create. The redirect below happens to remount a
+      // consumer either way, but relying on that is what follow-ups.md #30 was
+      // about: staleTime is 0, so the remount serves the stale list first and
+      // only then refetches - the just-saved Recipe is briefly missing or
+      // out of date. Invalidating makes the refetch the point rather than a
+      // side effect of navigating.
+      queryClient.invalidateQueries({ queryKey: queryKeys.recipes });
+      // A save upserts every Unit its ingredients reference (insertUnits in
+      // the Go API), so a Recipe that introduced "bunch" has just created a
+      // Unit the cached /units list doesn't have. Exactly the shape of the
+      // ['ingredients'] staleness that prompted #30.
+      queryClient.invalidateQueries({ queryKey: queryKeys.units });
+      // ['tags'] deliberately not invalidated: the `tag` table is a fixed list
+      // the app never inserts into (see hooks/use-tags.ts).
       if (mode === 'edit') {
+        queryClient.invalidateQueries({ queryKey: queryKeys.recipe(recipe.id) });
         router.push(`/recipes/${recipe.id}?stored=updated`);
       } else {
+        // Nothing has cached the new Recipe yet - there is no entry to invalidate.
         router.push(`/recipes/${result?.id}?stored=new`);
       }
     }
@@ -102,13 +121,23 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
       return apiDelete('/recipe', token, { id: recipe.id });
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.recipes });
+      // Remove rather than invalidate: the Recipe is gone, so a refetch would
+      // just 404. Removing is safe with this page's useRecipe still mounted -
+      // an observer whose query is removed keeps rendering its last value
+      // instead of refetching - and we navigate away immediately anyway. The
+      // point is that a later visit to this URL starts from nothing rather
+      // than rendering a deleted Recipe from cache.
+      queryClient.removeQueries({ queryKey: queryKeys.recipe(recipe.id) });
       setDeleted(true);
       router.push('/recipes');
     }
   });
 
   // The route reads the canonical Ingredient/Unit names from the database
-  // itself; the token is forwarded purely so it can make that call.
+  // itself; the token is forwarded purely so it can make that call. Extraction
+  // only - it writes nothing, so there is nothing to invalidate. The new
+  // Ingredients and Units land when the Recipe itself is saved, above.
   const parseTextMutation = useMutation({
     mutationFn: async (payload: { text: string }) => {
       const token = await getAccessTokenSilently();

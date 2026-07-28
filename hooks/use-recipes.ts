@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import useAuth from './use-auth';
 import { apiGet } from '../lib/api-client';
+import { queryKeys } from '../lib/query-keys';
 import type { RecipeSummary } from '../types/models';
 
 
@@ -11,7 +12,7 @@ const useRecipes = () => {
   // request instead of racing a second one against it (see CLAUDE.md's
   // "Known rough edge" section, and follow-ups.md #20).
   const { data } = useQuery<RecipeSummary[]>({
-    queryKey: ['recipes'],
+    queryKey: queryKeys.recipes,
     queryFn: async () => {
       const token = await getAccessTokenSilently();
       return apiGet<RecipeSummary[]>('/recipes', token);

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { queryKeys } from '../../lib/query-keys';
 
 const pushMock = vi.fn();
 vi.mock('next/router', () => ({ useRouter: () => ({ push: pushMock }) }));
@@ -52,22 +53,55 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-// A fresh QueryClient per test avoids cache bleed between tests/renders.
+// A fresh QueryClient per test avoids cache bleed between tests/renders. The
+// client is returned as well so the cache-invalidation tests below can seed it
+// and then assert on what the mutations did to it.
 function createWrapper() {
   const queryClient = new QueryClient();
-  return function Wrapper({ children }: { children: ReactNode }) {
+  function Wrapper({ children }: { children: ReactNode }) {
     return createElement(QueryClientProvider, { client: queryClient }, children);
-  };
+  }
+  return { queryClient, Wrapper };
 }
 
 async function renderForm(props: Partial<ComponentProps<typeof Form>> = {}) {
-  render(<Form {...props} />, { wrapper: createWrapper() });
+  const { queryClient, Wrapper } = createWrapper();
+  render(<Form {...props} />, { wrapper: Wrapper });
   await waitFor(() => expect(screen.getByText('Vegetarian')).toBeInTheDocument());
+  return queryClient;
 }
+
+const editableRecipe = {
+  id: 1,
+  name: 'Omelette',
+  remoteUrl: '',
+  notes: '',
+  method: '',
+  tags: [],
+  ingredients: [{ name: 'egg', quantity: '2', unit: '' }]
+};
+
+// Seeds every cache a Recipe save/delete is meant to act on. Seeding is what
+// makes these assertions meaningful at all: invalidating a key with no entry
+// in the cache is a silent no-op, and the hooks that would normally populate
+// these are mocked out at the top of this file.
+//
+// The recipe entry is keyed the way hooks/use-recipe.ts keys it when reading -
+// off the router param, i.e. a *string* id - while Form works from Recipe.id,
+// a number. queryKeys.recipe() reconciles the two; see lib/query-keys.ts.
+function seedCache(queryClient: QueryClient) {
+  queryClient.setQueryData(queryKeys.recipes, [{ id: 1, name: 'Omelette', tags: [] }]);
+  queryClient.setQueryData(queryKeys.recipe('1'), { ...editableRecipe });
+  queryClient.setQueryData(queryKeys.units, unitsMock);
+  queryClient.setQueryData(queryKeys.tags, tagsMock);
+}
+
+const isInvalidated = (queryClient: QueryClient, key: readonly unknown[]) =>
+  queryClient.getQueryState(key)?.isInvalidated === true;
 
 describe('Form', () => {
   it('renders nothing in edit mode when there is no recipe id yet', () => {
-    const { container } = render(<Form mode="edit" />, { wrapper: createWrapper() });
+    const { container } = render(<Form mode="edit" />, { wrapper: createWrapper().Wrapper });
     expect(container).toBeEmptyDOMElement();
   });
 
@@ -83,17 +117,7 @@ describe('Form', () => {
   });
 
   it('deletes an ingredient row', async () => {
-    await renderForm({
-      initialRecipe: {
-        id: 1,
-        name: 'Omelette',
-        remoteUrl: '',
-        notes: '',
-        method: '',
-        tags: [],
-        ingredients: [{ name: 'egg', quantity: '2', unit: '' }]
-      }
-    });
+    await renderForm({ initialRecipe: editableRecipe });
 
     expect(screen.getByText('egg')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'trash' }));
@@ -130,5 +154,67 @@ describe('Form', () => {
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/recipes/42?stored=new'));
     expect(mockedApiPost).toHaveBeenCalledWith('/recipe', 'test-token', expect.objectContaining({ name: 'Omelette' }));
+  });
+
+  // Cache invalidation (follow-ups.md #30). These assert on the cache rather
+  // than on what the user sees because the failure mode is invisible locally:
+  // a missing invalidation still looks right, since navigating away remounts
+  // the consumer and refetches anyway. It only shows up as a stale flash.
+  describe('cache invalidation', () => {
+    it('invalidates the recipe list and units after creating a recipe', async () => {
+      const queryClient = await renderForm();
+      seedCache(queryClient);
+
+      await userEvent.type(screen.getByLabelText(/Recipe Name/), 'Omelette');
+      await userEvent.click(screen.getByText('Save Recipe'));
+
+      await waitFor(() => expect(isInvalidated(queryClient, queryKeys.recipes)).toBe(true));
+      // A save upserts every Unit its ingredients reference, so the cached
+      // /units list can be missing one the save just created.
+      expect(isInvalidated(queryClient, queryKeys.units)).toBe(true);
+    });
+
+    // The regression this guards: Form works from Recipe.id (a number) while
+    // useRecipe caches under the router's string param. Key them differently
+    // and the invalidation silently matches nothing - no error, just a stale
+    // Recipe rendered after saving an edit.
+    it('invalidates the edited recipe despite reading and writing its id as different types', async () => {
+      const queryClient = await renderForm({ initialRecipe: editableRecipe, mode: 'edit' });
+      seedCache(queryClient);
+      expect(queryClient.getQueryData(queryKeys.recipe('1'))).toBeDefined();
+
+      await userEvent.click(screen.getByText('Update Recipe'));
+
+      await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/recipes/1?stored=updated'));
+      expect(isInvalidated(queryClient, queryKeys.recipe(1))).toBe(true);
+      expect(isInvalidated(queryClient, queryKeys.recipe('1'))).toBe(true);
+      expect(isInvalidated(queryClient, queryKeys.recipes)).toBe(true);
+    });
+
+    it('drops the deleted recipe from the cache rather than leaving it to refetch', async () => {
+      const queryClient = await renderForm({ initialRecipe: editableRecipe, mode: 'edit' });
+      seedCache(queryClient);
+
+      await userEvent.click(screen.getByText('Delete Recipe'));
+
+      await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/recipes'));
+      // Removed, not invalidated: refetching a deleted Recipe would 404.
+      expect(queryClient.getQueryData(queryKeys.recipe('1'))).toBeUndefined();
+      expect(isInvalidated(queryClient, queryKeys.recipes)).toBe(true);
+    });
+
+    // The `tag` table is a fixed list the app never inserts into - saving a
+    // Recipe only writes recipe_tag join rows - so invalidating here would be
+    // a refetch that can never return anything new.
+    it('leaves the tag list alone, which a recipe save cannot change', async () => {
+      const queryClient = await renderForm();
+      seedCache(queryClient);
+
+      await userEvent.type(screen.getByLabelText(/Recipe Name/), 'Omelette');
+      await userEvent.click(screen.getByText('Save Recipe'));
+
+      await waitFor(() => expect(isInvalidated(queryClient, queryKeys.recipes)).toBe(true));
+      expect(isInvalidated(queryClient, queryKeys.tags)).toBe(false);
+    });
   });
 });

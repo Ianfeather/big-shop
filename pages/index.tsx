@@ -30,6 +30,8 @@ const Index = () => {
   // redirected to /list.
   const [status, setStatus] = useState<'onboarding' | 'redirecting' | null>(null);
 
+  // Neither mutation invalidates: no cached query reads User state, and on
+  // first login there is nothing in the cache yet to be stale.
   const saveUserMutation = useMutation({
     mutationFn: async (payload: { name?: string; email?: string }) => {
       const token = await getAccessTokenSilently();

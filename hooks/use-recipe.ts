@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import useAuth from './use-auth';
 import { apiGet } from '../lib/api-client';
+import { queryKeys } from '../lib/query-keys';
 import type { Recipe } from '../types/models';
 
 
@@ -15,7 +16,7 @@ const useRecipe = (id: string | number | undefined) => {
   // Explicit null (not undefined) for "no match" - TanStack Query treats a
   // queryFn resolving to undefined as an error, not a valid "no data" result.
   const { data } = useQuery<Recipe | null>({
-    queryKey: ['recipe', id],
+    queryKey: queryKeys.recipe(id),
     // Before router.isReady, id is undefined (see hooks/use-recipe-id-param.ts)
     // - skip the fetch/mock lookup entirely rather than looking up "undefined".
     enabled: id !== undefined,

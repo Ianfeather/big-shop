@@ -1,6 +1,6 @@
 ---
-spec: specs/nextjs-16-upgrade.md
-status: in-progress
+spec: specs/completed/nextjs-16-upgrade.md
+status: complete
 branch: implement/nextjs-16-upgrade
 pr:
 ---
@@ -141,7 +141,7 @@ Scope: Spec Phase 3. @netlify/plugin-nextjs ^4.41.3 -> ^5.15.13; the
 --ignore-scripts workaround removed from BOTH GitHub workflows after verifying
 `npm ci` without it; netlify.toml unchanged, as the spec predicted.
 Depends on: Session 2
-Commit: (this session)
+Commit: 1da8364
 Notes: Static gate green - eslint clean, tsc clean, 118/118 Vitest, Turbopack
 build green, and 21/21 Playwright re-run after a from-scratch `npm ci`.
 

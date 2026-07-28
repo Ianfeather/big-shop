@@ -2,7 +2,7 @@
 spec: specs/completed/nextjs-16-upgrade.md
 status: complete
 branch: implement/nextjs-16-upgrade
-pr: https://github.com/Ianfeather/big-shop/pull/68
+pr: https://github.com/Ianfeather/big-shop/pull/68 (Phases 1-3), https://github.com/Ianfeather/big-shop/pull/69 (Phase 4)
 ---
 
 Scope note: Phases 1-3 shipped together in PR #68 (merged as 4a01c7e), per the

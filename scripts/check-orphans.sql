@@ -1,57 +1,50 @@
--- Report rows whose foreign key points at a parent row that no longer exists.
+-- Introspection only: lists the parent/child relationships worth checking for
+-- orphaned rows. scripts/check-orphans.sh runs this, builds one LEFT JOIN per
+-- row returned, and executes those. See that script for why.
 --
--- Derived from information_schema rather than hardcoded, so it keeps covering
--- the whole schema as constraints are added - a hand-written list goes stale
--- silently, which is exactly the failure mode this is meant to catch.
+-- Deliberately plain SQL. An earlier version generated the checks here with
+-- GROUP_CONCAT + SELECT ... INTO @var + PREPARE, which TiDB rejects outright -
+-- `SELECT ... INTO` is not supported there. Generating in the shell instead
+-- keeps this file portable and readable, and the generated SQL inspectable.
 --
--- Why this exists: TiDB does not necessarily enforce foreign keys, so a data
--- migration that deletes a parent row can leave children dangling with no
--- error at all. The same statement against a MySQL database built from
--- migrations/*.sql errors instead, because the constraints there are enforced
--- (all NO ACTION). Migration 029 hit this: it deleted `thyme sprig`, which
--- still had an Ingredient Line, and Potato & Leek Soup silently lost its thyme.
+-- Two sources, unioned:
 --
--- Reads nothing but counts; safe to run against production at any time.
+--   declared   - an actual FOREIGN KEY in information_schema.
+--   convention - a column named `<table>_id`, or `<something>_<table>_id`,
+--                where `<table>` exists. Needed because a declared-only check
+--                covers whatever the server happens to have registered, and
+--                production has far fewer constraints than a database built
+--                from migrations/*.sql: 7 against 15 at the time of writing.
+--                Checking only those 7 would have looked clean while missing
+--                more than half the schema, which is worse than not checking.
 --
---   docker run --rm -i -e MYSQL_PWD="$PW" mysql:8.0 \
---     mysql -h HOST -P 4000 -u USER --ssl-mode=REQUIRED bigshop \
---     < scripts/check-orphans.sql
---
--- No rows returned means no orphans. Run it before and after any migration
--- that deletes from a parent table.
+-- DATA_TYPE comes back because the caller skips a `<> 0` guard on non-integer
+-- columns. MySQL coerces a string to 0 in that comparison, so applying it to
+-- recipe_tag.tag_name would silently exclude every row from its own check.
 
--- Enforcement status. `declared_fks = 0` is the important one: it means this
--- server is not tracking constraints, so nothing below can be derived and
--- nothing was ever protecting these tables.
-SELECT VERSION() AS server,
-       @@foreign_key_checks AS fk_checks_session,
-       (SELECT COUNT(*) FROM information_schema.KEY_COLUMN_USAGE
-        WHERE TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_NAME IS NOT NULL) AS declared_fks;
-
-SET SESSION group_concat_max_len = 1000000;
-
--- One LEFT JOIN per foreign key. `IS NOT NULL` on the child column matters:
--- nullable references (ingredient.base_unit_id, ingredient.display_unit_id)
--- are legitimately empty and must not count as orphans.
-SELECT GROUP_CONCAT(
-         CONCAT("SELECT '", k.TABLE_NAME, '.', k.COLUMN_NAME,
-                ' -> ', k.REFERENCED_TABLE_NAME, '.', k.REFERENCED_COLUMN_NAME,
-                "' AS broken_reference, COUNT(*) AS orphan_rows",
-                ' FROM `', k.TABLE_NAME, '` c',
-                ' LEFT JOIN `', k.REFERENCED_TABLE_NAME, '` p',
-                ' ON p.`', k.REFERENCED_COLUMN_NAME, '` = c.`', k.COLUMN_NAME, '`',
-                ' WHERE c.`', k.COLUMN_NAME, '` IS NOT NULL',
-                '   AND p.`', k.REFERENCED_COLUMN_NAME, '` IS NULL')
-         SEPARATOR ' UNION ALL ')
-INTO @body
+SELECT k.TABLE_NAME, k.COLUMN_NAME, k.REFERENCED_TABLE_NAME, k.REFERENCED_COLUMN_NAME,
+       col.DATA_TYPE, 'declared' AS source
 FROM information_schema.KEY_COLUMN_USAGE k
+JOIN information_schema.COLUMNS col
+  ON col.TABLE_SCHEMA = k.TABLE_SCHEMA
+ AND col.TABLE_NAME   = k.TABLE_NAME
+ AND col.COLUMN_NAME  = k.COLUMN_NAME
 WHERE k.TABLE_SCHEMA = DATABASE()
-  AND k.REFERENCED_TABLE_NAME IS NOT NULL;
+  AND k.REFERENCED_TABLE_NAME IS NOT NULL
 
-SET @sql = IF(@body IS NULL,
-  "SELECT 'NO FOREIGN KEYS DECLARED IN THIS SCHEMA - no checks could be derived' AS broken_reference, 0 AS orphan_rows",
-  CONCAT('SELECT * FROM (', @body, ') t WHERE orphan_rows > 0'));
+UNION
 
-PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+SELECT c.TABLE_NAME, c.COLUMN_NAME, COALESCE(t1.TABLE_NAME, t2.TABLE_NAME), 'id',
+       c.DATA_TYPE, 'convention' AS source
+FROM information_schema.COLUMNS c
+LEFT JOIN information_schema.TABLES t1
+  ON t1.TABLE_SCHEMA = c.TABLE_SCHEMA
+ AND t1.TABLE_NAME   = LEFT(c.COLUMN_NAME, CHAR_LENGTH(c.COLUMN_NAME) - 3)
+LEFT JOIN information_schema.TABLES t2
+  ON t2.TABLE_SCHEMA = c.TABLE_SCHEMA
+ AND t2.TABLE_NAME   = SUBSTRING_INDEX(LEFT(c.COLUMN_NAME, CHAR_LENGTH(c.COLUMN_NAME) - 3), '_', -1)
+WHERE c.TABLE_SCHEMA = DATABASE()
+  AND c.COLUMN_NAME LIKE '%\_id'
+  AND COALESCE(t1.TABLE_NAME, t2.TABLE_NAME) IS NOT NULL
+
+ORDER BY 1, 2;

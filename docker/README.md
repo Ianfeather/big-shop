@@ -154,19 +154,31 @@ Read-only, so it is safe against production at any time. It reports rows whose
 foreign key points at a parent row that no longer exists. Run it before a data
 migration for a baseline, and after to prove nothing was stranded.
 
-**TiDB may not enforce foreign keys the way local MySQL does**, and that
+**Production does not have the constraints local MySQL has**, and that
 difference is the whole reason this exists. Every constraint in
 `migrations/*.sql` is `NO ACTION`, so deleting a row that still has children
-errors out against a database built from those migrations. The same statement
-can succeed against production and leave the children dangling with no error at
-all. Migration `029` did this: it deleted `thyme sprig` while an Ingredient Line
+errors out against a database built from those migrations. TiDB declares **7
+foreign keys where local MySQL declares 15**, so the same statement can succeed
+against production and leave the children dangling with no error at all.
+Migration `029` did this: it deleted `thyme sprig` while an Ingredient Line
 still referenced it, and Potato & Leek Soup silently lost its thyme. Nothing in
 the test suite could catch it, because the tests run against MySQL.
 
-The checks are derived from `information_schema` rather than hardcoded, so they
-keep covering the whole schema as constraints are added. If `declared_fks` comes
-back as `0`, the server is not tracking constraints at all - no checks could be
-derived, and that is itself the finding.
+That gap is also why the check does not trust declared constraints alone -
+doing so would cover fewer than half the schema and still report clean.
+`scripts/check-orphans.sql` unions the declared foreign keys with every column
+named `<table>_id` whose table exists, giving 21 relationships against the 15
+declared locally. Expect "Relationships checked" to exceed `declared_fks`.
+
+It runs in two steps - introspect, then build and execute - rather than
+generating the checks in SQL, because **TiDB rejects `SELECT ... INTO @var`**
+outright and the dynamic-SQL version failed there while passing on MySQL. To
+read the generated SQL without running it:
+
+```bash
+docker compose exec -T db mysql -uroot -proot -N bigshop \
+  < scripts/check-orphans.sql | scripts/build-orphan-checks.py
+```
 
 The stronger habit for anything that deletes rows is to **rehearse the migration
 against a scratch copy of a backup first**, since that reproduces production's

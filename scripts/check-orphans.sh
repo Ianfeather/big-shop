@@ -5,11 +5,23 @@
 # production at any time. Run it BEFORE a data migration to get a baseline, and
 # AFTER to prove the migration did not strand anything.
 #
-# Worth doing because TiDB may not enforce foreign keys the way a MySQL
-# database built from migrations/*.sql does. A DELETE from a parent table that
-# errors locally can succeed against production and silently orphan its
-# children - migration 029 did exactly that with `thyme sprig`, and the recipe
-# holding that Ingredient Line just lost it. See scripts/check-orphans.sql.
+# Worth doing because TiDB does not have all the constraints a database built
+# from migrations/*.sql has. Production declares 7 foreign keys where local
+# MySQL declares 15, so a DELETE from a parent table that errors locally can
+# succeed against production and silently orphan its children. Migration 029 did
+# exactly that with `thyme sprig`, and the recipe holding that Ingredient Line
+# just lost it.
+#
+# That gap is also why this does not check declared constraints alone: doing so
+# would cover fewer than half the schema's relationships and still look clean.
+# scripts/check-orphans.sql adds every column named `<table>_id` whose table
+# exists, declared or not - 21 relationships against the 15 declared locally.
+#
+# Runs in two steps rather than generating the checks in SQL. TiDB rejects
+# `SELECT ... INTO @var` outright, so the dynamic-SQL version of this failed
+# there while passing on MySQL. Introspect, build, run - each step inspectable:
+#
+#   ... check-orphans.sql | scripts/build-orphan-checks.py   # see the SQL
 #
 # mysql runs inside a throwaway mysql:8.0 container rather than a host install,
 # for the same reasons as sync-from-prod.sh: nothing to install, and it avoids
@@ -34,17 +46,32 @@ echo
 read -rp "Database [bigshop]: " TIDB_DB
 TIDB_DB="${TIDB_DB:-bigshop}"
 
+# SQL on stdin; any extra mysql flags as arguments.
+run_mysql() {
+  docker run --rm -i -e MYSQL_PWD="$TIDB_PASSWORD" mysql:8.0 \
+    mysql -h "$TIDB_HOST" -P "$TIDB_PORT" -u "$TIDB_USER" \
+    --ssl-mode=REQUIRED "$@" "$TIDB_DB"
+}
+
 echo
 echo "Checking ${TIDB_DB} on ${TIDB_HOST} for orphaned rows..."
 echo
 
-docker run --rm -i -e MYSQL_PWD="$TIDB_PASSWORD" mysql:8.0 \
-  mysql -h "$TIDB_HOST" -P "$TIDB_PORT" -u "$TIDB_USER" \
-  --ssl-mode=REQUIRED --table "$TIDB_DB" < scripts/check-orphans.sql
+echo "SELECT VERSION() AS server,
+       (SELECT COUNT(*) FROM information_schema.KEY_COLUMN_USAGE
+        WHERE TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_NAME IS NOT NULL) AS declared_fks;" \
+  | run_mysql --table
+
+RELATIONSHIPS="$(run_mysql -N < scripts/check-orphans.sql)"
+CHECKS="$(printf '%s\n' "$RELATIONSHIPS" | scripts/build-orphan-checks.py)"
 
 echo
-echo "Done. A 'broken_reference' table above lists each constraint with orphaned"
-echo "rows; no such table means none were found."
+echo "Relationships checked: $(printf '%s\n' "$RELATIONSHIPS" | cut -f1,2 | sort -u | wc -l | tr -d ' ')"
 echo
-echo "If declared_fks came back as 0, this server is not tracking constraints at"
-echo "all - no checks could be derived, and nothing is protecting these tables."
+
+printf '%s\n' "$CHECKS" | run_mysql --table
+
+echo
+echo "Rows above are orphans, one line per relationship; no table means none were"
+echo "found. 'Relationships checked' higher than 'declared_fks' is expected and"
+echo "intended - see the comments in scripts/check-orphans.sql."

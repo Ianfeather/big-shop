@@ -100,9 +100,17 @@ change than it looks. The build's route list is now correct for the first
 time: 5 real API routes, where it previously also shipped 5 dead ones.
 
 (3) tsconfig.json "jsx": "preserve" -> "react-jsx". Not a choice - Next 16
-rewrites it on every build ("mandatory changes were made to your
-tsconfig.json"), verified against a clean .next. Next did NOT reformat the rest
-of the file, so the diff stays minimal.
+applies it as a "mandatory change", verified against a clean .next.
+
+Precisely: Next rewrites the WHOLE file, reformatting every array onto multiple
+lines, but only on a build where it actually has a mandatory change to apply.
+Once "jsx" is already "react-jsx" it leaves the file untouched. An earlier
+version of this note claimed Next never reformats, which was wrong - it was
+written after checking only the "jsx" line rather than the whole file, and the
+committed tsconfig.json did carry ~20 lines of pure reformatting churn until
+Session 3's review caught it. The file is now stored compact, which survives
+repeated clean builds, so the real diff is 3 lines: "jsx" plus the two include
+entries.
 
 Manual verification beyond the automated gates, since the e2e suite intercepts
 the import API routes and does not cover Dave at all: /api/dev/openapi-spec
@@ -128,10 +136,43 @@ bundler-specific by running the same commit under next dev --webpack, which is
 clean, vs Turbopack, which is not; both render all 23 operations).
 
 ## Session 3: Netlify runtime v5
-Status: pending
-Scope: Spec Phase 3. @netlify/plugin-nextjs ^4.41.3 -> ^5.15.13; re-evaluate the
---ignore-scripts workaround in .github/workflows/ci.yml by running `npm ci`
-without it.
+Status: done
+Scope: Spec Phase 3. @netlify/plugin-nextjs ^4.41.3 -> ^5.15.13; the
+--ignore-scripts workaround removed from BOTH GitHub workflows after verifying
+`npm ci` without it; netlify.toml unchanged, as the spec predicted.
 Depends on: Session 2
-Commit:
-Notes:
+Commit: (this session)
+Notes: Static gate green - eslint clean, tsc clean, 118/118 Vitest, Turbopack
+build green, and 21/21 Playwright re-run after a from-scratch `npm ci`.
+
+THE DEPLOY GATE IS NOT MET AND CANNOT BE MET LOCALLY. The spec is explicit that
+this phase's "failure mode is invisible locally" and that its gate is "a Netlify
+deploy preview that builds and serves the app correctly. Confirm the build log
+shows the v5 runtime and a Turbopack build." Nothing in the local suite touches
+the runtime - @netlify/plugin-nextjs is a devDependency that no lint, type,
+test or build step loads. Every green check on this branch says nothing about
+whether the deploy works. This must be checked on the PR's preview before merge.
+
+--ignore-scripts: removed, and verified rather than assumed, as the spec
+demanded. `npm ls @netlify/esbuild` is empty (v5 has no dependencies block at
+all - v4's tree was bundled), and `npm ci` without the flag exits 0 both on
+macOS and in a node:22-bookworm container, which is the same environment the
+original comment cited as proof of failure. Note this newly runs install
+scripts in CI (esbuild, sharp, core-js, tree-sitter) - a new install surface
+that passed in the container run but had not executed in CI before.
+
+Also changed .github/workflows/e2e.yml, which the spec never mentions. It
+carried a byte-identical copy of the same flag and the same now-false comment;
+leaving it would have left exactly the "stale explanation" the spec forbids.
+
+Review gate: Standards + Spec sub-agents both ran; every CONFIRMED finding
+fixed. Standards caught that my first rewrite of the workflow comments made
+things worse - six identical lines in two files documenting a flag that is no
+longer there, while dropping the one durable fact worth keeping (why
+@netlify/plugin-nextjs is a devDependency at all). Both are now four lines
+carrying that fact. It also noted the Deployment section of
+technical-architecture.md never mentioned the runtime, now added. Spec caught
+the inaccurate tsconfig reformatting claim in Session 2's notes above, now
+corrected along with the file itself. Both independently confirmed the lockfile
+shrinking by ~2000 lines is fully explained by v4's bundled tree going away,
+with nothing needed lost.

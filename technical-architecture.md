@@ -202,6 +202,9 @@ NEXT_PUBLIC_HOST=https://www.bigshop.life
 - Automatic deployment via Netlify on git push
 - Build command: `./build.sh` (runs `npm run package` + Go tests)
 - Publish directory: `.next`
+- Next.js Runtime: `@netlify/plugin-nextjs` v5 (pinned as a devDependency so
+  `netlify.toml`'s `[[plugins]]` entry resolves during the deploy build). v5 is
+  required for Next.js 13.5+; the v4 runtime only supported Next.js 10–13.4
 - Environment: Node 22 (`.node-version`, matching both CI workflows; Next.js 16 requires >=20.9.0), Go 1.23 (`netlify.toml` `GO_VERSION`, matches `go.mod`)
 
 ## Key Dependencies

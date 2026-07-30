@@ -1,7 +1,14 @@
 .daveContainer {
   display: flex;
-  height: calc(100vh - 100px);
+  flex-direction: column;
   gap: var(--space-4);
+}
+
+@media (min-width: 800px) {
+  .daveContainer {
+    flex-direction: row;
+    height: calc(100vh - 100px);
+  }
 }
 
 .recipesSidebar {

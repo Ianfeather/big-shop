@@ -124,6 +124,7 @@ html {
      matched its content. */
   min-height: 100%;
   background: var(--color-primary-soft);
+  overflow-x: hidden;
 }
 
 body {
@@ -132,6 +133,7 @@ body {
   min-height: 100vh;
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 button {

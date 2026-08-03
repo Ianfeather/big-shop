@@ -4,10 +4,13 @@
 //    bearer-token authenticated.
 //  - nextApiGet/nextApiPost/nextApiPostFormData: this app's own Next.js API
 //    routes (pages/api/*, see technical-architecture.md's "Next.js API
-//    Routes" section), error-shaped as `{ error: string }` on failure. These
-//    routes don't validate a token themselves, but the import ones forward
-//    one to the Go API to read canonical Ingredient/Unit names server-side
-//    (lib/recipe-import/known-names.ts), so they take an optional token.
+//    Routes" section), error-shaped as `{ error: string }` on failure. None of
+//    them verifies a token itself; each forwards it to the Go API, which is
+//    the only thing that can. The parse routes do that to read canonical
+//    Ingredient/Unit names server-side (lib/recipe-import/known-names.ts);
+//    /api/recipe-image does it to authenticate the caller at all
+//    (lib/authenticate.ts), and rejects a request without one. Hence the
+//    optional token on all three.
 
 async function parseBody(res: Response): Promise<unknown> {
   const text = await res.text();
@@ -52,8 +55,10 @@ async function handleNextApiResponse<T>(res: Response, label: string): Promise<T
   return data as T;
 }
 
-export async function nextApiGet<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+export async function nextApiGet<T>(url: string, token?: string): Promise<T> {
+  const res = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined
+  });
   return handleNextApiResponse<T>(res, `GET ${url}`);
 }
 

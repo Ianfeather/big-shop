@@ -8,6 +8,7 @@ import { extractRecipe } from '../../lib/recipe-import/extract';
 import { imageToInput } from '../../lib/recipe-import/photo';
 import { requireEnv } from '../../lib/env';
 import { fetchKnownNames } from '../../lib/recipe-import/known-names';
+import { authenticateAccount } from '../../lib/authenticate';
 
 // Configure API route to handle form data
 export const config: PageConfig = {
@@ -82,11 +83,16 @@ const getBlobStoreConfig = () => ({
 // change - switched to the real getStore() API. The `{ ttl: 3600 }` option
 // passed to .set() doesn't exist on this version's SetOptions either (no
 // replacement attempted here - was already inert given the above).
-const updateJobStatus = async (jobId: string, status: string, result: unknown = null, error: string | null = null) => {
+//
+// `accountId` is written on every update, not just the first: each call
+// replaces the whole blob, so omitting it on the completed/failed write would
+// drop the owner exactly when there is finally a result worth protecting.
+const updateJobStatus = async (jobId: string, accountId: number, status: string, result: unknown = null, error: string | null = null) => {
   const store = getStore(getBlobStoreConfig());
 
   const job = {
     id: jobId,
+    accountId,
     status,
     result,
     error,
@@ -100,6 +106,11 @@ const updateJobStatus = async (jobId: string, status: string, result: unknown = 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {
     // Handle job status check
+    const auth = await authenticateAccount(req);
+    if (!auth.ok) {
+      return res.status(auth.status).json({ error: auth.error });
+    }
+
     const jobId = req.query.jobId as string | undefined;
     if (!jobId) {
       return res.status(400).json({ error: 'Job ID is required' });
@@ -115,6 +126,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       const job = JSON.parse(jobData);
+
+      // A completed job holds the entire contents of somebody's photographed
+      // recipe, in one shared blob store keyed by nothing but the job id, so
+      // it is readable only by the Account that created it. 404 rather than
+      // 403, matching how the Go API answers a Recipe belonging to another
+      // Account - there is no reason to confirm that an id exists.
+      //
+      // A job written before jobs carried an accountId has no owner to match
+      // and so fails this check. That can only affect an import already in
+      // flight at deploy time, which the user retries.
+      if (job.accountId !== auth.account.id) {
+        return res.status(404).json({ error: 'Job not found' });
+      }
+
       return res.status(200).json(job);
     } catch (error) {
       console.error('Error fetching job:', error);
@@ -124,6 +149,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // Before the form is parsed, so an unauthenticated caller never gets as far
+  // as uploading 5MB, let alone as far as an OpenAI call on this account's
+  // quota.
+  const auth = await authenticateAccount(req);
+  if (!auth.ok) {
+    return res.status(auth.status).json({ error: auth.error });
   }
 
   try {
@@ -149,16 +182,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Create a new job
     const jobId = uuidv4();
-    const initialJob = await updateJobStatus(jobId, 'processing');
+    const initialJob = await updateJobStatus(jobId, auth.account.id, 'processing');
 
     // Start processing in the background
     processImage(base64Image, knownIngredients, knownUnits)
       .then(async (result) => {
-        await updateJobStatus(jobId, 'completed', result);
+        await updateJobStatus(jobId, auth.account.id, 'completed', result);
       })
       .catch(async (error) => {
         console.error('Error processing recipe:', error);
-        await updateJobStatus(jobId, 'failed', null, error instanceof Error ? error.message : String(error));
+        await updateJobStatus(jobId, auth.account.id, 'failed', null, error instanceof Error ? error.message : String(error));
       });
 
     // Return the job ID immediately

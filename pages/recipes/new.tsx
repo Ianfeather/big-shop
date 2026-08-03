@@ -145,9 +145,11 @@ const NewRecipe = () => {
   const { getAccessTokenSilently } = useAuth();
 
   // Both import routes read the canonical Ingredient/Unit names from the
-  // database themselves; the token is forwarded purely so they can make that
-  // call on the user's behalf. Both are extraction only - they write no Big
-  // Shop state, so neither invalidates anything. The Ingredients and Units an
+  // database themselves, and /api/recipe-image additionally requires the token
+  // to authenticate the caller (lib/authenticate.ts) - it runs an OpenAI
+  // extraction and stores the result, neither of which is on offer to an
+  // anonymous request. Both are extraction only - they write no Big Shop
+  // state, so neither invalidates anything. The Ingredients and Units an
   // import introduces are created when the Recipe is saved, and it is
   // Form.tsx's save that invalidates for them.
   const uploadImageMutation = useMutation({
@@ -171,7 +173,12 @@ const NewRecipe = () => {
   const jobStatusQuery = useQuery<ImageJobStatus>({
     queryKey: queryKeys.recipeImageJob(processingJob?.jobId),
     enabled: !!processingJob,
-    queryFn: () => nextApiGet<ImageJobStatus>(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image?jobId=${processingJob!.jobId}`),
+    // Every poll carries the token: the route resolves it to an Account and
+    // hands back only that Account's job.
+    queryFn: async () => {
+      const token = await getAccessTokenSilently();
+      return nextApiGet<ImageJobStatus>(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image?jobId=${processingJob!.jobId}`, token);
+    },
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       return status === 'completed' || status === 'failed' ? false : 2000;

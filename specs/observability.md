@@ -151,6 +151,10 @@ triggered by roughly two weeks of production data, not by a date.
 
 ## Things to get right when building this
 
+- **Put `x-nf-request-id` on the server span** for any request arriving via the Netlify
+  proxy. It is the only handle that correlates a Big Shop trace with Netlify's own request
+  logs, and it costs one attribute. Confirmed present at the origin during the Phase 0
+  probe in [`api-hosting-migration.md`](./api-hosting-migration.md).
 - **Telemetry must never affect the application.** Exporter errors swallowed, flushes
   bounded, the SDK's default `ErrorHandler` replaced so it does not spam logs, and no
   telemetry initialisation that can `log.Fatal` the way `main.go`'s DB ping does.

@@ -42,18 +42,41 @@ Two pre-existing defects surface here and are fixed as part of the work:
 
 ## Proposed approach
 
-### Phase 0 — Settle the one unknown, before anything else
+### Phase 0 — DONE. The unknown is settled: `Authorization` is forwarded
 
-**Does Netlify forward the `Authorization` header through a `status = 200` rewrite to an
-external origin?** Netlify's docs do not say, and the entire API is bearer-authenticated.
+**Answered empirically on 2026-08-05**, via a throwaway branch deploy (PR #74, since
+closed) carrying the exact rewrite this migration proposes — `/api/bigshop/*`,
+`status = 200`, `force = true` — pointed at an echoing origin. Netlify's docs do not
+answer this, and the one support-forum thread asking it was closed without a staff reply,
+so measurement was the only route.
 
-Deploy any trivial echo service, add a rewrite, and `curl` it with a bearer token through
-`www.bigshop.life`. This is an afternoon at most and it gates the whole design.
+| Question | Result |
+| --- | --- |
+| `Authorization` forwarded to an external origin? | **Yes**, intact |
+| Arbitrary custom headers (`traceparent`, `X-Probe-Custom`)? | **Yes**, verbatim |
+| `PUT` / `PATCH` / `DELETE` proxied? | **Yes**, all 200 |
+| Method, body and `Content-Type` preserved on POST? | **Yes**, body round-tripped exactly |
+| Genuine rewrite rather than a 302? | **Yes**, 0 redirects, URL unchanged |
 
-**If it fails**, the fallback is `api.bigshop.life` pointed straight at Fly — which costs
-CORS preflights on mutations and requires fixing the wildcard-plus-credentials config
-above, but is otherwise equivalent and is arguably *faster* for UK users. Do not proceed
-past Phase 1 without an answer.
+**The `api.bigshop.life` subdomain fallback is therefore not needed**, and same-origin is
+confirmed rather than assumed. Every route family the API actually uses — `apiGet` plus
+`apiMutate`'s four verbs in `lib/api-client.ts` — is covered by the methods tested.
+
+Netlify adds several headers on the way through, visible at the origin:
+
+- `x-nf-client-connection-ip` — the real client IP survives the proxy, so rate limiting or
+  abuse handling at the origin remains possible.
+- `x-nf-request-id` — correlates a request with Netlify's own logs. Worth putting on spans;
+  noted in [`observability.md`](./observability.md).
+- `x-nf-netlify-proxy` — a **signed JWT** (`iss: netlify`, `sub: proxy`, carrying
+  `request_id` and `client_ip`). This means the Fly origin could verify that traffic
+  arrived via Netlify with no shared secret to manage — a cheaper mechanism than the JWS
+  signing ADR-0006 considered and rejected. It does **not** change that decision: Dave's
+  server-side calls address Fly directly and would not carry it, so the origin must accept
+  unsigned traffic anyway. Recorded because it is the obvious thing to reach for later.
+- `x-country`, `x-nf-account-tier`.
+- Netlify **rewrites `Accept` to `*/*,image/webp`**. See "Things to get right" — Huma
+  negotiates on `Accept`.
 
 ### Phase 1 — Make it deployable
 
@@ -162,8 +185,13 @@ Deliberately a separate PR, days later:
 
 ## Things to get right when building this
 
-- **Phase 0 gates everything.** Do not build a Dockerfile before knowing whether the
-  proxy forwards `Authorization`.
+- **Phase 0 is done** — see above. Nothing is blocked on it.
+- **Netlify rewrites the `Accept` header to `*/*,image/webp` through the proxy.** Huma
+  does content negotiation on `Accept`, so confirm during Phase 3's verification that
+  responses still come back as JSON rather than something else. It should be fine — `*/*`
+  is present and Huma resolves that to JSON — but it is a header the API's framework
+  actually reads, mutated by an intermediary, which is exactly the shape of bug
+  `follow-ups.md` #12 records being caught only by e2e.
 - **Phase 2 before Phase 3.** There must be no window in which the Go checks run nowhere.
 - `docs/openapi.yaml` and `types/api.d.ts` are generated and drift-checked. A base path
   change means regenerating both; the drift check will catch it if you forget, but only

@@ -83,7 +83,11 @@ instrumenting it would mostly serve to document that cost in detail.
   address the Fly host directly instead. Note this path does not get faster overall — it
   trades N transatlantic DB hops per tool call for one transatlantic API hop per tool
   call, which is an improvement but a smaller one than elsewhere.
-- Netlify can JWS-sign proxied requests with a shared secret, so the Fly origin can reject
-  anything that did not arrive via Netlify. Worth doing; not required for correctness.
+- The origin can tell proxied traffic apart from direct traffic for free: Netlify attaches
+  `x-nf-netlify-proxy`, a signed JWT (`iss: netlify`, `sub: proxy`), to every proxied
+  request — no shared secret and no JWS configuration needed. This does not change the
+  decision to leave the origin publicly reachable, because Dave's server-side calls
+  address Fly directly and carry no such header, so unsigned traffic must be accepted
+  regardless. Recorded because it is the obvious thing to reach for if that changes.
 - Connection pooling to TiDB starts working properly. Every cold Lambda container
   previously built a fresh pool and `Ping`ed across the Atlantic during `init()`.

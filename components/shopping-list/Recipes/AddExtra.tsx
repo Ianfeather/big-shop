@@ -2,6 +2,7 @@ import styles from './index.module.css';
 import { KeyboardEvent, MouseEvent, useState } from 'react';
 import SidebarInput from '../../sidebar-input';
 import SidebarHeading from '../../sidebar-heading';
+import Button from '@components/button';
 
 interface AddExtraProps {
   onAdd: (item: string) => void;
@@ -24,10 +25,12 @@ const AddExtra = ({ onAdd }: AddExtraProps) => {
 
   return  (
     <div className={styles.panel}>
-      <SidebarHeading>Non-recipe items</SidebarHeading>
+      <SidebarHeading>Fancy something extra?</SidebarHeading>
       <div className={styles.extraListContainer}>
         <SidebarInput placeholder="beer, snacks..." id="extra-list-item" value={extraItem} onKeyPress={addExtraItemOnEnter} onChange={(e) => setExtraItem(e.target.value)} />
-        <button onClick={addExtra} className={styles.addButton}>Add</button>
+        {/* The one solid button on the page. Everything else here is a text
+            action, which left the rail with no focal point at all. */}
+        <Button style="primary" onClick={addExtra} className={styles.addButton}>Add</Button>
       </div>
     </div>
   );

@@ -1,0 +1,59 @@
+.emptyState {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: clamp(var(--space-3), 3vw, var(--space-5));
+  padding: var(--space-5) 0;
+  max-width: 62ch;
+}
+
+/* Roughly the size these illustrations had before the "Cookbook" redesign
+   shrank them. They are the only illustrations in the product and they sit on
+   a page that is empty by definition, so a thumbnail bought space that nothing
+   else wanted. */
+.illustration {
+  flex-shrink: 0;
+  width: clamp(180px, 34vw, 260px);
+  height: auto;
+}
+
+.copy {
+  flex: 1;
+  min-width: 24ch;
+}
+
+.title {
+  font-family: var(--font-heading);
+  font-style: italic;
+  font-size: clamp(var(--text-md), 2.4vw, 26px);
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin: 0 0 var(--space-2);
+}
+
+.hint {
+  font-size: var(--text-base);
+  line-height: 1.6;
+  color: var(--ink-soft);
+  margin: 0;
+}
+
+/* On a phone there is no second column to sit beside, so the row becomes a
+   centred stack and the illustration gets the width the two of them were
+   sharing. */
+@media (max-width: 640px) {
+  .emptyState {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: var(--space-4) 0 var(--space-6);
+  }
+
+  .illustration {
+    width: min(78%, 300px);
+  }
+
+  .copy {
+    min-width: 0;
+  }
+}

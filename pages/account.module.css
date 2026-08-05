@@ -7,9 +7,14 @@
   background: var(--color-primary-soft);
 }
 
+/* Section heading, same treatment as the Shopping List's "Already bought". */
 .moduleHeading {
-  margin-top: 0;
-  font-weight: bold;
+  font-family: var(--font-heading);
+  font-size: var(--text-md);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--claret);
+  margin: 0 0 var(--space-2);
 }
 
 .input {

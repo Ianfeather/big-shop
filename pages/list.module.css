@@ -23,8 +23,10 @@
 }
 
 /* The selected tab is the disabled one - Tabs disables the button for the
-   panel already on screen. */
+   panel already on screen. Purple to match the header nav's active underline:
+   it's the same idiom one row below it, so two different accent colours read
+   as a mistake. */
 .tabButtons button:disabled {
   color: var(--ink);
-  border-bottom-color: var(--terracotta);
+  border-bottom-color: var(--color-primary);
 }

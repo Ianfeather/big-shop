@@ -96,7 +96,7 @@
   font-weight: 600;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--terracotta);
+  color: var(--claret);
   margin: 0 0 var(--space-3);
 }
 
@@ -311,7 +311,7 @@
   font-weight: 600;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--terracotta);
+  color: var(--claret);
   margin: var(--space-5) 0 var(--space-2);
   padding-bottom: var(--space-1);
   border-bottom: 1px solid var(--rule);
@@ -326,7 +326,7 @@
   max-width: 34ch;
   margin: calc(var(--space-5) + 6px) 0 0 auto;
   padding-left: var(--space-4);
-  border-left: 2px solid var(--terracotta);
+  border-left: 2px solid var(--claret);
 }
 
 /* ---------- method ---------- */
@@ -367,7 +367,7 @@
   font-weight: 500;
   font-size: clamp(38px, 6vw, 64px);
   line-height: 0.85;
-  color: var(--terracotta);
+  color: var(--claret);
 }
 
 .stepTitle {

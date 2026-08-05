@@ -315,7 +315,6 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
               />
               <Button
                 style="primary"
-                icon="tick"
                 className={`${parseTextMutation.isPending ? styles.loading : ''}`}
                 onClick={handleParseIngredients}
               >
@@ -383,7 +382,7 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
       </div>
 
       <div className={styles.buttonContainer}>
-        <Button style="primary" icon="tick" disabled={loading} onClick={submitRecipe}>
+        <Button style="primary" disabled={loading} onClick={submitRecipe}>
           { mode === 'edit' ? 'Update Recipe' : 'Save Recipe'}
           { loading && <Spinner className={styles.loadingIngredients}>Saving...</Spinner>}
         </Button>

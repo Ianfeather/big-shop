@@ -1,5 +1,10 @@
+import { ReactNode } from 'react';
+import Link from 'next/link';
 import TagPill from '@components/tag-pill';
+import icons from '@components/svg';
 import styles from './index.module.css';
+
+const PencilIcon = icons.pencil;
 import type { Recipe as RecipeModel } from '../../types/models';
 
 const RecipeLink = ({ link }: { link?: string | null }) => {
@@ -45,7 +50,32 @@ const Method = ({ method }: { method?: string | null }) => {
   );
 }
 
+// A recipe imported from a photo or a URL often arrives with one half missing -
+// ingredients but no method, most commonly. The empty section still renders,
+// deliberately: it's the only thing that tells you the method is missing rather
+// than merely not shown. The pencil beside it turns that dead end into the way
+// to fill it, and appears only while the section is empty so a complete recipe
+// isn't littered with edit affordances (the masthead's Edit covers that).
+const SectionHeading = ({ children, addLabel, editHref }: { children: ReactNode; addLabel: string; editHref?: string }) => (
+  <div className={styles.sectionHeading}>
+    <h3 className={styles.heading}>{children}</h3>
+    {/* A bare pencil rather than a Button: it's a quiet hint that the section
+        can be filled in, not the page's action. */}
+    { editHref && (
+      <Link href={editHref} className={styles.addLink} aria-label={addLabel} title={addLabel}>
+        <PencilIcon className={styles.addIcon} />
+      </Link>
+    )}
+  </div>
+);
+
 const Recipe = ({ recipe }: { recipe: Partial<RecipeModel> }) => {
+  const ingredients = recipe.ingredients || [];
+  // Whitespace-only method text counts as missing: it renders as an empty
+  // section either way, so it should offer the same way out.
+  const hasMethod = !!recipe.method?.trim();
+  const editHref = recipe.id ? `/recipes/${recipe.id}/edit` : undefined;
+
   return (
     <>
       <RecipeLink link={recipe.remoteUrl} />
@@ -58,10 +88,12 @@ const Recipe = ({ recipe }: { recipe: Partial<RecipeModel> }) => {
           ))
         }
       </div>
-      <div className={styles.ingredients}>
-        <h3 className={styles.heading}>Ingredients</h3>
+      <div className={styles.section}>
+        <SectionHeading addLabel="Add ingredients" editHref={ingredients.length ? undefined : editHref}>
+          Ingredients
+        </SectionHeading>
         <ul>
-          {(recipe.ingredients || []).map(ingredient => (
+          {ingredients.map(ingredient => (
             <li className={styles.ingredient} key={ingredient.name}>
               <span className={styles.amount}>{ingredient.quantity} {ingredient.unit}</span>
               <span className={styles.ingredientName}>{ingredient.name}</span>
@@ -69,8 +101,12 @@ const Recipe = ({ recipe }: { recipe: Partial<RecipeModel> }) => {
           ))}
         </ul>
       </div>
-      <h3 className={styles.heading}>Method</h3>
-      <Method method={recipe.method} />
+      <div className={styles.section}>
+        <SectionHeading addLabel="Add a method" editHref={hasMethod ? undefined : editHref}>
+          Method
+        </SectionHeading>
+        <Method method={recipe.method} />
+      </div>
     </>
   )
 }

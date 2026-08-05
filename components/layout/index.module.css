@@ -40,12 +40,19 @@
   .container {
     padding: var(--space-4) var(--space-4) var(--space-6);
   }
+  /* Both tracks are minmax(0, ...): a grid item's automatic minimum size is
+     its content, so a fixed `260px` track did not stop the rail's contents
+     from pushing the whole grid wider than the viewport - which is what a long
+     recipe name did between roughly 800px and 1200px. The rail also takes a
+     little more room than the 260px it had, since it's the column with the
+     long strings in it. */
   .grid {
-    grid-template-columns: minmax(0, 1fr) 260px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 300px);
   }
   /* The single hairline that separates the two columns - the only division
      between them, in place of two bordered panels. */
   .sideBarContainer {
+    min-width: 0;
     border-left: 1px solid var(--rule);
     padding-left: clamp(var(--space-4), 3vw, var(--space-5));
   }

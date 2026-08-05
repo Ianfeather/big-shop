@@ -6,6 +6,7 @@ import useAuth0 from '@hooks/use-auth';
 import { apiGet, apiPost } from '../lib/api-client';
 import { queryKeys } from '../lib/query-keys';
 import Layout, { MainContent, Sidebar } from '@components/layout'
+import PageHeading from '@components/page-heading';
 import Button from '@components/button';
 import type { Invite as InviteModel } from '../types/models';
 
@@ -97,7 +98,12 @@ const List = () => {
   return (
     <Layout>
       <MainContent name="Shopping List">
-        <h1>Hi {user?.name}! You can use this page to customize your account.</h1>
+        {/* The old h1 was a whole sentence, which at masthead size would have
+            been a paragraph in 40px serif - it reads as the subheading it
+            always was, under a title. */}
+        <PageHeading subheading={`Hi ${user?.name ?? 'there'}! You can use this page to customize your account.`}>
+          Your account
+        </PageHeading>
         <div className={styles.twoColumnGrid}>
           { !!invites.length && (
             <div className={styles.accountModule}>
@@ -120,7 +126,7 @@ const List = () => {
             <p>Sharing an account with someone means you will have access to the same recipes and shopping list. </p>
             <div className={styles.inviteForm}>
               <input className={styles.input} type="text" value={invitee} onChange={(e) => setInvitee(e.target.value)} />
-              <Button style="primary" icon="tick" onClick={handleInvite}>Invite</Button>
+              <Button style="primary" onClick={handleInvite}>Invite</Button>
             </div>
             { successMessage && (
               <h3>{successMessage}</h3>

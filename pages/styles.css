@@ -14,16 +14,21 @@
   /* "Cookbook" surface palette. The logged-out homepage and the Shopping List
      are built on these rather than on the lilac/white pairing the rest of the
      app still uses: warm paper for the page, a slightly lighter card on top of
-     it, ink for type, and terracotta for the small-caps labels. Brand purple
-     survives as a spot colour (--spot is a darkened --color-primary, dark
-     enough to read as text on paper). */
+     it, ink for type, and claret for section headings. Brand purple carries
+     the logo, the controls you touch and anything selected (--spot is a
+     darkened --color-primary, dark enough to read as text on paper).
+
+     --claret replaced a terracotta (#bc5a35) that sat almost opposite the brand
+     purple on the colour wheel and read as a second, competing accent once the
+     purple came back. Claret is the same density but rotated round towards the
+     purple's red-magenta side, so the two are related rather than at odds. */
   --paper: #faf5ee;
   --paper-deep: #f2e9dd;
   --card: #fffdf9;
   --ink: #241d26;
   --ink-soft: #6b5f6d;
   --rule: #ded1c0;
-  --terracotta: #bc5a35;
+  --claret: #9c3050;
   --spot: #8f4bc9;
 
   /* Neutral scale (consolidated from one-off greys scattered across components) */

@@ -1,8 +1,59 @@
-.heading {
-  font-size: var(--text-lg);
+/* Section heading, same treatment as the Shopping List's "Already bought" and
+   the rail's headings: lowercase serif in claret, over a hairline. The rule
+   lives on the row rather than the h3 so it still spans the full width with an
+   edit button sitting on it. */
+.sectionHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--rule);
+  /* Keeps the row the same height whether or not the pencil is there, so the
+     two sections' headings line up with each other. */
+  min-height: 28px;
 }
 
-.ingredients {
+.addLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--spot);
+  /* Padded out to a usable tap target, pulled back in by the same amount so it
+     doesn't set the row's height. */
+  padding: var(--space-1);
+  margin: calc(var(--space-1) * -1);
+  transition: color 0.12s ease;
+}
+
+.addLink:hover {
+  color: var(--ink);
+}
+
+.addIcon {
+  width: 18px;
+  height: 18px;
+}
+
+/* The icon set draws as filled paths, so it follows `fill`, not `color`. */
+.addIcon path {
+  fill: currentColor;
+}
+
+.heading {
+  font-family: var(--font-heading);
+  font-size: var(--text-md);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--claret);
+  margin: 0;
+}
+
+/* Ingredients kept this much space above it already; Method had none at all,
+   so its heading sat straight on the last ingredient. */
+.section {
   margin-top: var(--space-6);
 }
 

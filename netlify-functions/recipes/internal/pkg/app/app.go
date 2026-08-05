@@ -76,6 +76,39 @@ func devUserMiddleware(w http.ResponseWriter, r *http.Request, next http.Handler
 	next.ServeHTTP(w, r.WithContext(ctx))
 }
 
+// normalizeAudience rewrites the `aud` claim into a shape MapClaims.
+// VerifyAudience understands.
+//
+// It accepts only []string or string and returns false for anything else,
+// while encoding/json decodes a JSON array into []interface{} - which is what
+// Auth0 sends whenever a token was requested with an audience. Hence the
+// conversion (https://github.com/form3tech-oss/jwt-go/issues/7).
+//
+// Returns an error rather than asserting. The `claims["aud"].([]interface{})`
+// this replaced panicked outright on a token whose `aud` was absent or a bare
+// string, and there is no Recovery middleware in the negroni stack to turn
+// that into a response - so an unauthenticated request could kill the handler
+// instead of being refused by it.
+func normalizeAudience(claims jwt.MapClaims) error {
+	switch aud := claims["aud"].(type) {
+	case []interface{}:
+		values := make([]string, len(aud))
+		for i, v := range aud {
+			value, ok := v.(string)
+			if !ok {
+				return errors.New("invalid audience")
+			}
+			values[i] = value
+		}
+		claims["aud"] = values
+	case []string, string:
+		// Already a shape VerifyAudience reads.
+	default:
+		return errors.New("missing audience")
+	}
+	return nil
+}
+
 func getPemCert(token *jwt.Token) (string, error) {
 	cert := ""
 	resp, err := http.Get("https://" + os.Getenv("AUTH0_DOMAIN") + "/.well-known/jwks.json")
@@ -113,24 +146,30 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, huma.API, error) {
 
 	jwtMiddleware := jwtmiddleware.New(jwtmiddleware.Options{
 		ValidationKeyGetter: func(token *jwt.Token) (interface{}, error) {
-			// Have to fiddle with the types here due to a casting issue in
-			// the package https://github.com/form3tech-oss/jwt-go/issues/7
-			aud := token.Claims.(jwt.MapClaims)["aud"].([]interface{})
-			s := make([]string, len(aud))
-			for i, v := range aud {
-				s[i] = fmt.Sprint(v)
+			claims, ok := token.Claims.(jwt.MapClaims)
+			if !ok {
+				return nil, errors.New("invalid claims")
 			}
-			token.Claims.(jwt.MapClaims)["aud"] = s
 
-			checkAud := token.Claims.(jwt.MapClaims).VerifyAudience(os.Getenv("AUTH0_AUDIENCE"), false)
-			if !checkAud {
-				return token, errors.New("Invalid audience")
+			if err := normalizeAudience(claims); err != nil {
+				return nil, err
+			}
+
+			// Both claims are *required*, not merely checked-if-present. With
+			// the `false` this passed before, verifyAud returns true for an
+			// empty `aud` and VerifyIssuer returns true for a token carrying
+			// no `iss` at all - so any token the tenant's key signed was
+			// accepted, whatever it was minted for. The signature check below
+			// meant that was never an open door, but a token issued by this
+			// Auth0 tenant for some other audience is exactly what this API
+			// must refuse.
+			if !claims.VerifyAudience(os.Getenv("AUTH0_AUDIENCE"), true) {
+				return nil, errors.New("invalid audience")
 			}
 
 			iss := "https://" + os.Getenv("AUTH0_DOMAIN") + "/"
-			checkIss := token.Claims.(jwt.MapClaims).VerifyIssuer(iss, false)
-			if !checkIss {
-				return token, errors.New("invalid issuer")
+			if !claims.VerifyIssuer(iss, true) {
+				return nil, errors.New("invalid issuer")
 			}
 
 			cert, err := getPemCert(token)

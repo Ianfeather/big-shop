@@ -28,8 +28,12 @@ export async function fetchKnownNames(req: NextApiRequest): Promise<KnownNames> 
     return EMPTY;
   }
 
-  // Forwarded straight through from the browser. These routes do not validate
-  // it themselves; the Go API is the thing that decides whether it is good.
+  // Forwarded straight through from the browser. No route here validates a
+  // token itself; the Go API is the thing that decides whether it is good -
+  // which is also how lib/authenticate.ts authenticates a caller, by asking it.
+  // This call is not that check: a missing or bad token costs canonical names
+  // (see below), and any route that needs the caller authenticated says so
+  // separately.
   const authorization = req.headers.authorization;
   const headers = authorization ? { Authorization: authorization } : undefined;
 

@@ -223,7 +223,20 @@ committed defaults (`NEXT_PUBLIC_DISABLE_AUTH=true` etc.) are enough to bring
 the stack up standalone. `reporter` in `playwright.config.ts` adds an HTML
 report under `CI` (plain `list` isn't useful without a terminal to scroll
 back through); the workflow uploads it, plus any failure traces, as build
-artifacts. Not yet wired up as a required check — see follow-ups.md #13.
+artifacts.
+
+**Both CI workflows are required checks and block merging into `master`.** The
+`required checks` repository ruleset requires the `build-lint-test` job (from
+`ci.yml`) and the `e2e` job (from `e2e.yml`) to pass on every pull request.
+Renaming either job in its workflow file silently breaks the gate — the
+ruleset matches on job name, and a check that never reports is not the same
+as a check that fails. Update the ruleset in the same change.
+
+Two things the ruleset deliberately does *not* do. It is not "strict", so a
+branch does not have to be up to date with `master` before merging — that
+would mean rebasing on every unrelated push. And it does not require a pull
+request, so a direct push to `master` still bypasses both suites entirely;
+the gate is on merging a PR, not on changing the branch.
 
 Evals:
 ```bash

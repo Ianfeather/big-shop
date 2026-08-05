@@ -2,7 +2,7 @@
 
 Small defects and doc-drift found while building `CONTEXT.md` from the codebase (2026-07-13). Not designed here — just flagged for later action.
 
-Items 1–30, 32 and 33 have all been resolved — see [`follow-ups-resolved.md`](./follow-ups-resolved.md) for the full history (numbering preserved for cross-references between entries).
+Items 1–30, 32, 33 and 36 have all been resolved — see [`follow-ups-resolved.md`](./follow-ups-resolved.md) for the full history (numbering preserved for cross-references between entries).
 
 Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are real but deliberately not being fixed, so they are not queued work.
 
@@ -28,37 +28,6 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     `lemon`, `lime` and `orange` yet, since `030` merged `freshly squeezed lemon juice`
     into `lemon juice` but did not add any.
 
-36. **Put the brand back into the Shopping List.** The "Cookbook" redesign (paper, ink,
-    terracotta labels) fixed the boxiness of `/list`, but it went too far the other way:
-    the page is now almost monochrome, brand purple has been reduced to a spot colour on
-    hover states, and every control is an underlined text action. It reads as considered
-    but anonymous — nothing on it says Big Shop, and there is no button with any presence.
-
-    Six places to put colour and weight back, roughly in order of how much each buys:
-
-    - **The checkbox.** It's the control you touch most on the page and it's currently a
-      grey circle that fills ink when bought. Purple on hover and on bought would put the
-      brand into the main interaction rather than into decoration.
-    - **A real primary button.** "Add" (non-recipe items) is an underlined text link and
-      "Clear list" is another; a solid purple Add would restore the button presence the
-      page lost, and give the rail a focal point.
-    - **Selected recipes in the rail.** Ticked rows are a beige block today. Purple-tinted
-      with a purple tick would visibly tie the rail to the list it generates.
-    - **The masthead count.** "2 recipes · 7 items" is grey small-caps; as a purple pill it
-      anchors the top of the page in brand colour.
-    - **Department dividers.** The list is already sorted by aisle (see
-      `DEPARTMENT_ORDER`) but never says so. Small coloured aisle headings would add
-      personality *and* surface information the sort order is silently encoding — the one
-      item here that is a feature rather than a paint job.
-    - **The empty-basket illustration.** Already the only purple on the page, now sized
-      down beside the copy. Worth deciding whether it earns a bigger role rather than
-      being the last survivor of the old palette.
-
-    Not a redesign: the one-sheet layout stands. The question is only where colour and
-    weight go back on top of it. Whatever is picked, `/dave` should be looked at in the
-    same pass — it kept its white card and its own blue palette through the redesign and
-    now looks like a different product (see the `--color-info` note in
-    `pages/dev/design-system.tsx`).
 37. **Threshold-based alerting, once there are baselines to set thresholds from.**
     Deliberately deferred when the observability stack was designed (see
     [ADR-0007](./docs/adr/0007-observability-otel-grafana-cloud.md)): alert thresholds picked
@@ -83,3 +52,87 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     uptime check on `/health`, plus the fix making `/health` actually query TiDB rather
     than unconditionally writing `ok`. That one is a binary up/down signal, so "wait for
     baselines" never applied to it.
+
+38. **`/dave` is still on the pre-redesign design.** Split out of #36, which put the brand
+    back into the Shopping List but deliberately left Dave alone. It kept its white card
+    and its own blue palette (`--color-info`) through the "Cookbook" redesign and now
+    looks like a different product — more so than before, since `/list` has moved again
+    since.
+
+    What #36 settled that this should follow: paper rather than a white card, purple for
+    the controls you touch and for anything selected, lowercase `--font-heading` section
+    headings rather than letter-spaced small caps, and terracotta reserved for those
+    headings. The open question is what happens to `--color-info` itself: it exists only
+    for Dave's chat UI (see its note in `pages/dev/design-system.tsx`), so this pass
+    either finds it a real role or deletes the token.
+
+39. **Shopping List amounts are far more precise than anyone can shop.** The list
+    currently renders things like `4.444444 teaspoon (10 gram)` and `2.222222 teaspoon
+    (5 gram)` — the raw result of a unit conversion, printed in full. Nobody measures
+    4.444444 of anything into a trolley.
+
+    Two separate decisions hide in here, which is why this is its own item rather than a
+    quick `toFixed`:
+
+    - **How much precision to display.** One decimal place is probably right as a floor
+      (`4.4 teaspoon`), but the rule can't be blind: `0.25 teaspoon` is a real quantity a
+      cook recognises and `0.3 teaspoon` isn't, and rounding `1.04 kg` to `1 kg` is fine
+      where rounding `0.4 kg` to `0` is a bug. Halves and quarters read better than
+      decimals for spoons and cups.
+    - **When to round *up* instead of to-nearest.** For anything you buy as whole units —
+      spoons of a spice you're measuring out, tins, lemons — rounding down means going
+      home without enough. The existing Display Unit work already rounds tins up (see the
+      e2e test "a weight is shown in tins, rounded up to a whole one"), so there is a
+      precedent to follow rather than a new principle to invent.
+
+    Worth deciding at the same time: whether this is a display concern in
+    `components/shopping-list/ShoppingList/Item.tsx`'s `formatAmounts` (cheap, and keeps
+    the underlying totals exact for further combining) or a property of the combining
+    itself in the Go API (`netlify-functions/recipes`). Display-side is the safer default:
+    round once, at the end, where a human reads it.
+
+40. **URL import returns an empty `ingredients` array for some recipe sites.** Reproduced
+    on <https://www.bbcgoodfood.com/recipes/chicken-tzatziki-wraps>; reported for "a couple
+    of URLs", so it is not one broken page. The import completes and the form opens — the
+    Recipe just arrives with nothing in it, which is worse than a visible failure, since
+    it looks like the site had no ingredients rather than like the extractor missed them.
+
+    Where to start: `lib/recipe-import/*` (the extractor, plain untyped `.js` with a
+    sidecar `.d.ts`) and `pages/api/parse-recipe-url.ts`. The two things to separate
+    before concluding anything are (a) the fetch/extract step returning nothing — most
+    likely the page's JSON-LD shape changed, or it's now behind bot protection — versus
+    (b) extract succeeding and the LLM step dropping the ingredients on the floor.
+    Logging the intermediate payload for one known-bad URL answers that in one run.
+
+    Note that the e2e coverage for import (`e2e/recipe-import.spec.ts`) intercepts
+    `/api/parse-recipe-url` and returns canned JSON, deliberately — it covers everything
+    between the extractor and the save payload, and so cannot catch this class of bug by
+    design. Whatever the fix is, the regression test for it belongs next to the extractor,
+    against a saved copy of a real page.
+
+41. **Backfill the Method on existing Recipes.** A good number of Recipes in the catalog
+    have ingredients but an empty `method` — imports that only ever captured half the
+    page, and older hand-entered ones. The detail page now shows the empty Method section
+    with a pencil beside it (rather than hiding it, which made a missing method
+    indistinguishable from one that simply wasn't displayed), so this is visible rather
+    than silent — but the data is still missing.
+
+    Worth establishing before doing anything bulk:
+
+    - **How many, and which.** Measured on a local copy synced from production
+      (2026-08-05): **136 of 157 Recipes have no method at all.** That is most of the
+      catalog, so this is not an afternoon of typing — whatever happens has to be
+      largely automated, and has to be safe to run more than once.
+    - **Where the text comes from.** Recipes carrying a `remote_url` can plausibly be
+      re-fetched through the existing import path, which is the cheap case — but see #40,
+      since that path is currently returning empty ingredients for at least some sites,
+      and a re-import that silently overwrites good ingredients with nothing would be
+      worse than the missing method. Recipes with no URL have no source but the cook.
+    - **Never overwrite a non-empty field.** Whatever runs, it should write `method` only
+      where `method` is currently empty, and touch nothing else on the row.
+
+    Related but separate: `parseMethodSteps` in `components/recipe/index.tsx` splits
+    "1. … 2. …" prose into steps at render time. If a backfill is going to write method
+    text anyway, it is the natural moment to decide whether steps should be stored as
+    structured data instead — the comment there has called the parsing a stopgap since it
+    was written.

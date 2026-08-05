@@ -1,6 +1,8 @@
 import styles from './index.module.css'
 import Item from './Item';
 import ClearList from './clear-list';
+import PageHeading from '@components/page-heading';
+import EmptyState from '@components/empty-state';
 import EmptyBasketIllustration from '@components/svg/empty-basket';
 import type { ListIngredient } from '../../../types/models';
 
@@ -18,24 +20,18 @@ function sortByDepartment(shoppingList: Record<string, ListIngredient>) {
   return (_a: string, _b: string) => departmentPriority(shoppingList[_a].department) - departmentPriority(shoppingList[_b].department);
 }
 
-const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
-
 interface ShoppingListProps {
   shoppingList: Record<string, ListIngredient>;
   extras: Record<string, ListIngredient>;
   buyIngredient: (name: string, type: 'ingredient' | 'extra') => void;
   clearList: () => void;
-  // Only the page knows how many Recipes are ticked; the list itself is a flat
-  // set of Items. Optional so the component still stands up on its own.
-  recipeCount?: number;
 }
 
-const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList, recipeCount = 0 }: ShoppingListProps) => {
+const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList }: ShoppingListProps) => {
 
   const boughtItems = Object.keys(shoppingList).filter((name => shoppingList[name].isBought));
   const boughtExtras = Object.keys(extras).filter((name => extras[name].isBought));
-  const itemCount = Object.keys(shoppingList).length + Object.keys(extras).length;
-  const hasListItems = !!itemCount;
+  const hasListItems = !!Object.keys(shoppingList).length || !!Object.keys(extras).length;
   const hasBoughtItems = !!boughtItems.length || !!boughtExtras.length;
 
   const ingredients = Object.keys(shoppingList)
@@ -44,26 +40,21 @@ const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList, recipeCo
 
   return (
     <>
-      <div className={styles.masthead}>
-        <h2 className={styles.heading}>Your shopping list</h2>
-        <p className={styles.meta}>
-          {hasListItems ? `${plural(recipeCount, 'recipe')} · ${plural(itemCount, 'item')}` : 'Nothing on it yet'}
-        </p>
-      </div>
+      {/* Clear list sits up here on the masthead rather than at the foot of the
+          list: it used to be the page's only footer, stranded below however many
+          items you had, and this is where the (now deleted) item count was. */}
+      <PageHeading action={hasListItems ? <ClearList onClick={clearList} /> : undefined}>
+        Your shopping list
+      </PageHeading>
       { !hasListItems && (
-          /* Set beside the copy rather than centred in the middle of the page:
-             a full-width illustration left a screen-high void whenever the
-             list was empty, which is most of the week. */
-          <div className={styles.emptyState}>
-            <EmptyBasketIllustration className={styles.emptyBasketIllustration} role="img" aria-label="Empty shopping basket" />
-            <div>
-              <p className={styles.emptyStateText}>Your shopping list is empty</p>
-              <p className={styles.emptyStateHint}>
-                Tick a recipe and its ingredients land here &mdash; added up across everything
-                you&rsquo;ve picked, in the order you walk the shop.
-              </p>
-            </div>
-          </div>
+          <EmptyState
+            illustration={EmptyBasketIllustration}
+            illustrationLabel="Empty shopping basket"
+            title="Your shopping list is empty"
+          >
+            Tick a recipe and its ingredients land here &mdash; added up across everything
+            you&rsquo;ve picked, in the order you walk the shop.
+          </EmptyState>
       )}
       <ul className={styles.shoppingList}>
         { ingredients.map((name, i) => (
@@ -88,8 +79,6 @@ const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList, recipeCo
           </div>
         )
       }
-      { hasListItems && <ClearList onClick={clearList} />}
-
     </>
   )
 }

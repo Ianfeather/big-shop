@@ -1,10 +1,11 @@
+/* Lowercase serif, not small-caps: uppercase letter-spaced labels read as
+   generic UI chrome, where the rest of this design is a cookbook page. */
 .heading {
-  font-family: var(--font-body);
+  font-family: var(--font-heading);
   font-weight: 600;
-  font-size: var(--text-xs);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--terracotta);
+  font-size: var(--text-md);
+  letter-spacing: -0.02em;
+  color: var(--claret);
   margin: 0 0 var(--space-3);
 }
 

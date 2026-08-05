@@ -213,16 +213,15 @@ const List = () => {
   return (
     <Layout>
       <Tabs buttonsClassName={styles.tabButtons} maxWidth={800}>
-        <MainContent name="Shopping List">
+        <MainContent name="Your list">
           <ShoppingList
             clearList={clearList}
             shoppingList={shoppingList}
             extras={extras}
             buyIngredient={buyIngredient}
-            recipeCount={Object.values(recipeList).filter(Boolean).length}
           />
         </MainContent>
-        <Sidebar name="Create & Edit">
+        <Sidebar name="Pick recipes">
           <RecipeSidebar recipeList={recipeList} addExtraItem={addExtraItem} handleRecipeSelect={handleRecipeSelect}/>
         </Sidebar>
       </Tabs>

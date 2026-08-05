@@ -4,7 +4,7 @@ import Button from '@components/button';
 import useRecipe from '@hooks/use-recipe';
 import useRecipeIdParam from '@hooks/use-recipe-id-param';
 import Form from '@components/recipe-form/Form';
-import styles from '../index.module.css';
+import PageHeading from '@components/page-heading';
 
 
 const Recipes = () => {
@@ -18,8 +18,11 @@ const Recipes = () => {
     <Layout pageTitle={"Recipes"}>
       <Grid>
         <MainContent>
-          <h1 className={styles.title}>{recipe.name}</h1>
-          <Button href={`/recipes/${id}`} icon="back" style="primary" outline={true} className={styles.topRightButton}>Cancel edits</Button>
+          <PageHeading
+            action={<Button href={`/recipes/${id}`} icon="back" style="primary">Cancel edits</Button>}
+          >
+            {recipe.name}
+          </PageHeading>
           <Form initialRecipe={recipe} mode="edit" />
         </MainContent>
         <Sidebar>

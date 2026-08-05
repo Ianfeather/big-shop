@@ -1,6 +1,7 @@
 import Spinner from '@components/recipe-form/spinner';
 import Form from '@components/recipe-form/Form';
 import Layout, { MainContent } from '@components/layout'
+import PageHeading from '@components/page-heading';
 import styles from './index.module.css';
 import { ChangeEvent, useState, useRef, useEffect } from 'react';
 import Button from '@components/button';
@@ -281,9 +282,9 @@ const NewRecipe = () => {
   return (
     <Layout pageTitle={title}>
       <MainContent>
-        <div className={styles.headerContainer}>
-          <h1 className={styles.title}>{title}</h1>
-        </div>
+        <PageHeading subheading="Paste a link, photograph a page, or type it in yourself.">
+          {title}
+        </PageHeading>
 
         <div className={styles.sourceTabs}>
           {
@@ -314,7 +315,7 @@ const NewRecipe = () => {
                 onBlur={(e) => fetchFromUrl(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); fetchFromUrl(urlValue); } }}
               />
-              <Button style="primary" icon="tick" disabled={parseUrlMutation.isPending} onClick={(e) => { e.preventDefault(); fetchFromUrl(urlValue); }}>
+              <Button style="primary" disabled={parseUrlMutation.isPending} onClick={(e) => { e.preventDefault(); fetchFromUrl(urlValue); }}>
                 Fetch
                 { parseUrlMutation.isPending && <Spinner className={styles.loadingIngredients}>Fetching...</Spinner>}
               </Button>

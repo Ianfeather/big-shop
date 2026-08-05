@@ -29,13 +29,13 @@ const colorGroups = [
     title: 'Cookbook surfaces',
     colors: [
       { name: '--paper', value: '#faf5ee', note: 'the page canvas' },
-      { name: '--paper-deep', value: '#f2e9dd', note: 'tinted band / amount pill / selected row' },
+      { name: '--paper-deep', value: '#f2e9dd', note: 'tinted band / row hover' },
       { name: '--card', value: '#fffdf9', note: 'the card content sits on' },
       { name: '--ink', value: '#241d26', note: 'type, and the primary action on these surfaces' },
       { name: '--ink-soft', value: '#6b5f6d', note: 'secondary type' },
       { name: '--rule', value: '#ded1c0', note: 'hairline borders and dividers' },
-      { name: '--terracotta', value: '#bc5a35', note: 'small-caps labels, active nav underline' },
-      { name: '--spot', value: '#8f4bc9', note: 'brand purple, dark enough to be type on paper' },
+      { name: '--claret', value: '#9c3050', note: 'section headings on paper' },
+      { name: '--spot', value: '#8f4bc9', note: 'brand purple, dark enough to be type on paper - logo, hovers' },
     ],
   },
   {
@@ -283,7 +283,7 @@ const DesignSystem = () => {
             </p>
             <div className={styles.componentGrid}>
               <div className={styles.card} style={{ maxWidth: '280px' }}>
-                <SidebarHeading>All Recipes</SidebarHeading>
+                <SidebarHeading>Your recipes</SidebarHeading>
                 <SidebarInput icon={icons.search} placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} />
                 <SidebarTagFilter tags={['Batch Cook', 'Vegetarian']} value={tagFilter} onChange={toggleTagFilter} />
                 <ul>

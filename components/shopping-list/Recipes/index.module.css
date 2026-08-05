@@ -10,22 +10,13 @@
   background: none;
 }
 
+/* Sized against the underlined input beside it rather than the default button
+   padding, so the two line up on the same row. */
 .addButton {
-  background: none;
-  border: 0;
-  padding: 0;
-  font-family: inherit;
+  flex-shrink: 0;
+  align-self: stretch;
+  padding: 0 var(--space-3);
   font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--ink);
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  transition: color 0.15s ease;
-}
-
-.addButton:hover {
-  color: var(--spot);
 }
 
 .hidden {
@@ -34,6 +25,7 @@
 
 .extraListContainer {
   display: flex;
+  align-items: stretch;
   gap: var(--space-2);
 }
 

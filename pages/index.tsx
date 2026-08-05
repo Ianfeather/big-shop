@@ -11,7 +11,7 @@ import { apiPost, apiPatch } from '../lib/api-client';
 import type { User } from '../types/models';
 
 // The logged-out homepage: a marketing page for someone who has never heard of
-// Big Shop. Editorial/print direction - warm paper, ink, one terracotta accent,
+// Big Shop. Editorial/print direction - warm paper, ink, one claret accent,
 // brand purple as a spot colour - which the Shopping List now shares (see
 // pages/styles.css's "Cookbook" tokens and components/layout/header.module.css).
 //

@@ -5,6 +5,7 @@ import EditIcon from './edit';
 import PencilIcon from './pencil';
 import TrashIcon from './trash';
 import TickIcon from './tick';
+import PlusIcon from './plus';
 import UserIcon from './user';
 import LeafIcon from './leaf';
 import BatchIcon from './batch';
@@ -19,6 +20,7 @@ const icons: Record<string, ComponentType<SVGProps<SVGSVGElement>>> = {
   pencil: PencilIcon,
   trash: TrashIcon,
   tick: TickIcon,
+  plus: PlusIcon,
   user: UserIcon,
   leaf: LeafIcon,
   batch: BatchIcon,

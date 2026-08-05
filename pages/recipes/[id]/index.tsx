@@ -5,7 +5,7 @@ import Toast from '@components/toast';
 import useRecipe from '@hooks/use-recipe';
 import useRecipeIdParam from '@hooks/use-recipe-id-param';
 import Recipe from '@components/recipe';
-import styles from '../index.module.css';
+import PageHeading from '@components/page-heading';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 
@@ -43,8 +43,14 @@ const Recipes = () => {
     >
       <Grid>
         <MainContent>
-          <h1 className={styles.title}>{recipe.name}</h1>
-          <Button href={`/recipes/${id}/edit`} icon="pencil" style="primary" outline={true} className={styles.topRightButton}>Edit</Button>
+          {/* Edit was absolutely positioned into the top-right corner, which is
+              where the masthead now puts it anyway - as a real sibling of the
+              title rather than a box floated over the page. */}
+          <PageHeading
+            action={<Button href={`/recipes/${id}/edit`} icon="pencil" style="primary">Edit</Button>}
+          >
+            {recipe.name}
+          </PageHeading>
           <Recipe recipe={recipe} />
         </MainContent>
         <Sidebar>

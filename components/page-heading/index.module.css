@@ -1,0 +1,35 @@
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-2);
+}
+
+.titleBlock {
+  min-width: 0;
+}
+
+.title {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: clamp(var(--text-xl), 4vw, 40px);
+  letter-spacing: -0.035em;
+  color: var(--ink);
+  margin: 0;
+}
+
+/* Stays at the right-hand end even when a long title wraps it onto its own
+   row - which is the common case for a recipe name, and where it otherwise
+   landed under the title looking like a stray control. */
+.action {
+  margin-left: auto;
+}
+
+.subheading {
+  font-size: var(--text-base);
+  color: var(--ink-soft);
+  margin: var(--space-2) 0 0;
+}

@@ -66,10 +66,10 @@ const RecipeList = ({ handleRecipeSelect, filterFn = () => true, selectedIds = {
   return (
     <div className={styles.panel}>
       { showAddButton && (
-        <Button href="/recipes/new" style="primary" icon="tick" className={styles.addRecipeButton}>Add new recipe</Button>
+        <Button href="/recipes/new" style="primary" icon="plus" className={styles.addRecipeButton}>Add new recipe</Button>
       )}
       <div className={styles.filterRow}>
-        <SidebarHeading className={styles.filterHeading}>All Recipes</SidebarHeading>
+        <SidebarHeading className={styles.filterHeading}>Your recipes</SidebarHeading>
         <SidebarTagFilter onChange={toggleTagFilter} value={tagsFilter} tags={tags}/>
       </div>
       <SidebarInput icon={icons.search} placeholder="Search..." onChange={(e) => setSidebarFilter(e.target.value)} value={sidebarFilter} />

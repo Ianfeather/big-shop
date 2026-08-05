@@ -18,8 +18,11 @@ Three facts make this migration small:
 - **It's already containerized.** `netlify-functions/recipes/Dockerfile.dev` plus the
   `api` service in `docker-compose.yml` build and run it, and the e2e suite depends on
   that working.
-- **Nothing else in the repo talks to the Lambda directly.** `lib/api-client.ts` and
-  `lib/dave/tools.ts` both go through `NEXT_PUBLIC_API_HOST`.
+- **Everything reaches the API through `NEXT_PUBLIC_API_HOST`.** Nothing constructs a
+  Lambda URL of its own. There are four consumers, and **three of them run server-side**:
+  `lib/api-client.ts` (browser), `lib/dave/tools.ts`, `lib/authenticate.ts` and
+  `lib/recipe-import/known-names.ts`. See Phase 4 — that split is the migration's main
+  correctness trap.
 
 And three make it necessary:
 
@@ -33,7 +36,7 @@ And three make it necessary:
 
 Two pre-existing defects surface here and are fixed as part of the work:
 
-- `app.go:170` sets `AllowedOrigins: {"*"}` with `AllowCredentials: true`. The CORS spec
+- `app.go:211` sets `AllowedOrigins: {"*"}` with `AllowCredentials: true`. The CORS spec
   forbids that pairing, so it does not do what it appears to.
 - `.github/workflows/ci.yml` triggers on `pull_request` and `workflow_dispatch` only.
   `go fmt`, `go test` and both drift checks live in `build.sh`, i.e. they run **only** in
@@ -132,8 +135,24 @@ One frontend deploy changes two values:
 
 - `NEXT_PUBLIC_API_HOST` → `/api/bigshop` (relative — same origin via the rewrite)
 - `API_HOST_INTERNAL` → `https://<app>.fly.dev/api/bigshop`, a new **server-side-only**
-  variable for `lib/dave/tools.ts`, so Dave's several-per-turn tool calls go straight to
-  Frankfurt instead of us-east-2 → Netlify edge → Frankfurt.
+  variable (no `NEXT_PUBLIC_` prefix, and it must never acquire one).
+
+**All three server-side consumers must switch to `API_HOST_INTERNAL`**, not just Dave.
+A relative `NEXT_PUBLIC_API_HOST` is meaningless in a Node process, so any that is missed
+breaks outright rather than merely running slowly:
+
+| Consumer | Runs | Why it matters |
+| --- | --- | --- |
+| `lib/api-client.ts` | Browser | Stays on the relative path — this is the one that should |
+| `lib/dave/tools.ts` | Netlify fn | Several calls per turn; avoids us-east-2 → edge → Frankfurt |
+| `lib/authenticate.ts` | Netlify fn | **On the critical path of every authenticated Next.js route** — it authenticates by calling `GET /account` on the Go API |
+| `lib/recipe-import/known-names.ts` | Netlify fn | Forwards the caller's header to read canonical Ingredient/Unit names |
+
+`lib/authenticate.ts` deserves particular attention: it was added by #71 and means every
+authenticated Next.js API route now makes a *synchronous* call to the Go API before doing
+its own work. Post-migration that is a transatlantic hop from us-east-2 to Frankfurt on
+every such request. Going direct rather than via the proxy removes one leg of it; removing
+the other would mean moving those routes, which is out of scope.
 
 `e2e/env.ts`'s `API_HOST` changes to the new base path in the same PR.
 
@@ -196,16 +215,14 @@ Deliberately a separate PR, days later:
 - `docs/openapi.yaml` and `types/api.d.ts` are generated and drift-checked. A base path
   change means regenerating both; the drift check will catch it if you forget, but only
   once the check is running in its new home.
-- `lib/dave/tools.ts` currently reads `NEXT_PUBLIC_API_HOST` for server-side calls. It
-  must switch to `API_HOST_INTERNAL`, which has no `NEXT_PUBLIC_` prefix and must not
-  acquire one — it should never reach the browser bundle.
-- A **relative** `NEXT_PUBLIC_API_HOST` (`/api/bigshop`) works for the browser but not for
-  anything server-side, which is precisely why Dave needs its own absolute variable. Check
-  every consumer of `NEXT_PUBLIC_API_HOST` for server-side use before assuming a relative
-  value is safe.
+- **A relative `NEXT_PUBLIC_API_HOST` (`/api/bigshop`) works in the browser and nowhere
+  else.** Three server-side consumers must move to `API_HOST_INTERNAL` — see the table in
+  Phase 4. This list was wrong in the first draft of this spec (it named two consumers;
+  there are four) and grew again when #71 added `lib/authenticate.ts`, so re-grep for
+  `NEXT_PUBLIC_API_HOST` at implementation time rather than trusting the table.
 - The Netlify proxy has a **26 second ceiling**. Comfortable for CRUD; worth remembering
   if any endpoint ever grows slow.
 - `docker-compose.yml`, `dev-full.sh` and the e2e stack already run the API as a plain
   server and need no structural change — only the base path in `e2e/env.ts`.
-- Keep `/health`'s no-auth carve-out (`app.go:179`). It now backs a Fly health check as
+- Keep `/health`'s no-auth carve-out (`app.go:219`). It now backs a Fly health check as
   well as the uptime monitoring in `observability.md`.

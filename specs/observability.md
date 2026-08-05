@@ -114,7 +114,7 @@ time goes. Private source map upload so stack traces de-minify.
 - **Grafana synthetic check on `/health`**, ~1/min, with one contact point. Free tier
   allows 100k API test executions/month.
 
-Threshold-based alerting is deliberately **not** here — see `follow-ups.md` #36. It is
+Threshold-based alerting is deliberately **not** here — see `follow-ups.md` #37. It is
 triggered by roughly two weeks of production data, not by a date.
 
 ## Decisions made (grilled — do not re-litigate without a load-bearing reason)
@@ -147,7 +147,7 @@ triggered by roughly two weeks of production data, not by a date.
 - Profiling (Pyroscope), even though the local LGTM image includes it.
 - Tail sampling, and any collector processing beyond redaction and forwarding.
 - Extracting a shared Go module or npm package for instrumentation.
-- Threshold-based alert rules — `follow-ups.md` #36.
+- Threshold-based alert rules — `follow-ups.md` #37.
 
 ## Things to get right when building this
 

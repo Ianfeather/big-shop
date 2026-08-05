@@ -1,13 +1,7 @@
+/* Borderless, like the rest of the rail - see the note in
+   components/shopping-list/Recipes/index.module.css. */
 .panel {
-  background: white;
-  padding: var(--space-3);
-}
-@media (min-width: 800px) {
-  .panel {
-    box-shadow: inset 4px 0 6px -6px rgba(0, 0, 0, 0.4);
-    border-bottom: 1px solid #dfceeb;
-    border-top: 1px solid #dfceeb;
-  }
+  background: none;
 }
 
 .recipeList {

@@ -4,30 +4,32 @@
   flex-wrap: wrap;
 }
 
+/* Borderless on the one-sheet rail: it sits next to a small-caps heading, so
+   a bordered box beside it read as a stray control. */
 .toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  padding: var(--space-1);
+  padding: 0;
   outline: none;
-  border: 1px solid var(--color-primary-border);
-  border-radius: var(--radius-sm);
+  border: 0;
   background: transparent;
-  color: var(--gray-700);
+  color: var(--ink-soft);
   font-family: inherit;
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   cursor: pointer;
 }
 
 .toggle:hover {
-  border-color: var(--color-primary);
+  color: var(--ink);
 }
 
 .toggleActive {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+  color: var(--spot);
 }
 
 .toggleIcon {
@@ -37,11 +39,7 @@
 }
 
 .toggleIcon path {
-  fill: var(--gray-700);
-}
-
-.toggleActive .toggleIcon path {
-  fill: var(--color-primary);
+  fill: currentColor;
 }
 
 .count {
@@ -55,8 +53,9 @@
   flex: 1 0 100%;
   display: flex;
   flex-wrap: wrap;
-  padding-top: var(--space-1);
-  border-top: 1px solid var(--gray-100);
+  padding-top: var(--space-2);
+  margin-top: var(--space-2);
+  border-top: 1px dotted var(--rule);
 }
 
 .allPill {

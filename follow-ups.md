@@ -27,3 +27,35 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     Worth checking when this is picked up: whether the yield Unit Sizes actually exist on
     `lemon`, `lime` and `orange` yet, since `030` merged `freshly squeezed lemon juice`
     into `lemon juice` but did not add any.
+
+36. **Put the brand back into the Shopping List.** The "Cookbook" redesign (paper, ink,
+    terracotta labels) fixed the boxiness of `/list`, but it went too far the other way:
+    the page is now almost monochrome, brand purple has been reduced to a spot colour on
+    hover states, and every control is an underlined text action. It reads as considered
+    but anonymous — nothing on it says Big Shop, and there is no button with any presence.
+
+    Six places to put colour and weight back, roughly in order of how much each buys:
+
+    - **The checkbox.** It's the control you touch most on the page and it's currently a
+      grey circle that fills ink when bought. Purple on hover and on bought would put the
+      brand into the main interaction rather than into decoration.
+    - **A real primary button.** "Add" (non-recipe items) is an underlined text link and
+      "Clear list" is another; a solid purple Add would restore the button presence the
+      page lost, and give the rail a focal point.
+    - **Selected recipes in the rail.** Ticked rows are a beige block today. Purple-tinted
+      with a purple tick would visibly tie the rail to the list it generates.
+    - **The masthead count.** "2 recipes · 7 items" is grey small-caps; as a purple pill it
+      anchors the top of the page in brand colour.
+    - **Department dividers.** The list is already sorted by aisle (see
+      `DEPARTMENT_ORDER`) but never says so. Small coloured aisle headings would add
+      personality *and* surface information the sort order is silently encoding — the one
+      item here that is a feature rather than a paint job.
+    - **The empty-basket illustration.** Already the only purple on the page, now sized
+      down beside the copy. Worth deciding whether it earns a bigger role rather than
+      being the last survivor of the old palette.
+
+    Not a redesign: the one-sheet layout stands. The question is only where colour and
+    weight go back on top of it. Whatever is picked, `/dave` should be looked at in the
+    same pass — it kept its white card and its own blue palette through the redesign and
+    now looks like a different product (see the `--color-info` note in
+    `pages/dev/design-system.tsx`).

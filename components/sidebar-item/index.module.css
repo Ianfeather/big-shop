@@ -30,16 +30,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-primary);
-  border-color: var(--color-primary);
+  background: var(--ink);
+  border-color: var(--ink);
 }
 
 .checked .check::after {
   content: '';
   width: 6px;
   height: 3.5px;
-  border-left: 1.5px solid white;
-  border-bottom: 1.5px solid white;
+  border-left: 1.5px solid var(--card);
+  border-bottom: 1.5px solid var(--card);
   transform: rotate(-45deg) translate(0.5px, -1px);
 }
 
@@ -76,7 +76,7 @@
 
 .panel label {
   padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--gray-100);
+  border-bottom: 1px dotted var(--rule);
 }
 
 .panel:last-child label {
@@ -84,20 +84,20 @@
 }
 
 .panel .name {
-  font-weight: 600;
-  color: var(--gray-700);
+  font-weight: 500;
+  color: var(--ink);
 }
 
 .panel.checked label {
-  background: var(--color-primary-soft);
+  background: var(--paper-deep);
   margin: 0 calc(var(--space-2) * -1);
   padding: var(--space-2);
-  border-radius: var(--radius-sm);
+  border-radius: 2px;
   border-bottom-color: transparent;
 }
 
 .panel.checked .name {
-  color: var(--color-primary);
+  color: var(--ink);
   font-weight: 700;
 }
 

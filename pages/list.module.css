@@ -1,0 +1,30 @@
+/* Mobile tab bar (Shopping List / Create & Edit). Lived in index.module.css
+   until the homepage became the marketing page and stopped sharing anything
+   with this one. */
+.tabButtons {
+  display: flex;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: var(--space-4);
+}
+
+.tabButtons button {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  width: 50%;
+  padding: var(--space-3) 0;
+  margin-bottom: -1px;
+  outline: none;
+  cursor: pointer;
+  color: var(--ink-soft);
+}
+
+/* The selected tab is the disabled one - Tabs disables the button for the
+   panel already on screen. */
+.tabButtons button:disabled {
+  color: var(--ink);
+  border-bottom-color: var(--terracotta);
+}

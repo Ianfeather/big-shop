@@ -1,64 +1,98 @@
+/* Masthead, "Cookbook" design: paper ground, ink type, a single hairline rule
+   dividing it from the page - the same header the logged-out homepage uses.
+   Was a full-width purple band with the logo centred and the nav beneath it;
+   it's now one row, logo left, nav and account to the right, so the content
+   starts higher up the page. */
 .header {
-  padding: var(--space-5) var(--space-4) var(--space-6);
-  background: var(--color-primary);
-  position: relative;
-  overflow: hidden;
-}
-
-.header .title {
-  font-family: var(--font-heading);
-  -webkit-font-smoothing: antialiased;
-  letter-spacing: -0.05em;
-  margin-top: 0;
-  margin-bottom: 0;
-  text-align: center;
-  color: white;
-  font-size: var(--text-xl);
-}
-
-@media (min-width: 500px) {
-  .header .title {
-    font-size: var(--text-display);
-  }
-}
-
-.bold {
-  font-weight: bold;
-}
-
-.nav {
   display: flex;
-  justify-content: center;
-}
-
-.nav a, .logout {
-  color: white;
-  text-decoration: none;
-  margin: 0 var(--space-2);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) clamp(var(--space-3), 4vw, 40px);
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
 
 .logo {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 2px;
   text-decoration: none;
+  color: var(--ink);
+  margin-right: auto;
+}
+
+.header .title {
+  font-family: var(--font-heading);
+  -webkit-font-smoothing: antialiased;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--text-lg);
 }
 
 .bigShopIcon {
   fill: none;
-  stroke: #fff;
+  stroke: var(--ink);
   stroke-miterlimit: 10;
-  stroke-width: 5px;
-  width: 70px;
+  stroke-width: 6px;
+  width: 54px;
 }
 
 @media (min-width: 500px) {
+  .header .title {
+    font-size: var(--text-xl);
+  }
   .bigShopIcon {
-    width: 120px;
+    width: 64px;
   }
 }
 
-a.activeLink {
-  border-bottom: 1px solid white;
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  /* Below 640px the nav drops onto its own full-width row under the logo
+     rather than squeezing three links and the account button onto one line. */
+  order: 3;
+  width: 100%;
+  justify-content: center;
+  padding-bottom: var(--space-1);
+}
+
+.nav a {
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-size: var(--text-sm);
+  font-weight: 600;
   padding-bottom: 3px;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.nav a:hover {
+  color: var(--ink);
+}
+
+a.activeLink {
+  color: var(--ink);
+  border-bottom-color: var(--terracotta);
+}
+
+@media (min-width: 640px) {
+  .nav {
+    order: initial;
+    width: auto;
+    padding-bottom: 0;
+    gap: var(--space-4);
+    margin-right: var(--space-3);
+  }
+}
+
+.bold {
+  font-weight: bold;
 }

@@ -59,3 +59,27 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     same pass — it kept its white card and its own blue palette through the redesign and
     now looks like a different product (see the `--color-info` note in
     `pages/dev/design-system.tsx`).
+37. **Threshold-based alerting, once there are baselines to set thresholds from.**
+    Deliberately deferred when the observability stack was designed (see
+    [ADR-0007](./docs/adr/0007-observability-otel-grafana-cloud.md)): alert thresholds picked
+    before anyone knows Big Shop's actual error rate and latency distribution are usually
+    wrong in both directions, and on a project with an on-call rota of one person, an
+    alert that has been learned-to-ignore is worse than no alert.
+
+    Two rules are wanted, both symptom-based rather than cause-based:
+    - **Backend 5xx rate** above a floor, across `bigshop-api` and `bigshop-web` together.
+    - **Frontend error rate spike** from Faro.
+
+    Explicitly *not* wanted as alerts, however tempting: DB latency, cold-start frequency,
+    per-endpoint p99 regression, LLM failure rate, OpenAI spend. Those are causes you look
+    at on a dashboard *after* something fires, not things that should wake anyone up.
+
+    **The trigger is data, not a date** — roughly two weeks of production telemetry, i.e.
+    enough to know what a normal day's error rate and p99 look like. Nothing here is
+    blocked on more instrumentation; the traces, metrics and logs it needs all land with
+    the initial work.
+
+    Not deferred, and already shipped alongside the instrumentation: the synthetic
+    uptime check on `/health`, plus the fix making `/health` actually query TiDB rather
+    than unconditionally writing `ok`. That one is a binary up/down signal, so "wait for
+    baselines" never applied to it.

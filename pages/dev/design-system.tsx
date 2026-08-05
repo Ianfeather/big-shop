@@ -26,6 +26,19 @@ export const getServerSideProps: GetServerSideProps = async () => {
 
 const colorGroups = [
   {
+    title: 'Cookbook surfaces',
+    colors: [
+      { name: '--paper', value: '#faf5ee', note: 'the page canvas' },
+      { name: '--paper-deep', value: '#f2e9dd', note: 'tinted band / amount pill / selected row' },
+      { name: '--card', value: '#fffdf9', note: 'the card content sits on' },
+      { name: '--ink', value: '#241d26', note: 'type, and the primary action on these surfaces' },
+      { name: '--ink-soft', value: '#6b5f6d', note: 'secondary type' },
+      { name: '--rule', value: '#ded1c0', note: 'hairline borders and dividers' },
+      { name: '--terracotta', value: '#bc5a35', note: 'small-caps labels, active nav underline' },
+      { name: '--spot', value: '#8f4bc9', note: 'brand purple, dark enough to be type on paper' },
+    ],
+  },
+  {
     title: 'Brand',
     colors: [
       { name: '--color-primary', value: '#b870eb', note: 'the one forward action per screen' },

@@ -1,4 +1,4 @@
-import styles from './index.module.css';
+import styles from './list.module.css';
 import Tabs from '@components/layout/Tabs';
 import { useMutation } from '@tanstack/react-query';
 import { ChangeEvent, useState, useEffect, useRef } from 'react';
@@ -214,7 +214,13 @@ const List = () => {
     <Layout>
       <Tabs buttonsClassName={styles.tabButtons} maxWidth={800}>
         <MainContent name="Shopping List">
-          <ShoppingList clearList={clearList} shoppingList={shoppingList} extras={extras} buyIngredient={buyIngredient} />
+          <ShoppingList
+            clearList={clearList}
+            shoppingList={shoppingList}
+            extras={extras}
+            buyIngredient={buyIngredient}
+            recipeCount={Object.values(recipeList).filter(Boolean).length}
+          />
         </MainContent>
         <Sidebar name="Create & Edit">
           <RecipeSidebar recipeList={recipeList} addExtraItem={addExtraItem} handleRecipeSelect={handleRecipeSelect}/>

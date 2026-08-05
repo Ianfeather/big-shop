@@ -41,6 +41,9 @@ const Item = ({type, name, item, bought = false, handleClick}: ItemProps) => {
           <span className={styles.checkMark}></span>
         </span>
         <span className={styles.itemName}>{name}</span>
+        {/* Leader dots tie the name to its amount across the row - the job the
+            amount's background pill used to do, without drawing another box. */}
+        <span className={styles.leader} aria-hidden="true" />
         {amount && (
           <span className={styles.amount}>{amount}</span>
         )}

@@ -26,6 +26,9 @@ const InnerApp = ({ Component, pageProps }: Pick<AppProps, 'Component' | 'pagePr
 }
 
 export default function App({ Component, pageProps, router }: AppProps) {
+  // '/' is the only route a logged-out visitor may see - it's the marketing
+  // homepage. Everything else renders through InnerApp, which bounces them
+  // back to it.
   const behindAuth = router.route !== '/';
 
   // Created once per app instance (not per render) - every hooks/use-*.ts

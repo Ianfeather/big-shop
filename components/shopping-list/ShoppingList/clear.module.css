@@ -1,9 +1,30 @@
 .container {
   display: flex;
-  justify-content: center;
-  padding-top: var(--space-7);
+  justify-content: flex-end;
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--rule);
 }
 
-.clear {
-  margin-right: var(--space-3);
+.action {
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+
+.action:hover {
+  color: var(--spot);
+}
+
+.danger:hover {
+  color: var(--color-danger);
 }

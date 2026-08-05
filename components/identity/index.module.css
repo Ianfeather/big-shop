@@ -1,9 +1,6 @@
-.authButton {
-  min-width: 200px;
-  justify-content: center;
-  margin-bottom: var(--space-4);
-}
-
+/* Only Logout is left in components/identity - the homepage's Log in / Get
+   started buttons are its own, styled to the marketing page (see
+   hooks/use-login.ts for the redirect calls they share). */
 .pointer {
   cursor: pointer;
 }

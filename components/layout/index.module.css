@@ -5,24 +5,31 @@
 
 .grid {
   display: grid;
+  gap: clamp(var(--space-4), 4vw, var(--space-6));
 }
 
 .container {
-  background-color: white;
-  border-radius: var(--radius-md);
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-3);
 }
 
+/* No card. The page is one sheet of paper and structure comes from rules and
+   space instead of borders - a card here put a box inside a box, which is what
+   made the Shopping List read as two slabs. */
 .mainContentContainer {
-  background-color: white;
-  padding: var(--space-4);
+  padding: var(--space-4) 0;
   position: relative;
 }
 .fullHeight {
-  min-height: 100vh;
+  min-height: 70vh;
 }
 
 .sideBarContainer {
-  padding-top: var(--space-4);
+  display: grid;
+  gap: var(--space-6);
+  align-content: start;
+  padding: var(--space-4) 0;
 }
 
 @media (min-width: 800px) {
@@ -31,11 +38,15 @@
     margin: 0 auto;
   }
   .container {
-    background-color: transparent;
-    max-width: 1200px;
-    margin: 0 auto;
+    padding: var(--space-4) var(--space-4) var(--space-6);
   }
   .grid {
-    grid-template-columns: 1fr 280px;
+    grid-template-columns: minmax(0, 1fr) 260px;
+  }
+  /* The single hairline that separates the two columns - the only division
+     between them, in place of two bordered panels. */
+  .sideBarContainer {
+    border-left: 1px solid var(--rule);
+    padding-left: clamp(var(--space-4), 3vw, var(--space-5));
   }
 }

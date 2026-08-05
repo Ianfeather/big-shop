@@ -18,8 +18,7 @@ const UserMenu = ({ className, user }: UserMenuProps) => {
 
   return (
     <div className={`${styles.userMenu} ${isOpen ? styles.open : ''}`}>
-      <div className={styles.userBackground} />
-      <button className={styles.userMenuTrigger} onClick={toggleMenu}>
+      <button className={styles.userMenuTrigger} onClick={toggleMenu} aria-expanded={isOpen} aria-label="Account menu">
         <UserIcon className={styles.userIcon} />
       </button>
       {

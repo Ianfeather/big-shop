@@ -7,3 +7,21 @@ package = "@netlify/plugin-nextjs"
 
 [build.environment]
   GO_VERSION = "1.23"
+
+# TEMPORARY - Phase 0 probe for specs/api-hosting-migration.md. Delete this
+# branch once the question is answered; nothing should merge with it.
+#
+# Mirrors the exact rewrite the migration proposes (/api/bigshop/*, status 200,
+# force) but points at postman-echo.com, which reflects the request it received.
+# That is the only way to find out whether Netlify forwards Authorization to an
+# external origin: the docs do not say, and the one forum thread asking was
+# closed without an answer.
+#
+# /api/bigshop/* is unused today and does not collide with the Next.js routes
+# under /api (parse-recipe-url, parse-recipe-text, recipe-image, dave/chat,
+# dev/openapi-spec), so this cannot affect anything that currently works.
+[[redirects]]
+  from = "/api/bigshop/*"
+  to = "https://postman-echo.com/:splat"
+  status = 200
+  force = true

@@ -1,26 +1,16 @@
 #!/usr/bin/env bash
+# Netlify's build command (netlify.toml). It builds the Next.js site and
+# nothing else.
+#
+# It used to also run `go fmt`, `go test` and the openapi.yaml/api.d.ts drift
+# checks, because Netlify's deploy build was the only place they ran at all.
+# They now live in .github/workflows/ci.yml's `go` job, which runs on every pull
+# request *and* on pushes to master - so they no longer depend on a Netlify
+# deploy happening, and no longer need a Go toolchain provisioned here.
+#
+# See docs/adr/0006-go-api-leaves-netlify-functions.md: the Go API is moving to
+# Fly.io, deployed by .github/workflows/deploy-api.yml.
 
 set -e
 
-check_drift() {
-	local committed_file=$1 regen_cmd=$2 regen_hint=$3
-	echo "Checking $committed_file is up to date..."
-	if ! diff -u "$committed_file" <(eval "$regen_cmd"); then
-		echo "$committed_file is out of date. Regenerate it with:"
-		echo "  $regen_hint"
-		exit 1
-	fi
-}
-
 npm run package
-cd netlify-functions/recipes
-go fmt ./...
-go test ./... -v
-
-check_drift ../../docs/openapi.yaml "go run . openapi" \
-	"cd netlify-functions/recipes && go run . openapi > ../../docs/openapi.yaml"
-
-cd ../..
-
-check_drift types/api.d.ts "npx openapi-typescript docs/openapi.yaml" \
-	"npm run generate:api-types"

@@ -1,7 +1,15 @@
 name: CI
 
+# `push: branches: [master]` is load-bearing, not belt-and-braces. The Go
+# checks below used to run inside Netlify's deploy build (build.sh), which fired
+# on every push to master; that is the guarantee they are being moved off. The
+# `required checks` ruleset gates merging a PR, but a direct push to master
+# bypasses it entirely - so without this trigger, a push straight to master
+# would run no checks at all.
 on:
   pull_request:
+  push:
+    branches: [master]
   workflow_dispatch:
 
 jobs:
@@ -34,3 +42,95 @@ jobs:
 
       - name: Test
         run: npm run test
+
+  # The Go API's checks, moved here from build.sh - which is to say, off
+  # Netlify's deploy build, where they were the only thing running them. The
+  # API leaves Netlify Functions for Fly (docs/adr/0006-...), so build.sh stops
+  # having a Go toolchain to run them with.
+  #
+  # Deliberately a separate job from build-lint-test rather than more steps on
+  # it: it needs Go and not Node, and the two have no ordering between them.
+  #
+  # ACTION REQUIRED: add `go` to the `required checks` repository ruleset. It
+  # matches on job name and currently lists only `build-lint-test` and `e2e`,
+  # so until it is updated this job gates nothing on merge - CLAUDE.md's "a
+  # check that never reports is not the same as a check that fails", and the
+  # reason it says to update the ruleset in the same change.
+  #
+  # The gap is worse than a missing gate, because deploy-api.yml keys off this
+  # whole workflow's conclusion. A red `go` job merged through the un-updated
+  # ruleset silently stops the API deploying while Netlify goes on shipping the
+  # site from that same commit - a frontend and an API drifting apart, with no
+  # red required check anywhere to say so.
+  go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: netlify-functions/recipes
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Matches go.mod's `go 1.23.0` and the Dockerfile's build stage.
+          go-version: '1.23'
+          cache-dependency-path: netlify-functions/recipes/go.sum
+
+      # `gofmt -l`, not `go fmt ./...`: the latter *rewrites* the files and
+      # exits 0 regardless, so as a CI gate it passes unconditionally. It has
+      # been a no-op in build.sh all along. This one lists the files that need
+      # formatting and fails if the list is non-empty.
+      - name: Format
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./... -v
+
+      # docs/openapi.yaml is generated from app.go's route registrations, and
+      # types/api.d.ts from it in turn. Both are committed, so both can drift -
+      # notably if main.go's basePath changes, which is exactly what this
+      # migration did.
+      - name: Check docs/openapi.yaml is up to date
+        run: |
+          if ! diff -u ../../docs/openapi.yaml <(go run . openapi); then
+            echo "docs/openapi.yaml is out of date. Regenerate it with:"
+            echo "  cd netlify-functions/recipes && go run . openapi > ../../docs/openapi.yaml"
+            exit 1
+          fi
+
+      # Needs Node, but belongs to this job: it checks the artefact generated
+      # from the one immediately above, and running it here keeps the whole
+      # generated-file chain failing in one place.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # openapi-typescript is a pinned devDependency. Installing it rather than
+      # letting `npx` fetch whatever is newest matters: a different generator
+      # version emits different output, which would fail this check as drift
+      # when the committed file is in fact exactly what `npm run
+      # generate:api-types` produces locally.
+      - name: Install dependencies
+        working-directory: ${{ github.workspace }}
+        run: npm ci
+
+      - name: Check types/api.d.ts is up to date
+        working-directory: ${{ github.workspace }}
+        run: |
+          if ! diff -u types/api.d.ts <(npx openapi-typescript docs/openapi.yaml); then
+            echo "types/api.d.ts is out of date. Regenerate it with:"
+            echo "  npm run generate:api-types"
+            exit 1
+          fi

@@ -83,6 +83,21 @@ describe('parse-recipe-url handler', () => {
     });
   });
 
+  // An empty Recipe reaching the form looks like the page had no ingredients
+  // rather than like the extraction failed - follow-ups.md #40.
+  it('fails visibly rather than returning a recipe with no ingredients', async () => {
+    (fetch as unknown as Mock).mockResolvedValue({ text: async () => '<html><body>hello</body></html>' });
+    mockedExtractRecipe.mockResolvedValue({ name: 'Something', ingredients: [], method: '', tags: [] });
+    const res = mockRes();
+
+    await handler(mockReq({ method: 'POST', body: { url: 'https://example.com/recipe' } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'No ingredients could be read from that page. Try another link, or use Enter Manually.'
+    });
+  });
+
   it('returns a 500 with the error message when fetching/extraction fails', async () => {
     (fetch as unknown as Mock).mockRejectedValue(new Error('network down'));
     const res = mockRes();

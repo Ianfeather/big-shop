@@ -57,6 +57,12 @@ UPDATE `ingredient` SET display_unit_id = (SELECT id FROM `unit` WHERE name = ''
 WHERE name IN ('Onion', 'Carrot');
 UPDATE `ingredient` SET display_unit_id = (SELECT id FROM `unit` WHERE name = 'tin')
 WHERE name = 'Chopped Tomatoes';
+-- Mirrors migration 027, which gave every ground spice a teaspoon Display Unit
+-- in production. It is the one case where a Display Unit is an Absolute Unit
+-- reached through a density, and so the one that produces fractional totals -
+-- the shape behind follow-ups.md #39's "4.444444 teaspoon".
+UPDATE `ingredient` SET display_unit_id = (SELECT id FROM `unit` WHERE name = 'teaspoon')
+WHERE name = 'Black Pepper';
 
 -- Marks these as human-chosen so classification leaves them alone, mirroring
 -- migration 028. Inline for the same reason as unit.kind: 028 runs before any

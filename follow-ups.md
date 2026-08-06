@@ -243,3 +243,25 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     (asserted by `Form.test.tsx:201`). The client would dutifully refetch, hit the stale
     edge copy, and the new Unit would stay missing from autosuggest — looking exactly like
     a frontend cache bug, with the frontend innocent.
+
+45. **The API's deploy gate does not include e2e.**
+    `.github/workflows/deploy-api.yml` is gated on the `CI` workflow succeeding
+    (`workflow_run`), which is what
+    [`specs/api-hosting-migration.md`](./specs/api-hosting-migration.md)'s Phase 2 asked
+    for. `e2e.yml` is a separate workflow that a `workflow_run` on `CI` cannot see, so
+    merging requires all three checks while deploying the API requires only the CI ones.
+
+    The gap is narrower than it first looks. Every commit reaching `master` goes through a
+    pull request where every required check is green — a direct push is *rejected*, not
+    merely ungated (see CLAUDE.md). What is left is this: the ruleset is not "strict", so
+    the merge commit need not be the commit the suites ran against. `ci.yml` re-runs on
+    that merge commit; `e2e` does not. So a semantic conflict between two independently
+    green branches could deploy an API that e2e would have caught.
+
+    Not fixed because the obvious fix is worse than the problem. `workflow_run` with
+    `workflows: [CI, E2E]` fires when *either* completes, not both, so gating on both means
+    the deploy job polling the other workflow's conclusion through the API and
+    re-implementing a join GitHub does not offer. Cheaper options if this ever bites: make
+    the ruleset strict (at the cost of rebasing on every unrelated push), or fold `e2e`
+    into `ci.yml` as a second job, which would turn the whole thing into a one-line
+    `needs:` — and would also mean updating the ruleset's job names.

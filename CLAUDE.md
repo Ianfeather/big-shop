@@ -232,11 +232,25 @@ Renaming either job in its workflow file silently breaks the gate — the
 ruleset matches on job name, and a check that never reports is not the same
 as a check that fails. Update the ruleset in the same change.
 
-Two things the ruleset deliberately does *not* do. It is not "strict", so a
+One thing the ruleset deliberately does *not* do: it is not "strict", so a
 branch does not have to be up to date with `master` before merging — that
-would mean rebasing on every unrelated push. And it does not require a pull
-request, so a direct push to `master` still bypasses both suites entirely;
-the gate is on merging a PR, not on changing the branch.
+would mean rebasing on every unrelated push.
+
+**A direct push to `master` is rejected, not merely ungated.** This file used
+to claim the opposite — that because the ruleset does not require a pull
+request, `git push origin master` bypassed both suites, and the gate was only
+on merging. It isn't: required status checks apply to the push as well, so the
+push is refused outright with
+
+```
+remote: - 2 of 2 required status checks are expected.
+```
+
+because no check has ever reported against that commit. The practical
+consequence is that **every commit reaching `master` goes through a pull
+request**, including a one-line fix and including commits already sitting on a
+local `master` that was never pushed — those have to be carried in on a branch
+like anything else.
 
 Evals:
 ```bash

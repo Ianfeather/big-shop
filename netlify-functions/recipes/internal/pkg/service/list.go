@@ -330,7 +330,7 @@ func ApplyDisplayUnits(items map[string]*common.ListIngredient, units UnitCatalo
 				continue
 			}
 			converted := common.Amount{
-				Quantity: formatDisplayQuantity(base/display, info.DisplayUnit, units),
+				Quantity: formatShoppingQuantity(base/display, info.DisplayUnit, units),
 				Unit:     info.DisplayUnit,
 			}
 			// The bracket exists to expose an assumption - a Unit Size, which is
@@ -382,21 +382,96 @@ func unitsPerBase(unit string, units UnitCatalog, info IngredientInfo) (float64,
 	return 0, false
 }
 
-// formatDisplayQuantity rounds a converted total for display.
+// RoundAmountsForShopping rewrites every Amount on the list at the precision a
+// shopper can act on. Applied at read time, after Display Units, so it happens
+// exactly once - at the end, on the numbers a human is about to read - and the
+// stored totals stay exact for any further combining (follow-ups.md #39).
 //
-// A Relative Display Unit rounds **up to a whole**: you can't buy 1.5 tins or
-// 1.5 chicken breasts, so a fraction is never a purchasable instruction, and
-// rounding up means the cook is never left short. An Absolute one keeps its
-// natural precision - nobody wants weights rounded to half a kilo.
-func formatDisplayQuantity(quantity float64, unit string, units UnitCatalog) string {
-	if units.Get(unit).IsAbsolute() {
-		return formatQuantity(quantity)
+// A quantity it can't read is left exactly as it is: "a handful" reaches the
+// shopper verbatim rather than vanishing, the same contract as ParseQuantity.
+func RoundAmountsForShopping(items map[string]*common.ListIngredient, units UnitCatalog) {
+	for _, item := range items {
+		for i, amount := range item.Amounts {
+			item.Amounts[i].Quantity = roundQuantityForShopping(amount.Quantity, amount.Unit, units)
+			// The bracketed working ("2 tin (800 gram)") is read by the same
+			// person and deserves the same treatment.
+			if amount.BaseQuantity != "" {
+				item.Amounts[i].BaseQuantity = roundQuantityForShopping(amount.BaseQuantity, amount.BaseUnit, units)
+			}
+		}
 	}
-	whole := math.Ceil(math.Round(quantity*1e6) / 1e6)
-	if whole < 1 {
-		whole = 1
+}
+
+func roundQuantityForShopping(raw, unit string, units UnitCatalog) string {
+	quantity, ok := ParseQuantity(raw)
+	if !ok {
+		return raw
 	}
-	return formatQuantity(whole)
+	return formatShoppingQuantity(quantity, unit, units)
+}
+
+// formatShoppingQuantity renders a quantity the way someone standing in a shop
+// can act on it. A Shopping List is an instruction to a person, not the result
+// of a calculation: 10g of ground coriander is 4.444444 teaspoons, which is
+// arithmetically honest and useless, because nobody measures four and four
+// ninths of anything into a trolley.
+//
+// The Unit picks the granularity, and anything not weighed on a scale rounds
+// **up**, because rounding down means going home without enough:
+//
+//   - A Relative Unit - a tin, a clove, a bare count - rounds up to a whole.
+//     You can't buy 1.75 tins, and a total under one still means buying one.
+//   - A measuring-spoon Unit rounds up to a quarter: "0.25 teaspoon" is a
+//     quantity a cook recognises and can measure, where "0.3 teaspoon" is not.
+//   - A weight or volume rounds to nearest, at a precision scaled to its size -
+//     a gram either way changes no purchase. Whole numbers from 10 up
+//     (63.33 gram -> 63 gram), one decimal below that (1.04 kilogram ->
+//     1 kilogram), and two significant figures under 1, so that 0.4 kilogram
+//     stays 0.4 rather than rounding away to nothing.
+func formatShoppingQuantity(quantity float64, unit string, units UnitCatalog) string {
+	u := units.Get(unit)
+	v := math.Round(quantity*1e6) / 1e6
+
+	// Zero and (defensively) anything negative have no sensible rounding, and
+	// forcing them up to a whole would invent an item to buy.
+	if v <= 0 {
+		return formatQuantity(v)
+	}
+
+	if !u.IsAbsolute() {
+		return formatQuantity(math.Max(1, math.Ceil(v)))
+	}
+
+	if isSpoonScale(u) {
+		return formatQuantity(math.Ceil(v*4) / 4)
+	}
+
+	switch {
+	case v >= 10:
+		return formatQuantity(math.Round(v))
+	case v >= 1:
+		return formatQuantity(math.Round(v*10) / 10)
+	default:
+		return formatQuantity(roundToSignificantFigures(v, 2))
+	}
+}
+
+// isSpoonScale reports whether one of this Unit is a measuring spoon rather than
+// a jug or a scale - the case where quarters read better than decimals. It is
+// deliberately a size test rather than a list of names: any small volume Unit an
+// import introduces ("dessertspoon") behaves like the ones already in the
+// catalog. The dimension's own base is excluded, since you measure a quarter
+// teaspoon but never a quarter millilitre.
+func isSpoonScale(u UnitInfo) bool {
+	return u.Kind == KindVolume && u.Factor > 1 && u.Factor <= 50
+}
+
+func roundToSignificantFigures(v float64, digits int) float64 {
+	if v == 0 {
+		return 0
+	}
+	scale := math.Pow(10, float64(digits-1)-math.Floor(math.Log10(math.Abs(v))))
+	return math.Round(v*scale) / scale
 }
 
 // GenerateShoppingList recomputes every Ingredient Item for the given set of Recipes and
@@ -502,6 +577,9 @@ func GetShoppingList(userID string, db *sql.DB) (*common.ShoppingList, error) {
 		return nil, err
 	}
 	ApplyDisplayUnits(ingredients, units, ingredientCatalog)
+	// Last, so every Amount is rounded once, in its final Unit, rather than
+	// each conversion rounding on the way through.
+	RoundAmountsForShopping(ingredients, units)
 
 	list := &common.ShoppingList{
 		Recipes:     recipes,

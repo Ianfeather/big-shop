@@ -224,6 +224,7 @@ test.describe('shopping list unit sizes and display units', () => {
   const weightRecipe = `E2E Weight Recipe ${runId}`;
   const tinRecipe = `E2E Tin Recipe ${runId}`;
   const spoonRecipe = `E2E Spoon Recipe ${runId}`;
+  const pinchRecipe = `E2E Pinch Recipe ${runId}`;
   let ids: number[] = [];
 
   test.beforeAll(async ({ request }) => {
@@ -244,6 +245,9 @@ test.describe('shopping list unit sizes and display units', () => {
       ]}),
       await createRecipe(request, { name: spoonRecipe, ingredients: [
         { name: 'Chopped Tomatoes', quantity: '200', unit: 'gram' },
+      ]}),
+      await createRecipe(request, { name: pinchRecipe, ingredients: [
+        { name: 'Black Pepper', quantity: '1', unit: 'gram' },
       ]}),
     ];
   });
@@ -298,7 +302,25 @@ test.describe('shopping list unit sizes and display units', () => {
     await selectOnly(page, request, countRecipe, tinRecipe);
 
     // 1 tsp (5ml) + 1 tbsp (15ml) at 0.5 g/ml = 10g. Both derive from the one
-    // curated density rather than needing a Unit Size per spoon.
-    await expect(page.getByRole('checkbox', { name: 'Black Pepper' })).toContainText('10 gram');
+    // curated density rather than needing a Unit Size per spoon - then come
+    // back out as spoons, since that's Black Pepper's Display Unit, with the
+    // weight they were added up in kept alongside.
+    const pepper = page.getByRole('checkbox', { name: 'Black Pepper' });
+    await expect(pepper).toContainText('4 teaspoon');
+    await expect(pepper).toContainText('10 gram');
+  });
+
+  // follow-ups.md #39: the list used to print the raw conversion, so a spice
+  // could ask for "4.444444 teaspoon". Rounding is Go-side (the frontend has no
+  // Unit Catalog to know a spoon from a tin), so only a run through the real API
+  // shows what a shopper actually sees.
+  test('a fractional spoon total is rounded to something you can measure', async ({ page, request }) => {
+    await selectOnly(page, request, pinchRecipe);
+
+    // 1g at 0.5 g/ml is 0.4 tsp. A quarter spoon is measurable and 0.4 isn't,
+    // and it rounds up rather than to nearest so the cook is never left short.
+    const pepper = page.getByRole('checkbox', { name: 'Black Pepper' });
+    await expect(pepper).toContainText('0.5 teaspoon');
+    await expect(pepper).not.toContainText('0.4');
   });
 });

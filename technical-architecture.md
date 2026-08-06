@@ -49,7 +49,7 @@ For authenticated endpoints, copy the `Authorization` header from browser dev to
 | Route | File | Purpose |
 |-------|------|---------|
 | `/api/recipe-image` | `recipe-image.mjs` | GPT-4 Vision: photo → structured recipe JSON (async, polled) |
-| `/api/parse-recipe-url` | `parse-recipe-url.js` | Fetches a recipe URL's raw HTML and makes one LLM call to extract name/ingredients/method/vegetarian-ness — works against any recipe site, replacing the older per-site DOM-selector-plus-regex scrapers (formerly `pages/api/third-parties/*`, now deleted) |
+| `/api/parse-recipe-url` | `parse-recipe-url.js` | Fetches a recipe URL, reduces the page to the recipe (`lib/recipe-import/url.js`: schema.org JSON-LD where present, else the page's visible text) and makes one LLM call to extract name/ingredients/method/vegetarian-ness — works against any recipe site, replacing the older per-site DOM-selector-plus-regex scrapers (formerly `pages/api/third-parties/*`, now deleted). 422s rather than returning a recipe with no ingredients |
 | `/api/parse-recipe-text` | `parse-recipe-text.js` | LLM-parses freeform multiline ingredient text (Manual Entry's bulk paste box) into structured ingredient lines |
 | `/api/dave/chat` | `dave/chat.js` | GPT-3.5-turbo chat with tool calling (search/get/create shopping list) |
 

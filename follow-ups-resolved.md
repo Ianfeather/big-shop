@@ -104,3 +104,80 @@ cross-references between entries (e.g. #9 references #16).
     - **Global nav** — the active-link underline is `--color-primary`, was `--terracotta`. `/list`'s mobile tab bar followed it: same idiom one row below, so two accent colours there read as a mistake.
 
     Not done in this pass, and deliberately: `/dave`. The original item asked for it to be looked at alongside; it's carried forward as its own entry in `follow-ups.md` instead.
+
+39. ~~Shopping List amounts are far more precise than anyone can shop
+    (`4.444444 teaspoon (10 gram)`).~~ **Resolved** — one rounding pass,
+    `RoundAmountsForShopping` in `netlify-functions/recipes/internal/pkg/service/list.go`,
+    applied in `GetShoppingList` immediately after `ApplyDisplayUnits` and nowhere
+    else. Both decisions the item asked for:
+
+    - **Where.** The Go API rather than `Item.tsx`'s `formatAmounts`, which the item
+      leaned towards. The rule can't be blind, and everything that stops it being
+      blind — whether a Unit is Relative, its Kind, its Factor — lives in the Unit
+      Catalog, which the frontend does not have: `/units` returns `{id, name}` only,
+      so the display layer would have had to hardcode a list of unit names to know a
+      tin rounds differently from a gram. The "round once, at the end" property the
+      item actually wanted is kept by *where in the read* it runs, not by which
+      process runs it: it is the last thing to touch the Amounts before they're
+      serialised, and the stored totals are untouched.
+    - **The rule.** Unit picks the granularity, and anything not weighed on a scale
+      rounds **up**, because rounding down means going home without enough. A
+      Relative Unit (tin, clove, bare count) to a whole, minimum one. A
+      measuring-spoon Unit to a quarter — `4.444444 teaspoon` → `4.5`, `0.2222` →
+      `0.25`, since a cook can measure a quarter spoon and cannot measure 0.3 of one.
+      A weight or volume to nearest, at a precision scaled to its size: whole numbers
+      from 10 up (`63.333333 gram` → `63`), one decimal below that (`1.04 kilogram` →
+      `1`), and two significant figures under 1, so `0.44444 kilogram` → `0.44` and
+      `0.041666` → `0.042` rather than either rounding away to zero.
+
+    "Measuring spoon" is a size test — a volume Unit with a Factor above 1 and up to
+    50 — not a list of names, so a `dessertspoon` arriving via an import behaves like
+    the teaspoon and tablespoon already in the catalog. Millilitre is excluded by the
+    `> 1`: you measure a quarter teaspoon, never a quarter millilitre.
+
+    `formatDisplayQuantity` is gone, folded into the new `formatShoppingQuantity` —
+    its round-up-to-a-whole rule for Relative Display Units was the same rule, and
+    the item was right that it was the precedent to follow rather than a new
+    principle. That rule now also reaches Amounts that were never converted (a
+    `1.75 tin` total that was already in tins). The bracketed working is rounded too,
+    in its own Unit, since the same person reads it. An unreadable quantity ("a
+    handful") is still passed through verbatim, per `ParseQuantity`'s contract, and
+    zero is not rounded up to one — that would invent an item to buy.
+
+40. ~~URL import returns an empty `ingredients` array for some recipe sites.~~
+    **Resolved** — reproduced exactly as reported on the BBC Good Food URL, and it
+    was (a), the extract step, not the LLM. Two compounding causes in
+    `lib/recipe-import/url.js`, both fixed:
+
+    - **The JSON-LD was being thrown away.** `NOISE_SELECTOR` stripped every
+      `<script>`, which is where a site's schema.org `Recipe` lives. That page
+      publishes a perfect one — name, all six ingredients, both method steps.
+    - **The truncation cut before the ingredients.** What was left was *markup*,
+      mostly class attributes: 165,455 characters, with the recipe name at ~80,000
+      and the ingredients at ~108,000, against a 60,000-character limit. The model
+      was handed 60KB of navigation and asked for a recipe, so an empty
+      `ingredients` array was a reasonable answer to the question it was actually
+      asked.
+
+    `htmlToInput` now prefers the page's JSON-LD `Recipe`, rendered as a compact
+    plain-text recipe, and falls back to the page's *visible text* (plus its
+    `<title>`) rather than its markup. The same page is 6,109 characters of visible
+    text, so the limit stops being something a real page can reach — that fallback
+    alone would have fixed this URL, which is why both landed rather than just the
+    JSON-LD path. The JSON-LD reader handles the shapes sites actually publish:
+    `@graph` nesting, `@type` as an array, `HowToSection`-wrapped steps, markup
+    inside the JSON strings, and a malformed block sitting next to a good one. A
+    `Recipe` node carrying no ingredients falls through to the page text rather than
+    being trusted.
+
+    Also fixed, and the reason this was worse than a visible failure: an extraction
+    with no ingredients now 422s from `pages/api/parse-recipe-url.ts` with a message
+    the New Recipe page already knows how to show, instead of opening an empty
+    Recipe form that looks like the page had no ingredients.
+
+    Regression test where the item said it belonged — `lib/recipe-import/url.test.ts`,
+    against a verbatim saved copy of the real page in
+    `lib/recipe-import/__fixtures__/`. It is checked in at full size (533KB) on
+    purpose: the bug *was* the page's size, so a trimmed fixture would pass against
+    the broken code it exists to catch. Verified end to end against the live URL with
+    a real extraction call, which now returns all six ingredients and the method.

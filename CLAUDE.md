@@ -44,7 +44,7 @@ This runs `scripts/dev-full.sh`, which:
   mode, `DISABLE_AUTH=true`, hot-reloaded with `air` — edit any `.go` file and
   it rebuilds automatically) services.
 - Waits for the API's `/health` endpoint, then runs Next.js natively on the
-  host (not dockerized — keeps fast refresh) on port 3001 by default.
+  host (not dockerized — keeps fast refresh) on port 3000 by default.
 - Ports are overridable if they clash with another checkout/worktree:
   `DB_PORT`, `API_PORT`, `WEB_PORT` env vars (see the script for defaults).
 - The seeded dev user is `local-dev-user`, already linked to account id 1

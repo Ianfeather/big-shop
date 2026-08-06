@@ -68,6 +68,9 @@ The Unit an Ingredient's combined total is *shown* in on the Shopping List, as d
 **Amount**:
 A quantity paired with a Unit ("400 gram", "2 tablespoon"). An Ingredient Line carries exactly one; an Ingredient Item carries one or more.
 
+**Shopping Precision**:
+The rounding a Shopping List Amount is shown at — the list is an instruction to someone in a shop, not the result of a calculation, so "4.444444 teaspoon" is arithmetically honest and useless. The Unit picks the granularity, and anything not weighed on a scale rounds *up*, since rounding down means going home without enough: a Relative Unit to a whole (you can't buy 1.75 tins), a measuring spoon to a quarter (a cook can measure ¼ tsp, not 0.3 tsp), and a weight or volume to nearest at a precision scaled to its size — never so coarse that a real amount rounds away to zero. Applied once, when the list is read, so the stored totals stay exact.
+
 **Department**:
 The aisle-style grouping a Shopping List Item is shown under (e.g. "vegetables", "meat and fish", "other"). One per Ingredient (many-to-one), not many-to-many — the join table (`ingredient_department`) is looser than this rule today, which is a defect (an Ingredient with two Department rows would silently duplicate that Ingredient Line wherever it's read), not an intended feature.
 
@@ -76,7 +79,7 @@ Populating a new Recipe's name/Ingredient Lines/Method/vegetarian Tag from an ex
 _Avoid_: Scraping (see URL Import — the old per-site scraper approach this replaced)
 
 **Import Source** — URL Import, Photo Import, Manual Entry:
-- **URL Import**: user supplies a recipe's web address; the server fetches and strips its raw HTML and makes one LLM call to extract name/ingredients/method/vegetarian-ness. Works against any recipe site (`pages/api/parse-recipe-url.js`) — this fully replaced the older approach of a hand-written DOM-selector-plus-regex scraper per named site (Simply Recipes, BBC Good Food, etc., formerly under `pages/api/third-parties/`, now deleted).
+- **URL Import**: user supplies a recipe's web address; the server fetches the page, reduces it to the recipe (its schema.org JSON-LD where the site publishes one, otherwise the page's visible text), and makes one LLM call to extract name/ingredients/method/vegetarian-ness. Works against any recipe site (`pages/api/parse-recipe-url.js`) — this fully replaced the older approach of a hand-written DOM-selector-plus-regex scraper per named site (Simply Recipes, BBC Good Food, etc., formerly under `pages/api/third-parties/`, now deleted). An import that finds no ingredients fails visibly rather than opening an empty Recipe form.
 - **Photo Import**: user uploads a photo of a recipe; GPT-4 Vision extracts it as a Processing Job, since the extraction call runs too long for a synchronous Lambda response.
 - **Manual Entry**: user fills fields directly — but can still paste freeform multiline ingredient text into a bulk box that gets LLM-parsed into structured Ingredient Lines, rather than typing one row per ingredient.
 _Avoid_: Camera (UI label for Photo Import's tab; "Photo Import" is the canonical term)

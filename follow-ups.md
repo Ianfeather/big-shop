@@ -2,7 +2,7 @@
 
 Small defects and doc-drift found while building `CONTEXT.md` from the codebase (2026-07-13). Not designed here — just flagged for later action.
 
-Items 1–30, 32, 33 and 36 have all been resolved — see [`follow-ups-resolved.md`](./follow-ups-resolved.md) for the full history (numbering preserved for cross-references between entries).
+Items 1–30, 32, 33, 36, 39 and 40 have all been resolved — see [`follow-ups-resolved.md`](./follow-ups-resolved.md) for the full history (numbering preserved for cross-references between entries).
 
 Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are real but deliberately not being fixed, so they are not queued work.
 
@@ -66,73 +66,32 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     for Dave's chat UI (see its note in `pages/dev/design-system.tsx`), so this pass
     either finds it a real role or deletes the token.
 
-39. **Shopping List amounts are far more precise than anyone can shop.** The list
-    currently renders things like `4.444444 teaspoon (10 gram)` and `2.222222 teaspoon
-    (5 gram)` — the raw result of a unit conversion, printed in full. Nobody measures
-    4.444444 of anything into a trolley.
+    Note from Ian: I think it makes more sense to make dave a modal or integrate it into the other pages rather than it being its own page.
 
-    Two separate decisions hide in here, which is why this is its own item rather than a
-    quick `toFixed`:
+41. **Backfill the Method on existing Recipes — the 80 with no page to re-read.**
+    Reduced rather than resolved. The automatable half is done: `scripts/backfill-recipe-method.mjs`
+    re-read every Recipe carrying a `remote_url` through the app's own URL Import
+    path and generated [`migrations/031_backfill_recipe_method.sql`](./migrations/031_backfill_recipe_method.sql),
+    **56 methods**, verified byte-exact against a local copy of production and applied
+    to production on 2026-08-06. See `docker/README.md` for how to run it. What is left
+    is what no script can reach:
 
-    - **How much precision to display.** One decimal place is probably right as a floor
-      (`4.4 teaspoon`), but the rule can't be blind: `0.25 teaspoon` is a real quantity a
-      cook recognises and `0.3 teaspoon` isn't, and rounding `1.04 kg` to `1 kg` is fine
-      where rounding `0.4 kg` to `0` is a bug. Halves and quarters read better than
-      decimals for spoons and cups.
-    - **When to round *up* instead of to-nearest.** For anything you buy as whole units —
-      spoons of a spice you're measuring out, tins, lemons — rounding down means going
-      home without enough. The existing Display Unit work already rounds tins up (see the
-      e2e test "a weight is shown in tins, rounded up to a whole one"), so there is a
-      precedent to follow rather than a new principle to invent.
+    - **68 Recipes have no URL at all**, and no source but the cook. Six of those use
+      `remote_url` for a cookbook rather than a link ("From the Pie Room cookbook",
+      "Deliciously Healthy Fertility by Ro Huntriss"), which is a source, just not a
+      fetchable one. Every one of the 68 is listed by name in 031's footer.
+    - **12 have a URL that could not be read** — dead links, paywalls and bot
+      protection, one page (Yorkshire Puddings) that genuinely carries no method.
+      Also listed by name in 031's footer, with the reason for each. Worth a second
+      look before hand-typing: some may be fixable in the extractor rather than in
+      the catalog, the way #40 was.
 
-    Worth deciding at the same time: whether this is a display concern in
-    `components/shopping-list/ShoppingList/Item.tsx`'s `formatAmounts` (cheap, and keeps
-    the underlying totals exact for further combining) or a property of the combining
-    itself in the Go API (`netlify-functions/recipes`). Display-side is the safer default:
-    round once, at the end, where a human reads it.
+    Re-running the script is the right move after any extractor improvement — it is
+    safe to run repeatedly, only ever writes to a `method` that is still empty, and
+    will simply pick up whatever has become readable since.
 
-40. **URL import returns an empty `ingredients` array for some recipe sites.** Reproduced
-    on <https://www.bbcgoodfood.com/recipes/chicken-tzatziki-wraps>; reported for "a couple
-    of URLs", so it is not one broken page. The import completes and the form opens — the
-    Recipe just arrives with nothing in it, which is worse than a visible failure, since
-    it looks like the site had no ingredients rather than like the extractor missed them.
-
-    Where to start: `lib/recipe-import/*` (the extractor, plain untyped `.js` with a
-    sidecar `.d.ts`) and `pages/api/parse-recipe-url.ts`. The two things to separate
-    before concluding anything are (a) the fetch/extract step returning nothing — most
-    likely the page's JSON-LD shape changed, or it's now behind bot protection — versus
-    (b) extract succeeding and the LLM step dropping the ingredients on the floor.
-    Logging the intermediate payload for one known-bad URL answers that in one run.
-
-    Note that the e2e coverage for import (`e2e/recipe-import.spec.ts`) intercepts
-    `/api/parse-recipe-url` and returns canned JSON, deliberately — it covers everything
-    between the extractor and the save payload, and so cannot catch this class of bug by
-    design. Whatever the fix is, the regression test for it belongs next to the extractor,
-    against a saved copy of a real page.
-
-41. **Backfill the Method on existing Recipes.** A good number of Recipes in the catalog
-    have ingredients but an empty `method` — imports that only ever captured half the
-    page, and older hand-entered ones. The detail page now shows the empty Method section
-    with a pencil beside it (rather than hiding it, which made a missing method
-    indistinguishable from one that simply wasn't displayed), so this is visible rather
-    than silent — but the data is still missing.
-
-    Worth establishing before doing anything bulk:
-
-    - **How many, and which.** Measured on a local copy synced from production
-      (2026-08-05): **136 of 157 Recipes have no method at all.** That is most of the
-      catalog, so this is not an afternoon of typing — whatever happens has to be
-      largely automated, and has to be safe to run more than once.
-    - **Where the text comes from.** Recipes carrying a `remote_url` can plausibly be
-      re-fetched through the existing import path, which is the cheap case — but see #40,
-      since that path is currently returning empty ingredients for at least some sites,
-      and a re-import that silently overwrites good ingredients with nothing would be
-      worse than the missing method. Recipes with no URL have no source but the cook.
-    - **Never overwrite a non-empty field.** Whatever runs, it should write `method` only
-      where `method` is currently empty, and touch nothing else on the row.
-
-    Related but separate: `parseMethodSteps` in `components/recipe/index.tsx` splits
-    "1. … 2. …" prose into steps at render time. If a backfill is going to write method
-    text anyway, it is the natural moment to decide whether steps should be stored as
-    structured data instead — the comment there has called the parsing a stopgap since it
-    was written.
+    Still open, and still separate: `parseMethodSteps` in `components/recipe/index.tsx`
+    splits "1. … 2. …" prose into steps at render time. 031 has now written 56 methods
+    in exactly that shape, so the stopgap is more load-bearing than it was — which
+    sharpens the question of whether steps should be stored as structured data, rather
+    than settling it.

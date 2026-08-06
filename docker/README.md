@@ -193,6 +193,49 @@ Then apply the migrations in order and compare row counts before and after. The
 count that matters is `part`: Ingredient Lines in should equal Ingredient Lines
 out unless the migration is explicitly meant to remove some.
 
+## Backfilling missing Methods: `scripts/backfill-recipe-method.mjs`
+
+Most of the catalog arrived with ingredients but no method (`follow-ups.md`
+#41). For a Recipe that carries a `remote_url`, the method is still sitting on
+the page it was imported from, so it can be read back:
+
+```bash
+npm run dev:full                                  # in another terminal
+scripts/backfill-recipe-method.mjs --limit 3      # try a few first
+scripts/backfill-recipe-method.mjs                # the full run
+```
+
+**Run it against a freshly synced copy of production** (`sync-from-prod.sh`
+above). It writes SQL targeting rows by the id it read locally, which is only
+production's id because the sync carries ids verbatim.
+
+It writes a numbered file into `migrations/` and touches no database itself, so
+the SQL can be read before anything is applied. Apply it the way you would any
+other data migration.
+
+**It drives the running app's `/api/parse-recipe-url` rather than importing the
+extractor directly.** That is the point: the backfill reads pages through
+exactly the code path the app uses - the JSON-LD preference, the visible-text
+fallback, and the "no ingredients means the page was not read" guard - rather
+than a second extraction that could drift from it. It also means the script
+needs no OpenAI key of its own.
+
+**Only the method is kept.** Everything else the extraction returns is discarded
+unread, which is what makes this safe to run at all: the worst case #41 worried
+about was a re-import quietly replacing good ingredients with nothing, and a
+script that cannot write an ingredient cannot do that. Each generated statement
+guards itself twice as well - `remote_url` must still match the page the method
+was read from, so a shifted id is a no-op rather than a wrong write, and
+`method` must still be empty, so a method typed by hand since is never
+overwritten. Both make the file safe to apply more than once.
+
+**The generated file starts with `SET NAMES utf8mb4;`**, and needs to. Method
+text is full of degree signs, accents and dashes; a mysql client defaulting to
+latin1 reads those UTF-8 bytes as latin1 and stores them double-encoded -
+`180°C` arriving as `180Â°C` - with no error anywhere. This was caught by
+comparing `MD5(method)` against the generator's own hash rather than by reading
+the output, which looked perfectly fine.
+
 ## Taking a full backup: `scripts/backup-prod.sh`
 
 `sync-from-prod.sh` pulls *your account's* data into local dev. It is not a

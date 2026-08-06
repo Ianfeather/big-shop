@@ -143,6 +143,124 @@ func TestApplyDisplayUnits(t *testing.T) {
 	}
 }
 
+// The reason this exists: a Shopping List is read by someone in a shop, and
+// "4.444444 teaspoon" is not an instruction anyone can follow (follow-ups.md #39).
+func TestRoundAmountsForShopping(t *testing.T) {
+	units := testUnits()
+
+	tests := []struct {
+		name string
+		in   common.Amount
+		want common.Amount
+	}{
+		{
+			name: "the case this exists for: a converted spoon total lands on a quarter",
+			in:   common.Amount{Quantity: "4.444444", Unit: "teaspoon", BaseQuantity: "10", BaseUnit: "gram"},
+			want: common.Amount{Quantity: "4.5", Unit: "teaspoon", BaseQuantity: "10", BaseUnit: "gram"},
+		},
+		{
+			// A quarter is a real measuring spoon; 0.3 of one isn't. Up rather
+			// than to-nearest, so a spice never comes up short.
+			name: "a small spoon amount rounds up to a quarter rather than a decimal",
+			in:   common.Amount{Quantity: "0.2222", Unit: "teaspoon"},
+			want: common.Amount{Quantity: "0.25", Unit: "teaspoon"},
+		},
+		{
+			name: "a spoon amount already on a quarter is left where it is",
+			in:   common.Amount{Quantity: "1.5", Unit: "tablespoon"},
+			want: common.Amount{Quantity: "1.5", Unit: "tablespoon"},
+		},
+		{
+			// You can't buy 1.75 tins. Same rule the Display Unit work already
+			// applied - it just now reaches Amounts that were never converted.
+			name: "a relative unit rounds up to a whole",
+			in:   common.Amount{Quantity: "1.75", Unit: "tin"},
+			want: common.Amount{Quantity: "2", Unit: "tin"},
+		},
+		{
+			name: "a bare count rounds up to a whole",
+			in:   common.Amount{Quantity: "2.4", Unit: ""},
+			want: common.Amount{Quantity: "3", Unit: ""},
+		},
+		{
+			name: "a weight of ten or more loses its decimals",
+			in:   common.Amount{Quantity: "63.333333", Unit: "gram"},
+			want: common.Amount{Quantity: "63", Unit: "gram"},
+		},
+		{
+			name: "a weight between one and ten keeps one decimal",
+			in:   common.Amount{Quantity: "1.04", Unit: "kilogram"},
+			want: common.Amount{Quantity: "1", Unit: "kilogram"},
+		},
+		{
+			// The bug the other direction: rounding this to a whole would say
+			// "buy 0 kilogram of beef".
+			name: "a weight under one keeps enough precision not to vanish",
+			in:   common.Amount{Quantity: "0.44444", Unit: "kilogram"},
+			want: common.Amount{Quantity: "0.44", Unit: "kilogram"},
+		},
+		{
+			name: "a very small weight keeps two significant figures",
+			in:   common.Amount{Quantity: "0.041666", Unit: "kilogram"},
+			want: common.Amount{Quantity: "0.042", Unit: "kilogram"},
+		},
+		{
+			// Not a spoon: a quarter of a millilitre is not a thing anyone
+			// measures, so this reads as a volume.
+			name: "the volume base unit is not treated as a measuring spoon",
+			in:   common.Amount{Quantity: "12.4", Unit: "millilitre"},
+			want: common.Amount{Quantity: "12", Unit: "millilitre"},
+		},
+		{
+			name: "the bracketed working is rounded in its own unit",
+			in:   common.Amount{Quantity: "3", Unit: "tin", BaseQuantity: "1050.0004", BaseUnit: "gram"},
+			want: common.Amount{Quantity: "3", Unit: "tin", BaseQuantity: "1050", BaseUnit: "gram"},
+		},
+		{
+			// ParseQuantity's contract: an unreadable quantity reaches the
+			// shopper verbatim rather than being dropped or invented.
+			name: "an unreadable quantity is left exactly as it is",
+			in:   common.Amount{Quantity: "a handful", Unit: "gram"},
+			want: common.Amount{Quantity: "a handful", Unit: "gram"},
+		},
+		{
+			// Rounding this up would invent an item to buy.
+			name: "zero is not rounded up to one",
+			in:   common.Amount{Quantity: "0", Unit: "tin"},
+			want: common.Amount{Quantity: "0", Unit: "tin"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			it := items("thing", tc.in)
+			RoundAmountsForShopping(it, units)
+			if got := it["thing"].Amounts[0]; got != tc.want {
+				t.Errorf("expected %v but got %v", tc.want, got)
+			}
+		})
+	}
+}
+
+// Rounding runs once, at the end of the read - so running it again must not
+// walk a quantity further away from the number it was summed from.
+func TestRoundAmountsForShoppingIsIdempotent(t *testing.T) {
+	units := testUnits()
+	it := items("thing",
+		amount("4.444444", "teaspoon"),
+		amount("1.75", "tin"),
+		amount("0.44444", "kilogram"),
+		amount("63.333333", "gram"))
+
+	RoundAmountsForShopping(it, units)
+	once := append([]common.Amount(nil), it["thing"].Amounts...)
+	RoundAmountsForShopping(it, units)
+
+	if got := it["thing"].Amounts; !reflect.DeepEqual(got, once) {
+		t.Errorf("expected %v but got %v", once, got)
+	}
+}
+
 func amount(quantity, unit string) common.Amount {
 	return common.Amount{Quantity: quantity, Unit: unit}
 }

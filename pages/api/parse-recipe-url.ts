@@ -31,6 +31,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       knownUnits,
     });
 
+    // An import that "succeeds" with nothing in it is worse than one that
+    // fails: the form opens empty and it looks like the page had no
+    // ingredients, rather than like this app failed to read them
+    // (follow-ups.md #40). Say so instead, so the user can try another link or
+    // enter it manually.
+    if (!result.ingredients?.length) {
+      return res.status(422).json({
+        error: 'No ingredients could be read from that page. Try another link, or use Enter Manually.',
+      });
+    }
+
     res.status(200).json(result);
   } catch (e) {
     console.error(e);

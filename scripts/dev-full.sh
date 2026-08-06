@@ -44,8 +44,21 @@ export DB_PORT API_PORT
 echo "Starting local MySQL + Go API (docker compose)..."
 docker compose up -d --build db api
 
+# The health poll, the browser and server-side code all address the API through
+# the same base URL here, so it is composed once - the router's base path
+# (main.go's basePath) appears in enough places already without this script
+# holding three copies of it.
+#
+# The two variables are the same value locally and deliberately different in
+# production, where NEXT_PUBLIC_API_HOST is the relative /api/bigshop and
+# API_HOST_INTERNAL names the Fly origin. Setting both here means local dev and
+# e2e exercise the variable production's server-side code actually reads, rather
+# than only lib/api-host.ts's fallback.
+export NEXT_PUBLIC_API_HOST="http://localhost:${API_PORT}/api/bigshop"
+export API_HOST_INTERNAL="$NEXT_PUBLIC_API_HOST"
+
 echo "Waiting for the API on :${API_PORT}..."
-health_url="http://localhost:${API_PORT}/.netlify/functions/recipes/health"
+health_url="${NEXT_PUBLIC_API_HOST}/health"
 for _ in $(seq 1 60); do
   if curl -sf "$health_url" > /dev/null 2>&1; then
     echo "API is up."
@@ -58,7 +71,6 @@ if ! curl -sf "$health_url" > /dev/null 2>&1; then
   exit 1
 fi
 
-export NEXT_PUBLIC_API_HOST="http://localhost:${API_PORT}/.netlify/functions/recipes"
 export NEXT_PUBLIC_HOST="http://localhost:${WEB_PORT}"
 
 echo "Starting Next.js on :${WEB_PORT}..."

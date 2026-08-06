@@ -35,11 +35,25 @@ The app uses Auth0 for authentication:
 ## Go API Structure
 
 Located in `netlify-functions/recipes/`:
-- `main.go`: Lambda entry point, TiDB connection, Negroni router setup
+- `main.go`: entry point, TiDB connection, Negroni router setup. `main()` branches three
+  ways on `os.Args[1]`: `openapi` prints the spec and exits, `serve` (or its older alias
+  `dev`) runs a plain `http.Server` on `:8080` — which is what both local development
+  *and* the production container on Fly run — and the default is `lambda.Start`, still
+  deployed to Netlify Functions during the migration's cooling-off period
+  ([spec](./specs/completed/api-hosting-migration.md) Phase 5 deletes it)
+- `basePath` / `lambdaBasePath` (`main.go`): the server registers routes under
+  `/api/bigshop`, which is also the OpenAPI server URL — Netlify rewrites that path to
+  the Fly origin with `status = 200`, so the API stays same-origin to the browser. The
+  Lambda goes on registering under `/.netlify/functions/recipes`, because Netlify routes
+  to a function by the function's own path; that is what keeps it a working rollback
+  target during the cooling-off period
+- `Dockerfile`: production image (static binary on distroless, non-root) — distinct from
+  `Dockerfile.dev`, the toolchain-plus-`air` image `docker-compose.yml` builds
+- `fly.toml`: one always-on `shared-cpu-1x`/512MB machine in `fra`
 - `internal/pkg/app/app.go`: App struct, JWT middleware, all route definitions (`GetRouter`, ~line 145)
 - `internal/pkg/app/*.go`: Feature handlers
 
-**Route list**: routes are registered in `internal/pkg/app/app.go`'s `GetRouter`, using [Huma](https://github.com/danielgtaylor/huma) (`humamux`, on top of the same `gorilla/mux` router) so each operation's request/response types double as its OpenAPI schema - no separate hand-maintained doc to drift. The generated spec is committed at [`docs/openapi.yaml`](./docs/openapi.yaml); regenerate it with `cd netlify-functions/recipes && go run . openapi > ../../docs/openapi.yaml` (no DB needed - route registration never touches it). `build.sh` fails the build if the committed spec is stale relative to `app.go`. All routes except `/health` require Auth0 JWT validation; the user ID is extracted from the JWT `sub` claim and threaded through context to handlers.
+**Route list**: routes are registered in `internal/pkg/app/app.go`'s `GetRouter`, using [Huma](https://github.com/danielgtaylor/huma) (`humamux`, on top of the same `gorilla/mux` router) so each operation's request/response types double as its OpenAPI schema - no separate hand-maintained doc to drift. The generated spec is committed at [`docs/openapi.yaml`](./docs/openapi.yaml); regenerate it with `cd netlify-functions/recipes && go run . openapi > ../../docs/openapi.yaml` (no DB needed - route registration never touches it). `.github/workflows/ci.yml`'s `go` job fails if the committed spec is stale relative to `app.go` (it used to be `build.sh`, i.e. only during a Netlify deploy). All routes except `/health` require Auth0 JWT validation; the user ID is extracted from the JWT `sub` claim and threaded through context to handlers.
 
 ### API Testing
 For authenticated endpoints, copy the `Authorization` header from browser dev tools — no established curl/Postman workflow exists yet.
@@ -177,7 +191,8 @@ stored server-side by recipe id and re-read on mount, so it self-corrects.
 
 **Development (`.env.development`):**
 ```
-NEXT_PUBLIC_API_HOST=http://localhost:8080
+NEXT_PUBLIC_API_HOST=http://localhost:8080/api/bigshop
+API_HOST_INTERNAL=http://localhost:8080/api/bigshop
 NEXT_PUBLIC_AUTH0_DOMAIN=dev-x-n37k6b.eu.auth0.com
 NEXT_PUBLIC_AUTH0_CLIENT_ID=HxkTOH3ZYxjbsgrVI4ii1CV2TQx7hk9G
 NEXT_PUBLIC_AUTH0_AUDIENCE=https://big-shop-api
@@ -185,11 +200,36 @@ NEXT_PUBLIC_HOST=http://localhost:3000
 DISABLE_AUTH=false
 ```
 
-**Production (`.env.production`):**
+**Production (`.env.production`, overridden by Netlify's own environment variables):**
 ```
-NEXT_PUBLIC_API_HOST=https://www.bigshop.life/.netlify/functions/recipes
+NEXT_PUBLIC_API_HOST=/api/bigshop
+API_HOST_INTERNAL=https://big-shop-api.fly.dev/api/bigshop
 NEXT_PUBLIC_HOST=https://www.bigshop.life
 ```
+
+`@next/env` never replaces a key already present in `process.env`, so anything set in the
+Netlify UI wins over this file. That is what makes the UI the control surface and this the
+default — and why rolling the API cutover back means changing the UI values, not this file.
+
+### The two API host variables
+
+They are the same value locally and deliberately different in production, and
+getting them confused is the sharpest edge in the whole Fly migration.
+
+| | Read by | Production value |
+|---|---|---|
+| `NEXT_PUBLIC_API_HOST` | `lib/api-client.ts`, in the **browser** | `/api/bigshop` — relative. Netlify rewrites it to the Fly origin (`netlify.toml`), so the API stays same-origin and there is no CORS |
+| `API_HOST_INTERNAL` | `lib/authenticate.ts`, `lib/dave/tools.ts`, `lib/recipe-import/known-names.ts`, in **Netlify functions** | `https://big-shop-api.fly.dev/api/bigshop` — absolute, straight to Fly |
+
+A relative URL has no origin to be relative to inside a Node process, so a server-side
+caller left on `NEXT_PUBLIC_API_HOST` does not merely run slowly — it throws. All three
+read it through `serverApiHost()` in [`lib/api-host.ts`](./lib/api-host.ts), which prefers
+`API_HOST_INTERNAL` and falls back to `NEXT_PUBLIC_API_HOST` (that fallback is what keeps
+local development and e2e working, where the public value is absolute anyway).
+
+**`API_HOST_INTERNAL` must never gain a `NEXT_PUBLIC_` prefix.** Next.js inlines every
+`NEXT_PUBLIC_*` variable into the client bundle at build time, which would publish the
+unproxied origin to every visitor and undo the same-origin property.
 
 **Server-side secrets (set in Netlify UI / local `.env.local`):**
 - `DSN` — TiDB connection string
@@ -199,13 +239,33 @@ NEXT_PUBLIC_HOST=https://www.bigshop.life
 
 ## Deployment
 
-- Automatic deployment via Netlify on git push
-- Build command: `./build.sh` (runs `npm run package` + Go tests)
+Two independent pipelines, one per deployable — an accepted consequence of
+[ADR-0006](./docs/adr/0006-go-api-leaves-netlify-functions.md).
+
+**Next.js site — Netlify**, automatically on git push.
+- Build command: `./build.sh`, which is now just `npm run package`
 - Publish directory: `.next`
 - Next.js Runtime: `@netlify/plugin-nextjs` v5 (pinned as a devDependency so
   `netlify.toml`'s `[[plugins]]` entry resolves during the deploy build). v5 is
   required for Next.js 13.5+; the v4 runtime only supported Next.js 10–13.4
 - Environment: Node 22 (`.node-version`, matching both CI workflows; Next.js 16 requires >=20.9.0), Go 1.23 (`netlify.toml` `GO_VERSION`, matches `go.mod`)
+- `GO_VERSION` is still needed even though `build.sh` no longer runs anything Go:
+  Netlify goes on compiling the `netlify-functions/recipes` Lambda on every deploy
+  throughout the migration's cooling-off period, because that Lambda is the rollback
+  target. Phase 5 deletes the function and the pin together
+
+**Go API — Fly.io** (`big-shop-api`, region `fra`), by
+`.github/workflows/deploy-api.yml` on push to `master`.
+- Gated on the CI workflow succeeding, so a commit that fails `go test` or a drift
+  check is never deployed
+- Config: `netlify-functions/recipes/fly.toml`; image:
+  `netlify-functions/recipes/Dockerfile`
+- Needs a `FLY_API_TOKEN` repository secret; `DSN` and `SENDGRID_API_KEY` are Fly
+  secrets, `AUTH0_DOMAIN`/`AUTH0_AUDIENCE` are in `fly.toml`'s `[env]`
+- Reached from the browser through a Netlify `status = 200` rewrite, so it stays
+  same-origin. Server-side callers address it directly
+- First-time setup, cutover and rollback:
+  [`docs/fly-migration-runbook.md`](./docs/fly-migration-runbook.md)
 
 ## Key Dependencies
 

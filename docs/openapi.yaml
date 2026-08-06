@@ -6,7 +6,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - /.netlify/functions/recipes/schemas/Account.json
+            - /api/bigshop/schemas/Account.json
           format: uri
           readOnly: true
           type: string
@@ -44,7 +44,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - /.netlify/functions/recipes/schemas/CreatedResponse.json
+            - /api/bigshop/schemas/CreatedResponse.json
           format: uri
           readOnly: true
           type: string
@@ -63,7 +63,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - /.netlify/functions/recipes/schemas/DeleteRecipeInputBody.json
+            - /api/bigshop/schemas/DeleteRecipeInputBody.json
           format: uri
           readOnly: true
           type: string
@@ -91,7 +91,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - /.netlify/functions/recipes/schemas/ErrorModel.json
+            - /api/bigshop/schemas/ErrorModel.json
           format: uri
           readOnly: true
           type: string
@@ -182,7 +182,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - /.netlify/functions/recipes/schemas/InviteTokenInputBody.json
+            - /api/bigshop/schemas/InviteTokenInputBody.json
           format: uri
           readOnly: true
           type: string
@@ -219,7 +219,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - /.netlify/functions/recipes/schemas/ListItem.json
+            - /api/bigshop/schemas/ListItem.json
           format: uri
           readOnly: true
           type: string
@@ -237,7 +237,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - /.netlify/functions/recipes/schemas/Recipe.json
+            - /api/bigshop/schemas/Recipe.json
           format: uri
           readOnly: true
           type: string
@@ -297,7 +297,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - /.netlify/functions/recipes/schemas/ShoppingList.json
+            - /api/bigshop/schemas/ShoppingList.json
           format: uri
           readOnly: true
           type: string
@@ -326,7 +326,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - /.netlify/functions/recipes/schemas/ShoppingListHistoryOutputBody.json
+            - /api/bigshop/schemas/ShoppingListHistoryOutputBody.json
           format: uri
           readOnly: true
           type: string
@@ -354,7 +354,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - /.netlify/functions/recipes/schemas/SimpleResponse.json
+            - /api/bigshop/schemas/SimpleResponse.json
           format: uri
           readOnly: true
           type: string
@@ -381,7 +381,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - /.netlify/functions/recipes/schemas/User.json
+            - /api/bigshop/schemas/User.json
           format: uri
           readOnly: true
           type: string
@@ -937,4 +937,4 @@ paths:
       tags:
         - Users
 servers:
-  - url: /.netlify/functions/recipes
+  - url: /api/bigshop

@@ -23,16 +23,22 @@ npm run package      # Lint, typecheck, and build (used in deployment)
 
 ### Full Stack Development
 ```bash
-./build.sh                  # Build frontend + run Go tests (production build).
-                             # This is Netlify's actual build command (netlify.toml),
-                             # run in a sandbox with Go provisioned natively - no
-                             # Docker available there. Requires Go installed locally
-                             # to run this yourself.
-./scripts/build-local.sh    # Same checks, for machines without Go installed: runs
-                             # the Go steps (fmt/test/openapi-drift-check) inside the
-                             # api container's Go toolchain via docker compose instead.
-                             # Local dev only - not what Netlify runs.
+./build.sh                  # Netlify's build command (netlify.toml). Builds the
+                             # Next.js site and nothing else - it is now just
+                             # `npm run package`.
+./scripts/build-local.sh    # The full local check suite: `npm run package` plus the
+                             # Go steps (gofmt/vet/test + both drift checks) that
+                             # .github/workflows/ci.yml's `go` job runs in CI. Runs
+                             # them inside the api container's Go toolchain via docker
+                             # compose, so it needs Docker but not Go on the host.
 ```
+
+**`build.sh` no longer runs the Go checks.** `go fmt`, `go test` and the
+`openapi.yaml`/`api.d.ts` drift checks used to live there, which meant they ran
+**only** inside Netlify's deploy build. They now live in `ci.yml`'s `go` job,
+which runs on every pull request *and* on pushes to `master`. The Go API is
+deployed to Fly.io by `.github/workflows/deploy-api.yml`, not by Netlify — see
+[ADR-0006](./docs/adr/0006-go-api-leaves-netlify-functions.md).
 
 ### Local Development Setup
 
@@ -40,8 +46,9 @@ npm run package      # Lint, typecheck, and build (used in deployment)
 This runs `scripts/dev-full.sh`, which:
 - Brings up `docker-compose.yml`'s `db` (MySQL 8, seeded once on first run from
   `migrations/*.sql` + `docker/mysql-seed/dev-seed.sql` via
-  `docker/mysql-init/01-migrate-and-seed.sh`) and `api` (the Go binary's `dev`
-  mode, `DISABLE_AUTH=true`, hot-reloaded with `air` — edit any `.go` file and
+  `docker/mysql-init/01-migrate-and-seed.sh`) and `api` (the Go binary's
+  `serve` mode — the same one the production container on Fly runs —
+  `DISABLE_AUTH=true`, hot-reloaded with `air` — edit any `.go` file and
   it rebuilds automatically) services.
 - Waits for the API's `/health` endpoint, then runs Next.js natively on the
   host (not dockerized — keeps fast refresh) on port 3000 by default.
@@ -86,11 +93,13 @@ against the real stack, or against a synced copy of production
 (`scripts/sync-from-prod.sh`).
 
 **Manual path** (what `dev:full` automates, useful if you want the API/DB
-outside Docker): `go run . dev` inside `netlify-functions/recipes/` starts a
-plain HTTP server on `:8080` — but routes are always registered under
-`/.netlify/functions/recipes` (see `main.go`'s `GetRouter` call), so
+outside Docker): `go run . serve` inside `netlify-functions/recipes/` starts a
+plain HTTP server on `:8080` — the same mode the production container on Fly
+runs, which is why it is no longer called `dev` (`dev` still works as an alias).
+Routes are registered under
+`/api/bigshop` (`main.go`'s `basePath`, passed to `GetRouter`), so
 `NEXT_PUBLIC_API_HOST` must include that suffix, e.g.
-`http://localhost:8080/.netlify/functions/recipes` (already the case in
+`http://localhost:8080/api/bigshop` (already the case in
 `.env.development`). It needs a live DB via `DSN`, and `DISABLE_AUTH=true`
 (no `NEXT_PUBLIC_` prefix — read server-side by the Go process) to skip real
 Auth0 JWT validation; the router then injects a fixed `DEV_USER_ID` (default
@@ -260,6 +269,8 @@ npm run test:evals   # runs evals/run-evals.sh
 ## Useful External Links
 
 - [Netlify Dashboard](https://app.netlify.com/sites/big-shop/overview)
+- [Fly.io Dashboard](https://fly.io/apps/big-shop-api) — the Go API. First-time setup,
+  cutover and rollback: [fly-migration-runbook.md](./docs/fly-migration-runbook.md)
 - [TiDB Console](https://tidbcloud.com/console/clusters/10445360365857932862/sqleditor?orgId=1372813089209222715&projectId=1372813089454538934)
 - [Auth0 Management](https://manage.auth0.com/dashboard/eu/dev-x-n37k6b/applications/HxkTOH3ZYxjbsgrVI4ii1CV2TQx7hk9G/settings)
 - [Trello Backlog](https://trello.com/b/LnaGkQyG/bigshop)

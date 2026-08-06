@@ -1,0 +1,10 @@
+# Applies to both Dockerfile and Dockerfile.dev - this is the build context for
+# each, and docker-compose.yml also bind-mounts this directory over /app in the
+# dev container.
+#
+# air's build output. A host-built binary in the context invalidates the build
+# cache on every local run for no benefit; it is rebuilt inside the image.
+tmp/
+
+# Deploy config, not source. Not needed in either image.
+fly.toml

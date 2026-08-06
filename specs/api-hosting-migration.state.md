@@ -93,13 +93,34 @@ Notes: Gates green — vitest 134, typecheck, lint, all three workflow YAMLs and
   weaker than the merge gate. Not worth a double-`workflow_run` contortion.
 
 ## Session 3: Phase 3 — dual run
-Status: pending
+Status: done
 Scope: `netlify.toml` rewrite `/api/bigshop/*` → `https://big-shop-api.fly.dev/api/bigshop/:splat`
   (`status = 200`, `force = true`), plus `docs/fly-migration-runbook.md` for the deploy and
   production-verification steps only the user can execute.
 Depends on: Session 2
-Commit:
-Notes:
+Commit: 19ca47a
+Notes: Gates green — vitest 134, e2e 21, typecheck, lint, `netlify.toml` parses and the
+  redirect resolves as intended. Confirmed no `pages/api` route is shadowed: the five are
+  `parse-recipe-text`, `parse-recipe-url`, `recipe-image`, `dave/chat`, `dev/openapi-spec`,
+  all siblings of `/api/bigshop` rather than under it.
+
+  The rewrite cannot be verified locally — e2e talks to the container directly, and there
+  is no Netlify proxy in front of `next dev`. Its real verification is the runbook's step 5.
+
+  Review caught four runbook commands that would not have worked as written:
+  - `fly tokens deploy` is not a command (`fly tokens create deploy` is).
+  - Every `fly` command must run from `netlify-functions/recipes`. `--config` relocates
+    only the config *file*; the app root and Docker build context still come from the
+    working directory, so running from the repo root would have used the whole repo as
+    build context with no Dockerfile in it.
+  - The rewrite-vs-redirect check used `curl -I`. The `/health` carve-out in `app.go` is
+    `r.Method == http.MethodGet`, so a HEAD falls through to the JWT middleware and returns
+    401 on a *healthy* deploy — the check would have failed precisely when all was well.
+  - `/health` returns the bare string `ok`, not JSON.
+
+  Also swapped `fly launch` for `fly apps create`: `fly.toml` and `Dockerfile` are already
+  committed, so there is nothing to scaffold, and launch's framework detection would have
+  found the Next.js app at the repo root.
 
 ## Session 4: Phase 4 — cut over
 Status: pending

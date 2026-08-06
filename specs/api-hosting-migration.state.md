@@ -123,12 +123,39 @@ Notes: Gates green — vitest 134, e2e 21, typecheck, lint, `netlify.toml` parse
   found the Next.js app at the repo root.
 
 ## Session 4: Phase 4 — cut over
-Status: pending
+Status: done
 Scope: New `lib/api-host.ts` (`serverApiHost()`, prefers `API_HOST_INTERNAL`, falls back to
   `NEXT_PUBLIC_API_HOST`); `lib/dave/tools.ts`, `lib/authenticate.ts` and
   `lib/recipe-import/known-names.ts` move onto it; `API_HOST_INTERNAL` set in
   `.env.development` and `scripts/dev-full.sh`; tests extended; env docs updated.
 Depends on: Session 3
-Commit:
-Notes: Four `NEXT_PUBLIC_API_HOST` consumers confirmed by re-grep at planning time, three
-  of them server-side — matches the spec's table.
+Commit: fa21ebd
+Notes: Gates green — vitest 143 (31 files), e2e 21, typecheck, lint.
+
+  Consumer set re-grepped at implementation time as the spec insists: four, three of them
+  server-side, matching the table. `lib/api-client.ts` correctly stays on
+  `NEXT_PUBLIC_API_HOST`. Nothing outside `.ts` constructs a Go API URL.
+
+  Two additions beyond the spec's letter, both from review:
+  - **`serverApiHost()` rejects a relative value** instead of returning it. A relative path
+    is truthy, so the exact misconfiguration the spec warns about (`API_HOST_INTERNAL`
+    forgotten, `NEXT_PUBLIC_API_HOST` relative) sailed past every caller's `if (!host)`
+    guard and surfaced as an opaque `fetch` throw. Now it logs the missing variable and
+    takes the existing not-configured path.
+  - **`.env.production` updated** — it is tracked, and both reviewers caught that leaving
+    it naming the Lambda created a silent fallback: forget the Netlify variable and auth,
+    import and Dave quietly keep using a Lambda that Phase 5 deletes. It now carries the
+    post-cutover values, which makes **merging the PR the cutover**. Netlify's own env vars
+    still override the file, so they remain the rollback lever. Runbook step 5 reordered
+    accordingly: Fly must be verified *before* merge.
+
+  Test quality was the real finding. Under mutation (`serverApiHost()` →
+  `process.env.NEXT_PUBLIC_API_HOST`) the suite now fails in 5 places across three files.
+  Before this session `known-names.test.ts` passed that mutation — it asserted a URL
+  *suffix*, which a relative path satisfies — and `lib/dave/tools.ts` had no coverage of
+  the non-mock path at all (all 12 existing cases pass `useMockApi = true`).
+  `pages/api/recipe-image.test.mts` had its stub corrected to the production shape, but it
+  stubs `fetch` without inspecting the URL, so it does not catch the regression;
+  `authenticate.test.ts` is what does.
+
+  Also extracted `toolApiHost()` from four identical lines in `tools.ts`.

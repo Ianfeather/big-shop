@@ -46,8 +46,9 @@ deployed to Fly.io by `.github/workflows/deploy-api.yml`, not by Netlify — see
 This runs `scripts/dev-full.sh`, which:
 - Brings up `docker-compose.yml`'s `db` (MySQL 8, seeded once on first run from
   `migrations/*.sql` + `docker/mysql-seed/dev-seed.sql` via
-  `docker/mysql-init/01-migrate-and-seed.sh`) and `api` (the Go binary's `dev`
-  mode, `DISABLE_AUTH=true`, hot-reloaded with `air` — edit any `.go` file and
+  `docker/mysql-init/01-migrate-and-seed.sh`) and `api` (the Go binary's
+  `serve` mode — the same one the production container on Fly runs —
+  `DISABLE_AUTH=true`, hot-reloaded with `air` — edit any `.go` file and
   it rebuilds automatically) services.
 - Waits for the API's `/health` endpoint, then runs Next.js natively on the
   host (not dockerized — keeps fast refresh) on port 3000 by default.

@@ -1,11 +1,16 @@
 name: CI
 
-# `push: branches: [master]` is load-bearing, not belt-and-braces. The Go
-# checks below used to run inside Netlify's deploy build (build.sh), which fired
-# on every push to master; that is the guarantee they are being moved off. The
-# `required checks` ruleset gates merging a PR, but a direct push to master
-# bypasses it entirely - so without this trigger, a push straight to master
-# would run no checks at all.
+# `push: branches: [master]` is load-bearing, but not for the reason it looks
+# like. It is not extra check coverage: a direct push to master is *rejected*,
+# not merely ungated (CLAUDE.md), so every commit reaching master has already
+# been through a pull request where this workflow ran.
+#
+# It is here because deploy-api.yml keys off `workflow_run` with
+# `branches: [master]`, and that filter matches the *triggering* run's head
+# branch. A pull_request-triggered run's head branch is the PR's own branch,
+# never master - so with only the pull_request trigger, no CI run would ever
+# carry head_branch=master, workflow_run would never fire, and the API would
+# simply never deploy.
 on:
   pull_request:
   push:

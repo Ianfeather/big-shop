@@ -122,15 +122,24 @@ you dispatch from.
 
 ## 5. Cut over
 
-This is the only step users can notice. **Merge the migration PR first**, and confirm the
-Netlify deploy went green. That PR carries both halves of the cutover: the rewrite in
-`netlify.toml`, and the `lib/api-host.ts` code that makes `API_HOST_INTERNAL` mean
-anything. Setting the variables against a deploy that predates it does nothing useful —
-`API_HOST_INTERNAL` would be read by nobody, and the relative `NEXT_PUBLIC_API_HOST` would
-break every server-side caller.
+This is the only step users can notice.
 
-Verify the rewrite before touching any env var. Nothing is pointed at this path yet, so a
-failure here costs nothing:
+**Do not merge the migration PR until steps 1–4 are done and step 3's checks passed.**
+`.env.production` in that PR already carries the post-cutover values —
+`NEXT_PUBLIC_API_HOST=/api/bigshop` and
+`API_HOST_INTERNAL=https://big-shop-api.fly.dev/api/bigshop` — so **merging is the
+cutover** for the frontend, not a preparation for it. There is no separate flip to make
+afterwards. That is deliberate: the alternative was leaving a stale Lambda URL committed as
+a silent fallback, where forgetting the Netlify variable would quietly keep half the app
+pointed at a Lambda that Phase 5 later deletes.
+
+What this means in practice: the Fly machine must be serving correctly *before* you merge,
+which step 3 already establishes against real production data.
+
+Netlify's own environment variables override `.env.production` (`@next/env` never replaces
+a key already in `process.env`), which is what makes the UI the rollback lever below.
+
+Once merged, confirm the Netlify deploy went green, then verify the proxy:
 
 ```bash
 # Same three checks as step 3, but through www.bigshop.life. Same results expected.
@@ -156,36 +165,55 @@ Then the checks that specifically test the proxy rather than the origin:
   migration — ADR-0006 predicts 300–500ms. If it is not faster, stop and find out why
   before continuing.
 
-Now change **two** values in Netlify (Site configuration → Environment variables), then
-trigger a deploy:
+### Check Netlify isn't still overriding these
 
-| Variable | New value | Notes |
+If either name is **already set** in Netlify (Site configuration → Environment variables),
+its value wins over `.env.production` and the cutover will not happen. Check both:
+
+| Variable | Wanted value | Notes |
 | --- | --- | --- |
-| `NEXT_PUBLIC_API_HOST` | `/api/bigshop` | Relative. Same-origin via the rewrite above |
-| `API_HOST_INTERNAL` | `https://big-shop-api.fly.dev/api/bigshop` | **New.** Absolute, and must never gain a `NEXT_PUBLIC_` prefix |
+| `NEXT_PUBLIC_API_HOST` | `/api/bigshop` | Relative. Same-origin via the rewrite above. Very likely set today to the Lambda URL — **update or delete it** |
+| `API_HOST_INTERNAL` | `https://big-shop-api.fly.dev/api/bigshop` | Absolute, straight to Fly. Must never gain a `NEXT_PUBLIC_` prefix |
 
-Both are needed. A relative `NEXT_PUBLIC_API_HOST` works in the browser and nowhere else,
-and three things call the API from inside a Netlify function — `lib/authenticate.ts`,
-`lib/dave/tools.ts` and `lib/recipe-import/known-names.ts`. They read `API_HOST_INTERNAL`
-and fall back to `NEXT_PUBLIC_API_HOST`, so if you set only the first they will each try to
-`fetch('/api/bigshop/...')` from Node and fail outright.
+Deleting both is fine and is the simplest outcome — `.env.production` then supplies them.
+Setting them explicitly is also fine, and is what you will do to roll back.
+
+What must not happen is setting only `NEXT_PUBLIC_API_HOST` to the relative path while
+leaving `API_HOST_INTERNAL` unset in *both* places. Three things call the API from inside a
+Netlify function — `lib/authenticate.ts`, `lib/dave/tools.ts` and
+`lib/recipe-import/known-names.ts` — and a relative URL has no origin to be relative to in
+Node. `serverApiHost()` detects that case explicitly and logs which variable is missing
+rather than letting a `fetch` throw for no stated reason, but the routes still fail.
 
 `lib/authenticate.ts` is the one to watch: it is on the critical path of every
 authenticated Next.js API route. If it breaks, `/api/recipe-image` and the parse routes all
 start 500ing.
 
-After the deploy, in a browser: load `/recipes`, open a recipe, edit and save it, add it to
-the Shopping List, mark something bought. Watch the Network tab — requests should go to
+### Then check it in a browser
+
+Load `/recipes`, open a recipe, edit and save it, add it to the Shopping List, mark
+something bought. Watch the Network tab — requests should go to
 `www.bigshop.life/api/bigshop/*`, not to `.netlify`. Then try a Photo or URL import, which
-is what exercises the server-side consumers.
+is what exercises the server-side consumers, and ask Dave something that makes him search
+recipes.
 
 ### Rollback
 
-Set both variables back (`NEXT_PUBLIC_API_HOST` to
-`https://www.bigshop.life/.netlify/functions/recipes`, remove `API_HOST_INTERNAL`) and
-redeploy. The Lambda is still deployed and still registers its routes under
-`/.netlify/functions/recipes` — `main.go`'s `lambdaBasePath` exists precisely so that
-stays true. No Fly changes, no database changes.
+In Netlify's environment variables, set **both** to the Lambda:
+
+```
+NEXT_PUBLIC_API_HOST = https://www.bigshop.life/.netlify/functions/recipes
+API_HOST_INTERNAL    = https://www.bigshop.life/.netlify/functions/recipes
+```
+
+Then redeploy. Netlify's values override `.env.production`, so this needs no code change
+and no revert. Set both, not just the first — leaving `API_HOST_INTERNAL` pointed at Fly
+would roll back the browser and not the three server-side callers.
+
+This works because the Lambda is still deployed and still registers its routes under
+`/.netlify/functions/recipes`. `main.go`'s `lambdaBasePath` exists precisely so that stays
+true while the server runs on `/api/bigshop`. No Fly changes, no database changes — both
+APIs are talking to the same TiDB throughout.
 
 ## 6. Repo settings
 

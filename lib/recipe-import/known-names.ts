@@ -1,4 +1,5 @@
 import type { NextApiRequest } from 'next';
+import { serverApiHost } from '../api-host';
 
 export type KnownNames = { knownIngredients: string[]; knownUnits: string[] };
 
@@ -22,9 +23,12 @@ const EMPTY: KnownNames = { knownIngredients: [], knownUnits: [] };
 // honestly on an empty list - buildInstructions simply omits the reuse
 // instruction rather than referring to a list that isn't there.
 export async function fetchKnownNames(req: NextApiRequest): Promise<KnownNames> {
-  const host = process.env.NEXT_PUBLIC_API_HOST;
+  // API_HOST_INTERNAL, not NEXT_PUBLIC_API_HOST - this runs in a Netlify
+  // function, where the latter's production value is a relative path. See
+  // lib/api-host.ts.
+  const host = serverApiHost();
   if (!host) {
-    console.error('NEXT_PUBLIC_API_HOST is not set - importing without canonical names');
+    console.error('No API host configured (API_HOST_INTERNAL, or NEXT_PUBLIC_API_HOST locally) - importing without canonical names');
     return EMPTY;
   }
 

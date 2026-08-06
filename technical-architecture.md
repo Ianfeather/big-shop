@@ -192,6 +192,7 @@ stored server-side by recipe id and re-read on mount, so it self-corrects.
 **Development (`.env.development`):**
 ```
 NEXT_PUBLIC_API_HOST=http://localhost:8080/api/bigshop
+API_HOST_INTERNAL=http://localhost:8080/api/bigshop
 NEXT_PUBLIC_AUTH0_DOMAIN=dev-x-n37k6b.eu.auth0.com
 NEXT_PUBLIC_AUTH0_CLIENT_ID=HxkTOH3ZYxjbsgrVI4ii1CV2TQx7hk9G
 NEXT_PUBLIC_AUTH0_AUDIENCE=https://big-shop-api
@@ -199,11 +200,36 @@ NEXT_PUBLIC_HOST=http://localhost:3000
 DISABLE_AUTH=false
 ```
 
-**Production (`.env.production`):**
+**Production (`.env.production`, overridden by Netlify's own environment variables):**
 ```
-NEXT_PUBLIC_API_HOST=https://www.bigshop.life/.netlify/functions/recipes
+NEXT_PUBLIC_API_HOST=/api/bigshop
+API_HOST_INTERNAL=https://big-shop-api.fly.dev/api/bigshop
 NEXT_PUBLIC_HOST=https://www.bigshop.life
 ```
+
+`@next/env` never replaces a key already present in `process.env`, so anything set in the
+Netlify UI wins over this file. That is what makes the UI the control surface and this the
+default — and why rolling the API cutover back means changing the UI values, not this file.
+
+### The two API host variables
+
+They are the same value locally and deliberately different in production, and
+getting them confused is the sharpest edge in the whole Fly migration.
+
+| | Read by | Production value |
+|---|---|---|
+| `NEXT_PUBLIC_API_HOST` | `lib/api-client.ts`, in the **browser** | `/api/bigshop` — relative. Netlify rewrites it to the Fly origin (`netlify.toml`), so the API stays same-origin and there is no CORS |
+| `API_HOST_INTERNAL` | `lib/authenticate.ts`, `lib/dave/tools.ts`, `lib/recipe-import/known-names.ts`, in **Netlify functions** | `https://big-shop-api.fly.dev/api/bigshop` — absolute, straight to Fly |
+
+A relative URL has no origin to be relative to inside a Node process, so a server-side
+caller left on `NEXT_PUBLIC_API_HOST` does not merely run slowly — it throws. All three
+read it through `serverApiHost()` in [`lib/api-host.ts`](./lib/api-host.ts), which prefers
+`API_HOST_INTERNAL` and falls back to `NEXT_PUBLIC_API_HOST` (that fallback is what keeps
+local development and e2e working, where the public value is absolute anyway).
+
+**`API_HOST_INTERNAL` must never gain a `NEXT_PUBLIC_` prefix.** Next.js inlines every
+`NEXT_PUBLIC_*` variable into the client bundle at build time, which would publish the
+unproxied origin to every visitor and undo the same-origin property.
 
 **Server-side secrets (set in Netlify UI / local `.env.local`):**
 - `DSN` — TiDB connection string

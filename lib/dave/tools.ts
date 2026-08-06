@@ -2,6 +2,20 @@
 
 import type OpenAI from 'openai';
 import type { Recipe, RecipeSummary } from '../../types/models';
+import { serverApiHost } from '../api-host';
+
+// Where these tools reach the Go API.
+//
+// API_HOST_INTERNAL, not NEXT_PUBLIC_API_HOST: these run in a Netlify function,
+// where the latter's production value is a relative path (see lib/api-host.ts).
+// Going direct to Fly also skips a leg - the alternative is us-east-2 ->
+// Netlify's edge -> Frankfurt, on several calls per turn.
+//
+// Extracted rather than repeated at each of the four call sites, so there is
+// one place to change and one place to test.
+export function toolApiHost(useMockApi: boolean): string | undefined {
+  return useMockApi ? 'http://localhost:3001' : serverApiHost();
+}
 
 /**
  * Search recipes in the user's collection
@@ -9,7 +23,7 @@ import type { Recipe, RecipeSummary } from '../../types/models';
 export async function searchRecipes({ query = '', tags = '' }: { query?: string; tags?: string }, authToken: string, useMockApi = false) {
   try {
     // Use mock API for testing, otherwise use remote API
-    const apiHost = useMockApi ? 'http://localhost:3001' : process.env.NEXT_PUBLIC_API_HOST;
+    const apiHost = toolApiHost(useMockApi);
 
     // For now, just fetch all recipes and filter client-side
     // TODO: Add proper search parameters to the API
@@ -81,7 +95,7 @@ export async function searchRecipes({ query = '', tags = '' }: { query?: string;
 export async function getRecipeDetails({ recipeId }: { recipeId: string }, authToken: string, useMockApi = false) {
   try {
     // Use mock API for testing, otherwise use remote API
-    const apiHost = useMockApi ? 'http://localhost:3001' : process.env.NEXT_PUBLIC_API_HOST;
+    const apiHost = toolApiHost(useMockApi);
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (!useMockApi) {
@@ -114,7 +128,7 @@ export async function getRecipeDetails({ recipeId }: { recipeId: string }, authT
  */
 export async function getShoppingHistory(args: unknown, authToken: string, useMockApi = false) {
   try {
-    const apiHost = useMockApi ? 'http://localhost:3001' : process.env.NEXT_PUBLIC_API_HOST;
+    const apiHost = toolApiHost(useMockApi);
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (!useMockApi) {
@@ -149,7 +163,7 @@ export async function getShoppingHistory(args: unknown, authToken: string, useMo
 export async function createShoppingList({ recipeIds }: { recipeIds: string[] }, authToken: string, useMockApi = false) {
   try {
     // Use mock API for testing, otherwise use remote API
-    const apiHost = useMockApi ? 'http://localhost:3001' : process.env.NEXT_PUBLIC_API_HOST;
+    const apiHost = toolApiHost(useMockApi);
 
     // First, fetch existing shopping list
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };

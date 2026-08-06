@@ -1,4 +1,5 @@
 import type { NextApiRequest } from 'next';
+import { serverApiHost } from './api-host';
 
 // Who the caller of a Next.js API route is.
 //
@@ -25,9 +26,12 @@ export type AuthenticationResult =
   | { ok: false; status: 401 | 500; error: string };
 
 export async function authenticateAccount(req: NextApiRequest): Promise<AuthenticationResult> {
-  const host = process.env.NEXT_PUBLIC_API_HOST;
+  // API_HOST_INTERNAL, not NEXT_PUBLIC_API_HOST - this runs in a Netlify
+  // function, where the latter's production value is a relative path. See
+  // lib/api-host.ts.
+  const host = serverApiHost();
   if (!host) {
-    console.error('NEXT_PUBLIC_API_HOST is not set - cannot authenticate the caller');
+    console.error('No API host configured (API_HOST_INTERNAL, or NEXT_PUBLIC_API_HOST locally) - cannot authenticate the caller');
     return { ok: false, status: 500, error: 'Authentication is not configured' };
   }
 

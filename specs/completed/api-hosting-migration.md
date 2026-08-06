@@ -1,7 +1,7 @@
 # Move the Go API off Netlify Functions onto Fly.io in Frankfurt
 
-Decisions and rationale: [ADR-0006](../docs/adr/0006-go-api-leaves-netlify-functions.md).
-This spec covers the *how*. Do this before [`observability.md`](./observability.md) —
+Decisions and rationale: [ADR-0006](../../docs/adr/0006-go-api-leaves-netlify-functions.md).
+This spec covers the *how*. Do this before [`observability.md`](../observability.md) —
 that spec's design assumes the API is a long-lived process.
 
 ## Current state (why this isn't greenfield)
@@ -70,7 +70,7 @@ Netlify adds several headers on the way through, visible at the origin:
 - `x-nf-client-connection-ip` — the real client IP survives the proxy, so rate limiting or
   abuse handling at the origin remains possible.
 - `x-nf-request-id` — correlates a request with Netlify's own logs. Worth putting on spans;
-  noted in [`observability.md`](./observability.md).
+  noted in [`observability.md`](../observability.md).
 - `x-nf-netlify-proxy` — a **signed JWT** (`iss: netlify`, `sub: proxy`, carrying
   `request_id` and `client_ip`). This means the Fly origin could verify that traffic
   arrived via Netlify with no shared secret to manage — a cheaper mechanism than the JWS
@@ -199,7 +199,7 @@ Deliberately a separate PR, days later:
   latency is dominated by OpenAI calls measured in seconds.
 - Multi-instance or multi-region Fly deployment. One machine; revisit if deploy blips
   become annoying.
-- Any observability work. That is [`observability.md`](./observability.md), and it depends
+- Any observability work. That is [`observability.md`](../observability.md), and it depends
   on this landing first.
 
 ## Things to get right when building this

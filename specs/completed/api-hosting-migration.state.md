@@ -1,9 +1,21 @@
 ---
-spec: specs/api-hosting-migration.md
-status: in-progress
+spec: specs/completed/api-hosting-migration.md
+status: complete
 branch: fly-migration
-pr:
+pr: https://github.com/Ianfeather/big-shop/pull/76
 ---
+
+**Phases 1–4 shipped. Phase 5 remains outstanding**, deliberately — a separate PR after a
+cooling-off period, per the spec. It deletes the `lambda.Start` branch and `lambdaBasePath`
+from `main.go`, drops `aws-lambda-go`/`aws-lambda-go-api-proxy`, removes `GO_VERSION` from
+`netlify.toml`, renames `netlify-functions/recipes/` → `api/`, and fixes the CORS
+allowlist. **Merging it is what makes rollback stop working**, so it must not land on the
+same day.
+
+The operator half is not done either: `docs/fly-migration-runbook.md` steps 1–4 (create the
+Fly app, set `DSN`/`SENDGRID_API_KEY`, deploy, verify, add `FLY_API_TOKEN`) have to run
+before this PR is merged, because `.env.production` carries the post-cutover values and
+merging is therefore the cutover.
 
 Fly app name: `big-shop-api` (→ `big-shop-api.fly.dev`), chosen by the user at planning
 time and baked into `fly.toml` and the `netlify.toml` rewrite.

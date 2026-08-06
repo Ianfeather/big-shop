@@ -1,0 +1,66 @@
+# Deploys the Go API to Fly.io (app `big-shop-api`, region fra).
+#
+# Netlify no longer deploys this API - see
+# docs/adr/0006-go-api-leaves-netlify-functions.md. The Next.js site is still
+# Netlify's, deployed on its own from the same push; the two pipelines are
+# independent, which is one of the migration's accepted consequences.
+name: Deploy API
+
+# Gated on CI rather than triggered directly by the push, so a master commit
+# that fails `go test` or a drift check is never deployed. `workflow_run` fires
+# after CI finishes; the `if` below is what makes success (not merely
+# completion) the condition - without it this would deploy failed builds, since
+# `completed` includes `failure` and `cancelled`.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [master]
+  # For redeploying master without pushing anything - e.g. after rotating a Fly
+  # secret, which does not itself trigger a release. Always master, whatever
+  # branch it is dispatched from: see the checkout step.
+  workflow_dispatch:
+
+# One deploy at a time. Queued rather than superseded (cancel-in-progress:
+# false) because the thing being cancelled is a `flyctl deploy` mid-release -
+# killing that can leave the app between images, which is a worse outcome than
+# waiting out a deploy that a newer one will supersede seconds later anyway.
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      # Two things this ref is doing. For workflow_run, checkout would otherwise
+      # take the default branch's tip rather than the commit CI actually ran
+      # against - pinning head_sha keeps the deployed image and the tested
+      # commit the same thing. For workflow_dispatch it is a hard 'master',
+      # not github.ref: dispatching from a feature branch would otherwise push
+      # that branch straight onto the production machine, and per-branch API
+      # deploys are explicitly out of scope for this migration.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || 'master' }}
+
+      # Pinned, like every other action here. This is the only job that holds
+      # FLY_API_TOKEN, so a mutable @master ref would let an upstream change
+      # reach the credential without any change on our side.
+      - uses: superfly/flyctl-actions/setup-flyctl@v1.4
+
+      # --remote-only builds on Fly's builder rather than this runner, so the
+      # image never crosses the network as a push from here. The config lives
+      # next to the Dockerfile so the build context is the Go module alone.
+      # FLY_API_TOKEN is a repository secret, created with `fly tokens deploy`
+      # - see docs/fly-migration-runbook.md. Until it exists, every run of this
+      # workflow fails at this step.
+      - name: Deploy
+        run: flyctl deploy --remote-only --config fly.toml
+        working-directory: netlify-functions/recipes
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

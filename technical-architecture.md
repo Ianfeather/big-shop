@@ -53,7 +53,7 @@ Located in `netlify-functions/recipes/`:
 - `internal/pkg/app/app.go`: App struct, JWT middleware, all route definitions (`GetRouter`, ~line 145)
 - `internal/pkg/app/*.go`: Feature handlers
 
-**Route list**: routes are registered in `internal/pkg/app/app.go`'s `GetRouter`, using [Huma](https://github.com/danielgtaylor/huma) (`humamux`, on top of the same `gorilla/mux` router) so each operation's request/response types double as its OpenAPI schema - no separate hand-maintained doc to drift. The generated spec is committed at [`docs/openapi.yaml`](./docs/openapi.yaml); regenerate it with `cd netlify-functions/recipes && go run . openapi > ../../docs/openapi.yaml` (no DB needed - route registration never touches it). `build.sh` fails the build if the committed spec is stale relative to `app.go`. All routes except `/health` require Auth0 JWT validation; the user ID is extracted from the JWT `sub` claim and threaded through context to handlers.
+**Route list**: routes are registered in `internal/pkg/app/app.go`'s `GetRouter`, using [Huma](https://github.com/danielgtaylor/huma) (`humamux`, on top of the same `gorilla/mux` router) so each operation's request/response types double as its OpenAPI schema - no separate hand-maintained doc to drift. The generated spec is committed at [`docs/openapi.yaml`](./docs/openapi.yaml); regenerate it with `cd netlify-functions/recipes && go run . openapi > ../../docs/openapi.yaml` (no DB needed - route registration never touches it). `.github/workflows/ci.yml`'s `go` job fails if the committed spec is stale relative to `app.go` (it used to be `build.sh`, i.e. only during a Netlify deploy). All routes except `/health` require Auth0 JWT validation; the user ID is extracted from the JWT `sub` claim and threaded through context to handlers.
 
 ### API Testing
 For authenticated endpoints, copy the `Authorization` header from browser dev tools — no established curl/Postman workflow exists yet.
@@ -215,13 +215,31 @@ NEXT_PUBLIC_HOST=https://www.bigshop.life
 
 ## Deployment
 
-- Automatic deployment via Netlify on git push
-- Build command: `./build.sh` (runs `npm run package` + Go tests)
+Two independent pipelines, one per deployable — an accepted consequence of
+[ADR-0006](./docs/adr/0006-go-api-leaves-netlify-functions.md).
+
+**Next.js site — Netlify**, automatically on git push.
+- Build command: `./build.sh`, which is now just `npm run package`
 - Publish directory: `.next`
 - Next.js Runtime: `@netlify/plugin-nextjs` v5 (pinned as a devDependency so
   `netlify.toml`'s `[[plugins]]` entry resolves during the deploy build). v5 is
   required for Next.js 13.5+; the v4 runtime only supported Next.js 10–13.4
 - Environment: Node 22 (`.node-version`, matching both CI workflows; Next.js 16 requires >=20.9.0), Go 1.23 (`netlify.toml` `GO_VERSION`, matches `go.mod`)
+- `GO_VERSION` is still needed even though `build.sh` no longer runs anything Go:
+  Netlify goes on compiling the `netlify-functions/recipes` Lambda on every deploy
+  throughout the migration's cooling-off period, because that Lambda is the rollback
+  target. Phase 5 deletes the function and the pin together
+
+**Go API — Fly.io** (`big-shop-api`, region `fra`), by
+`.github/workflows/deploy-api.yml` on push to `master`.
+- Gated on the CI workflow succeeding, so a commit that fails `go test` or a drift
+  check is never deployed
+- Config: `netlify-functions/recipes/fly.toml`; image:
+  `netlify-functions/recipes/Dockerfile`
+- Needs a `FLY_API_TOKEN` repository secret; `DSN` and `SENDGRID_API_KEY` are Fly
+  secrets, `AUTH0_DOMAIN`/`AUTH0_AUDIENCE` are in `fly.toml`'s `[env]`
+- Reached from the browser through a Netlify `status = 200` rewrite, so it stays
+  same-origin. Server-side callers address it directly
 
 ## Key Dependencies
 

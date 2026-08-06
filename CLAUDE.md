@@ -23,16 +23,22 @@ npm run package      # Lint, typecheck, and build (used in deployment)
 
 ### Full Stack Development
 ```bash
-./build.sh                  # Build frontend + run Go tests (production build).
-                             # This is Netlify's actual build command (netlify.toml),
-                             # run in a sandbox with Go provisioned natively - no
-                             # Docker available there. Requires Go installed locally
-                             # to run this yourself.
-./scripts/build-local.sh    # Same checks, for machines without Go installed: runs
-                             # the Go steps (fmt/test/openapi-drift-check) inside the
-                             # api container's Go toolchain via docker compose instead.
-                             # Local dev only - not what Netlify runs.
+./build.sh                  # Netlify's build command (netlify.toml). Builds the
+                             # Next.js site and nothing else - it is now just
+                             # `npm run package`.
+./scripts/build-local.sh    # The full local check suite: `npm run package` plus the
+                             # Go steps (gofmt/vet/test + both drift checks) that
+                             # .github/workflows/ci.yml's `go` job runs in CI. Runs
+                             # them inside the api container's Go toolchain via docker
+                             # compose, so it needs Docker but not Go on the host.
 ```
+
+**`build.sh` no longer runs the Go checks.** `go fmt`, `go test` and the
+`openapi.yaml`/`api.d.ts` drift checks used to live there, which meant they ran
+**only** inside Netlify's deploy build. They now live in `ci.yml`'s `go` job,
+which runs on every pull request *and* on pushes to `master`. The Go API is
+deployed to Fly.io by `.github/workflows/deploy-api.yml`, not by Netlify — see
+[ADR-0006](./docs/adr/0006-go-api-leaves-netlify-functions.md).
 
 ### Local Development Setup
 

@@ -5,5 +5,24 @@
 [[plugins]]
 package = "@netlify/plugin-nextjs"
 
+# GO_VERSION is deliberately still here, though specs/api-hosting-migration.md's
+# Phase 2 says to remove it.
+#
+# The reason it says so is that build.sh no longer runs `go fmt`/`go test` -
+# those moved to .github/workflows/ci.yml's `go` job, which pins its own
+# toolchain via actions/setup-go. True, but not the whole story: Netlify also
+# *compiles* the function in netlify-functions/recipes on every deploy, and goes
+# on doing so through the migration's cooling-off period, because that Lambda is
+# the rollback target. (The functions directory is set in the Netlify UI, not
+# here - which is exactly why removing this pin looks safe from the repo alone.)
+#
+# Dropping it would hand that build whatever Go version Netlify's image
+# defaults to. go.mod's `toolchain go1.23.12` line means a default of 1.21+
+# would fetch the right toolchain and survive; a default below that fails, and a
+# failed Netlify build takes the whole site down, not just the API. Netlify's
+# default has historically trailed well behind - not a bet worth taking for the
+# sake of deleting two lines a few days early.
+#
+# Phase 5 deletes the function, and this pin goes with it.
 [build.environment]
   GO_VERSION = "1.23"

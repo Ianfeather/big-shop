@@ -95,3 +95,43 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     in exactly that shape, so the stopgap is more load-bearing than it was — which
     sharpens the question of whether steps should be stored as structured data, rather
     than settling it.
+
+42. **Onboarding: the empty account, not the pitch, is what loses people.** Raised while
+    reviewing the marketing page (2026-08-06). The page itself now says the right things,
+    but the funnel behind it is: read the page → sign up through Auth0 → land in an
+    account holding **nothing**. Every claim the page makes — the adding-up, the aisle
+    order, "2 tins" — needs several Recipes to be visible at all, so the first session
+    delivers none of it and asks for data entry instead. No amount of copy fixes that;
+    this is where the work is.
+
+    A bucket rather than a single task. Two concrete pieces are worth doing first:
+
+    - **Let someone import a recipe before they have an account.** A URL box on the
+      logged-out homepage that runs the real extractor and shows what came back — name,
+      ingredients, method — with "save it" as the thing that triggers signup. It answers
+      the biggest unspoken objection ("will it work on the sites *I* use?") by letting
+      them test it rather than be told, and it means the first thing in the account is a
+      recipe they chose. `pages/api/parse-recipe-url.ts` already does the work; what is
+      missing is an unauthenticated path to it and, necessarily, rate limiting — it is an
+      LLM call on a public endpoint, so this cannot ship without a per-IP cap and a
+      sensible cost ceiling. It also needs a real failure state rather than silence: #40
+      is fixed, but #41 found 12 URLs the extractor still cannot read (dead links,
+      paywalls, bot protection), and a public try-it box that returns nothing at all for
+      one of those is worse than no box — it reads as "this doesn't work" on the one
+      screen where that conclusion is fatal.
+    - **Never show an empty collection.** Seed a new Account with a small set of good
+      Recipes — clearly marked as samples, deletable in one action — so the very first
+      thing a user can do is tick three boxes and see a real combined list. The seeding
+      mechanics already exist for local dev (`docker/mysql-seed/dev-seed.sql`); what does
+      not exist is a production path, or a decision on where the sample Recipes come from
+      and who owns them. Note the interaction with the Global Catalog: sample Recipes
+      create real Ingredient Lines, so whatever is chosen should use Ingredients that are
+      already well-curated rather than introducing new ones.
+
+    Other onboarding threads not designed yet, listed so they are not re-discovered:
+    what the first run of `/list` shows when nothing is selected; whether the invite flow
+    should be offered during onboarding rather than buried in `/account`, given that a
+    shared list is the strongest reason to keep using it; and whether the one-shot
+    onboarding screen in `pages/index.tsx` (shown once, then marked onboarded in the
+    background) is worth keeping at all if the two items above land — it currently exists
+    only to say "you're in" to someone who has nowhere to go yet.

@@ -18,11 +18,32 @@ import type { User } from '../types/models';
 // An already-onboarded user never sees any of it: the effect below redirects
 // them to /list, exactly as this page did before it was rewritten.
 
+// The two human needs underneath the mechanics: the deciding, and the buying
+// twice. Both are written as a concession followed by the real claim - saying
+// what it can't do first is what makes the second half believable, and it keeps
+// us off the two claims we can't back. We have no price data and no receipts,
+// so nothing here says "save money"; the money point is waste avoided, which is
+// mechanically true of combining, rather than savings earned, which isn't ours
+// to claim. Same for time: no minutes, because the time it gives back is spent
+// deciding, not chopping.
+const why = [
+  {
+    concession: 'It won’t do the cooking.',
+    claim: 'It’ll stop the deciding.',
+    body: 'Deciding is the part that actually takes the time. Everything you’ve liked before is in one place, tagged and searchable, so choosing five meals for the week is five ticks — not half an hour of “I don’t mind, what do you fancy?” on a Sunday night.',
+  },
+  {
+    concession: 'It doesn’t make food cheaper.',
+    claim: 'It stops you buying it twice.',
+    body: 'Three jars of cumin. A second bag of rice. The mid-week top-up trip that somehow costs forty quid. Buying for the whole week in one go, off a list that has already added everything up, is the cheap way to shop — this is the thing that makes actually doing it possible.',
+  },
+];
+
 const method = [
   {
     n: '01',
     title: 'Put a recipe in',
-    body: 'Paste a link from any recipe site, photograph a page of a cookbook, or type it out. It gets read, pulled apart into ingredients and method, and filed.',
+    body: 'Paste a link from any recipe site, photograph a page of a cookbook, or type it out. It’s read for you and comes back as ingredients, method and tags — ready to cook from, and ready to shop from.',
   },
   {
     n: '02',
@@ -32,34 +53,61 @@ const method = [
   {
     n: '03',
     title: 'Take the list to the shop',
-    body: 'Every ingredient across every chosen recipe, added up into one line each and sorted into the order you walk the aisles. Tick things off as they go in the trolley.',
+    body: 'Every ingredient across every chosen recipe, added up into one line each and sorted into the order you walk the aisles. Tick things off as they go in the trolley — and whoever else is shopping sees them go.',
+  },
+];
+
+// The two that actually make someone switch get the large treatment; the rest
+// are reassurance and sit in a smaller grid underneath.
+const leadNotes = [
+  {
+    title: 'Nobody comes home with a second bag of rice',
+    body: 'Invite whoever you shop with by email. Same recipes, same list, same ticked boxes — updating in both your pockets while you’re stood in different aisles.',
+  },
+  {
+    title: 'It does the adding up',
+    body: 'Three recipes wanting onions is one line saying how many onions. Where two amounts genuinely can’t be added — 50 g and 2 tbsp of flour — you get one line carrying both, not two lines to hunt for.',
   },
 ];
 
 const notes = [
   {
-    title: 'It does the adding up',
-    body: 'Three recipes wanting onions is one line saying how many onions. Where two amounts genuinely can’t be added — 50 g and 2 tbsp of flour — you get one line carrying both, not two lines to hunt for.',
-  },
-  {
     title: 'It knows what a tin is',
     body: 'A tin of chopped tomatoes is 400 g, a clove is 5 g, a potato is about 180 g. So the list says “2 tins”, which is a thing you can pick up, with the raw total kept alongside.',
   },
   {
-    title: 'One list per household',
-    body: 'Invite whoever you shop with by email. Same recipes, same list, same ticked boxes — so nobody comes home with a second bag of rice.',
-  },
-  {
-    title: 'Room for the non-recipe things',
+    title: 'Bin bags too',
     body: 'Bin bags, milk, the birthday card. Add extras straight to the list and they sit alongside everything the recipes asked for.',
   },
   {
-    title: 'Your own collection, searchable',
-    body: 'Everything you’ve saved in one place, searchable by name and filterable by tag — so “that lentil thing we had in March” is findable.',
+    title: '“That lentil thing we had in March”',
+    body: 'Everything you’ve saved in one place, searchable by name and filterable by tag — so the one you can only half remember is still findable.',
   },
   {
-    title: 'And Dave, if you’re stuck',
-    body: 'A chat that can only see your recipes. It remembers what you cooked recently and what you keep going back to, and will build the list for you.',
+    title: 'Ask what’s for dinner',
+    body: 'Dave only knows your kitchen — your recipes, what you cooked recently, what you keep going back to. Ask what to cook this week and it’ll build the list for you.',
+  },
+];
+
+// Objections in the order they actually occur to someone reading this page,
+// answered immediately before the last ask. Nothing here promises anything the
+// app doesn't already do - notably there is no export yet, so nothing claims one.
+const questions = [
+  {
+    q: 'Do I have to type all my recipes in?',
+    a: 'No. Paste a link and the page is read for you; photograph a cookbook and so is that. Typing is the fallback rather than the default — and even then you can paste the whole ingredient list in one lump instead of a row at a time.',
+  },
+  {
+    q: 'Will it work with the sites I use?',
+    a: 'It reads the page itself rather than following rules written for a handful of named sites, so it isn’t limited to a supported list. When a page does defeat it, what it did get still opens in the form and you fill in the rest.',
+  },
+  {
+    q: 'Can I share it with the person I shop with?',
+    a: 'Yes — invite them by email and you have one collection and one list between you, ticked boxes and all. That’s the whole point of it, not an extra.',
+  },
+  {
+    q: 'What does it cost?',
+    a: 'Nothing. There’s no card to enter, no trial counting down, and no plan to be upgraded to.',
   },
 ];
 
@@ -156,7 +204,7 @@ const Index = () => {
         <meta charSet="utf-8" />
         <meta
           name="description"
-          content="Big Shop keeps your recipes in one place and turns the ones you're cooking this week into a single shopping list - ingredients added up across every dish and sorted by aisle."
+          content="Big Shop keeps your recipes in one place and turns the ones you're cooking this week into a single shopping list - ingredients added up across every dish and sorted by aisle. Free, and shared with whoever you shop with."
         />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="theme-color" content="#faf5ee" />
@@ -189,7 +237,7 @@ const Index = () => {
         <main id="top">
           <section className={styles.hero}>
             <div className={styles.heroCopy}>
-              <p className={styles.eyebrow}>Recipes &amp; the weekly shop</p>
+              <p className={styles.eyebrow}>The shop you do every week</p>
               <h1 className={styles.display}>
                 Start with one recipe.
                 <br />
@@ -198,6 +246,7 @@ const Index = () => {
               <p className={styles.standfirst}>
                 Big Shop keeps your recipes together, and turns the ones you’ve chosen this week into a
                 single shopping list &mdash; ingredients added up across every dish and sorted by aisle.
+                One decision on Sunday, one trip, nothing bought twice.
               </p>
               {onboarding ? (
                 <div className={styles.actions}>
@@ -205,11 +254,16 @@ const Index = () => {
                 </div>
               ) : (
                 <>
+                  {/* One action only. Anyone who already has an account has the
+                      Log in button in the header, three inches up. */}
                   <div className={styles.actions}>
-                    <button type="button" className={styles.primary} onClick={signUp}>Get started</button>
-                    <button type="button" className={styles.secondary} onClick={logIn}>I already have an account</button>
+                    <button type="button" className={styles.primary} onClick={signUp}>Add your first recipe</button>
                   </div>
-                  <p className={styles.footnote}>Free. No app to install. Works on the phone in your hand at the shop.</p>
+                  <p className={styles.footnote}>
+                    <strong className={styles.free}>Free.</strong>{' '}
+                    No card, no app to install &mdash; it works on the phone that’s already in your
+                    hand at the shop.
+                  </p>
                 </>
               )}
             </div>
@@ -236,6 +290,20 @@ const Index = () => {
             </div>
           </section>
 
+          <section className={styles.whySection}>
+            <h2 className={styles.sectionHeading}>What it’s actually for</h2>
+            <div className={styles.why}>
+              {why.map((item) => (
+                <article key={item.claim} className={styles.reason}>
+                  <h3 className={styles.reasonTitle}>
+                    <span className={styles.concession}>{item.concession}</span> {item.claim}
+                  </h3>
+                  <p className={styles.reasonBody}>{item.body}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
           <section className={styles.methodSection}>
             <h2 className={styles.sectionHeading}>Method</h2>
             <ol className={styles.method}>
@@ -256,7 +324,7 @@ const Index = () => {
             <div className={styles.sources}>
               <article className={styles.source}>
                 <h3>A link</h3>
-                <p>Any recipe site. The page is read for you and comes back as name, ingredients, method and tags.</p>
+                <p>Any recipe site. The page is read for you and comes back as name, ingredients, method and tags &mdash; with American cups and ounces turned into grams on the way in.</p>
               </article>
               <article className={styles.source}>
                 <h3>A photograph</h3>
@@ -270,7 +338,15 @@ const Index = () => {
           </section>
 
           <section className={styles.notesSection}>
-            <h2 className={styles.sectionHeading}>Notes</h2>
+            <h2 className={styles.sectionHeading}>The fiddly bits</h2>
+            <div className={styles.leadNotes}>
+              {leadNotes.map((note) => (
+                <article key={note.title} className={styles.leadNote}>
+                  <h3 className={styles.leadNoteTitle}>{note.title}</h3>
+                  <p className={styles.leadNoteBody}>{note.body}</p>
+                </article>
+              ))}
+            </div>
             <div className={styles.notes}>
               {notes.map((note) => (
                 <article key={note.title} className={styles.note}>
@@ -279,6 +355,44 @@ const Index = () => {
                 </article>
               ))}
             </div>
+          </section>
+
+          <section className={styles.colophonSection}>
+            <div className={styles.colophon}>
+              <article>
+                <h2 className={styles.colophonTitle}>Built for one household’s weekly shop</h2>
+                {/* Deliberately no longer lists the pains - the "What it's
+                    actually for" band does that far better, and repeating them
+                    here made this read as a weaker second attempt. What's left
+                    is the thing that band can't say: who built it, and what it
+                    refuses to become. */}
+                <p className={styles.colophonBody}>
+                  There’s no growth team here, and no roadmap of things nobody asked for. It does
+                  recipes, and the list that falls out of them, and it does those properly. It isn’t
+                  going to become your calendar, your macros tracker or your fridge.
+                </p>
+              </article>
+              <article>
+                <h2 className={styles.colophonTitle}>It gets better as more people cook</h2>
+                <p className={styles.colophonBody}>
+                  How much a tin holds, what a potato weighs, which aisle a thing lives in &mdash;
+                  that’s one shared reference rather than something every kitchen re-enters. Worked
+                  out once, and every list after it is that bit more accurate.
+                </p>
+              </article>
+            </div>
+          </section>
+
+          <section className={styles.questionsSection}>
+            <h2 className={styles.sectionHeading}>Questions</h2>
+            <dl className={styles.questions}>
+              {questions.map((item) => (
+                <div key={item.q} className={styles.question}>
+                  <dt className={styles.questionTitle}>{item.q}</dt>
+                  <dd className={styles.questionBody}>{item.a}</dd>
+                </div>
+              ))}
+            </dl>
           </section>
 
           <section className={styles.closer}>
@@ -290,7 +404,12 @@ const Index = () => {
             {onboarding ? (
               <Link href="/list" className={styles.primary}>Start building your shopping list</Link>
             ) : (
-              <button type="button" className={styles.primary} onClick={signUp}>Get started</button>
+              <>
+                <button type="button" className={styles.primary} onClick={signUp}>Start with one recipe</button>
+                <p className={styles.closerFootnote}>
+                  <strong className={styles.free}>Free.</strong> One recipe is enough to make a list.
+                </p>
+              </>
             )}
           </section>
         </main>

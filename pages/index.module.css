@@ -83,8 +83,7 @@
 }
 
 .logIn:focus-visible,
-.primary:focus-visible,
-.secondary:focus-visible {
+.primary:focus-visible {
   outline: 2px solid var(--spot);
   outline-offset: 3px;
 }
@@ -174,29 +173,20 @@
   transform: translateY(-1px);
 }
 
-.secondary {
-  font-family: inherit;
-  font-size: var(--text-base);
-  font-weight: 500;
-  color: var(--ink);
-  background: none;
-  border: 0;
-  border-bottom: 1px solid var(--rule);
-  border-radius: 0;
-  padding: 14px 2px;
-  cursor: pointer;
-  transition: border-color 0.18s ease, color 0.18s ease;
-}
-
-.secondary:hover {
-  color: var(--spot);
-  border-bottom-color: var(--spot);
-}
-
 .footnote {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
+  line-height: 1.55;
   color: var(--ink-soft);
+  max-width: 34em;
   margin: 0;
+}
+
+/* "Free" is the strongest word on the page and was previously set in the same
+   grey as the rest of the footnote. Full ink, and the heading face. */
+.free {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  color: var(--ink);
 }
 
 /* ---------- hero card ----------
@@ -329,6 +319,50 @@
   border-left: 2px solid var(--claret);
 }
 
+/* ---------- what it's actually for ----------
+   Sits between the hero and the Method, so it has to read as the reason for
+   what follows rather than as another feature grid. Deliberately unlike the
+   two-tier "fiddly bits" notes it could otherwise be confused with: no top
+   rules on each item, larger type, and a single hairline splitting the pair on
+   wide screens. */
+
+.whySection {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: clamp(var(--space-5), 4vw, 56px) clamp(var(--space-4), 5vw, 60px) clamp(var(--space-6), 6vw, 80px);
+  border-top: 1px solid var(--rule);
+}
+
+.why {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.reasonTitle {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: clamp(26px, 3.4vw, 38px);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  margin: 0 0 var(--space-3);
+  text-wrap: balance;
+}
+
+/* The admission is set back in soft ink so the claim after it carries the
+   weight - it's a concession, not half the headline. */
+.concession {
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+
+.reasonBody {
+  font-size: var(--text-md);
+  line-height: 1.7;
+  color: var(--ink-soft);
+  margin: 0;
+  max-width: 46ch;
+}
+
 /* ---------- method ---------- */
 
 .methodSection,
@@ -420,9 +454,42 @@
 
 /* ---------- notes ---------- */
 
+/* Two tiers: the two reasons someone switches, set large and ruled like a
+   standfirst, then the four reassurance notes in the smaller hanging grid. */
+.leadNotes {
+  display: grid;
+  gap: var(--space-5) clamp(var(--space-5), 5vw, 70px);
+  margin-bottom: var(--space-6);
+}
+
+.leadNote {
+  border-top: 2px solid var(--ink);
+  padding-top: var(--space-3);
+}
+
+.leadNoteTitle {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: clamp(var(--text-lg), 2.6vw, 30px);
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+  margin: 0 0 var(--space-2);
+  max-width: 18ch;
+}
+
+.leadNoteBody {
+  font-size: var(--text-md);
+  line-height: 1.65;
+  color: var(--ink-soft);
+  margin: 0;
+  max-width: 44ch;
+}
+
 .notes {
   display: grid;
   gap: var(--space-5) clamp(var(--space-5), 5vw, 70px);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--rule);
 }
 
 .noteTitle {
@@ -447,6 +514,78 @@
   max-width: 46ch;
 }
 
+/* ---------- colophon ----------
+   The print-page equivalent of an "about the publisher" note: who made this and
+   why it gets better with use. Set on the deeper paper so it reads as an aside
+   rather than another feature section. */
+
+.colophonSection {
+  background: var(--paper-deep);
+  border-block: 1px solid var(--rule);
+  padding: clamp(var(--space-6), 6vw, 80px) clamp(var(--space-4), 5vw, 60px);
+}
+
+.colophon {
+  display: grid;
+  gap: var(--space-5) clamp(var(--space-5), 5vw, 70px);
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+.colophonTitle {
+  font-family: var(--font-heading);
+  font-style: italic;
+  font-weight: 600;
+  font-size: clamp(var(--text-lg), 2.4vw, 26px);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin: 0 0 var(--space-2);
+  color: var(--claret);
+}
+
+.colophonBody {
+  font-size: var(--text-base);
+  line-height: 1.7;
+  color: var(--ink-soft);
+  margin: 0;
+  max-width: 52ch;
+}
+
+/* ---------- questions ---------- */
+
+.questionsSection {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: clamp(var(--space-6), 6vw, 80px) clamp(var(--space-4), 5vw, 60px);
+}
+
+.questions {
+  display: grid;
+  gap: var(--space-5) clamp(var(--space-5), 5vw, 70px);
+  margin: 0;
+}
+
+.question {
+  padding-bottom: var(--space-4);
+  border-bottom: 1px dotted var(--rule);
+}
+
+.questionTitle {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: var(--text-md);
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-2);
+}
+
+.questionBody {
+  font-size: var(--text-base);
+  line-height: 1.65;
+  color: var(--ink-soft);
+  margin: 0;
+  max-width: 52ch;
+}
+
 /* ---------- closer + footer ---------- */
 
 .closer {
@@ -467,6 +606,12 @@
 .closerHeading em {
   font-style: italic;
   color: var(--spot);
+}
+
+.closerFootnote {
+  font-size: var(--text-base);
+  color: var(--ink-soft);
+  margin: var(--space-4) 0 0;
 }
 
 .footer {
@@ -498,8 +643,29 @@
   .sources {
     grid-template-columns: repeat(3, 1fr);
   }
-  .notes {
+  .notes,
+  .leadNotes,
+  .colophon,
+  .questions {
     grid-template-columns: repeat(2, 1fr);
+  }
+  .why {
+    grid-template-columns: 1fr 1px 1fr;
+    /* Halved from the row gap: it lands on both sides of the 1px rule, so the
+       gap between the two texts is twice whatever is set here. */
+    column-gap: clamp(var(--space-4), 3vw, 44px);
+  }
+  /* Hairline between the pair, drawn as a grid track so it spans whichever of
+     the two columns is taller. */
+  .why::before {
+    content: '';
+    grid-column: 2;
+    grid-row: 1;
+    background: var(--rule);
+  }
+  .reason:last-child {
+    grid-column: 3;
+    grid-row: 1;
   }
 }
 

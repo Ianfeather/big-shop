@@ -54,15 +54,43 @@ Notes: Gates green — vitest 134, e2e 21, `go test`/`go vet`/`gofmt` clean, bot
   there.
 
 ## Session 2: Phase 2 — move the checks before removing them
-Status: pending
+Status: done
 Scope: `ci.yml` gains `push: branches: [master]` and a `go` job (gofmt gate, `go test`,
   both drift checks). `build.sh` reduces to `npm run package`; `GO_VERSION` leaves
   `netlify.toml`. New `.github/workflows/deploy-api.yml` gated on CI.
 Depends on: Session 1
-Commit:
-Notes: Must land before Session 3 so the Go checks never run nowhere. The `required
-  checks` ruleset matches on job name — the new `go` job is not a required check until the
-  ruleset is updated; flagged, not fixed (repo settings, not code).
+Commit: a1fa73d
+Notes: Gates green — vitest 134, typecheck, lint, all three workflow YAMLs and both TOMLs
+  parse, all shell scripts pass `bash -n`.
+
+  Deviations from the spec's Phase 2:
+  - **`GO_VERSION` stays in `netlify.toml`**, contrary to "Remove `GO_VERSION` from
+    `netlify.toml`". Netlify still *compiles* the Lambda on every deploy through the
+    cooling-off period — the functions directory is configured in the Netlify UI, not in
+    `netlify.toml`, which is exactly why removing the pin looks safe from the repo alone.
+    A failed Netlify build takes the whole site down, not just the API. Phase 5 deletes
+    the function and the pin together.
+  - **`gofmt -l`, not `go fmt ./...`** as the spec words it. `go fmt` rewrites files and
+    exits 0 regardless, so the check as specified would have shipped as a gate that can
+    never fail — it has been one in `build.sh` all along.
+  - **`go vet` added** (spec lists four checks, not five) and `scripts/build-local.sh`
+    updated to match, so the local script and CI don't drift.
+
+  Review findings fixed: stale docs in `CLAUDE.md` and `technical-architecture.md` (three
+  statements about `build.sh` running Go tests, now false); `deploy-api.yml`'s concurrency
+  comment contradicted its config; manual dispatch would have deployed whatever branch it
+  was dispatched from; `setup-flyctl@master` pinned to `@v1.4` (it is the only job holding
+  `FLY_API_TOKEN`); `npm ci` added before the `api.d.ts` drift check so the pinned
+  generator runs rather than whatever `npx` fetches.
+
+  **ACTION REQUIRED (repo setting, not code): add `go` to the `required checks` ruleset.**
+  Worse than a missing gate — `deploy-api.yml` keys off the whole CI workflow's
+  conclusion, so a red `go` job merged through the un-updated ruleset silently stops the
+  API deploying while Netlify goes on shipping the site from that same commit.
+
+  Known limitation, accepted: the deploy is gated on CI only, as the spec says. `e2e.yml`
+  is a separate workflow with no `push` trigger, so the API's deploy gate is strictly
+  weaker than the merge gate. Not worth a double-`workflow_run` contortion.
 
 ## Session 3: Phase 3 — dual run
 Status: pending

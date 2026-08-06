@@ -86,11 +86,13 @@ against the real stack, or against a synced copy of production
 (`scripts/sync-from-prod.sh`).
 
 **Manual path** (what `dev:full` automates, useful if you want the API/DB
-outside Docker): `go run . dev` inside `netlify-functions/recipes/` starts a
-plain HTTP server on `:8080` — but routes are always registered under
-`/.netlify/functions/recipes` (see `main.go`'s `GetRouter` call), so
+outside Docker): `go run . serve` inside `netlify-functions/recipes/` starts a
+plain HTTP server on `:8080` — the same mode the production container on Fly
+runs, which is why it is no longer called `dev` (`dev` still works as an alias).
+Routes are registered under
+`/api/bigshop` (`main.go`'s `basePath`, passed to `GetRouter`), so
 `NEXT_PUBLIC_API_HOST` must include that suffix, e.g.
-`http://localhost:8080/.netlify/functions/recipes` (already the case in
+`http://localhost:8080/api/bigshop` (already the case in
 `.env.development`). It needs a live DB via `DSN`, and `DISABLE_AUTH=true`
 (no `NEXT_PUBLIC_` prefix — read server-side by the Go process) to skip real
 Auth0 JWT validation; the router then injects a fixed `DEV_USER_ID` (default

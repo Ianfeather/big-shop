@@ -35,7 +35,21 @@ The app uses Auth0 for authentication:
 ## Go API Structure
 
 Located in `netlify-functions/recipes/`:
-- `main.go`: Lambda entry point, TiDB connection, Negroni router setup
+- `main.go`: entry point, TiDB connection, Negroni router setup. `main()` branches three
+  ways on `os.Args[1]`: `openapi` prints the spec and exits, `serve` (or its older alias
+  `dev`) runs a plain `http.Server` on `:8080` — which is what both local development
+  *and* the production container on Fly run — and the default is `lambda.Start`, still
+  deployed to Netlify Functions during the migration's cooling-off period
+  ([spec](./specs/api-hosting-migration.md) Phase 5 deletes it)
+- `basePath` / `lambdaBasePath` (`main.go`): the server registers routes under
+  `/api/bigshop`, which is also the OpenAPI server URL — Netlify rewrites that path to
+  the Fly origin with `status = 200`, so the API stays same-origin to the browser. The
+  Lambda goes on registering under `/.netlify/functions/recipes`, because Netlify routes
+  to a function by the function's own path; that is what keeps it a working rollback
+  target during the cooling-off period
+- `Dockerfile`: production image (static binary on distroless, non-root) — distinct from
+  `Dockerfile.dev`, the toolchain-plus-`air` image `docker-compose.yml` builds
+- `fly.toml`: one always-on `shared-cpu-1x`/512MB machine in `fra`
 - `internal/pkg/app/app.go`: App struct, JWT middleware, all route definitions (`GetRouter`, ~line 145)
 - `internal/pkg/app/*.go`: Feature handlers
 
@@ -179,7 +193,7 @@ stored server-side by recipe id and re-read on mount, so it self-corrects.
 
 **Development (`.env.development`):**
 ```
-NEXT_PUBLIC_API_HOST=http://localhost:8080
+NEXT_PUBLIC_API_HOST=http://localhost:8080/api/bigshop
 NEXT_PUBLIC_AUTH0_DOMAIN=dev-x-n37k6b.eu.auth0.com
 NEXT_PUBLIC_AUTH0_CLIENT_ID=HxkTOH3ZYxjbsgrVI4ii1CV2TQx7hk9G
 NEXT_PUBLIC_AUTH0_AUDIENCE=https://big-shop-api

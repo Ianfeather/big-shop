@@ -26,11 +26,54 @@ var negroniLambda *negroniadapter.NegroniAdapter
 var router *negroni.Negroni
 var openapiAPI huma.API
 
+// basePath is the prefix every route is registered under when this runs as a
+// server - the Fly container in production, and `serve` locally - and it is the
+// OpenAPI server URL. Netlify rewrites it to the Fly origin with status = 200,
+// which keeps the API same-origin to the browser. /api alone would swallow the
+// Next.js routes under pages/api, hence the second segment. Changing this means
+// regenerating docs/openapi.yaml and types/api.d.ts - both are drift-checked in
+// CI.
+const basePath = "/api/bigshop"
+
+// lambdaBasePath is what the Netlify Function has always served, and goes on
+// serving unchanged.
+//
+// It is not simply the old value of basePath. Netlify routes a request to a
+// function by the function's own path, so the Lambda has to keep registering
+// routes under that prefix or it 404s on everything the moment this branch
+// deploys. That would quietly destroy the rollback the whole migration rests
+// on: specs/api-hosting-migration.md's Phase 4 says rollback is "reverting
+// those values and redeploying. The Lambda is still there, still serving its
+// old path, untouched" - which is only true if it really is untouched. So the
+// two servers coexist through the cooling-off period, on different paths,
+// against the same database.
+//
+// Deleted along with the lambda.Start branch in Phase 5.
+const lambdaBasePath = "/.netlify/functions/recipes"
+
 // isOpenAPIMode reports whether the process was invoked as `go run . openapi`,
 // which prints the generated OpenAPI spec and exits - no DB connection is
 // needed since route registration never touches it.
 func isOpenAPIMode() bool {
 	return len(os.Args) > 1 && os.Args[1] == "openapi"
+}
+
+// isServeMode reports whether the process should run as a plain HTTP server:
+// the production container on Fly, `npm run dev:full`, and the e2e stack.
+// `dev` is the name this mode had when it was only ever used locally; it is
+// still accepted so CLAUDE.md's documented invocation and anyone's muscle
+// memory keep working.
+func isServeMode() bool {
+	return len(os.Args) > 1 && (os.Args[1] == "serve" || os.Args[1] == "dev")
+}
+
+// routerBasePath picks the prefix for the mode this process is running in.
+// Anything that is not the OpenAPI printer or a server is the Lambda.
+func routerBasePath() string {
+	if isOpenAPIMode() || isServeMode() {
+		return basePath
+	}
+	return lambdaBasePath
 }
 
 func init() {
@@ -47,7 +90,7 @@ func init() {
 			return
 		}
 
-		_, api, err := application.GetRouter("/.netlify/functions/recipes")
+		_, api, err := application.GetRouter(basePath)
 		if err != nil {
 			fmt.Println("Failed to get application router")
 			fmt.Println(err)
@@ -77,7 +120,7 @@ func init() {
 		fmt.Println(err)
 	}
 
-	router, _, err = application.GetRouter("/.netlify/functions/recipes")
+	router, _, err = application.GetRouter(routerBasePath())
 	if err != nil {
 		fmt.Println("Failed to get application router")
 		fmt.Println(err)
@@ -91,21 +134,32 @@ func handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.API
 }
 
 func main() {
-	args := os.Args
 	if isOpenAPIMode() {
 		spec, err := openapiAPI.OpenAPI().YAML()
 		if err != nil {
 			panic(err.Error())
 		}
 		fmt.Print(string(spec))
-	} else if len(args) > 1 && args[1] == "dev" {
+	} else if isServeMode() {
+		// This branch is no longer dev-only: it is what the production
+		// container on Fly runs too (see Dockerfile), so its timeouts now
+		// apply to real traffic for the first time - the lambda.Start path
+		// below never used them. The old 3s read/write pair would have cut
+		// off anything slower than that, shopping-list generation being the
+		// obvious candidate. WriteTimeout covers handler execution, and sits
+		// above the Netlify proxy's own 26s ceiling so the proxy is what
+		// gives up first rather than the origin truncating a response
+		// mid-flight.
 		server := http.Server{
 			Addr:         ":8080",
-			ReadTimeout:  3000 * time.Millisecond,
-			WriteTimeout: 3000 * time.Millisecond,
+			ReadTimeout:  10 * time.Second,
+			WriteTimeout: 30 * time.Second,
+			IdleTimeout:  120 * time.Second,
 			Handler:      router,
 		}
-		server.ListenAndServe()
+		// Fatal rather than ignored: a bind failure used to exit 0 silently,
+		// which on Fly would be a restart loop with no reason recorded.
+		log.Fatal(server.ListenAndServe())
 	} else {
 		lambda.Start(handler)
 	}

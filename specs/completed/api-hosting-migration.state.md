@@ -119,9 +119,18 @@ Notes: Gates green — vitest 134, typecheck, lint, all three workflow YAMLs and
   conclusion, so a red `go` job merged through the un-updated ruleset silently stops the
   API deploying while Netlify goes on shipping the site from that same commit.
 
-  Known limitation, accepted: the deploy is gated on CI only, as the spec says. `e2e.yml`
-  is a separate workflow with no `push` trigger, so the API's deploy gate is strictly
-  weaker than the merge gate. Not worth a double-`workflow_run` contortion.
+  Known limitation, accepted and tracked as `follow-ups.md` #43: the deploy is gated on CI
+  only, as the spec says, and `e2e.yml` is a separate workflow a `workflow_run` cannot see.
+  Narrower than it sounds — every commit on `master` came through a PR where both suites
+  were green — but the ruleset is not "strict", so the merge commit itself is CI-verified
+  and not e2e-verified, and it is the merge commit that deploys.
+
+  `push: branches: [master]` on `ci.yml` turns out to matter for a different reason than
+  first written. It is not extra check coverage: a direct push to `master` is *rejected*,
+  not merely ungated (master's own `d81c9d6` established this after the branch was cut).
+  It is required because `deploy-api.yml`'s `workflow_run` filters on the triggering run's
+  head branch, which for a `pull_request` run is the PR's branch and never `master` —
+  without the push trigger the API would never deploy at all. Comment corrected on rebase.
 
 ## Session 3: Phase 3 — dual run
 Status: done

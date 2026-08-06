@@ -44,8 +44,13 @@ export DB_PORT API_PORT
 echo "Starting local MySQL + Go API (docker compose)..."
 docker compose up -d --build db api
 
+# Both the health poll and Next.js address the API through the same base URL,
+# so it is composed once - the router's base path (main.go's basePath) appears
+# in enough places already without this script holding two copies of it.
+export NEXT_PUBLIC_API_HOST="http://localhost:${API_PORT}/api/bigshop"
+
 echo "Waiting for the API on :${API_PORT}..."
-health_url="http://localhost:${API_PORT}/.netlify/functions/recipes/health"
+health_url="${NEXT_PUBLIC_API_HOST}/health"
 for _ in $(seq 1 60); do
   if curl -sf "$health_url" > /dev/null 2>&1; then
     echo "API is up."
@@ -58,7 +63,6 @@ if ! curl -sf "$health_url" > /dev/null 2>&1; then
   exit 1
 fi
 
-export NEXT_PUBLIC_API_HOST="http://localhost:${API_PORT}/.netlify/functions/recipes"
 export NEXT_PUBLIC_HOST="http://localhost:${WEB_PORT}"
 
 echo "Starting Next.js on :${WEB_PORT}..."

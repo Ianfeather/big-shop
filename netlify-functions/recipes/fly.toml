@@ -1,0 +1,73 @@
+# Fly.io config for the Go API.
+#
+# Why Fly, why `fra`, and why one always-on machine:
+# docs/adr/0006-go-api-leaves-netlify-functions.md. How the migration was
+# carried out: specs/api-hosting-migration.md.
+#
+# Deploy from the repository root with:
+#   fly deploy ./netlify-functions/recipes
+# (this file sits next to the Dockerfile so the build context is the Go module
+# and nothing else - not the whole repo). docs/fly-migration-runbook.md has the
+# first-time setup, including the DSN secret.
+
+app = "big-shop-api"
+
+# Frankfurt: the same metro as the TiDB cluster in AWS eu-central-1. Not the
+# same provider network - Fly runs its own hardware - so the DB hop is
+# Frankfurt peering at ~1-5ms rather than intra-AWS at ~0.5-1ms. Knowingly
+# accepted in ADR-0006; it is still ~90ms better than us-east-2.
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# The Go process reads five environment variables (grep os.Getenv). Two are
+# public identifiers and live here, in version control, so a deploy cannot
+# forget them:
+#
+#   AUTH0_DOMAIN / AUTH0_AUDIENCE - both are already public in
+#     .env.development. Getting these wrong does not fail loudly: with
+#     AUTH0_DOMAIN unset the JWKS fetch goes to https:///.well-known/jwks.json
+#     and every authenticated route rejects, while /health stays green and the
+#     machine looks perfectly healthy.
+#
+# Two are secrets, set out-of-band with `fly secrets set` (see
+# docs/fly-migration-runbook.md) and deliberately absent from this file:
+#
+#   DSN               - TiDB connection string
+#   SENDGRID_API_KEY  - account invitation emails (internal/pkg/app/user.go)
+#
+# The fifth, DISABLE_AUTH, must never be set here. It is a local-development
+# switch that makes the API resolve every request to DEV_USER_ID without
+# validating a token; docker-compose.yml is the only place it belongs.
+[env]
+  AUTH0_DOMAIN = "dev-x-n37k6b.eu.auth0.com"
+  AUTH0_AUDIENCE = "https://big-shop-api"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+
+  # Never stop the machine. Cold starts are the thing this migration exists to
+  # remove, so paying for an idle machine is the point rather than a waste.
+  # (min_machines_running is deliberately absent: it only governs how far
+  # autostop is allowed to scale down, so it would be inert alongside this.)
+  auto_stop_machines = false
+  auto_start_machines = true
+
+  [[http_service.checks]]
+    # /health is the one route with no JWT requirement (see app.go's carve-out
+    # ahead of the CORS and auth middleware), which is what makes it usable
+    # here - a health check cannot hold an Auth0 token. Note it is under the
+    # router's base path, not at the root.
+    path = "/api/bigshop/health"
+    method = "GET"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  # 512MB rather than the 256MB a Go API of this size needs, to leave room for
+  # the OpenTelemetry collector sidecar that specs/observability.md adds next.
+  memory = "512mb"

@@ -238,6 +238,8 @@ Two independent pipelines, one per deployable — an accepted consequence of
   secrets, `AUTH0_DOMAIN`/`AUTH0_AUDIENCE` are in `fly.toml`'s `[env]`
 - Reached from the browser through a Netlify `status = 200` rewrite, so it stays
   same-origin. Server-side callers address it directly
+- First-time setup, cutover and rollback:
+  [`docs/fly-migration-runbook.md`](./docs/fly-migration-runbook.md)
 
 ## Key Dependencies
 

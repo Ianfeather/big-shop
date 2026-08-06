@@ -4,7 +4,7 @@ Decisions and rationale: [ADR-0007](../docs/adr/0007-observability-otel-grafana-
 (architecture) and [ADR-0008](../docs/adr/0008-what-telemetry-does-not-carry.md)
 (content and cardinality rules).
 
-**Depends on [`api-hosting-migration.md`](./api-hosting-migration.md) landing first.**
+**Depends on [`api-hosting-migration.md`](./completed/api-hosting-migration.md) landing first.**
 Phases 2–4 below assume the Go API is a long-lived process on Fly with a collector
 sidecar available. Attempting them against the Lambda would produce a materially different
 and worse design.
@@ -154,7 +154,7 @@ triggered by roughly two weeks of production data, not by a date.
 - **Put `x-nf-request-id` on the server span** for any request arriving via the Netlify
   proxy. It is the only handle that correlates a Big Shop trace with Netlify's own request
   logs, and it costs one attribute. Confirmed present at the origin during the Phase 0
-  probe in [`api-hosting-migration.md`](./api-hosting-migration.md).
+  probe in [`api-hosting-migration.md`](./completed/api-hosting-migration.md).
 - **Telemetry must never affect the application.** Exporter errors swallowed, flushes
   bounded, the SDK's default `ErrorHandler` replaced so it does not spam logs, and no
   telemetry initialisation that can `log.Fatal` the way `main.go`'s DB ping does.

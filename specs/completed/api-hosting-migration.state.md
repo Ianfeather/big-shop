@@ -26,6 +26,25 @@ production verification are the user's to run, from `docs/fly-migration-runbook.
 (written in Session 3). **Phase 5 is deliberately excluded** — the spec calls for it as a
 separate PR after a cooling-off period.
 
+## Branch-deploy verification (post-PR)
+
+All CI green on the first run, including the new `go` job (46s) and Netlify's own
+**Redirect rules** check, which validates the `[[redirects]]` block. Netlify's build also
+succeeded, independently confirming that keeping `GO_VERSION` was right — it still compiled
+the Lambda.
+
+Against `deploy-preview-76--big-shop.netlify.app`, which is the only place the two things
+that cannot be tested locally could be checked:
+
+```
+GET /.netlify/functions/recipes/health   -> 200 "ok"   # lambdaBasePath works; rollback target is real
+GET /.netlify/functions/recipes/recipes  -> 401        # ...with auth still running
+GET /api/bigshop/health                  -> 502        # rewrite fires; no Fly app exists yet
+```
+
+The 502 is the correct result at this stage: it proves the rewrite is wired and aimed at
+`big-shop-api.fly.dev`, which runbook step 1 creates.
+
 ## Session 1: Phase 1 — make it deployable
 Status: done
 Scope: Production `Dockerfile` + `.dockerignore`, `fly.toml`, raised HTTP timeouts on the

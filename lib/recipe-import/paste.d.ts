@@ -1,3 +1,3 @@
 import type { ExtractInput } from './extract';
 
-export function textToInput(raw: string): ExtractInput;
+export function textToInput(raw: string): ExtractInput & { source: 'ingredient-list' };

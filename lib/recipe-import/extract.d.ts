@@ -9,10 +9,16 @@ export interface ExtractedIngredient {
   baseUnit?: string;
   displayUnit?: string;
   unitSizes?: Record<string, number>;
+  pantryStaple?: boolean;
 }
 
 export interface ExtractInput {
   type: 'text' | 'image';
+  // Which Import Source produced this input. It selects between two materially
+  // different prompts - see buildFieldRules in extract.js - so it is required
+  // rather than optional: a new Source that forgets it would silently get the
+  // scraped-page rules, which is the bug this distinction exists to fix.
+  source: 'ingredient-list' | 'page';
   text?: string;
   base64?: string;
 }

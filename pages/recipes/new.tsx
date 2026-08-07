@@ -96,6 +96,7 @@ interface ParsedIngredient {
   baseUnit?: string;
   displayUnit?: string;
   unitSizes?: Record<string, number>;
+  pantryStaple?: boolean;
 }
 
 interface ParseUrlResult {
@@ -123,13 +124,14 @@ interface ImageJobStatus {
 // function destructured only name/quantity/unit and silently lost them for two
 // of the three Import Sources.
 function normalizeParsedIngredients(ingredients?: ParsedIngredient[]): RecipeModel['ingredients'] {
-  return (ingredients || []).map(({ name, quantity, unit, baseUnit, displayUnit, unitSizes }) => ({
+  return (ingredients || []).map(({ name, quantity, unit, baseUnit, displayUnit, unitSizes, pantryStaple }) => ({
     name: name || '',
     quantity: quantity || '',
     unit: unit || '',
     ...(baseUnit ? { baseUnit } : {}),
     ...(displayUnit !== undefined && displayUnit !== null ? { displayUnit } : {}),
     ...(unitSizes ? { unitSizes } : {}),
+    ...(pantryStaple ? { pantryStaple } : {}),
   }));
 }
 

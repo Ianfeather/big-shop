@@ -511,6 +511,9 @@ func classifyNewIngredients(recipe common.Recipe, db execer) {
 		if ingredient.DisplayUnit != nil {
 			setIngredientUnitColumn(db, "display_unit_id", *ingredient.DisplayUnit, ingredient.Name)
 		}
+		if ingredient.PantryStaple {
+			setPantryStaple(db, ingredient.Name)
+		}
 
 		for unit, size := range ingredient.UnitSizes {
 			if size <= 0 {
@@ -548,6 +551,24 @@ func setIngredientUnitColumn(db execer, column, unitName, ingredientName string)
 		WHERE name = ? AND %s IS NULL AND NOT curated;`, column, column)
 	if _, err := db.Exec(query, unitName, ingredientName); err != nil {
 		log.Printf("could not set %s for %q: %v", column, ingredientName, err)
+	}
+}
+
+// setPantryStaple flags an Ingredient as a store-cupboard basic on Recipe
+// Import's proposal, for the ones migration 032's list didn't cover.
+//
+// One-way, by construction: it is only ever reached for a true proposal, and it
+// only ever writes true. That is what stands in for the `IS NULL` guard the two
+// unit columns use - `pantry_staple` is NOT NULL with a default, so there is no
+// "unset" state to test for, and re-proposing something already flagged has to
+// be harmless rather than merely unlikely.
+//
+// `NOT curated` still applies, so anyone who deliberately un-flags an Ingredient
+// by hand can mark it curated and have that stick.
+func setPantryStaple(db execer, ingredientName string) {
+	query := `UPDATE ingredient SET pantry_staple = TRUE WHERE name = ? AND NOT curated;`
+	if _, err := db.Exec(query, ingredientName); err != nil {
+		log.Printf("could not set pantry_staple for %q: %v", ingredientName, err)
 	}
 }
 

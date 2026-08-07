@@ -33,6 +33,11 @@ type IngredientInfo struct {
 	// UnitSizes maps a Unit name to how much one of it is, in BaseUnit. Missing
 	// is a normal state: that Unit's Amounts simply won't combine yet.
 	UnitSizes map[string]float64
+	// PantryStaple marks a store-cupboard basic the Shopping List groups away by
+	// default. Purely presentational - it never affects combining or arithmetic,
+	// which is the whole point of moving the judgement here from Recipe Import
+	// (migration 032).
+	PantryStaple bool
 }
 
 // IngredientCatalog maps an Ingredient's name to its measurement metadata.
@@ -78,12 +83,13 @@ func GetIngredientCatalog(db *sql.DB, units UnitCatalog) (IngredientCatalog, err
 	catalog := make(IngredientCatalog)
 
 	baseUnits, err := db.Query(`
-		SELECT ingredient.name, base.name, display.name
+		SELECT ingredient.name, base.name, display.name, ingredient.pantry_staple
 		FROM ingredient
 		LEFT JOIN unit AS base ON base.id = ingredient.base_unit_id
 		LEFT JOIN unit AS display ON display.id = ingredient.display_unit_id
 		WHERE ingredient.base_unit_id IS NOT NULL
-		   OR ingredient.display_unit_id IS NOT NULL;
+		   OR ingredient.display_unit_id IS NOT NULL
+		   OR ingredient.pantry_staple;
 	`)
 	if err != nil {
 		return nil, err
@@ -93,7 +99,8 @@ func GetIngredientCatalog(db *sql.DB, units UnitCatalog) (IngredientCatalog, err
 	for baseUnits.Next() {
 		var ingredient string
 		var base, display sql.NullString
-		if err := baseUnits.Scan(&ingredient, &base, &display); err != nil {
+		var pantryStaple bool
+		if err := baseUnits.Scan(&ingredient, &base, &display, &pantryStaple); err != nil {
 			return nil, err
 		}
 		baseUnit := base.String
@@ -111,6 +118,7 @@ func GetIngredientCatalog(db *sql.DB, units UnitCatalog) (IngredientCatalog, err
 			BaseUnit:       baseUnit,
 			DisplayUnit:    display.String,
 			HasDisplayUnit: display.Valid,
+			PantryStaple:   pantryStaple,
 		}
 	}
 	if err := baseUnits.Err(); err != nil {

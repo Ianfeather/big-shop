@@ -71,6 +71,14 @@ A quantity paired with a Unit ("400 gram", "2 tablespoon"). An Ingredient Line c
 **Shopping Precision**:
 The rounding a Shopping List Amount is shown at — the list is an instruction to someone in a shop, not the result of a calculation, so "4.444444 teaspoon" is arithmetically honest and useless. The Unit picks the granularity, and anything not weighed on a scale rounds *up*, since rounding down means going home without enough: a Relative Unit to a whole (you can't buy 1.75 tins), a measuring spoon to a quarter (a cook can measure ¼ tsp, not 0.3 tsp), and a weight or volume to nearest at a precision scaled to its size — never so coarse that a real amount rounds away to zero. Applied once, when the list is read, so the stored totals stay exact.
 
+**Pantry Staple**:
+A near-universal store-cupboard basic — salt, pepper, cooking oil, flour, butter, sugar — that the Shopping List groups into its own collapsed section instead of listing among the things you actually went out for. A property of the Ingredient (`ingredient.pantry_staple`), not of an Amount: a staple is a staple whatever quantity a Recipe calls for.
+
+Purely presentational, and deliberately so. Recipe Import used to solve the same problem by omitting these from the Recipe outright whenever the amount looked like seasoning, which made a Recipe permanently wrong about its own contents and — the reason it changed — looked exactly like a failed extraction from the cook's side. Now every Ingredient reaches the Recipe and the list, the flag is applied when the list is read (so flagging an Ingredient improves a list already generated), and the shopper is always shown the group and its count.
+
+Whether the group is open is a **per-User** preference (`user.show_pantry_staples`), not per-Account: the Shopping List is shared, but two people shopping off one list needn't agree about whether the salt is showing. The browser also caches it in `localStorage` and paints from that, so the first render never waits on a request — the server is the source of truth, the cache is only what makes it instant. See `hooks/use-synced-flag.ts`.
+_Avoid_: Pantry Item, Basic (neither says it's still on the list, only grouped)
+
 **Department**:
 The aisle-style grouping a Shopping List Item is shown under (e.g. "vegetables", "meat and fish", "other"). One per Ingredient (many-to-one), not many-to-many — the join table (`ingredient_department`) is looser than this rule today, which is a defect (an Ingredient with two Department rows would silently duplicate that Ingredient Line wherever it's read), not an intended feature.
 
@@ -83,6 +91,10 @@ _Avoid_: Scraping (see URL Import — the old per-site scraper approach this rep
 - **Photo Import**: user uploads a photo of a recipe; GPT-4 Vision extracts it as a Processing Job, since the extraction call runs too long for a synchronous Lambda response.
 - **Manual Entry**: user fills fields directly — but can still paste freeform multiline ingredient text into a bulk box that gets LLM-parsed into structured Ingredient Lines, rather than typing one row per ingredient.
 _Avoid_: Camera (UI label for Photo Import's tab; "Photo Import" is the canonical term)
+
+The bulk box is an **explicit enumeration**, and the extractor is told so (`source: 'ingredient-list'`, `lib/recipe-import/paste.js`): every non-blank line comes back as an Ingredient Line, and none of it is a title or a method. URL and Photo Import are the opposite — a whole page or photo to find the recipe inside — so they alone get the rules for picking a title and method out of surrounding noise. Applying those to the bulk box loses lines the cook deliberately typed: a first line reading "Jerk marinade: 120ml" gets taken as the dish's name, and the route keeps only `ingredients`, so it vanishes with nothing shown.
+
+**No Import Source omits an Ingredient.** Extraction proposes `pantryStaple` alongside the other catalog metadata; grouping is the Shopping List's job (see Pantry Staple).
 
 **Processing Job**:
 The async unit of work behind Photo Import specifically (not used by URL Import or Manual Entry, which respond synchronously). The client polls for completion rather than waiting on one request, because Netlify Functions' Lambda-based execution can't hold a request open long enough for a Vision call to finish.

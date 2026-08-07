@@ -344,7 +344,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Get the signed-in user */
+        get: operations["get-user"];
         put?: never;
         /** Add a user */
         post: operations["add-user"];
@@ -369,6 +370,23 @@ export interface paths {
         head?: never;
         /** Mark the current user as onboarded */
         patch: operations["complete-onboarding"];
+        trace?: never;
+    };
+    "/user/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update the signed-in user's view preferences */
+        patch: operations["set-preferences"];
         trace?: never;
     };
 }
@@ -465,6 +483,7 @@ export interface components {
             department?: string;
             displayUnit?: string;
             name: string;
+            pantryStaple?: boolean;
             quantity: string;
             unit: string;
             unitSizes?: {
@@ -491,6 +510,7 @@ export interface components {
             amounts: components["schemas"]["Amount"][] | null;
             department: string;
             isBought: boolean;
+            pantryStaple?: boolean;
             /** Format: int64 */
             recipe_id: number;
         };
@@ -503,6 +523,15 @@ export interface components {
             readonly $schema?: string;
             IsBought: boolean;
             Name: string;
+        };
+        PreferencesInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /.netlify/functions/recipes/schemas/PreferencesInputBody.json
+             */
+            readonly $schema?: string;
+            showPantryStaples: boolean;
         };
         Recipe: {
             /**
@@ -576,6 +605,7 @@ export interface components {
             id?: string;
             name?: string;
             onboarded?: boolean;
+            showPantryStaples?: boolean;
         };
     };
     responses: never;
@@ -1236,6 +1266,35 @@ export interface operations {
             };
         };
     };
+    "get-user": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "add-user": {
         parameters: {
             query?: never;
@@ -1277,6 +1336,39 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "set-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreferencesInputBody"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {

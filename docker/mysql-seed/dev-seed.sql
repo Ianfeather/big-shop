@@ -70,6 +70,20 @@ WHERE name = 'Black Pepper';
 UPDATE `ingredient` SET curated = TRUE
 WHERE name IN ('Olive Oil', 'Onion', 'Carrot', 'Chopped Tomatoes', 'Garlic Clove', 'Black Pepper');
 
+-- Pantry staples, mirroring migration 032 - inline for the same reason. Two of
+-- the ten seeded Ingredients, which is enough for the Shopping List's staples
+-- group to have something in it locally and in e2e: without any flagged rows
+-- the grouping is unreachable, and its tests would pass just as happily with
+-- the feature deleted.
+--
+-- Black Pepper is deliberately NOT flagged, even though migration 032 flags it
+-- in production. It is this seed's density/Display Unit exemplar - the one
+-- ingredient that exercises grams-through-a-density-back-into-teaspoons - and
+-- flagging it would bury that fixture inside a collapsed group, entangling
+-- every unit-conversion test with the staples UI for no gain.
+UPDATE `ingredient` SET pantry_staple = TRUE
+WHERE name IN ('Olive Oil', 'Salt');
+
 INSERT INTO `ingredient_unit_size` (ingredient_id, unit_id, size)
 SELECT i.id, u.id, v.size FROM `ingredient` i, `unit` u, (
   SELECT 'Onion' AS ing, '' AS un, 150 AS size

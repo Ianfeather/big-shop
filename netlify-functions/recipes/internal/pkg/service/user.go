@@ -27,13 +27,35 @@ func AddUser(db *sql.DB, user common.User) error {
 }
 
 func GetUser(db *sql.DB, userID string) (u *common.User, e error) {
-	userQuery := `SELECT id, name, email, onboarded FROM user WHERE id = ?`
+	userQuery := `SELECT id, name, email, onboarded, show_pantry_staples FROM user WHERE id = ?`
 	user := &common.User{}
 
-	if err := db.QueryRow(userQuery, userID).Scan(&user.ID, &user.Name, &user.Email, &user.Onboarded); err != nil {
+	// Scanned into a local and then pointed at, so the field is always non-nil
+	// on the way out - a read of this User always states the preference,
+	// including when it is false. See the field's comment in common/types.go.
+	var showPantryStaples bool
+	if err := db.QueryRow(userQuery, userID).Scan(&user.ID, &user.Name, &user.Email, &user.Onboarded, &showPantryStaples); err != nil {
 		return nil, err
 	}
+	user.ShowPantryStaples = &showPantryStaples
 	return user, nil
+}
+
+// SetShowPantryStaples records whether this user wants the Shopping List's
+// Pantry Staples group opened.
+//
+// Takes the value rather than only ever setting true, unlike SetOnboarded above:
+// onboarding happens once and never un-happens, while this is a preference the
+// same person flips back and forth.
+func SetShowPantryStaples(db *sql.DB, userID string, show bool) error {
+	query := `UPDATE user SET show_pantry_staples = ? WHERE id = ?`
+	_, err := db.Exec(query, show, userID)
+	if err != nil {
+		log.Println("Error setting user show_pantry_staples")
+		log.Println(err)
+		return err
+	}
+	return nil
 }
 
 // SetOnboarded marks a user as having completed the onboarding screen.

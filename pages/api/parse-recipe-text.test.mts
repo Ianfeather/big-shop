@@ -70,7 +70,11 @@ describe('parse-recipe-text handler', () => {
     }), res);
 
     expect(extractRecipe).toHaveBeenCalledWith({
-      input: { type: 'text', text: '2 eggs' },
+      // `source` is what tells the extractor this is a list the cook wrote out
+      // rather than a scraped page, which is the difference between a prompt
+      // that keeps every line and one that may drop some as a title or as
+      // pantry noise (lib/recipe-import/extract.test.ts).
+      input: { type: 'text', source: 'ingredient-list', text: '2 eggs' },
       knownIngredients: ['egg'],
       knownUnits: ['gram']
     });

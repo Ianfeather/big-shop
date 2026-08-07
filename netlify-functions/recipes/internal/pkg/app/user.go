@@ -50,6 +50,52 @@ func (a *App) addUser(ctx context.Context, input *UserInput) (*UserOutput, error
 	return &UserOutput{Body: *saved}, nil
 }
 
+// PreferencesInput carries the view preferences a user can change. Separate
+// from UserInput: this is the only body a client is allowed to set directly, so
+// name/email/onboarded can't be smuggled in through it.
+type PreferencesInput struct {
+	Body struct {
+		ShowPantryStaples bool `json:"showPantryStaples"`
+	}
+}
+
+// getUser returns the signed-in user, including their view preferences.
+//
+// The frontend previously only ever saw a User as the response body of POST
+// /user on the landing page, which left no way for any other page to read user
+// state at all.
+func (a *App) getUser(ctx context.Context, _ *struct{}) (*UserOutput, error) {
+	userID := ctx.Value(contextKey("userID")).(string)
+
+	user, err := service.GetUser(a.db, userID)
+	if err != nil {
+		// Also the no-rows case: someone who reached an inner page before POST
+		// /user ever ran for them. Not a server fault, and the client treats it
+		// as "no preferences recorded yet" rather than as an error.
+		log.Println("Error fetching user")
+		return nil, huma.Error404NotFound("user not found")
+	}
+
+	return &UserOutput{Body: *user}, nil
+}
+
+func (a *App) setPreferences(ctx context.Context, input *PreferencesInput) (*UserOutput, error) {
+	userID := ctx.Value(contextKey("userID")).(string)
+
+	if err := service.SetShowPantryStaples(a.db, userID, input.Body.ShowPantryStaples); err != nil {
+		log.Println("Error saving preferences")
+		return nil, huma.Error500InternalServerError("could not save preferences")
+	}
+
+	saved, err := service.GetUser(a.db, userID)
+	if err != nil {
+		log.Println("Error fetching saved user")
+		return nil, huma.Error500InternalServerError("Error fetching saved user")
+	}
+
+	return &UserOutput{Body: *saved}, nil
+}
+
 func (a *App) completeOnboarding(ctx context.Context, _ *struct{}) (*UserOutput, error) {
 	userID := ctx.Value(contextKey("userID")).(string)
 
@@ -117,6 +163,22 @@ func (a *App) registerUserRoutes(api huma.API) {
 		Summary:     "Add a user",
 		Tags:        []string{"Users"},
 	}, a.addUser)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "get-user",
+		Method:      http.MethodGet,
+		Path:        "/user",
+		Summary:     "Get the signed-in user",
+		Tags:        []string{"Users"},
+	}, a.getUser)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "set-preferences",
+		Method:      http.MethodPatch,
+		Path:        "/user/preferences",
+		Summary:     "Update the signed-in user's view preferences",
+		Tags:        []string{"Users"},
+	}, a.setPreferences)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "complete-onboarding",

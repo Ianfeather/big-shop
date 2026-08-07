@@ -57,12 +57,12 @@ The recipe image extraction uses Netlify Blobs to store async job results; the f
 
 ## Database Schema
 
-Production: TiDB (MySQL-compatible). Migrations in `migrations/` applied manually, in order — there is no consolidated schema file, so `migrations/*.sql` (currently 25 files) is the authoritative source for exact columns/constraints.
+Production: TiDB (MySQL-compatible). Migrations in `migrations/` applied manually, in order — there is no consolidated schema file, so `migrations/*.sql` (currently 32 files) is the authoritative source for exact columns/constraints.
 
 | Table | Purpose |
 |-------|---------|
 | `recipe` | Recipe records (id, name, slug, remote_url, account_id) |
-| `ingredient` | Canonical ingredient names, plus `base_unit_id` (what its Amounts are added up in) and `display_unit_id` (what a Shopping List shows them as) |
+| `ingredient` | Canonical ingredient names, plus `base_unit_id` (what its Amounts are added up in), `display_unit_id` (what a Shopping List shows them as) and `pantry_staple` (grouped away on the Shopping List by default — see CONTEXT.md's Pantry Staple) |
 | `ingredient_unit_size` | How much one `<unit>` of an `<ingredient>` is, in that ingredient's base unit — average weight, pack size and density are all this one relation (see [ADR-0004](./docs/adr/0004-unit-size-as-one-relation.md)) |
 | `unit` | Measurement units (gram, litre, teaspoon, packet, etc.), each with a `kind` (weight/volume/relative), a `factor` for Absolute Units, and an optional `default_size` |
 | `part` | Recipe ↔ ingredient join (recipe_id, ingredient_id, unit_id, quantity) |
@@ -75,7 +75,7 @@ Production: TiDB (MySQL-compatible). Migrations in `migrations/` applied manuall
 | `account` | Shared account aggregate |
 | `account_user` | User ↔ account join (user_id is Auth0 string ID) |
 | `invite` | Email invitations with expiring tokens |
-| `user` | Auth0-backed user identity |
+| `user` | Auth0-backed user identity, plus per-user flags: `onboarded` and `show_pantry_staples` (view preference — see CONTEXT.md's Pantry Staple) |
 
 ## Component Structure
 

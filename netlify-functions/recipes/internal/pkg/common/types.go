@@ -57,6 +57,12 @@ type Ingredient struct {
 	// baseTotal.soleUnit and IngredientInfo.HasDisplayUnit.
 	DisplayUnit *string            `json:"displayUnit,omitempty"`
 	UnitSizes   map[string]float64 `json:"unitSizes,omitempty"`
+	// PantryStaple is Recipe Import proposing that this Ingredient is a
+	// store-cupboard basic. A plain bool rather than a pointer, unlike
+	// DisplayUnit above: classification only ever acts on true, so "false" and
+	// "not proposed" genuinely are the same thing here and there is no sentinel
+	// to collide with.
+	PantryStaple bool `json:"pantryStaple,omitempty"`
 }
 
 // Tag contains tag fields
@@ -107,6 +113,15 @@ type ListIngredient struct {
 	IsBought   bool     `json:"isBought"`
 	RecipeID   int      `json:"recipe_id"`
 	Department string   `json:"department"`
+	// PantryStaple marks a store-cupboard basic (salt, oil, flour...) that the
+	// frontend groups away by default. Set when the list is read, from the
+	// Global Catalog, so flagging an Ingredient improves a list that has already
+	// been generated - the same read-time principle as Display Units.
+	//
+	// omitempty, so every Item that isn't one is byte-for-byte unchanged; Huma
+	// infers required-ness from JSON tags, and a `false` here means exactly what
+	// an absent field means.
+	PantryStaple bool `json:"pantryStaple,omitempty"`
 }
 
 // User object
@@ -122,6 +137,21 @@ type User struct {
 	Name      string `json:"name,omitempty"`
 	Email     string `json:"email"`
 	Onboarded bool   `json:"onboarded,omitempty"`
+	// ShowPantryStaples is a view preference, not domain state: whether this
+	// User wants the Shopping List's Pantry Staples group opened. Server-managed
+	// like Onboarded above, hence omitempty for the same reason - it is never
+	// sent as input on POST /user or POST /invite, and Huma would otherwise mark
+	// it required on those bodies.
+	//
+	// A pointer, unlike Onboarded, because here `false` is a real answer that
+	// has to win. The client caches this value in localStorage and paints from
+	// the cache; reconciling means "the server said X, adopt it". With a plain
+	// bool, omitempty drops `false` from the JSON, so a preference turned *off*
+	// on another device arrives as absent - indistinguishable from "no answer
+	// yet" - and every other device keeps showing it on, forever. GetUser always
+	// sets it, so it is always present on output. Same reason Ingredient's
+	// DisplayUnit is a *string.
+	ShowPantryStaples *bool `json:"showPantryStaples,omitempty"`
 }
 
 // Account holds accounts and users

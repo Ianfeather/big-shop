@@ -205,13 +205,14 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
   // while writing a recipe, and the server ignores them for any ingredient that
   // already has values.
   function appendIngredients(parsedIngredients: Partial<Ingredient>[]) {
-    const newIngredients = parsedIngredients.map(({ name, quantity, unit, baseUnit, displayUnit, unitSizes }) => ({
+    const newIngredients = parsedIngredients.map(({ name, quantity, unit, baseUnit, displayUnit, unitSizes, pantryStaple }) => ({
       name: (name || '').trim(),
       quantity: quantity || '',
       unit: unit || '',
       ...(baseUnit ? { baseUnit } : {}),
       ...(displayUnit !== undefined && displayUnit !== null ? { displayUnit } : {}),
       ...(unitSizes ? { unitSizes } : {}),
+      ...(pantryStaple ? { pantryStaple } : {}),
     }));
     setRecipe(prevRecipe => ({
       ...prevRecipe,

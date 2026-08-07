@@ -1,6 +1,7 @@
 import type { Page, APIRequestContext } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { createRecipe, deleteRecipeById, clearShoppingList, addRecipesToList } from './api';
+import { createRecipe, deleteRecipeById, clearShoppingList, addRecipesToList, setShowPantryStaples } from './api';
+import { API_HOST } from './env';
 
 // Under DISABLE_AUTH every request resolves to the same dev Account, so the
 // Shopping List is one singleton mutable resource shared across this whole
@@ -225,6 +226,7 @@ test.describe('shopping list unit sizes and display units', () => {
   const tinRecipe = `E2E Tin Recipe ${runId}`;
   const spoonRecipe = `E2E Spoon Recipe ${runId}`;
   const pinchRecipe = `E2E Pinch Recipe ${runId}`;
+  const stapleRecipe = `E2E Staple Recipe ${runId}`;
   let ids: number[] = [];
 
   test.beforeAll(async ({ request }) => {
@@ -248,6 +250,12 @@ test.describe('shopping list unit sizes and display units', () => {
       ]}),
       await createRecipe(request, { name: pinchRecipe, ingredients: [
         { name: 'Black Pepper', quantity: '1', unit: 'gram' },
+      ]}),
+      // Olive Oil is flagged pantry_staple in dev-seed.sql; Chopped Tomatoes
+      // is not, so one Recipe covers both sides of the split.
+      await createRecipe(request, { name: stapleRecipe, ingredients: [
+        { name: 'Olive Oil', quantity: '2', unit: 'tablespoon' },
+        { name: 'Chopped Tomatoes', quantity: '1', unit: 'tin' },
       ]}),
     ];
   });
@@ -322,5 +330,64 @@ test.describe('shopping list unit sizes and display units', () => {
     const pepper = page.getByRole('checkbox', { name: 'Black Pepper' });
     await expect(pepper).toContainText('0.5 teaspoon');
     await expect(pepper).not.toContainText('0.4');
+  });
+
+  // Pantry staples. Recipe Import used to drop salt/oil/sugar from a Recipe
+  // outright when the amount looked like seasoning, which is indistinguishable
+  // from a failed extraction - the cook sees a Recipe missing lines and cannot
+  // tell "we decided you have this" from "we lost it". The Recipe now keeps
+  // everything and the Shopping List groups it instead.
+  //
+  // Worth an e2e test rather than only the component one: the flag is set
+  // server-side at read time from the ingredient catalog (MarkPantryStaples),
+  // so nothing but a run through the real API proves it survives the trip.
+  test('a pantry staple is grouped rather than dropped, and opens on request', async ({ page, request }) => {
+    // Collapsed to start with, whatever a previous test left on the User.
+    await setShowPantryStaples(request, false);
+    await selectOnly(page, request, stapleRecipe);
+
+    // Out of the main list, but its existence is stated, with a count.
+    const toggle = page.getByRole('button', { name: /pantry staples/i });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByRole('checkbox', { name: 'Olive Oil' })).toBeHidden();
+    // The non-staple from the same Recipe is unaffected.
+    await expect(page.getByRole('checkbox', { name: 'Chopped Tomatoes' })).toBeVisible();
+
+    await toggle.click();
+
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const oil = page.getByRole('checkbox', { name: 'Olive Oil' });
+    await expect(oil).toBeVisible();
+    // Grouped, not filtered: it carries a real Amount like any other Item, and
+    // the same rules apply to it - one contributing Unit was never ambiguous, so
+    // it stays tablespoons rather than being reduced to its base unit.
+    await expect(oil).toContainText('2 tablespoon');
+  });
+
+  // The toggle is cached in localStorage (so the first paint never waits on a
+  // request) but stored on the User. Clearing localStorage before reloading is
+  // what makes this test about the server half: with the cache gone, the group
+  // can only come back open if the preference survived on the User row.
+  test('the staples preference follows the user, not the browser', async ({ page, request }) => {
+    await setShowPantryStaples(request, false);
+    await selectOnly(page, request, stapleRecipe);
+    await page.getByRole('button', { name: /pantry staples/i }).click();
+    await expect(page.getByRole('button', { name: /pantry staples/i })).toHaveAttribute('aria-expanded', 'true');
+
+    // Wait for the write to land before throwing the cache away, or this races
+    // the PATCH rather than testing it. Deliberately not wrapped in a catch: a
+    // failing read here is a real failure, and swallowing it would just time
+    // out with "undefined" and say nothing about why.
+    await expect.poll(async () => {
+      const res = await request.get(`${API_HOST}/user`);
+      if (!res.ok()) throw new Error(`GET /user: ${res.status()} ${await res.text()}`);
+      return (await res.json()).showPantryStaples;
+    }).toBe(true);
+
+    await page.evaluate(() => window.localStorage.clear());
+    await page.reload();
+
+    // Nothing cached locally any more, so this is the server's answer.
+    await expect(page.getByRole('button', { name: /pantry staples/i })).toHaveAttribute('aria-expanded', 'true');
   });
 });

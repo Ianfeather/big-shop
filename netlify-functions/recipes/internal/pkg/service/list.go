@@ -348,6 +348,26 @@ func ApplyDisplayUnits(items map[string]*common.ListIngredient, units UnitCatalo
 	}
 }
 
+// MarkPantryStaples flags the Ingredient Items the Shopping List should group
+// away as store-cupboard basics.
+//
+// Marking rather than filtering, and here rather than in the frontend's own
+// data, because the shopper decides: the API sends the whole list every time and
+// the client shows or hides the group. A staple that were filtered out server
+// side could not be revealed without a round trip, and - the thing this feature
+// exists to fix - would be indistinguishable from one that had gone missing.
+//
+// Read time, alongside ApplyDisplayUnits, for the same reason: flagging an
+// Ingredient improves a Shopping List that has already been generated, instead
+// of only the next one.
+//
+// Pure: the catalog is a parameter.
+func MarkPantryStaples(items map[string]*common.ListIngredient, ingredients IngredientCatalog) {
+	for name, item := range items {
+		item.PantryStaple = ingredients.Get(name).PantryStaple
+	}
+}
+
 // amountInBaseUnits reduces a rendered Amount back to the Ingredient's Base
 // Unit, reporting false when there's no honest way to.
 func amountInBaseUnits(amount common.Amount, units UnitCatalog, info IngredientInfo) (float64, bool) {
@@ -577,6 +597,9 @@ func GetShoppingList(userID string, db *sql.DB) (*common.ShoppingList, error) {
 		return nil, err
 	}
 	ApplyDisplayUnits(ingredients, units, ingredientCatalog)
+	// Touches no Amounts, so its position relative to the two either side of it
+	// doesn't matter - it sits here because it reads the same catalog.
+	MarkPantryStaples(ingredients, ingredientCatalog)
 	// Last, so every Amount is rounded once, in its final Unit, rather than
 	// each conversion rounding on the way through.
 	RoundAmountsForShopping(ingredients, units)

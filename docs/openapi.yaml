@@ -143,6 +143,8 @@ components:
           type: string
         name:
           type: string
+        pantryStaple:
+          type: boolean
         quantity:
           type: string
         unit:
@@ -204,6 +206,8 @@ components:
           type: string
         isBought:
           type: boolean
+        pantryStaple:
+          type: boolean
         recipe_id:
           format: int64
           type: integer
@@ -230,6 +234,21 @@ components:
       required:
         - IsBought
         - Name
+      type: object
+    PreferencesInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /.netlify/functions/recipes/schemas/PreferencesInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        showPantryStaples:
+          type: boolean
+      required:
+        - showPantryStaples
       type: object
     Recipe:
       additionalProperties: false
@@ -392,6 +411,8 @@ components:
         name:
           type: string
         onboarded:
+          type: boolean
+        showPantryStaples:
           type: boolean
       required:
         - email
@@ -893,6 +914,24 @@ paths:
       tags:
         - Units
   /user:
+    get:
+      operationId: get-user
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Get the signed-in user
+      tags:
+        - Users
     post:
       operationId: add-user
       requestBody:
@@ -934,6 +973,31 @@ paths:
                 $ref: "#/components/schemas/ErrorModel"
           description: Error
       summary: Mark the current user as onboarded
+      tags:
+        - Users
+  /user/preferences:
+    patch:
+      operationId: set-preferences
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PreferencesInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Update the signed-in user's view preferences
       tags:
         - Users
 servers:

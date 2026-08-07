@@ -1,0 +1,14 @@
+-- Whether this User wants the Shopping List's Pantry Staples group opened.
+--
+-- On `user` rather than `account` deliberately. The Shopping List itself is
+-- account-wide - you and whoever you share it with are looking at the same
+-- items - but how you like it laid out is yours. Two people shopping off one
+-- list should not have to agree about whether the salt is showing.
+--
+-- Defaults false, matching the collapsed-by-default group, so every existing
+-- row and every new one starts where the UI already starts.
+--
+-- The browser keeps a copy in localStorage and paints from it, so this column
+-- is the source of truth but not what the first render waits on - see
+-- hooks/use-synced-flag.ts.
+ALTER TABLE `user` ADD COLUMN `show_pantry_staples` BOOLEAN NOT NULL DEFAULT FALSE;

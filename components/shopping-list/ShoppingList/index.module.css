@@ -23,6 +23,60 @@
   border-bottom: 1px solid var(--rule);
 }
 
+/* The staples group sits between the list proper and "Already bought": still
+   part of the list, visibly set apart from the things you actually came for. */
+.staplesContainer {
+  margin-top: var(--space-5);
+}
+
+.staplesToggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-2);
+  margin: 0 calc(var(--space-2) * -1);
+  width: calc(100% + var(--space-4));
+  border: none;
+  background: none;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 2px;
+  cursor: pointer;
+  font-family: var(--font-heading);
+  font-size: var(--text-md);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--claret);
+  text-align: left;
+  transition: background-color 0.12s ease;
+}
+
+.staplesToggle:hover {
+  background: var(--paper-deep);
+}
+
+.staplesHint {
+  margin-left: auto;
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+
+.staplesChevron {
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.12s ease;
+}
+
+.staplesChevronOpen {
+  transform: rotate(90deg);
+}
+
 .item {
   display: flex;
   align-items: center;

@@ -162,6 +162,40 @@ describe('Form', () => {
     expect(screen.getByLabelText('Ingredients')).toHaveValue('');
   });
 
+  // Rules the client out of the "pasted six lines, got three" report: whatever
+  // the route returns is appended in full, and a repeat parse adds to the list
+  // rather than replacing it. The ingredients that went missing were never in
+  // the response - see lib/recipe-import/extract.test.ts.
+  it('appends every ingredient the route returns, across repeated parses', async () => {
+    mockedNextApiPost.mockResolvedValueOnce({
+      ingredients: [
+        { name: 'tomato ketchup', quantity: '120', unit: 'millilitre' },
+        { name: 'pineapple juice', quantity: '120', unit: 'millilitre' },
+        { name: 'soy sauce', quantity: '100', unit: 'millilitre' }
+      ]
+    });
+    await renderForm();
+
+    await userEvent.type(screen.getByLabelText('Ingredients'), 'Tomato ketchup: 120ml');
+    await userEvent.click(screen.getByText('Parse ingredients'));
+    await waitFor(() => expect(screen.getByText('soy sauce')).toBeInTheDocument());
+
+    mockedNextApiPost.mockResolvedValueOnce({
+      ingredients: [
+        { name: 'jerk marinade', quantity: '120', unit: 'millilitre' },
+        { name: 'brown sugar', quantity: '20', unit: 'gram' },
+        { name: 'oil', quantity: '22.5', unit: 'millilitre' }
+      ]
+    });
+    await userEvent.type(screen.getByLabelText('Ingredients'), 'Jerk marinade: 120ml');
+    await userEvent.click(screen.getByText('Parse ingredients'));
+
+    await waitFor(() => expect(screen.getByText('oil')).toBeInTheDocument());
+    for (const name of ['tomato ketchup', 'pineapple juice', 'soy sauce', 'jerk marinade', 'brown sugar']) {
+      expect(screen.getByText(name)).toBeInTheDocument();
+    }
+  });
+
   it('shows an error and keeps the typed text when bulk parsing fails', async () => {
     mockedNextApiPost.mockRejectedValue(new Error('Could not parse that'));
     await renderForm();

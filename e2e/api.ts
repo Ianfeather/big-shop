@@ -68,6 +68,17 @@ export async function clearShoppingList(request: APIRequestContext): Promise<voi
   await request.delete(`${API_HOST}/shopping-list/clear`);
 }
 
+// The Pantry Staples toggle is stored on the User, so under DISABLE_AUTH it is
+// one more piece of state shared by every test in the run - the same hazard the
+// Shopping List has. A test that cares which way the group starts has to say
+// so rather than inherit whatever the last one left behind.
+export async function setShowPantryStaples(request: APIRequestContext, show: boolean): Promise<void> {
+  const res = await request.patch(`${API_HOST}/user/preferences`, { data: { showPantryStaples: show } });
+  if (!res.ok()) {
+    throw new Error(`Failed to set showPantryStaples: ${res.status()} ${await res.text()}`);
+  }
+}
+
 export async function addRecipesToList(request: APIRequestContext, ids: number[]): Promise<void> {
   const res = await request.post(`${API_HOST}/shopping-list`, { data: ids.map(String) });
   if (!res.ok()) {

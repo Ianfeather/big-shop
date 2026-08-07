@@ -135,3 +135,111 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     onboarding screen in `pages/index.tsx` (shown once, then marked onboarded in the
     background) is worth keeping at all if the two items above land — it currently exists
     only to say "you're in" to someone who has nowhere to go yet.
+43. **Google Analytics, and the consent foundation it requires.** The other half of a
+    decision already made: [`observability.md`](./specs/observability.md) puts long-horizon
+    product questions ("is Dave used more than three months ago") explicitly out of scope
+    for Grafana and names GA as their home — which is what makes Grafana Cloud Free's
+    14-day retention a non-issue rather than a constraint. Nothing has been built.
+
+    **Unblocked.** Unlike the observability work, this depends on neither the Fly
+    migration nor anything else. It is pure frontend and could ship first.
+
+    One GA4 property covering **both** surfaces: the public marketing homepage (`/`) and
+    the authenticated app. That scope is what drags in the compliance work below; a
+    homepage-only install would not have needed it. It is also what makes this the
+    measurement half of #42 — the funnel that item describes (read the page → sign up →
+    land in an empty account) is not currently observable at any step, so there is no way
+    to tell whether the onboarding work moved anything.
+
+    Three parts, deliberately one item rather than three, because shipping the tag
+    without the other two is the non-compliant version:
+
+    - A **privacy policy page**. None exists today.
+    - A **minimal consent banner**, two categories (essential / analytics). None exists
+      today either.
+    - **GA4 via Consent Mode v2**, firing only on opt-in. GA4 sets first-party cookies, so
+      under UK PECR it is non-essential storage requiring opt-in — this is a real
+      dependency, not a footnote.
+
+    **Identity: `account.id` as a custom user property, and no `user_id`.** The Account is
+    the unit the product questions are actually about ("how many Accounts have ever used
+    Dave"), and sending it as a property answers them without asserting a cross-device
+    person identity. The Auth0 subject is never sent to Google.
+
+    This extends [ADR-0008](./docs/adr/0008-what-telemetry-does-not-carry.md)'s
+    "pseudonymous identifiers, never content" rule to a second recipient, and the ADR
+    should say so. Nothing leaks today — every `pageTitle` in
+    `components/layout/index.tsx`'s callers is static (`"Recipes"`, `"Chat with Dave"`)
+    and Recipe URLs carry numeric ids — but that is currently an accident rather than a
+    rule. A future `{recipe.name} — Big Shop` title would ship Recipe names to Google.
+
+    Events: page views plus a short fixed list — Recipe imported by Source, Shopping List
+    generated, Dave turn, Invite sent. Two things to get right:
+
+    - **Page views must be fired manually on Next router changes.** Every route bar `/` is
+      a client-rendered SPA, so the default single pageload measures almost nothing.
+    - **GA carries an event only when the question is longitudinal.** Otherwise it stays a
+      Grafana metric. `observability.md` already specifies an import-outcome counter by
+      source and result, and a duration histogram by route; duplicating those in GA is the
+      obvious drift and this rule is what prevents it.
+
+    **Faro is deliberately not gated by the banner.** Frontend error reporting stays always
+    on, treated as necessary for service integrity. Recorded as a knowing risk rather than
+    an oversight: the "strictly necessary" exemption is narrow and error monitoring is a
+    contested fit. The alternative — putting Faro under the analytics category — would
+    blind error reporting for everyone who declines, which is the thing `observability.md`
+    exists to provide.
+
+44. **Audit `Cache-Control` across the Go API.** Originally filed as "put cacheable pages
+    and endpoints behind a CDN so we can globally distribute". Most of that premise
+    dissolved on inspection, and what is left is a headers problem rather than an
+    infrastructure one:
+
+    - **The frontend is already fully CDN'd.** Netlify serves `.next` from its edge, and
+      every route bar `/` is a client-rendered SPA behind an auth gate, so there are no
+      cacheable *pages* beyond the marketing homepage and the hashed bundle.
+    - **There is no CDN to add for the API either.** Once
+      [`api-hosting-migration.md`](./specs/api-hosting-migration.md) lands, browser API
+      traffic already crosses Netlify's edge via the `/api/bigshop/*` 200 rewrite, and
+      Netlify's CDN *does* cache responses proxied from an external origin, honouring the
+      origin's `Cache-Control`/`s-maxage`. Only the headers are missing. **Depends on that
+      migration** for exactly this reason.
+
+    Audit all 22 routes. Nineteen are account-scoped and mutable and want explicit
+    `private`/`no-store`. Three take no account scoping and return the same bytes for
+    everyone — and each wants a different answer, which is the finding:
+
+    - **`/tags`** reads the `tag` table, a fixed list seeded by migration that no code path
+      writes to (see `hooks/use-tags.ts`, which documents why nothing invalidates it). Long
+      `s-maxage`, no purge needed.
+    - **`/units`** is an Open catalog — saving a Recipe upserts every Unit its ingredients
+      reference, so an import can coin `"bunch"`. Cache-tagged and **purged on write**,
+      with a moderate backstop `s-maxage`.
+    - **`/ingredients`** is read server-side by `lib/recipe-import/known-names.ts`, which
+      post-migration calls Fly directly via `API_HOST_INTERNAL` and so **bypasses the edge
+      entirely**. Edge caching buys it nothing; an in-process cache in that module is the
+      real win, and is a separate piece of work.
+
+    On the purge mechanism: Netlify supports `Netlify-Cache-Tag` plus a purge API on all
+    plans, so this is available. It costs a Netlify personal access token as a Fly secret
+    — a re-coupling to Netlify's control plane immediately after a migration that reduced
+    it, accepted knowingly. **The purge must be async and best-effort: it must never fail a
+    Recipe save.** Each tag can be purged only twice every five seconds before returning
+    429, which a burst of saves, the e2e suite or a re-run of
+    `scripts/backfill-recipe-method.mjs` can all exceed. The backstop `s-maxage` is what
+    makes a dropped or rate-limited purge self-heal, which is why it is minutes rather
+    than a year.
+
+    **Accepted consequence: the three cached routes become publicly readable.**
+    `Authorization` is not part of Netlify's default cache key and `Netlify-Vary` cannot be
+    made to vary on it, so a `public` response cached from an authenticated request is
+    served to whoever asks next, authenticated or not. That is acceptable here because the
+    catalog is global and non-personal by design ([ADR-0001](./docs/adr/0001-global-ingredient-catalog.md)).
+    **`public` must never extend to an account-scoped route** — one Account's Shopping List
+    would be served to another.
+
+    Finally, the near-miss worth recording because it would be misdiagnosed: a naive TTL on
+    `/units` defeats the post-save invalidation at `components/recipe-form/Form.tsx:101`
+    (asserted by `Form.test.tsx:201`). The client would dutifully refetch, hit the stale
+    edge copy, and the new Unit would stay missing from autosuggest — looking exactly like
+    a frontend cache bug, with the frontend innocent.

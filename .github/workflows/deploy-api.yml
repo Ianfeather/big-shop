@@ -44,14 +44,19 @@ jobs:
       # not github.ref: dispatching from a feature branch would otherwise push
       # that branch straight onto the production machine, and per-branch API
       # deploys are explicitly out of scope for this migration.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha || 'master' }}
 
-      # Pinned, like every other action here. This is the only job that holds
-      # FLY_API_TOKEN, so a mutable @master ref would let an upstream change
-      # reach the credential without any change on our side.
-      - uses: superfly/flyctl-actions/setup-flyctl@v1.4
+      # Pinned to an exact tag rather than the moving `v1`, unlike the actions/*
+      # majors elsewhere. This is the only job that holds FLY_API_TOKEN, so a
+      # ref that moves on its own would let an upstream change reach the
+      # credential with no change on our side.
+      #
+      # The cost of that choice is this: an exact pin does not pick up runtime
+      # bumps either. `v1.4` sat on node16 until GitHub's node20 deprecation
+      # surfaced it. Re-check this tag whenever a runner deprecation lands.
+      - uses: superfly/flyctl-actions/setup-flyctl@1.6
 
       # --remote-only builds on Fly's builder rather than this runner. It is
       # already flyctl's default (--local-only is the opt-out), so this is

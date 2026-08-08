@@ -1,9 +1,55 @@
 ---
-spec: specs/recipe-import-unification.md
-status: in-progress
+spec: specs/completed/recipe-import-unification.md
+status: complete
 branch: implement/recipe-import-unification
-pr: https://github.com/Ianfeather/big-shop/pull/new/implement/recipe-import-unification (not yet created - `gh` CLI unavailable/unauthenticated in this environment; branch is pushed, PR needs manual creation via this compare link or a `gh auth login`)
+pr: none - no PR was ever opened. The branch was rebased onto master and pushed
+  directly (544ed8d, 8e28153, 56e4ca8, fcd250c, plus de6a2c7 and the three
+  post-rebase fixes 8133c6c/6d3d8f5/d698c28), all 2026-07-13. A direct push was
+  possible then; the `required checks` ruleset that now rejects one landed later,
+  in PR #75 (2026-08-05). Nothing is outstanding as a result - see Completion.
 ---
+
+## Completion (verified 2026-08-08)
+
+Every commit named in the sessions below is an ancestor of `master`, and each
+Phase's deliverable was re-checked against the code as it stands today, not just
+read off these notes:
+
+- **Phase 1** — `lib/recipe-import/extract.js` exports
+  `extractRecipe({input, knownIngredients, knownUnits})` returning
+  `{name, ingredients, method, tags}`; `matchCanonicalIngredient` lives inside it
+  and is applied to every returned ingredient; `isVegetarian` is mapped to `tags`
+  and never leaves the module; the `DEFAULT_UNITS` fallback survives an empty
+  `knownUnits`.
+- **Phase 2** — `url.js`'s `htmlToInput`, `photo.js`'s `imageToInput`,
+  `paste.js`'s `textToInput` all present.
+- **Phase 3** — all three routes are thin wrappers around `extract.js`;
+  `lib/extract-recipe-ingredients.js` and `lib/extract-recipe-method.js` are
+  gone; `lib/openai-client.js`'s stale "still uses its own vision model" comment
+  is gone with them.
+- **Phase 4** — `Form.tsx` carries no `matchCanonicalIngredient`; `new.tsx` reads
+  `tags` straight off the result and the job-polling effect reads `job.result`
+  without a second parse.
+
+**What has since been superseded** (later work built on this seam, not gaps in
+it - noted so a reader doesn't take the Phase descriptions as a description of
+today's code):
+
+- Phase 3/4 had the client send `knownIngredients`/`knownUnits` up with each
+  parse. `lib/recipe-import/known-names.ts` now reads both server-side from the
+  database on every call and the client is not asked at all - the caches those
+  lists came from were never invalidated, so a Recipe that created new
+  Ingredients left the next import's prompt unaware of them. This spec's goal
+  (every Import Source reconciles against the Global Catalog) holds more firmly
+  than it specified.
+- `ExtractInput` now carries a required `source`, and `paste.js` sets
+  `'ingredient-list'`: a typed list and a scraped page are read by materially
+  different prompts, after conflating them cost the cook ingredients.
+- `url.js` prefers a page's schema.org JSON-LD over its visible text, and no
+  longer truncates markup the way Phase 2 faithfully copied.
+- The "no new test runner" decision was overtaken by the Vitest setup this
+  branch was rebased onto. These modules have real tests now
+  (`extract.test.ts`, `url.test.ts`, and the route tests below).
 
 ## Session 1: Shared extraction core (extract.js)
 Status: done

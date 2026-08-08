@@ -5,5 +5,60 @@
 [[plugins]]
 package = "@netlify/plugin-nextjs"
 
+# GO_VERSION is deliberately still here, though specs/api-hosting-migration.md's
+# Phase 2 says to remove it.
+#
+# The reason it says so is that build.sh no longer runs `go fmt`/`go test` -
+# those moved to .github/workflows/ci.yml's `go` job, which pins its own
+# toolchain via actions/setup-go. True, but not the whole story: Netlify also
+# *compiles* the function in netlify-functions/recipes on every deploy, and goes
+# on doing so through the migration's cooling-off period, because that Lambda is
+# the rollback target. (The functions directory is set in the Netlify UI, not
+# here - which is exactly why removing this pin looks safe from the repo alone.)
+#
+# Dropping it would hand that build whatever Go version Netlify's image
+# defaults to. go.mod's `toolchain go1.23.12` line means a default of 1.21+
+# would fetch the right toolchain and survive; a default below that fails, and a
+# failed Netlify build takes the whole site down, not just the API. Netlify's
+# default has historically trailed well behind - not a bet worth taking for the
+# sake of deleting two lines a few days early.
+#
+# Phase 5 deletes the function, and this pin goes with it.
 [build.environment]
   GO_VERSION = "1.23"
+
+# Proxies the Go API, which now runs on Fly.io in Frankfurt
+# (docs/adr/0006-go-api-leaves-netlify-functions.md), so it stays on
+# www.bigshop.life and remains same-origin to the browser - no CORS, and the
+# Auth0 bearer token keeps working exactly as it did.
+#
+# status = 200 makes this a rewrite rather than a redirect: Netlify fetches the
+# origin and returns its response under the original URL. Measured on a throwaway
+# branch deploy against an echoing origin (spec Phase 0, PR #74, since closed),
+# because Netlify's docs do not say: Authorization survives intact, arbitrary
+# headers pass verbatim, PUT/PATCH/DELETE are all proxied, and method, body and
+# Content-Type are preserved on POST. That is why there is no api.bigshop.life
+# subdomain here.
+#
+# force = true so this wins over anything Netlify would otherwise serve at the
+# path, including whatever @netlify/plugin-nextjs claims. Phase 0 only measured
+# the rewrite with force on, so treat "it would work without it" as untested
+# rather than false.
+#
+# Note the pattern matches /api/bigshop/<something>, not a bare /api/bigshop.
+# Nothing requests the base path on its own - every call in lib/api-client.ts
+# appends a route - but a future one would need a second rule.
+#
+# Two things Netlify does on the way through, worth knowing:
+#  - It rewrites Accept to "*/*,image/webp". Huma content-negotiates on Accept;
+#    */* resolves to JSON, verified against the container directly.
+#  - The proxy has a 26 second ceiling. Comfortable for CRUD, worth remembering
+#    if an endpoint ever grows slow.
+#
+# /api/bigshop rather than /api: the latter would swallow the Next.js API routes
+# under pages/api, which stay on Netlify.
+[[redirects]]
+  from = "/api/bigshop/*"
+  to = "https://big-shop-api.fly.dev/api/bigshop/:splat"
+  status = 200
+  force = true

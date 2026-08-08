@@ -397,7 +397,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example /.netlify/functions/recipes/schemas/Account.json
+             * @example /api/bigshop/schemas/Account.json
              */
             readonly $schema?: string;
             /** Format: int64 */
@@ -414,7 +414,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example /.netlify/functions/recipes/schemas/CreatedResponse.json
+             * @example /api/bigshop/schemas/CreatedResponse.json
              */
             readonly $schema?: string;
             /** Format: int64 */
@@ -425,7 +425,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example /.netlify/functions/recipes/schemas/DeleteRecipeInputBody.json
+             * @example /api/bigshop/schemas/DeleteRecipeInputBody.json
              */
             readonly $schema?: string;
             /** Format: int64 */
@@ -443,7 +443,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example /.netlify/functions/recipes/schemas/ErrorModel.json
+             * @example /api/bigshop/schemas/ErrorModel.json
              */
             readonly $schema?: string;
             /**
@@ -501,7 +501,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example /.netlify/functions/recipes/schemas/InviteTokenInputBody.json
+             * @example /api/bigshop/schemas/InviteTokenInputBody.json
              */
             readonly $schema?: string;
             Token: string;
@@ -518,7 +518,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example /.netlify/functions/recipes/schemas/ListItem.json
+             * @example /api/bigshop/schemas/ListItem.json
              */
             readonly $schema?: string;
             IsBought: boolean;
@@ -528,7 +528,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example /.netlify/functions/recipes/schemas/PreferencesInputBody.json
+             * @example /api/bigshop/schemas/PreferencesInputBody.json
              */
             readonly $schema?: string;
             showPantryStaples: boolean;
@@ -537,7 +537,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example /.netlify/functions/recipes/schemas/Recipe.json
+             * @example /api/bigshop/schemas/Recipe.json
              */
             readonly $schema?: string;
             /** Format: int64 */
@@ -559,7 +559,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example /.netlify/functions/recipes/schemas/ShoppingList.json
+             * @example /api/bigshop/schemas/ShoppingList.json
              */
             readonly $schema?: string;
             extras: {
@@ -574,7 +574,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example /.netlify/functions/recipes/schemas/ShoppingListHistoryOutputBody.json
+             * @example /api/bigshop/schemas/ShoppingListHistoryOutputBody.json
              */
             readonly $schema?: string;
             favorite_recipes: number[] | null;
@@ -584,7 +584,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example /.netlify/functions/recipes/schemas/SimpleResponse.json
+             * @example /api/bigshop/schemas/SimpleResponse.json
              */
             readonly $schema?: string;
             status: string;
@@ -598,7 +598,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example /.netlify/functions/recipes/schemas/User.json
+             * @example /api/bigshop/schemas/User.json
              */
             readonly $schema?: string;
             email: string;

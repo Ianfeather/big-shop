@@ -5,7 +5,12 @@ import { authenticateAccount } from './authenticate';
 const req = (headers: Record<string, string> = {}) => ({ headers }) as unknown as NextApiRequest;
 
 beforeEach(() => {
-  vi.stubEnv('NEXT_PUBLIC_API_HOST', 'http://api.test');
+  // API_HOST_INTERNAL is what this reads in production - see lib/api-host.ts.
+  // NEXT_PUBLIC_API_HOST is stubbed to a relative path alongside it, matching
+  // the production shape, so a regression that reads the wrong one produces a
+  // relative URL rather than quietly passing.
+  vi.stubEnv('API_HOST_INTERNAL', 'http://api.test');
+  vi.stubEnv('NEXT_PUBLIC_API_HOST', '/api/bigshop');
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
@@ -62,7 +67,8 @@ describe('authenticateAccount', () => {
     });
   });
 
-  it('fails closed when NEXT_PUBLIC_API_HOST is unset', async () => {
+  it('fails closed when no API host is configured', async () => {
+    vi.stubEnv('API_HOST_INTERNAL', '');
     vi.stubEnv('NEXT_PUBLIC_API_HOST', '');
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

@@ -63,7 +63,12 @@ const stubAccountApi = (account: { id: number } | null) =>
 const storeGet = vi.fn();
 
 beforeEach(() => {
-  vi.stubEnv('NEXT_PUBLIC_API_HOST', 'http://api.test');
+  // This route authenticates through lib/authenticate.ts, which reads
+  // API_HOST_INTERNAL server-side. NEXT_PUBLIC_API_HOST is stubbed relative
+  // alongside it, matching the production shape, so a regression that reads the
+  // browser variable fails here rather than passing via the fallback.
+  vi.stubEnv('API_HOST_INTERNAL', 'http://api.test');
+  vi.stubEnv('NEXT_PUBLIC_API_HOST', '/api/bigshop');
   vi.stubEnv('NETLIFY_BLOB_STORE_TOKEN', 'token');
   vi.stubEnv('NETLIFY_SITE_ID', 'site');
   vi.spyOn(console, 'error').mockImplementation(() => {});

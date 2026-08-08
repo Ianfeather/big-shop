@@ -7,7 +7,12 @@ const req = (headers: Record<string, string> = {}) => ({ headers }) as unknown a
 const ok = (rows: { name: string }[]) => ({ ok: true, json: async () => rows });
 
 beforeEach(() => {
-  vi.stubEnv('NEXT_PUBLIC_API_HOST', 'http://api.test');
+  // API_HOST_INTERNAL is what this reads in production - see lib/api-host.ts.
+  // NEXT_PUBLIC_API_HOST is stubbed to a relative path alongside it, matching
+  // the production shape, so a regression that reads the wrong one produces a
+  // relative URL rather than quietly passing.
+  vi.stubEnv('API_HOST_INTERNAL', 'http://api.test');
+  vi.stubEnv('NEXT_PUBLIC_API_HOST', '/api/bigshop');
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
@@ -27,6 +32,16 @@ describe('fetchKnownNames', () => {
       knownIngredients: ['egg', 'thyme'],
       knownUnits: ['gram']
     });
+
+    // Asserted as whole URLs, not suffixes. The host half is the point: this
+    // runs server-side, so reading NEXT_PUBLIC_API_HOST instead of
+    // API_HOST_INTERNAL would build a relative URL here. A suffix assertion
+    // (which is what this test used to make) is satisfied by both and so
+    // cannot tell the regression apart from correct behaviour.
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      'http://api.test/ingredients',
+      'http://api.test/units'
+    ]);
   });
 
   it('forwards the caller Authorization header to the Go API', async () => {
@@ -66,7 +81,8 @@ describe('fetchKnownNames', () => {
     await expect(fetchKnownNames(req())).resolves.toEqual({ knownIngredients: [], knownUnits: [] });
   });
 
-  it('returns empty lists when NEXT_PUBLIC_API_HOST is unset', async () => {
+  it('returns empty lists when no API host is configured', async () => {
+    vi.stubEnv('API_HOST_INTERNAL', '');
     vi.stubEnv('NEXT_PUBLIC_API_HOST', '');
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

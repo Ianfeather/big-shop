@@ -1,7 +1,11 @@
 package app
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"recipes/internal/pkg/common"
 
 	"github.com/form3tech-oss/jwt-go"
 )
@@ -107,6 +111,78 @@ func TestRequiredClaims(t *testing.T) {
 		}
 		if !claims.VerifyIssuer(testIssuer, true) {
 			t.Error("VerifyIssuer() = false for a genuine token")
+		}
+	})
+}
+
+// The /health carve-out sits ahead of CORS and the JWT middleware in the
+// negroni stack, which is the only reason an uptime monitor or Fly's health
+// check - neither of which can hold an Auth0 token - can reach it at all. That
+// makes it easy to break by reordering middleware and not notice, since every
+// other route would carry on working.
+//
+// Deliberately exercised with auth *enabled*: a 200 here means the request
+// never reached the JWT middleware. DISABLE_AUTH is pinned rather than
+// inherited because docker-compose.yml sets it to "true" for the api service,
+// so running these through `docker compose run api` would otherwise take the
+// dev-user branch and prove nothing about the carve-out's position.
+//
+// None of these touch the database, and route registration never does either,
+// so a nil-DB App is fine. No token is ever presented, so the JWT middleware
+// rejects before it would fetch JWKS - no network.
+func TestHealthCarveOut(t *testing.T) {
+	const base = "/api/bigshop"
+
+	newRouter := func(t *testing.T) http.Handler {
+		t.Helper()
+		t.Setenv("DISABLE_AUTH", "")
+		application, err := NewApp(&common.Env{})
+		if err != nil {
+			t.Fatalf("NewApp() error = %v", err)
+		}
+		router, _, err := application.GetRouter(base)
+		if err != nil {
+			t.Fatalf("GetRouter() error = %v", err)
+		}
+		return router
+	}
+
+	status := func(t *testing.T, method, path string) int {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		newRouter(t).ServeHTTP(rec, httptest.NewRequest(method, path, nil))
+		return rec.Code
+	}
+
+	t.Run("answers under the base path, which is what fly.toml checks", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		newRouter(t).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, base+"/health", nil))
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("GET %s/health = %d, want 200", base, rec.Code)
+		}
+		if got := rec.Body.String(); got != "ok" {
+			t.Errorf("body = %q, want %q", got, "ok")
+		}
+	})
+
+	// The alias. Without it this returned 401, because the request fell past
+	// the carve-out into the JWT middleware - confusing enough that it was the
+	// first thing reported after the Fly app went live.
+	t.Run("answers at the root as well", func(t *testing.T) {
+		if code := status(t, http.MethodGet, "/health"); code != http.StatusOK {
+			t.Errorf("GET /health = %d, want 200", code)
+		}
+	})
+
+	// The carve-out is GET-only, so a HEAD falls past it. Worth pinning, because
+	// `curl -I` against /health then fails on a perfectly healthy deploy - which
+	// has already sent one runbook verification check the wrong way. Asserted as
+	// "not 200" rather than a specific code: what it becomes (401 from auth, 404
+	// from the mux) is not the point, only that it is not served.
+	t.Run("does not carve out non-GET methods", func(t *testing.T) {
+		if code := status(t, http.MethodHead, "/health"); code == http.StatusOK {
+			t.Error("HEAD /health = 200; the carve-out is meant to be GET-only")
 		}
 	})
 }

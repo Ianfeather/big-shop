@@ -216,11 +216,22 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, huma.API, error) {
 	healthPath := base + "/health"
 
 	n := negroni.New(negroni.NewLogger())
-	// /health must stay reachable without a JWT - it's used by uptime monitors
-	// and Lambda warmers, none of which can hold an Auth0 token - so it's
-	// handled before CORS/auth even run, not registered on the mux router.
+	// /health must stay reachable without a JWT - it's used by uptime monitors,
+	// Fly's own health check and Lambda warmers, none of which can hold an
+	// Auth0 token - so it's handled before CORS/auth even run, not registered
+	// on the mux router.
+	//
+	// Answered at two paths. `base + "/health"` is the real one, and is what
+	// fly.toml checks: it travels the same prefix as live traffic, so it fails
+	// if the base path is ever misconfigured, where a root-only check would sit
+	// green while every actual route 404s. Bare "/health" is an alias for
+	// humans and uptime monitors, who reach for it first and got a confusing
+	// 401 - the request fell past this carve-out into the JWT middleware.
+	isHealthCheck := func(r *http.Request) bool {
+		return r.Method == http.MethodGet && (r.URL.Path == healthPath || r.URL.Path == "/health")
+	}
 	n.Use(negroni.HandlerFunc(func(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-		if r.Method == http.MethodGet && r.URL.Path == healthPath {
+		if isHealthCheck(r) {
 			healthHandler(w, r)
 			return
 		}

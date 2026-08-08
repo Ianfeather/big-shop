@@ -243,3 +243,201 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     (asserted by `Form.test.tsx:201`). The client would dutifully refetch, hit the stale
     edge copy, and the new Unit would stay missing from autosuggest — looking exactly like
     a frontend cache bug, with the frontend innocent.
+
+45. **The API's deploy gate does not include e2e.**
+    `.github/workflows/deploy-api.yml` is gated on the `CI` workflow succeeding
+    (`workflow_run`), which is what
+    [`specs/api-hosting-migration.md`](./specs/api-hosting-migration.md)'s Phase 2 asked
+    for. `e2e.yml` is a separate workflow that a `workflow_run` on `CI` cannot see, so
+    merging requires all three checks while deploying the API requires only the CI ones.
+
+    The gap is narrower than it first looks. Every commit reaching `master` goes through a
+    pull request where every required check is green — a direct push is *rejected*, not
+    merely ungated (see CLAUDE.md). What is left is this: the ruleset is not "strict", so
+    the merge commit need not be the commit the suites ran against. `ci.yml` re-runs on
+    that merge commit; `e2e` does not. So a semantic conflict between two independently
+    green branches could deploy an API that e2e would have caught.
+
+    Not fixed because the obvious fix is worse than the problem. `workflow_run` with
+    `workflows: [CI, E2E]` fires when *either* completes, not both, so gating on both means
+    the deploy job polling the other workflow's conclusion through the API and
+    re-implementing a join GitHub does not offer. Cheaper options if this ever bites: make
+    the ruleset strict (at the cost of rebasing on every unrelated push), or fold `e2e`
+    into `ci.yml` as a second job, which would turn the whole thing into a one-line
+    `needs:` — and would also mean updating the ruleset's job names.
+
+46. **Account invites are a broken branch of the app.** Found while checking whether the
+    Fly deploy would fail without `SENDGRID_API_KEY` (it does not — see below). Sharing an
+    Account is, per CONTEXT.md, one of the product's reasons to exist, and right now the
+    entry point to it returns an error.
+
+    **What actually works.** The in-app half is complete and correct.
+    `GET /invites` lists invites matching the logged-in user's *email*;
+    `POST /invite/accept` re-checks token *and* email (`service.GetInvite`), disables the
+    invitee's old Account, adds them to the inviter's, and deletes the invite;
+    `components/invite/index.tsx` renders the card on `pages/index.tsx` and
+    `pages/account.tsx`. So an invitee never actually needs the email — logging in is
+    enough for the card to appear.
+
+    **What is broken**, in the order it bites:
+
+    - **`POST /invite` returns 400 whenever email sending fails**, which is currently
+      always, since `SENDGRID_API_KEY` is set nowhere. Worse than a plain failure: the
+      invite row is written *before* the send (`user.go:87`), and nothing rolls it back. So
+      the inviter is told it failed, while the invite exists and would work if the invitee
+      logged in. Decide which half is authoritative — most likely send-then-fail should
+      degrade to "invite created, we couldn't email them" rather than a 400.
+    - **The email's link is dead.** `user.go:100` points at
+      `https://pleeyu7yrd.execute-api.us-east-1.amazonaws.com/prod/invitation/<token>`, an
+      API Gateway stack from an architecture this app no longer has. Nothing serves it.
+      Since acceptance is in-app and email-matched, the honest fix is probably a link to
+      `https://www.bigshop.life` and letting the card do the work — or a real deep link if
+      the token should survive the round trip.
+    - **The sender is hardcoded** to `"Ian Feather" <info@ianfeather.co.uk>`
+      (`user.go:94`). Whatever address is used has to be a verified SendGrid sender, so
+      this and the key are one task, not two.
+    - **`POST /invite/reject` does not scope to the caller.** `rejectInvite` calls
+      `DeleteInviteByToken` with no check that the invite is addressed to the current
+      user's email — unlike `accept`, which checks both. Any authenticated user with a
+      token can delete someone else's invite. The token is 32 bytes so this is not
+      urgent, but it is the one route in the family that trusts its input.
+
+    **Not a deployment blocker.** `SENDGRID_API_KEY` is read once, per-request, inside
+    `inviteUser` (`user.go:103`) — never at startup. Verified by booting the production
+    image with the key absent: clean start, no restarts, `/health` 200, normal routes 200.
+    So Fly deploys fine without it and only `POST /invite` is affected.
+
+    Worth doing alongside #42 (onboarding), which notes that a shared list is the strongest
+    reason someone keeps using Big Shop — an invite flow that errors on the first click is
+    the same wound.
+
+47. **Read the homepage marketing copy over by hand.** `pages/index.tsx` was rewritten in
+    `aee9b58` ("Rework the marketing page around what it's actually for") and the copy has
+    not had a careful human pass since. This is a note to do that deliberately, not a
+    report of a specific defect — the wording is the one part of the app no test can check
+    and the only part most visitors ever read.
+
+    Worth reading for, roughly in order of how much it would cost to get wrong:
+
+    - **Claims that have to stay true.** The Three ways in section promises "any recipe
+      site", that a page "comes back as name, ingredients, method and tags", and that
+      American cups and ounces are "turned into grams on the way in". #40's URL-import
+      failures are fixed, but #41 found 12 URLs the extractor still cannot read, so "any"
+      is doing load-bearing work. Decide whether it should be softened or left as the
+      honest aspiration.
+    - **What the empty first run actually delivers.** "The list builds itself" and "Start
+      building your shopping list" both promise motion, and #42 records that a brand new
+      Account has nothing in it — the pitch and the first screen disagree. These two items
+      probably want settling together.
+    - **"It gets better as more people cook"** describes the Global Catalog, which is a
+      real property (see CONTEXT.md) but reads as a network-effect claim on a product with
+      few users. Check it lands as the invitation it is rather than a boast.
+    - **Voice.** The rest of the app settled on plain, lowercase, unexcited language during
+      the Cookbook redesign; the headings here ("The fiddly bits", "What it's actually
+      for") are in that register and worth keeping consistent if anything is rewritten.
+    - Mundane but easy to miss: typos, the `&mdash;` entities rendering as intended, and
+      whether the two calls to action ("Start building your shopping list", "Start with one
+      recipe") should say the same thing.
+
+    No code change is implied. If a rewrite does happen, `pages/index.tsx` is the only file
+    involved, and nothing under test asserts on this copy.
+
+48. **You cannot log in on a deploy preview, so branch deploys cannot be tested.** Hit while
+    trying to run the authenticated half of
+    [`api-hosting-migration.md`](./specs/api-hosting-migration.md)'s cutover verification
+    against `deploy-preview-76`, which had to be abandoned. Filed as "an Auth0 callback
+    config issue", which is half of it — the other half is in this repo.
+
+    **Root cause, in two layers.** The console setting is the second one, not the first:
+
+    - `pages/_app.tsx:82` passes `redirect_uri: process.env.NEXT_PUBLIC_HOST`, and
+      `.env.production` pins that to `https://www.bigshop.life`. `NEXT_PUBLIC_*` is inlined
+      at build time, so *every* production-mode build — previews included — tells Auth0 to
+      send the user to the live site. Auth0 obeys, and you land on production having
+      "logged in" somewhere else. Nothing in the console can fix that; the app is asking
+      for the wrong thing.
+    - Once that is fixed, Auth0 also has to *allow* the preview origin in Allowed Callback
+      URLs, Allowed Logout URLs and Allowed Web Origins. This is where it gets awkward:
+      Netlify preview hosts are `deploy-preview-<N>--big-shop.netlify.app`, and Auth0's
+      wildcard rules require `*` to be the leftmost subdomain component followed by a dot.
+      So `https://*--big-shop.netlify.app` is not expressible, and `https://*.netlify.app`
+      — which would be — grants callbacks to every site on Netlify and must not be used.
+
+    **The same constant breaks more than login.** `NEXT_PUBLIC_HOST` is also the base for
+    the Next.js API routes called from the browser: `pages/recipes/new.tsx` (91, 98, 113)
+    and `components/method-import/index.tsx` (68, 75, 87). On a preview those become
+    *cross-origin calls to production's* `/api/recipe-image`, `/api/parse-recipe-url` and
+    `/api/parse-method-url`. And `components/identity/logout/index.tsx:16` sends
+    `returnTo: NEXT_PUBLIC_HOST`, so logging out of a preview also lands on production. Any
+    fix should treat all four call sites together rather than patching `redirect_uri` alone.
+
+    **Likely shape of the fix**, not decided here: derive the origin at runtime
+    (`window.location.origin`) rather than at build time, with an SSR guard since `_app`
+    renders on the server too. Netlify exposes `DEPLOY_PRIME_URL` during the build as an
+    alternative, but that keeps the value build-time and would still need the Auth0
+    allowlist entry per preview. A pragmatic middle path is a single stable alias — a
+    branch deploy on a fixed subdomain — allowlisted once, rather than trying to make every
+    numbered preview work.
+
+    **Why it is worth fixing rather than living with.**
+    [ADR-0006](./docs/adr/0006-go-api-leaves-netlify-functions.md) already accepts that
+    branch deploys degrade under the Fly migration, because they proxy to the single
+    production API. That is a known, bounded cost. This is different and larger: it means a
+    preview cannot be exercised past the login screen *at all*, which removes the main
+    reason to have previews and pushed the migration's own verification onto production.
+
+49. **Investigate why a request costs ~160ms per query, not ~90ms — and why `GET /shopping-list`
+    issues nine of them.** Opened off the back of the Fly migration's latency measurement
+    (see [ADR-0006](./docs/adr/0006-go-api-leaves-netlify-functions.md)'s Measured outcome).
+    An investigation, not a fix: the numbers do not add up yet, and guessing which way they
+    are wrong is how the wrong thing gets optimised.
+
+    **What is known.** `GET /shopping-list` on the Lambda took ~1,624ms of server time and
+    ~165ms on Fly. Counted from the code, that request makes **nine sequential DB round
+    trips**:
+
+    | Call | Queries |
+    | --- | --- |
+    | `GetRecipesFromList` | `GetAccountID` + 1 |
+    | `GetIngredientListItems` | `GetAccountID` + 1 |
+    | `GetExtraListItems` | `GetAccountID` + 1 |
+    | `GetUnitCatalog` | 1 |
+    | `GetIngredientCatalog` | 2 |
+
+    No N+1 loops — every one is a flat query. Two things fall out:
+
+    - **`GetAccountID` is resolved three times per request**, from the same `userID`, to get
+      the same answer. Transatlantic that was ~270ms of pure waste; from Frankfurt it is
+      small but still free to remove. Resolving it once in the handler and passing it down
+      is the obvious change, and it touches every service function's signature, which is why
+      it wants deciding rather than doing on impulse.
+    - **The arithmetic does not close.** ADR-0006 assumed ~90ms a round trip, so nine
+      queries predicts ~810ms — but the Lambda spent ~1,624ms. Something accounts for the
+      other ~800ms, and it is not query count.
+
+    **The leading hypothesis is connection establishment, not queries.** TiDB Serverless
+    requires TLS, so a new connection costs a TCP handshake plus a TLS handshake — three to
+    four round trips, ~270–360ms transatlantic, before a single query runs. `main.go` sets
+    no pool limits at all, so `database/sql` defaults apply (`MaxIdleConns` 2), and every
+    cold Lambda container built a fresh pool and `Ping`ed during `init()` — a consequence
+    ADR-0006 already names. Whether a *warm* container was still paying handshakes, and how
+    often Netlify recycled them, is exactly what nobody knows.
+
+    **What would settle it**, cheapest first:
+
+    - `observability.md`'s tracing, once it lands. A span per query against a span for the
+      request answers this directly and permanently, with no bespoke work — which is the
+      argument for simply waiting rather than investigating now.
+    - `db.Stats()` on the Fly process (`OpenConnections`, `Idle`, `WaitCount`) exposed on a
+      debug route or as a metric. Cheap, and tells you whether the pool is actually being
+      reused now that the process is long-lived.
+    - Explicit `SetMaxOpenConns` / `SetMaxIdleConns` / `SetConnMaxLifetime`. Currently
+      unset, which was defensible when every container was short-lived and is now just
+      undecided. Note TiDB Serverless has its own connection ceiling, so this is a real
+      choice, not a formality.
+
+    **Deliberately not urgent.** At 165ms the endpoint is fine, and the migration already
+    took ~90% of the cost out. This is filed so the *reason* is understood before anyone
+    reaches for caching (#44 reasons about a query profile that had never been measured) or
+    concludes that query count was the problem. The interesting finding is that the biggest
+    win came from something other than the mechanism the ADR predicted.

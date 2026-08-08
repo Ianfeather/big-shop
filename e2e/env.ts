@@ -8,7 +8,7 @@ export const API_PORT = 8980;
 export const DB_PORT = 3908;
 
 export const BASE_URL = `http://localhost:${WEB_PORT}`;
-export const API_HOST = `http://localhost:${API_PORT}/.netlify/functions/recipes`;
+export const API_HOST = `http://localhost:${API_PORT}/api/bigshop`;
 
 // See CLAUDE.md's "Multiple worktrees" section: docker compose derives its
 // project name from the directory basename by default, and every worktree of

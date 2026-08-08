@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { createRecipe, deleteRecipeById, deleteRecipeByName } from './api';
+import { API_HOST } from './env';
 
 // Recipe Import, with the LLM stubbed out at the Next.js API route.
 //
@@ -67,7 +68,12 @@ function parsedRecipe(name: string, ingredientName: string) {
 function captureSavePayload(page: Page) {
   const payloads: any[] = [];
   page.on('request', (request) => {
-    if (request.method() === 'POST' && request.url().endsWith('/recipes/recipe')) {
+    // Built from API_HOST rather than a hardcoded suffix. This used to match
+    // `endsWith('/recipes/recipe')`, which only worked because the API's base
+    // path happened to end in `recipes` - changing it to /api/bigshop made this
+    // capture silently stop firing, and the test failed on "no save request was
+    // made" rather than on anything to do with the payload.
+    if (request.method() === 'POST' && request.url() === `${API_HOST}/recipe`) {
       try {
         payloads.push(request.postDataJSON());
       } catch {

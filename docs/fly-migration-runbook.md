@@ -75,6 +75,9 @@ Confirm with `fly secrets list` — it shows names and digests, never values.
 ## 3. Deploy and check it in isolation
 
 ```bash
+# --remote-only is flyctl's default, so plain `fly deploy` is equivalent. Spelled
+# out here only to match what deploy-api.yml runs. Pass --local-only instead if
+# you specifically want to build with your own Docker daemon.
 fly deploy --remote-only
 fly status
 ```

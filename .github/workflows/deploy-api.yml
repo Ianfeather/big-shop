@@ -53,12 +53,19 @@ jobs:
       # reach the credential without any change on our side.
       - uses: superfly/flyctl-actions/setup-flyctl@v1.4
 
-      # --remote-only builds on Fly's builder rather than this runner, so the
-      # image never crosses the network as a push from here. The config lives
-      # next to the Dockerfile so the build context is the Go module alone.
-      # FLY_API_TOKEN is a repository secret, created with `fly tokens deploy`
-      # - see docs/fly-migration-runbook.md. Until it exists, every run of this
-      # workflow fails at this step.
+      # --remote-only builds on Fly's builder rather than this runner. It is
+      # already flyctl's default (--local-only is the opt-out), so this is
+      # explicit rather than necessary - worth keeping so the intent survives a
+      # future change of default, since a runner without a warm Docker cache is
+      # the last place we want building this.
+      #
+      # The config lives next to the Dockerfile, so the build context is the Go
+      # module alone rather than the whole repo.
+      #
+      # FLY_API_TOKEN is a repository secret, created with
+      # `fly tokens create deploy` - app-scoped and deploy-only, unlike a
+      # personal access token. See docs/fly-migration-runbook.md. Until it
+      # exists, every run of this workflow fails at this step.
       - name: Deploy
         run: flyctl deploy --remote-only --config fly.toml
         working-directory: netlify-functions/recipes

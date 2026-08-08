@@ -9,79 +9,9 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import PhotoIcon from '@components/svg/photo';
 import { nextApiPost, nextApiPostFormData, nextApiGet } from '../../lib/api-client';
 import { queryKeys } from '../../lib/query-keys';
+import { resizeImage } from '../../lib/resize-image';
 import useAuth from '@hooks/use-auth';
 import type { Recipe as RecipeModel } from '../../types/models';
-
-// Helper function to resize image
-const resizeImage = (file: File): Promise<Blob> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => {
-      const img = new Image();
-      img.src = reader.result as string;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
-
-        // Calculate new dimensions while maintaining aspect ratio
-        const MAX_WIDTH = 2000; // Maximum width
-        const MAX_HEIGHT = 2000; // Maximum height
-        const MAX_SIZE = 5 * 1024 * 1024; // 5MB in bytes
-
-        if (width > MAX_WIDTH) {
-          height = Math.round((height * MAX_WIDTH) / width);
-          width = MAX_WIDTH;
-        }
-
-        if (height > MAX_HEIGHT) {
-          width = Math.round((width * MAX_HEIGHT) / height);
-          height = MAX_HEIGHT;
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-
-        // A freshly created canvas's 2d context is never null in practice.
-        const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(img, 0, 0, width, height);
-
-        // Recursive function to create blob with quality adjustment
-        const createBlob = (quality: number): Promise<Blob | null> => {
-          return new Promise((resolveBlob) => {
-            canvas.toBlob((blob) => {
-              if (!blob) {
-                resolveBlob(null);
-                return;
-              }
-
-              if (blob.size <= MAX_SIZE || quality <= 0.1) {
-                resolveBlob(blob);
-              } else {
-                // Reduce quality and try again
-                createBlob(quality - 0.1).then(resolveBlob);
-              }
-            }, 'image/jpeg', quality);
-          });
-        };
-
-        // Start with 90% quality
-        createBlob(0.9)
-          .then((blob) => {
-            if (!blob) {
-              reject(new Error('Failed to create image blob'));
-              return;
-            }
-            resolve(blob);
-          })
-          .catch(reject);
-      };
-      img.onerror = reject;
-    };
-    reader.onerror = reject;
-  });
-};
 
 const SOURCE_TABS: { id: 'url' | 'camera' | 'manual'; label: string }[] = [
   { id: 'url', label: 'Recipe Link' },

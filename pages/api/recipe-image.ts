@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { getStore } from '@netlify/blobs';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import type { PageConfig } from 'next';
-import { extractRecipe } from '../../lib/recipe-import/extract';
+import { extractRecipe, extractMethod } from '../../lib/recipe-import/extract';
 import { imageToInput } from '../../lib/recipe-import/photo';
 import { requireEnv } from '../../lib/env';
 import { fetchKnownNames } from '../../lib/recipe-import/known-names';
@@ -61,6 +61,15 @@ const processImage = async (base64Image: string, knownIngredients: string[], kno
     knownIngredients,
     knownUnits,
   });
+};
+
+// Method Import from a photo (a `mode=method` upload): the same photograph of a
+// cookbook page, read for its instructions alone. It shares this route rather
+// than getting one of its own because everything around the extraction - the
+// 5MB upload, the account check, the job in Netlify Blobs and the polling that
+// reads it back - is identical, and it is the part with the teeth in it.
+const processMethodImage = async (base64Image: string) => {
+  return extractMethod({ input: imageToInput(base64Image) });
 };
 
 // Fails fast with a clear error if either var is unset (e.g. a preview
@@ -167,11 +176,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Validate the image
     validateImage(imageFile);
 
+    // formidable returns every field as an array. Anything other than 'method'
+    // - including the field being absent, which is every existing caller - is a
+    // whole-recipe import.
+    const [mode] = fields.mode || [];
+    const methodOnly = mode === 'method';
+
     // Read from the database rather than taken from the form fields - see
     // lib/recipe-import/known-names.ts for why the client is no longer asked.
     // Awaited before the job is created so a lookup failure is logged against
-    // the request that caused it, not against the background job.
-    const { knownIngredients, knownUnits } = await fetchKnownNames(req);
+    // the request that caused it, not against the background job. Skipped
+    // entirely for a method-only import, which has no name to canonicalise.
+    const { knownIngredients, knownUnits } = methodOnly
+      ? { knownIngredients: [], knownUnits: [] }
+      : await fetchKnownNames(req);
 
     // Read the file and convert to base64
     const imageBuffer = await fs.readFile(imageFile.filepath);
@@ -185,7 +203,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const initialJob = await updateJobStatus(jobId, auth.account.id, 'processing');
 
     // Start processing in the background
-    processImage(base64Image, knownIngredients, knownUnits)
+    const processing = methodOnly
+      ? processMethodImage(base64Image)
+      : processImage(base64Image, knownIngredients, knownUnits);
+
+    processing
       .then(async (result) => {
         await updateJobStatus(jobId, auth.account.id, 'completed', result);
       })

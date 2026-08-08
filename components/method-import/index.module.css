@@ -1,0 +1,140 @@
+/* Sits directly above the Method textarea, styled like the "add ingredients"
+   box on the other side of the form so the two read as the same kind of
+   offer - a way to fill the field in, not another field. */
+.panel {
+  background-color: var(--color-primary-soft);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-3);
+}
+
+.header {
+  margin-bottom: var(--space-3);
+}
+
+.title {
+  display: block;
+  font-weight: bold;
+  font-size: var(--text-base);
+  margin-bottom: var(--space-1);
+}
+
+.hint {
+  display: block;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.sources {
+  display: flex;
+  gap: 8px;
+}
+
+/* Same pill treatment as Add New Recipe's Import Source tabs, which is what
+   these are - the same two sources, narrowed to one field. */
+.sourceTab {
+  border: none;
+  background-color: var(--card);
+  padding: 8px 16px;
+  border-radius: var(--radius-lg);
+  font-size: var(--text-sm);
+  font-weight: bold;
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+.sourceTabActive {
+  background-color: var(--color-primary);
+  color: #fff;
+}
+
+.sourceSection {
+  margin-top: var(--space-4);
+}
+
+.inputLabel {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: bold;
+}
+
+.inputGroup {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+/* Not inherited from form.module.css: that stylesheet's `.form input` rule
+   only reaches inputs it renders itself, and this one wants a white field on
+   the panel's tint rather than the form's underline. */
+.input {
+  flex-grow: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--color-primary-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--card);
+  font-size: var(--text-base);
+  font-family: inherit;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.fileInput {
+  display: none;
+}
+
+.photoIcon {
+  width: 20px;
+  height: 20px;
+  margin-right: 8px;
+}
+
+.photoIcon path {
+  fill: currentColor;
+}
+
+/* Shown only when the Method box already has something in it, so the
+   extraction is offered rather than dropped on top of it. */
+.offer {
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  background-color: var(--card);
+  border: 1px solid var(--color-primary-border);
+  border-radius: var(--radius-md);
+}
+
+.offerHint {
+  margin: 0 0 var(--space-2);
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.offerPreview {
+  max-height: 200px;
+  overflow-y: auto;
+  margin: 0 0 var(--space-3);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.offerActions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.applied {
+  margin: var(--space-3) 0 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.error {
+  margin-top: var(--space-3);
+}

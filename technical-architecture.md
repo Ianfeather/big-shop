@@ -48,9 +48,10 @@ For authenticated endpoints, copy the `Authorization` header from browser dev to
 
 | Route | File | Purpose |
 |-------|------|---------|
-| `/api/recipe-image` | `recipe-image.mjs` | GPT-4 Vision: photo → structured recipe JSON (async, polled) |
+| `/api/recipe-image` | `recipe-image.mjs` | GPT-4 Vision: photo → structured recipe JSON (async, polled). A `mode=method` form field switches it to Method Import — same upload, auth, job and polling, but only the method is read out of the photo, and the canonical Ingredient/Unit lookup is skipped |
 | `/api/parse-recipe-url` | `parse-recipe-url.js` | Fetches a recipe URL, reduces the page to the recipe (`lib/recipe-import/url.js`: schema.org JSON-LD where present, else the page's visible text) and makes one LLM call to extract name/ingredients/method/vegetarian-ness — works against any recipe site, replacing the older per-site DOM-selector-plus-regex scrapers (formerly `pages/api/third-parties/*`, now deleted). 422s rather than returning a recipe with no ingredients |
 | `/api/parse-recipe-text` | `parse-recipe-text.js` | LLM-parses freeform multiline ingredient text (Manual Entry's bulk paste box) into structured ingredient lines |
+| `/api/parse-method-url` | `parse-method-url.ts` | Method Import from a link: same page reduction as `/api/parse-recipe-url`, but one LLM call for the method alone (`extractMethod`), no canonical-name lookup, and it accepts a page with no ingredient list. 422s rather than returning an empty method. Unlike the routes above it requires a valid token |
 | `/api/dave/chat` | `dave/chat.js` | GPT-3.5-turbo chat with tool calling (search/get/create shopping list) |
 
 The recipe image extraction uses Netlify Blobs to store async job results; the frontend polls every 2 seconds until complete.
@@ -83,6 +84,7 @@ Components are organized by feature with index files:
 - `components/layout/`: Page layout, header, Grid/Sidebar/MainContent wrappers
 - `components/recipe/`: Individual recipe display and editing
 - `components/recipe-form/`: Full recipe editor (ingredients, tags, image upload)
+- `components/method-import/`: Fills an existing Recipe's Method from a link or a photo, rendered inside the recipe editor in edit mode only (see CONTEXT.md's Method Import)
 - `components/recipe-list/`: Browsable/searchable list of user recipes
 - `components/shopping-list/`: ShoppingList display + Recipes selector sub-components
 - `components/identity/`: Auth0 login/logout/create account buttons

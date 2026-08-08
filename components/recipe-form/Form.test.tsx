@@ -25,7 +25,11 @@ vi.mock('../../lib/api-client', () => ({
   apiPost: vi.fn(),
   apiPut: vi.fn(),
   apiDelete: vi.fn(),
-  nextApiPost: vi.fn()
+  nextApiPost: vi.fn(),
+  // Method Import's two, which this form renders in edit mode. Nothing here
+  // exercises them - components/method-import/index.test.tsx does.
+  nextApiGet: vi.fn(),
+  nextApiPostFormData: vi.fn()
 }));
 
 import useAuth from '@hooks/use-auth';
@@ -205,6 +209,57 @@ describe('Form', () => {
 
     await waitFor(() => expect(screen.getByText('Could not parse that')).toBeInTheDocument());
     expect(screen.getByLabelText('Ingredients')).toHaveValue('2 eggs');
+  });
+
+  // Method Import (components/method-import). The form is where it lives; what
+  // it does is tested next to it.
+  describe('method import', () => {
+    it('offers to fill the method in from a link or a photo when editing', async () => {
+      await renderForm({ initialRecipe: editableRecipe, mode: 'edit' });
+
+      expect(screen.getByText('From a link')).toBeInTheDocument();
+      expect(screen.getByText('From a photo')).toBeInTheDocument();
+    });
+
+    // Add New Recipe already offers both sources for the whole recipe, method
+    // included, so a method-only importer there would be two controls doing
+    // the same job.
+    it('leaves it out when creating a recipe', async () => {
+      await renderForm();
+
+      expect(screen.queryByText('From a link')).not.toBeInTheDocument();
+    });
+
+    it('opens onto the link field when the cook arrived from the Method pencil', async () => {
+      await renderForm({ initialRecipe: editableRecipe, mode: 'edit', focusSection: 'method' });
+
+      expect(screen.getByLabelText('Recipe link')).toBeInTheDocument();
+    });
+
+    it('stays closed on an ordinary edit', async () => {
+      await renderForm({ initialRecipe: editableRecipe, mode: 'edit' });
+
+      expect(screen.queryByLabelText('Recipe link')).not.toBeInTheDocument();
+    });
+
+    // The whole point of the feature: what the import returns has to reach the
+    // Method field, and from there the save payload.
+    it('writes an imported method into the field it is going to save', async () => {
+      mockedNextApiPost.mockResolvedValue({ method: '1. Beat the eggs' });
+      await renderForm({ initialRecipe: editableRecipe, mode: 'edit', focusSection: 'method' });
+
+      await userEvent.type(screen.getByLabelText('Recipe link'), 'https://example.com/recipe');
+      await userEvent.click(screen.getByText('Fetch'));
+
+      await waitFor(() => expect(screen.getByLabelText('Method')).toHaveValue('1. Beat the eggs'));
+
+      await userEvent.click(screen.getByText('Update Recipe'));
+      await waitFor(() => expect(mockedApiPut).toHaveBeenCalledWith(
+        '/recipe',
+        'test-token',
+        expect.objectContaining({ method: '1. Beat the eggs' })
+      ));
+    });
   });
 
   it('redirects to the new recipe after a successful submit', async () => {

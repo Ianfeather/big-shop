@@ -385,3 +385,59 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     production API. That is a known, bounded cost. This is different and larger: it means a
     preview cannot be exercised past the login screen *at all*, which removes the main
     reason to have previews and pushed the migration's own verification onto production.
+
+49. **Investigate why a request costs ~160ms per query, not ~90ms — and why `GET /shopping-list`
+    issues nine of them.** Opened off the back of the Fly migration's latency measurement
+    (see [ADR-0006](./docs/adr/0006-go-api-leaves-netlify-functions.md)'s Measured outcome).
+    An investigation, not a fix: the numbers do not add up yet, and guessing which way they
+    are wrong is how the wrong thing gets optimised.
+
+    **What is known.** `GET /shopping-list` on the Lambda took ~1,624ms of server time and
+    ~165ms on Fly. Counted from the code, that request makes **nine sequential DB round
+    trips**:
+
+    | Call | Queries |
+    | --- | --- |
+    | `GetRecipesFromList` | `GetAccountID` + 1 |
+    | `GetIngredientListItems` | `GetAccountID` + 1 |
+    | `GetExtraListItems` | `GetAccountID` + 1 |
+    | `GetUnitCatalog` | 1 |
+    | `GetIngredientCatalog` | 2 |
+
+    No N+1 loops — every one is a flat query. Two things fall out:
+
+    - **`GetAccountID` is resolved three times per request**, from the same `userID`, to get
+      the same answer. Transatlantic that was ~270ms of pure waste; from Frankfurt it is
+      small but still free to remove. Resolving it once in the handler and passing it down
+      is the obvious change, and it touches every service function's signature, which is why
+      it wants deciding rather than doing on impulse.
+    - **The arithmetic does not close.** ADR-0006 assumed ~90ms a round trip, so nine
+      queries predicts ~810ms — but the Lambda spent ~1,624ms. Something accounts for the
+      other ~800ms, and it is not query count.
+
+    **The leading hypothesis is connection establishment, not queries.** TiDB Serverless
+    requires TLS, so a new connection costs a TCP handshake plus a TLS handshake — three to
+    four round trips, ~270–360ms transatlantic, before a single query runs. `main.go` sets
+    no pool limits at all, so `database/sql` defaults apply (`MaxIdleConns` 2), and every
+    cold Lambda container built a fresh pool and `Ping`ed during `init()` — a consequence
+    ADR-0006 already names. Whether a *warm* container was still paying handshakes, and how
+    often Netlify recycled them, is exactly what nobody knows.
+
+    **What would settle it**, cheapest first:
+
+    - `observability.md`'s tracing, once it lands. A span per query against a span for the
+      request answers this directly and permanently, with no bespoke work — which is the
+      argument for simply waiting rather than investigating now.
+    - `db.Stats()` on the Fly process (`OpenConnections`, `Idle`, `WaitCount`) exposed on a
+      debug route or as a metric. Cheap, and tells you whether the pool is actually being
+      reused now that the process is long-lived.
+    - Explicit `SetMaxOpenConns` / `SetMaxIdleConns` / `SetConnMaxLifetime`. Currently
+      unset, which was defensible when every container was short-lived and is now just
+      undecided. Note TiDB Serverless has its own connection ceiling, so this is a real
+      choice, not a formality.
+
+    **Deliberately not urgent.** At 165ms the endpoint is fine, and the migration already
+    took ~90% of the cost out. This is filed so the *reason* is understood before anyone
+    reaches for caching (#44 reasons about a query profile that had never been measured) or
+    concludes that query count was the problem. The interesting finding is that the biggest
+    win came from something other than the mechanism the ADR predicted.

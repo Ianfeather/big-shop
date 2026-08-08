@@ -84,18 +84,26 @@ best case.
 **1,459ms removed — about 90% of the request, a 10x improvement.** Three to five times
 the 300–500ms this decision was justified on.
 
-The estimate was not wrong about the cost of a query; it was wrong about how many there
-are. At the ~90ms round trip assumed above, 1,459ms implies roughly **16 sequential
-round trips**, where "several" was the working assumption. `GET /shopping-list` makes five
-service calls, but `GetUnitCatalog`, `GetIngredientCatalog` and the combining logic each
-issue several queries beneath that. Worth carrying into
-[ADR-0007](./0007-observability-otel-grafana-cloud.md)'s instrumentation, which will show
-where those sixteen actually go — and into the `Cache-Control` audit that follow-up #44
-describes, which assumes a query profile nobody had measured.
+**Why the estimate was low is not yet settled, and the obvious answer is wrong.** Counted
+from the code, `GET /shopping-list` issues **nine** sequential DB round trips — three of
+them re-resolving `GetAccountID` from the same `userID` — with no N+1 loop anywhere. At the
+~90ms round trip assumed above, nine predicts ~810ms, but the Lambda spent ~1,624ms. So
+roughly 800ms is unaccounted for by query *count*.
 
-The honest caveat: one endpoint, one Account, one moment. It is the endpoint the ADR
+The leading hypothesis is connection establishment rather than queries: TiDB Serverless
+requires TLS, so a new connection costs a TCP plus a TLS handshake — three to four round
+trips, ~270–360ms transatlantic — before any query runs, and `main.go` sets no pool limits
+at all. That would make the last consequence listed below ("connection pooling starts
+working properly") the dominant effect rather than a footnote. It is a hypothesis, not a
+finding; follow-up #49 carries the investigation, and
+[ADR-0007](./0007-observability-otel-grafana-cloud.md)'s per-query spans will settle it for
+free once they land.
+
+The honest caveats: one endpoint, one Account, one moment. It is the endpoint this ADR
 singled out as worst, so it is the right one to quote, but it is a headline rather than a
-distribution. Real percentiles arrive with the observability work.
+distribution — real percentiles arrive with the observability work. And the mechanism
+credited above is the one that was *predicted*; the measurement suggests the biggest single
+win may have come from somewhere else.
 
 ## Consequences
 

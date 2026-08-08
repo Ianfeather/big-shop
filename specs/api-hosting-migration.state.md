@@ -33,8 +33,14 @@ FLY (fra)           server≈ 165ms  total≈ 212ms  n=5
 
 **1,459ms removed, ~90% of the request.** ADR-0006 justified the move on 300–500ms, so the
 result is 3–5x the case that was argued. Recorded in the ADR's new "Measured outcome"
-section, along with why the estimate was low: at ~90ms a round trip, 1,459ms implies ~16
-sequential queries, where "several" was assumed.
+section.
+
+Why the estimate was low is *not* settled. Counted from the code, `GET /shopping-list`
+makes nine sequential queries, not the "several" assumed — but nine at ~90ms predicts
+~810ms against ~1,624ms observed, so query count does not explain it either. The leading
+hypothesis is TLS connection establishment (TiDB Serverless requires it; `main.go` sets no
+pool limits), which would make ADR-0006's last listed consequence the dominant effect
+rather than a footnote. `follow-ups.md` #49 carries the investigation.
 
 Also verified pre-cutover, against `deploy-preview-76`:
 - The rewrite is genuine — 200, `redirects=0`, URL unchanged, not a 302.

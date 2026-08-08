@@ -30,8 +30,16 @@ export interface ExtractedRecipe {
   tags: string[];
 }
 
+export interface ExtractedMethod {
+  method: string;
+}
+
 export function extractRecipe(args: {
   input: ExtractInput;
   knownIngredients?: string[];
   knownUnits?: string[];
 }): Promise<ExtractedRecipe>;
+
+// Method Import (see extract.js). No knownIngredients/knownUnits: it returns
+// prose, so there is no name or unit for a canonical list to reconcile.
+export function extractMethod(args: { input: ExtractInput }): Promise<ExtractedMethod>;

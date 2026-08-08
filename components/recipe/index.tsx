@@ -56,6 +56,10 @@ const Method = ({ method }: { method?: string | null }) => {
 // than merely not shown. The pencil beside it turns that dead end into the way
 // to fill it, and appears only while the section is empty so a complete recipe
 // isn't littered with edit affordances (the masthead's Edit covers that).
+//
+// The Method pencil carries ?add=method, which scrolls the edit form to the
+// Method and opens Method Import - so the answer to "this has no method" can be
+// the original link or a photo of the cookbook page, not only typing it out.
 const SectionHeading = ({ children, addLabel, editHref }: { children: ReactNode; addLabel: string; editHref?: string }) => (
   <div className={styles.sectionHeading}>
     <h3 className={styles.heading}>{children}</h3>
@@ -102,7 +106,7 @@ const Recipe = ({ recipe }: { recipe: Partial<RecipeModel> }) => {
         </ul>
       </div>
       <div className={styles.section}>
-        <SectionHeading addLabel="Add a method" editHref={hasMethod ? undefined : editHref}>
+        <SectionHeading addLabel="Add a method" editHref={hasMethod || !editHref ? undefined : `${editHref}?add=method`}>
           Method
         </SectionHeading>
         <Method method={recipe.method} />

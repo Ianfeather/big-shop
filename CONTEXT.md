@@ -94,10 +94,16 @@ _Avoid_: Camera (UI label for Photo Import's tab; "Photo Import" is the canonica
 
 The bulk box is an **explicit enumeration**, and the extractor is told so (`source: 'ingredient-list'`, `lib/recipe-import/paste.js`): every non-blank line comes back as an Ingredient Line, and none of it is a title or a method. URL and Photo Import are the opposite — a whole page or photo to find the recipe inside — so they alone get the rules for picking a title and method out of surrounding noise. Applying those to the bulk box loses lines the cook deliberately typed: a first line reading "Jerk marinade: 120ml" gets taken as the dish's name, and the route keeps only `ingredients`, so it vanishes with nothing shown.
 
+**Method Import**:
+Filling in the Method of a Recipe that already exists, on its own, from a link or a photo — the same two sources as Recipe Import, aimed at one field. It exists because an imported Recipe often arrives with ingredients and no method (a photo of the ingredients page, a link the extractor could not find instructions in), and until now the only way out was to type the method by hand. Reached from the pencil beside an empty Method on the Recipe page, which opens the edit form at the Method with the importer already open (`?add=method`).
+
+It is deliberately not Recipe Import with the other fields discarded: the Recipe already has a name, tags and Ingredient Lines, so returning new ones would only raise the question of which to keep. Nothing about the Recipe but its Method can change. An existing Method is never overwritten — an extraction that lands on one is offered for the cook to accept or refuse.
+_Avoid_: Method Extraction (that's the server-side step, `extractMethod`); Re-import (nothing is re-read — the rest of the Recipe is untouched)
+
 **No Import Source omits an Ingredient.** Extraction proposes `pantryStaple` alongside the other catalog metadata; grouping is the Shopping List's job (see Pantry Staple).
 
 **Processing Job**:
-The async unit of work behind Photo Import specifically (not used by URL Import or Manual Entry, which respond synchronously). The client polls for completion rather than waiting on one request, because Netlify Functions' Lambda-based execution can't hold a request open long enough for a Vision call to finish.
+The async unit of work behind a photo specifically — Photo Import and Method Import's photo source, which share one route and one job store (not used by URL Import, Manual Entry or Method Import from a link, which respond synchronously). The client polls for completion rather than waiting on one request, because Netlify Functions' Lambda-based execution can't hold a request open long enough for a Vision call to finish.
 
 ### Meal planning intelligence (experimental, not fully productionized)
 

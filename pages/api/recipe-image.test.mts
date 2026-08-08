@@ -6,16 +6,38 @@ vi.mock('@netlify/blobs', () => ({
 }));
 
 // Imported transitively by the route, and constructs an OpenAI client at module
-// load - which needs a key that no test should have. Nothing here gets as far
-// as an extraction anyway.
+// load - which needs a key that no test should have. Both extractors are
+// stubbed; the upload tests below assert on which of the two a request picked.
 vi.mock('../../lib/recipe-import/extract', () => ({
-  extractRecipe: vi.fn()
+  extractRecipe: vi.fn(),
+  extractMethod: vi.fn()
+}));
+
+// The route reads the upload with formidable and the file off disk. Neither is
+// what these tests are about, so both are stood in for - `parseFields` below is
+// what a given test wants the form to have carried.
+let parseFields: Record<string, string[]> = {};
+
+vi.mock('formidable', () => ({
+  default: () => ({
+    parse: (_req: unknown, cb: (err: unknown, fields: unknown, files: unknown) => void) =>
+      cb(null, parseFields, {
+        image: [{ filepath: '/tmp/upload.jpg', mimetype: 'image/jpeg', size: 1024 }]
+      })
+  })
+}));
+
+vi.mock('fs/promises', () => ({
+  default: { readFile: vi.fn(async () => Buffer.from('image-bytes')), unlink: vi.fn(async () => {}) }
 }));
 
 import { getStore } from '@netlify/blobs';
+import { extractRecipe, extractMethod } from '../../lib/recipe-import/extract';
 import handler from './recipe-image';
 
 const mockedGetStore = getStore as unknown as Mock;
+const mockedExtractRecipe = extractRecipe as unknown as Mock;
+const mockedExtractMethod = extractMethod as unknown as Mock;
 
 // One job, owned by account 7.
 const job = { id: 'job-1', accountId: 7, status: 'completed', result: { name: 'Omelette' }, error: null };
@@ -48,6 +70,11 @@ beforeEach(() => {
   storeGet.mockReset();
   storeGet.mockResolvedValue(JSON.stringify(job));
   mockedGetStore.mockReturnValue({ get: storeGet, set: vi.fn() });
+  parseFields = {};
+  mockedExtractRecipe.mockReset();
+  mockedExtractRecipe.mockResolvedValue({ name: 'Omelette', ingredients: [], method: '', tags: [] });
+  mockedExtractMethod.mockReset();
+  mockedExtractMethod.mockResolvedValue({ method: '1. Beat the eggs' });
 });
 
 afterEach(() => {
@@ -140,5 +167,48 @@ describe('recipe-image upload (POST)', () => {
     await handler(mockReq({ method: 'POST', headers: { authorization: 'Bearer forged' } }), res);
 
     expect(res.status).toHaveBeenCalledWith(401);
+  });
+
+  // Method Import shares this route with whole-recipe Photo Import, and `mode`
+  // is the only thing that tells them apart. Get that wrong in either direction
+  // and the failure is quiet: a method-only upload that runs the full
+  // extraction returns a name, tags and an ingredient list for a Recipe that
+  // already has all three, and a whole-recipe upload that runs the method-only
+  // one returns a Recipe with no ingredients in it.
+  it('runs the whole-recipe extraction when no mode is given', async () => {
+    stubAccountApi({ id: 7 });
+    const res = mockRes();
+
+    await handler(mockReq({ method: 'POST', headers: { authorization: 'Bearer good' } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(202);
+    expect(mockedExtractRecipe).toHaveBeenCalled();
+    expect(mockedExtractMethod).not.toHaveBeenCalled();
+  });
+
+  it('runs the method-only extraction for a mode=method upload', async () => {
+    stubAccountApi({ id: 7 });
+    parseFields = { mode: ['method'] };
+    const res = mockRes();
+
+    await handler(mockReq({ method: 'POST', headers: { authorization: 'Bearer good' } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(202);
+    expect(mockedExtractMethod).toHaveBeenCalled();
+    expect(mockedExtractRecipe).not.toHaveBeenCalled();
+  });
+
+  // The canonical Ingredient/Unit lists cost two calls to the Go API and a good
+  // chunk of the prompt, and a method-only extraction has no name or unit for
+  // them to reconcile. Only the account check should reach the API.
+  it('does not look up canonical names for a method-only upload', async () => {
+    stubAccountApi({ id: 7 });
+    parseFields = { mode: ['method'] };
+    const res = mockRes();
+
+    await handler(mockReq({ method: 'POST', headers: { authorization: 'Bearer good' } }), res);
+
+    const paths = (fetch as unknown as Mock).mock.calls.map(([url]) => String(url));
+    expect(paths).toEqual(['http://api.test/account']);
   });
 });

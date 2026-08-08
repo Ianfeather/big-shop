@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { deleteRecipeByName } from './api';
+import { createRecipe, deleteRecipeById, deleteRecipeByName } from './api';
 
 // Recipe Import, with the LLM stubbed out at the Next.js API route.
 //
@@ -179,5 +179,106 @@ test.describe('recipe import', () => {
 
     expectClassificationInPayload(payloads, ingredientName);
     await deleteRecipeByName(request, recipeName);
+  });
+});
+
+// Method Import: the same two sources, aimed at one field of a Recipe that
+// already exists. Stubbed at the route for the same reason as above - the model
+// is not what can break here, the journey from the pencil to a saved method is.
+//
+// Worth covering end to end rather than in Vitest alone because the feature is
+// mostly plumbing between four places (the pencil's ?add=method, the edit page
+// reading it, the form opening the panel, and the extracted text reaching the
+// save payload), and each piece is individually correct in a way that says
+// nothing about whether they are joined up.
+test.describe('method import', () => {
+  const importedMethod = '1. Mix everything together.\n2. Bake for 30 minutes.';
+
+  // A Recipe with ingredients and no method - which is how nearly every
+  // imported Recipe arrives, and the only state that shows the pencil.
+  const methodlessRecipe = (name: string) => ({
+    name,
+    method: '',
+    ingredients: [{ name: 'flour', quantity: '200', unit: 'gram' }],
+  });
+
+  test('the Method pencil leads to an import that fills the field in from a link', async ({ page, request }) => {
+    const recipeName = `E2E Method Link ${runId}`;
+    const id = await createRecipe(request, methodlessRecipe(recipeName));
+
+    await page.route('**/api/parse-method-url', (route) => route.fulfill({ json: { method: importedMethod } }));
+
+    await page.goto(`/recipes/${id}`);
+    await page.getByRole('link', { name: 'Add a method' }).click();
+
+    // The pencil is only worth anything if it lands on the Method with the
+    // import already open - the edit form is long, and Method is at the bottom
+    // of it on a phone.
+    await expect(page).toHaveURL(new RegExp(`/recipes/${id}/edit\\?add=method$`));
+    await expect(page.getByLabel('Recipe link')).toBeVisible();
+
+    await page.getByLabel('Recipe link').fill('https://example.com/a-recipe');
+    await page.getByRole('button', { name: 'Fetch' }).click();
+
+    await expect(page.getByLabel('Method', { exact: true })).toHaveValue(importedMethod);
+
+    await page.getByRole('button', { name: 'Update Recipe' }).click();
+    await expect(page).toHaveURL(new RegExp(`/recipes/${id}`));
+    // Rendered as steps on the Recipe page, so the pencil is gone and the
+    // section it pointed at is filled in.
+    await expect(page.getByText('Bake for 30 minutes.')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Add a method' })).toHaveCount(0);
+
+    await deleteRecipeById(request, id);
+  });
+
+  test('a photographed page fills the method in the same way', async ({ page, request }) => {
+    const recipeName = `E2E Method Photo ${runId}`;
+    const id = await createRecipe(request, methodlessRecipe(recipeName));
+
+    // Asynchronous like whole-recipe Photo Import, and on the same route -
+    // matched on pathname so the polling request's ?jobId= is caught too.
+    await page.route((url) => url.pathname === '/api/recipe-image', (route) =>
+      route.request().method() === 'POST'
+        ? route.fulfill({ json: { jobId: `e2e-method-job-${runId}` } })
+        : route.fulfill({ json: { status: 'completed', result: { method: importedMethod } } })
+    );
+
+    await page.goto(`/recipes/${id}/edit?add=method`);
+    await page.getByRole('button', { name: 'From a photo' }).click();
+    await page.setInputFiles('input[type="file"]', 'specs/evidence/sidebar-alignment/after.png');
+
+    await expect(page.getByLabel('Method', { exact: true })).toHaveValue(importedMethod, { timeout: 15_000 });
+
+    await page.getByRole('button', { name: 'Update Recipe' }).click();
+    await expect(page).toHaveURL(new RegExp(`/recipes/${id}`));
+    await expect(page.getByText('Bake for 30 minutes.')).toBeVisible();
+
+    await deleteRecipeById(request, id);
+  });
+
+  // The pencil only appears on an empty Method, but the panel is on the edit
+  // form regardless - and a method the cook wrote is not something to lose to a
+  // fetch they may have started before remembering they had one.
+  test('offers rather than overwrites a method that is already there', async ({ page, request }) => {
+    const recipeName = `E2E Method Kept ${runId}`;
+    const id = await createRecipe(request, {
+      ...methodlessRecipe(recipeName),
+      method: 'My own method.',
+    });
+
+    await page.route('**/api/parse-method-url', (route) => route.fulfill({ json: { method: importedMethod } }));
+
+    await page.goto(`/recipes/${id}/edit?add=method`);
+    await page.getByLabel('Recipe link').fill('https://example.com/a-recipe');
+    await page.getByRole('button', { name: 'Fetch' }).click();
+
+    await expect(page.getByText('There is already a method here.')).toBeVisible();
+    await expect(page.getByLabel('Method', { exact: true })).toHaveValue('My own method.');
+
+    await page.getByRole('button', { name: 'Replace the method' }).click();
+    await expect(page.getByLabel('Method', { exact: true })).toHaveValue(importedMethod);
+
+    await deleteRecipeById(request, id);
   });
 });

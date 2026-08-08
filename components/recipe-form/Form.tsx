@@ -1,9 +1,10 @@
 import styles from './form.module.css';
-import { MouseEvent, useState, useEffect, useMemo } from 'react';
+import { MouseEvent, useState, useEffect, useMemo, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/router'
 import Button from '@components/button';
 import Message from '@components/message';
+import MethodImport from '@components/method-import';
 import Spinner from './spinner';
 import useUnits from '@hooks/use-units';
 import useTags from '@hooks/use-tags';
@@ -41,6 +42,11 @@ interface FormUnit {
 interface FormProps {
   initialRecipe?: Partial<RecipeModel>;
   mode?: 'new' | 'edit';
+  // Which part of the form the cook came here to fill in, from the pencil beside
+  // an empty section on the Recipe page (?add=method). The form is two columns
+  // of fields on a desktop and a long scroll on a phone, so "we opened the edit
+  // page for you" is not on its own an answer to "add a method".
+  focusSection?: 'method';
 }
 
 interface ParseTextResult {
@@ -59,7 +65,7 @@ function normalizeInitialRecipe(initialRecipe: Partial<RecipeModel>, bareRecipe:
   };
 }
 
-export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
+export default function Form({initialRecipe = {}, mode = 'new', focusSection}: FormProps) {
   const bareRecipe: FormRecipe = { name: '', remoteUrl: '', notes: '', method: '', ingredients: [], tags: []};
 
   let useInitialRecipe = Object.keys(initialRecipe).length > 0;
@@ -73,6 +79,8 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
   const router = useRouter();
   const { getAccessTokenSilently } = useAuth();
   const queryClient = useQueryClient();
+  const methodSection = useRef<HTMLDivElement>(null);
+  const scrolledToFocus = useRef(false);
 
   const saveMutation = useMutation({
     mutationFn: async (recipeToSave: FormRecipe): Promise<CreatedResponse | undefined> => {
@@ -156,6 +164,22 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
       setRecipe(normalizeInitialRecipe(initialRecipe, bareRecipe));
     }
   }, [initialRecipe]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Takes the cook to the section they clicked the pencil for. Deliberately not
+  // an autoFocus on the textarea: the point of arriving here from the Method
+  // pencil is usually to import the method rather than to start typing, and
+  // focusing the box would put a caret in the one thing the import is about to
+  // fill in. Runs once - `recipe.id` is in the deps because in edit mode this
+  // component renders nothing at all until the Recipe has loaded, so on a cold
+  // page load there is no section to scroll to on the first pass.
+  useEffect(() => {
+    if (focusSection !== 'method' || scrolledToFocus.current) return;
+    const node = methodSection.current;
+    if (!node) return;
+    scrolledToFocus.current = true;
+    // Guarded: jsdom has no layout, so it does not implement scrollIntoView.
+    node.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  }, [focusSection, recipe.id]);
 
   // The fetched Unit list, plus synthetic entries for any unit the extractor
   // introduced that isn't in the catalog yet (e.g. "bunch") - whether those
@@ -371,8 +395,19 @@ export default function Form({initialRecipe = {}, mode = 'new'}: FormProps) {
         </div>
 
         <div className={styles.gridCell}>
-          <div className={styles.group}>
+          <div className={styles.group} ref={methodSection}>
             <label htmlFor="recipe-method">Method</label>
+            {/* Edit only. On a new Recipe the page above this form already
+                offers the same two sources for the whole recipe, method
+                included, so a second method-only importer would be a choice
+                between two things that do the same job. */}
+            { mode === 'edit' && (
+              <MethodImport
+                currentMethod={recipe.method}
+                onMethod={(method) => setRecipe(prev => ({ ...prev, method }))}
+                defaultOpen={focusSection === 'method'}
+              />
+            )}
             <textarea placeholder="1. Cook until done" value={recipe.method} autoComplete="off" id="recipe-method" rows={5} onChange={(e) => updateRecipe('method', e.target.value)}/>
           </div>
           <div className={styles.group}>

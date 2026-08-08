@@ -13,7 +13,7 @@
 // So server-side callers read `API_HOST_INTERNAL`, an absolute URL pointing
 // straight at the Fly machine. Going direct also skips a leg: those functions
 // run in us-east-2, and the alternative is us-east-2 -> Netlify's edge ->
-// Frankfurt. See specs/completed/api-hosting-migration.md's Phase 4.
+// Frankfurt. See specs/api-hosting-migration.md's Phase 4.
 //
 // **`API_HOST_INTERNAL` must never gain a `NEXT_PUBLIC_` prefix.** Next.js
 // inlines every `NEXT_PUBLIC_*` variable into the client bundle at build time,

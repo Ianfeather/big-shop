@@ -42,7 +42,7 @@ const basePath = "/api/bigshop"
 // function by the function's own path, so the Lambda has to keep registering
 // routes under that prefix or it 404s on everything the moment this branch
 // deploys. That would quietly destroy the rollback the whole migration rests
-// on: specs/completed/api-hosting-migration.md's Phase 4 says rollback is "reverting
+// on: specs/api-hosting-migration.md's Phase 4 says rollback is "reverting
 // those values and redeploying. The Lambda is still there, still serving its
 // old path, untouched" - which is only true if it really is untouched. So the
 // two servers coexist through the cooling-off period, on different paths,

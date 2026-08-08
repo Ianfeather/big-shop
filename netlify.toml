@@ -5,7 +5,7 @@
 [[plugins]]
 package = "@netlify/plugin-nextjs"
 
-# GO_VERSION is deliberately still here, though specs/completed/api-hosting-migration.md's
+# GO_VERSION is deliberately still here, though specs/api-hosting-migration.md's
 # Phase 2 says to remove it.
 #
 # The reason it says so is that build.sh no longer runs `go fmt`/`go test` -

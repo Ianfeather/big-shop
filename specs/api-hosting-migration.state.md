@@ -1,21 +1,44 @@
 ---
-spec: specs/completed/api-hosting-migration.md
-status: complete
+spec: specs/api-hosting-migration.md
+status: in-progress
 branch: fly-migration
 pr: https://github.com/Ianfeather/big-shop/pull/76
 ---
 
-**Phases 1–4 shipped. Phase 5 remains outstanding**, deliberately — a separate PR after a
-cooling-off period, per the spec. It deletes the `lambda.Start` branch and `lambdaBasePath`
-from `main.go`, drops `aws-lambda-go`/`aws-lambda-go-api-proxy`, removes `GO_VERSION` from
-`netlify.toml`, renames `netlify-functions/recipes/` → `api/`, and fixes the CORS
-allowlist. **Merging it is what makes rollback stop working**, so it must not land on the
-same day.
+**The code for Phases 1–4 is written and green; the migration is not done.** This file and
+the spec briefly moved into `specs/completed/` when the PR opened, which was wrong — the
+cutover had not happened and Phase 5 had not started. Moved back on 2026-08-08.
 
-The operator half is not done either: `docs/fly-migration-runbook.md` steps 1–4 (create the
-Fly app, set `DSN`/`SENDGRID_API_KEY`, deploy, verify, add `FLY_API_TOKEN`) have to run
-before this PR is merged, because `.env.production` carries the post-cutover values and
-merging is therefore the cutover.
+## Where this actually is
+
+| | State |
+| --- | --- |
+| PR [#76](https://github.com/Ianfeather/big-shop/pull/76) | Open, all checks green, **not merged** |
+| Fly app `big-shop-api` | **Live**, verified 2026-08-08 — `/api/bigshop/health` 200, `/api/bigshop/recipes` 401 |
+| `FLY_API_TOKEN` repo secret | Not set — `deploy-api.yml` fails at its last step until it is |
+| `go` in the `required checks` ruleset | Not added |
+| Cutover (runbook step 5) | Not done. **Merging the PR is the cutover** — `.env.production` carries the post-cutover values |
+| Phase 5 | Not started, by design |
+
+## Still to do
+
+1. `fly tokens create deploy` → add as repo secret `FLY_API_TOKEN`.
+2. Add `go` to the `required checks` ruleset (it matches on job name; until then the job
+   gates nothing, and a red `go` silently stops the API deploying while Netlify keeps
+   shipping the site).
+3. Runbook step 5: check Netlify's own env vars are not still overriding
+   `NEXT_PUBLIC_API_HOST` with the Lambda URL, verify the proxy, compare a shopping-list
+   generate's latency against the Lambda, then merge.
+4. **Phase 5, days later, as a separate PR**: delete the `lambda.Start` branch and
+   `lambdaBasePath` from `main.go`, drop `aws-lambda-go`/`aws-lambda-go-api-proxy`, remove
+   `GO_VERSION` from `netlify.toml`, rename `netlify-functions/recipes/` → `api/`, fix the
+   CORS allowlist. **Merging it is what makes rollback stop working**, so not the same day.
+
+Known ergonomics wrinkle found on first contact with the deployed app: a bare `/health`
+returns 401, because the carve-out is `basePath + "/health"` and everything is registered
+under `/api/bigshop`. `fly.toml`'s check uses the right path, so this is cosmetic — but it
+is the first thing anyone tries, and `observability.md`'s uptime monitor will meet it too.
+A root alias in `app.go`'s carve-out would cost two lines and no OpenAPI regeneration.
 
 Fly app name: `big-shop-api` (→ `big-shop-api.fly.dev`), chosen by the user at planning
 time and baked into `fly.toml` and the `netlify.toml` rewrite.

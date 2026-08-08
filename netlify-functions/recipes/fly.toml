@@ -2,7 +2,7 @@
 #
 # Why Fly, why `fra`, and why one always-on machine:
 # docs/adr/0006-go-api-leaves-netlify-functions.md. How the migration was
-# carried out: specs/completed/api-hosting-migration.md.
+# carried out: specs/api-hosting-migration.md.
 #
 # Deploy from the repository root with:
 #   fly deploy ./netlify-functions/recipes

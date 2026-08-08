@@ -1,6 +1,6 @@
 # Runbook: moving the Go API onto Fly.io
 
-The operator half of [`specs/completed/api-hosting-migration.md`](../specs/completed/api-hosting-migration.md).
+The operator half of [`specs/api-hosting-migration.md`](../specs/api-hosting-migration.md).
 Everything in this file needs credentials or a live deploy, so none of it is in the PR
 that carries the code — the code is inert until these steps run.
 

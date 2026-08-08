@@ -266,7 +266,7 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     into `ci.yml` as a second job, which would turn the whole thing into a one-line
     `needs:` — and would also mean updating the ruleset's job names.
 
-44. **Account invites are a broken branch of the app.** Found while checking whether the
+46. **Account invites are a broken branch of the app.** Found while checking whether the
     Fly deploy would fail without `SENDGRID_API_KEY` (it does not — see below). Sharing an
     Account is, per CONTEXT.md, one of the product's reasons to exist, and right now the
     entry point to it returns an error.

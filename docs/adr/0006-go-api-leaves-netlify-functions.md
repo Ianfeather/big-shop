@@ -13,7 +13,8 @@ hardware rather than reselling AWS; TiDB Cloud Serverless is on AWS `eu-central-
 API-to-database hop crosses a provider boundary over Frankfurt peering rather than staying
 on a provider's internal network — call it ~1–5ms with more jitter than an intra-AWS link,
 against ~0.5–1ms had the API been placed in AWS `eu-central-1` itself. Across a
-query-heavy request that difference is perhaps 10–25ms of the ~500ms this move recovers,
+query-heavy request that difference is perhaps 10–25ms of the ~1,460ms this move turned out
+to recover (see Measured outcome below; ~500ms was the estimate at decision time),
 and buying it back would mean an AWS-native host: either materially more expensive
 (App Runner, or Fargate behind an ALB) or handing back the OS, TLS and patching burden
 that ruled out a VPS below. Accepted knowingly.
@@ -25,7 +26,8 @@ region selection is a Pro/Enterprise feature. TiDB is in `eu-central-1`. So ever
 Big Shop makes is transatlantic, at roughly 90ms round trip, and the data-heavy paths —
 shopping list generation especially — issue several sequentially. Moving the API into the
 same metro as the database plausibly removes 300–500ms from those requests. Nothing else
-on the table comes close to that.
+on the table comes close to that. *(Left as written, because it is what was believed when
+the decision was taken. The measured figure was about three times larger — see below.)*
 
 **Netlify has deprecated Lambda compatibility mode**, and deploys containing functions in
 that mode stop being accepted on 1 July 2027. `main.go` is squarely in that mode
@@ -64,6 +66,36 @@ few pounds a month.
 **Staying on Netlify Functions** remains workable; the observability design that assumed
 it was sound. Rejected because it means paying ~90ms per query indefinitely, and
 instrumenting it would mostly serve to document that cost in detail.
+
+## Measured outcome
+
+Measured 2026-08-08, before cutover, against the same production Account and the same
+production TiDB — `GET /shopping-list`, five samples each after a discarded warm-up, timed
+as TTFB minus TLS-established so connection setup is excluded. Both paths go through
+Netlify's edge: the Lambda on `www.bigshop.life`, Fly through the `/api/bigshop/*` rewrite
+on a deploy preview, so this is the real production shape rather than a direct-to-origin
+best case.
+
+| | server | total |
+| --- | --- | --- |
+| Lambda, `us-east-2` | **1,624ms** | 1,678ms |
+| Fly, `fra`, via the rewrite | **165ms** | 212ms |
+
+**1,459ms removed — about 90% of the request, a 10x improvement.** Three to five times
+the 300–500ms this decision was justified on.
+
+The estimate was not wrong about the cost of a query; it was wrong about how many there
+are. At the ~90ms round trip assumed above, 1,459ms implies roughly **16 sequential
+round trips**, where "several" was the working assumption. `GET /shopping-list` makes five
+service calls, but `GetUnitCatalog`, `GetIngredientCatalog` and the combining logic each
+issue several queries beneath that. Worth carrying into
+[ADR-0007](./0007-observability-otel-grafana-cloud.md)'s instrumentation, which will show
+where those sixteen actually go — and into the `Cache-Control` audit that follow-up #44
+describes, which assumes a query profile nobody had measured.
+
+The honest caveat: one endpoint, one Account, one moment. It is the endpoint the ADR
+singled out as worst, so it is the right one to quote, but it is a headline rather than a
+distribution. Real percentiles arrive with the observability work.
 
 ## Consequences
 

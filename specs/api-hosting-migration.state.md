@@ -20,6 +20,32 @@ cutover had not happened and Phase 5 had not started. Moved back on 2026-08-08.
 | Cutover (runbook step 5) | Not done. **Merging the PR is the cutover** — `.env.production` carries the post-cutover values |
 | Phase 5 | Not started, by design |
 
+## Measured: the migration's premise, confirmed
+
+Runbook step 5's latency check, run 2026-08-08 before cutover. `GET /shopping-list`, same
+production Account, same production TiDB, five samples each after a discarded warm-up,
+TTFB minus TLS-established. Both through Netlify's edge, so this is the production shape:
+
+```
+LAMBDA (us-east-2)  server≈1624ms  total≈1678ms  n=5
+FLY (fra)           server≈ 165ms  total≈ 212ms  n=5
+```
+
+**1,459ms removed, ~90% of the request.** ADR-0006 justified the move on 300–500ms, so the
+result is 3–5x the case that was argued. Recorded in the ADR's new "Measured outcome"
+section, along with why the estimate was low: at ~90ms a round trip, 1,459ms implies ~16
+sequential queries, where "several" was assumed.
+
+Also verified pre-cutover, against `deploy-preview-76`:
+- The rewrite is genuine — 200, `redirects=0`, URL unchanged, not a 302.
+- Auth is enforced through the proxy (401 without a token).
+- **The `Accept` risk is retired**: an authenticated response comes back
+  `content-type: application/json` despite Netlify rewriting `Accept` to `*/*,image/webp`.
+- A write through the proxy works.
+
+Not verifiable on a preview: anything needing a browser login — see `follow-ups.md` #48,
+opened for it. Those checks move to production after merge.
+
 ## Still to do
 
 1. `fly tokens create deploy` → add as repo secret `FLY_API_TOKEN`.

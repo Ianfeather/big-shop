@@ -310,3 +310,34 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     Worth doing alongside #42 (onboarding), which notes that a shared list is the strongest
     reason someone keeps using Big Shop — an invite flow that errors on the first click is
     the same wound.
+
+47. **Read the homepage marketing copy over by hand.** `pages/index.tsx` was rewritten in
+    `aee9b58` ("Rework the marketing page around what it's actually for") and the copy has
+    not had a careful human pass since. This is a note to do that deliberately, not a
+    report of a specific defect — the wording is the one part of the app no test can check
+    and the only part most visitors ever read.
+
+    Worth reading for, roughly in order of how much it would cost to get wrong:
+
+    - **Claims that have to stay true.** The Three ways in section promises "any recipe
+      site", that a page "comes back as name, ingredients, method and tags", and that
+      American cups and ounces are "turned into grams on the way in". #40's URL-import
+      failures are fixed, but #41 found 12 URLs the extractor still cannot read, so "any"
+      is doing load-bearing work. Decide whether it should be softened or left as the
+      honest aspiration.
+    - **What the empty first run actually delivers.** "The list builds itself" and "Start
+      building your shopping list" both promise motion, and #42 records that a brand new
+      Account has nothing in it — the pitch and the first screen disagree. These two items
+      probably want settling together.
+    - **"It gets better as more people cook"** describes the Global Catalog, which is a
+      real property (see CONTEXT.md) but reads as a network-effect claim on a product with
+      few users. Check it lands as the invitation it is rather than a boast.
+    - **Voice.** The rest of the app settled on plain, lowercase, unexcited language during
+      the Cookbook redesign; the headings here ("The fiddly bits", "What it's actually
+      for") are in that register and worth keeping consistent if anything is rewritten.
+    - Mundane but easy to miss: typos, the `&mdash;` entities rendering as intended, and
+      whether the two calls to action ("Start building your shopping list", "Start with one
+      recipe") should say the same thing.
+
+    No code change is implied. If a rewrite does happen, `pages/index.tsx` is the only file
+    involved, and nothing under test asserts on this copy.

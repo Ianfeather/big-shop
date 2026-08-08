@@ -1,9 +1,38 @@
 ---
-spec: specs/recipe-writes-and-shopping-list-generation-seam.md
-status: in-progress
+spec: specs/completed/recipe-writes-and-shopping-list-generation-seam.md
+status: complete
 branch: implement/recipe-writes-and-shopping-list-generation-seam
-pr: https://github.com/Ianfeather/big-shop/pull/new/implement/recipe-writes-and-shopping-list-generation-seam (not yet created - `gh` CLI unavailable/unauthenticated in this environment; branch is pushed, PR needs manual creation via this compare link or a `gh auth login`)
+pr: none - no PR was ever opened. The branch was rebased onto master and pushed
+  directly (a105eff, 12d818c, d0d4dd1, a4a184b, a8cbb37), all 2026-07-13. A direct
+  push was possible then; the `required checks` ruleset that now rejects one
+  landed later, in PR #75 (2026-08-05). Nothing is outstanding as a result - see
+  Completion.
 ---
+
+## Completion (verified 2026-08-08)
+
+Every commit named in the sessions below is an ancestor of `master`, and each
+Phase's deliverable was re-checked against the code as it stands today:
+
+- **Phase 1** — `service/recipe.go` declares `execer` (Exec only);
+  `insertIngredients`/`insertUnits`/`insertParts`/`insertTags` all take it.
+- **Phase 2** — `AddRecipe` and `EditRecipe` each `db.Begin()`, `defer
+  tx.Rollback()`, and commit only after every step, still as two functions.
+- **Phase 3** — `service.GenerateShoppingList` exists with the specified
+  signature and runs the specified order, including the `IsBought` carry-over the
+  review gate caught missing, the remove+add inside one `sql.Tx`, and the Event
+  logged best-effort outside it. `dbConn` is declared alongside `execer` and
+  `GetAccountID` takes it.
+- **Phase 4** — `createList` in `app/list.go` is decode → call → encode, plus the
+  `ErrInvalidRecipeID` unwrap that keeps a bad recipe id a 400. `app/list_test.go`
+  is gone and `TestCombineIngredients` lives in `service/list_test.go`.
+- **Phase 5** — `service/recipe_test.go` holds the `fakeExecer` and its subtests
+  over the four `execer`-only helpers.
+
+**What has since been built on this seam** (not gaps in it): unit normalisation
+added the Unit and Ingredient catalogs `GenerateShoppingList` now loads and hands
+to `CombineIngredients`, keeping that function pure. The seam itself is
+unchanged, which is roughly the point of having cut it.
 
 ## Session 1: Minimal execer interface
 Status: done
@@ -99,6 +128,5 @@ atomicity properties this Phase originally wanted remain verified by
 Sessions 2 and 3's live-DB testing (see those sections above), not by a
 unit test - documented explicitly rather than silently substituted.
 
-All 5 Sessions of specs/recipe-writes-and-shopping-list-generation-seam.md
+All 5 Sessions of specs/completed/recipe-writes-and-shopping-list-generation-seam.md
 are now done.
-Notes:

@@ -265,3 +265,48 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     the ruleset strict (at the cost of rebasing on every unrelated push), or fold `e2e`
     into `ci.yml` as a second job, which would turn the whole thing into a one-line
     `needs:` — and would also mean updating the ruleset's job names.
+
+44. **Account invites are a broken branch of the app.** Found while checking whether the
+    Fly deploy would fail without `SENDGRID_API_KEY` (it does not — see below). Sharing an
+    Account is, per CONTEXT.md, one of the product's reasons to exist, and right now the
+    entry point to it returns an error.
+
+    **What actually works.** The in-app half is complete and correct.
+    `GET /invites` lists invites matching the logged-in user's *email*;
+    `POST /invite/accept` re-checks token *and* email (`service.GetInvite`), disables the
+    invitee's old Account, adds them to the inviter's, and deletes the invite;
+    `components/invite/index.tsx` renders the card on `pages/index.tsx` and
+    `pages/account.tsx`. So an invitee never actually needs the email — logging in is
+    enough for the card to appear.
+
+    **What is broken**, in the order it bites:
+
+    - **`POST /invite` returns 400 whenever email sending fails**, which is currently
+      always, since `SENDGRID_API_KEY` is set nowhere. Worse than a plain failure: the
+      invite row is written *before* the send (`user.go:87`), and nothing rolls it back. So
+      the inviter is told it failed, while the invite exists and would work if the invitee
+      logged in. Decide which half is authoritative — most likely send-then-fail should
+      degrade to "invite created, we couldn't email them" rather than a 400.
+    - **The email's link is dead.** `user.go:100` points at
+      `https://pleeyu7yrd.execute-api.us-east-1.amazonaws.com/prod/invitation/<token>`, an
+      API Gateway stack from an architecture this app no longer has. Nothing serves it.
+      Since acceptance is in-app and email-matched, the honest fix is probably a link to
+      `https://www.bigshop.life` and letting the card do the work — or a real deep link if
+      the token should survive the round trip.
+    - **The sender is hardcoded** to `"Ian Feather" <info@ianfeather.co.uk>`
+      (`user.go:94`). Whatever address is used has to be a verified SendGrid sender, so
+      this and the key are one task, not two.
+    - **`POST /invite/reject` does not scope to the caller.** `rejectInvite` calls
+      `DeleteInviteByToken` with no check that the invite is addressed to the current
+      user's email — unlike `accept`, which checks both. Any authenticated user with a
+      token can delete someone else's invite. The token is 32 bytes so this is not
+      urgent, but it is the one route in the family that trusts its input.
+
+    **Not a deployment blocker.** `SENDGRID_API_KEY` is read once, per-request, inside
+    `inviteUser` (`user.go:103`) — never at startup. Verified by booting the production
+    image with the key absent: clean start, no restarts, `/health` 200, normal routes 200.
+    So Fly deploys fine without it and only `POST /invite` is affected.
+
+    Worth doing alongside #42 (onboarding), which notes that a shared list is the strongest
+    reason someone keeps using Big Shop — an invite flow that errors on the first click is
+    the same wound.

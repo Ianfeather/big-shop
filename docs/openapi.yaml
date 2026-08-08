@@ -241,7 +241,7 @@ components:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - /.netlify/functions/recipes/schemas/PreferencesInputBody.json
+            - /api/bigshop/schemas/PreferencesInputBody.json
           format: uri
           readOnly: true
           type: string

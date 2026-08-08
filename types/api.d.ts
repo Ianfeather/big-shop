@@ -528,7 +528,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example /.netlify/functions/recipes/schemas/PreferencesInputBody.json
+             * @example /api/bigshop/schemas/PreferencesInputBody.json
              */
             readonly $schema?: string;
             showPantryStaples: boolean;

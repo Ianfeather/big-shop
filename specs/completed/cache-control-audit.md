@@ -1,6 +1,6 @@
 # Audit `Cache-Control` across the Go API
 
-Implements [`follow-ups.md`](../follow-ups.md) #44. That item is the audit's *findings*;
+Implements [`follow-ups.md`](../../follow-ups.md) #44. That item is the audit's *findings*;
 this is the plan for acting on them. Read #44 first — it records why the original framing
 ("put cacheable pages and endpoints behind a CDN so we can globally distribute") dissolved
 into a headers problem rather than an infrastructure one, and it is not repeated here.
@@ -14,7 +14,7 @@ added since the audit was written, so the split is 22 account-scoped and 3 unsco
 19 and 3. It does not change any of #44's conclusions — the three unscoped routes are the
 same three — but the numbers in #44 are stale and are corrected here rather than repeated.
 
-Since [ADR-0006](../docs/adr/0006-go-api-leaves-netlify-functions.md) browser API traffic
+Since [ADR-0006](../../docs/adr/0006-go-api-leaves-netlify-functions.md) browser API traffic
 crosses Netlify's edge, via the `/api/bigshop/*` `status = 200` rewrite in `netlify.toml`.
 Netlify does **not** cache proxied responses by default and will not cache one without a
 cache-control header, so the missing headers cost two different things:
@@ -67,7 +67,7 @@ copy would be invisible to the purge.
 is not part of Netlify's default cache key and `Netlify-Vary` cannot be made to vary on it,
 so a `public` response cached from an authenticated request is served to whoever asks next.
 Acceptable because the catalog is global and non-personal by design
-([ADR-0001](../docs/adr/0001-global-ingredient-catalog.md)) — and unacceptable anywhere
+([ADR-0001](../../docs/adr/0001-global-ingredient-catalog.md)) — and unacceptable anywhere
 else, which is what item 1 enforces.
 
 ### 3. Purging `units` on write

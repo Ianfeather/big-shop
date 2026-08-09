@@ -29,6 +29,14 @@ type App struct {
 	purger cachePurger
 }
 
+// PurgeConfigured reports whether edge cache purging will actually happen, for
+// the startup line in main.go. Unconfigured is correct locally and in CI and a
+// misconfiguration on Fly, and nothing else tells the two apart.
+func (a *App) PurgeConfigured() bool {
+	p, ok := a.purger.(*purge.Purger)
+	return ok && p.Configured()
+}
+
 // cachePurger is the slice of purge.Purger the handlers use.
 //
 // An interface rather than the concrete type only so a test can see that a

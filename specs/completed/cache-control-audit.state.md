@@ -1,5 +1,5 @@
 ---
-spec: specs/cache-control-audit.md
+spec: specs/completed/cache-control-audit.md
 status: in-progress
 branch: implement/cache-control-audit
 pr:
@@ -65,10 +65,41 @@ Both reviews also flagged the state file being un-checkpointed, which is this
 block, and the missing PR, which is step 5 of the run.
 
 ## Session 3: Purge `units` on write
-Status: pending
+Status: done
 Scope: new internal/pkg/purge package (async, best-effort, coalescing, no-op when
-unconfigured), wired into addRecipe/editRecipe; ADR; env-var docs; follow-ups.md
-bookkeeping (#44 resolved, new item for the in-process /ingredients cache)
+unconfigured), wired into addRecipe/editRecipe; ADR-0009; env-var docs;
+follow-ups.md bookkeeping (#44 resolved, #51 opened for the in-process
+/ingredients cache)
 Depends on: Session 2 (nothing to purge until /units carries a cache tag)
-Commit:
-Notes:
+Commit: 4b8124a (+ review fixes)
+Notes: `go test ./... -race -count=4` green. Verified end-to-end on a live
+stack: a real POST /recipe returned 201 and coined the "bunch" Unit with the
+purger unconfigured (a no-op, as intended), and the startup line reports
+purging disabled. `npm run package` builds; all 27 e2e specs pass.
+
+Review fixes applied:
+- `Configured()` was documented as feeding a startup log line that did not
+  exist, so a Fly host with only one of the two secrets set would silently
+  never purge — exactly what the runbook warns about. main.go now logs it.
+- ADR-0009 claimed "a burst of a hundred saves costs two requests", true only
+  within one 5s window; corrected, and the deliberate choice to spend one of
+  Netlify's two allowed purges per window is now stated rather than inferred.
+- The `!state.last.IsZero()` guard in Purge was dead (time.Since on a zero Time
+  saturates, so wait is already negative) — removed, with the reason recorded.
+- **The happens-before argument that makes coalescing correct is now written
+  down.** Clearing `pending` before `send` looks unsafe; it is safe only
+  because `pending` is cleared under the same mutex that orders the send, so a
+  caller seeing `pending == true` provably precedes that send. Moving the clear
+  after `p.send` reads like a tidy-up and would silently drop purges.
+- Test timings hardened against a loaded runner (the mid-window assertion could
+  race the trailing call), and the per-tag test given a long window against a
+  short deadline so a shared-throttle bug cannot squeak past it.
+- Response body drained as well as closed; spy purger given a mutex.
+- **`-race` added to ci.yml's Test step and scripts/build-local.sh.** This is
+  the repo's first concurrent production code and the ordering argument above
+  is precisely what a race detector exists to catch.
+
+Known limit, accepted: `TestRecipeWritesPurgeTheUnitsCache` exercises
+`purgeUnitsCache`, not the two call sites, so it would still pass if both calls
+were deleted. Reaching addRecipe/editRecipe needs a database and the repo has no
+DB-backed Go harness. The call sites are one line each and visible in the diff.

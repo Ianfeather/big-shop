@@ -36,7 +36,8 @@ echo "Running go vet in the api container..."
 docker compose run --rm api go vet ./...
 
 echo "Running go test in the api container..."
-docker compose run --rm api go test ./... -v
+# -race to match ci.yml - see the comment on its Test step.
+docker compose run --rm api go test ./... -v -race
 
 echo "Checking docs/openapi.yaml is up to date with app.go..."
 # -T: without it compose allocates a TTY and injects carriage returns into the

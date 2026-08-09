@@ -68,8 +68,17 @@ user saving several recipes in a row, the e2e suite, or a re-run of
 `scripts/backfill-recipe-method.mjs` all exceed that comfortably.
 
 So purges **coalesce**: one call goes immediately, and anything arriving inside the window
-collapses into a single trailing call at its end. A burst of a hundred saves costs two
-requests. This is why the purger holds state rather than being a bare HTTP call.
+collapses into a single trailing call at its end. A hundred saves inside one five-second
+window cost two requests rather than a hundred; sustained load settles at one request every
+five seconds, not two. This is why the purger holds state rather than being a bare HTTP
+call.
+
+**The implementation spends one of the two allowed purges per window, not both**, which is
+deliberate rather than an off-by-one. Two purges of the same tag in one window achieve
+nothing the first did not — the second invalidates an entry the first already dropped —
+while sitting exactly on a documented limit means any clock skew or retry turns into a 429,
+and a 429 is a purge that silently did not happen. Half the allowance buys the same
+freshness with room to be wrong in.
 
 ## What was rejected
 

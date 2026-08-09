@@ -98,8 +98,14 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # -race because internal/pkg/purge is the first concurrent production
+      # code in this repo: a mutex, a background goroutine per purge and a
+      # time.AfterFunc callback that shares state with the caller. Its
+      # correctness rests on an ordering argument (see Purge's comment on the
+      # `pending` flag), and the way that argument gets broken is a data race,
+      # which a plain `go test` will not report.
       - name: Test
-        run: go test ./... -v
+        run: go test ./... -v -race
 
       # docs/openapi.yaml is generated from app.go's route registrations, and
       # types/api.d.ts from it in turn. Both are committed, so both can drift -

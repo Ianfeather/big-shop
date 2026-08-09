@@ -147,7 +147,11 @@ func TestPurgeNeverBlocksTheCaller(t *testing.T) {
 // happen.
 func TestPurgeCoalescesABurst(t *testing.T) {
 	rec := &recorder{}
-	const window = 150 * time.Millisecond
+	// A full second, not the 150ms this started at: the mid-window assertion
+	// below runs right after the ten Purge calls, so any stall longer than the
+	// window - a loaded CI runner is enough - would let the trailing call land
+	// first and fail the test for a reason that is not the code's fault.
+	const window = time.Second
 	p := newTestPurger(t, rec, window)
 
 	for i := 0; i < 10; i++ {
@@ -163,12 +167,12 @@ func TestPurgeCoalescesABurst(t *testing.T) {
 	}
 
 	// The other nine collapse into a single trailing call at the window's end.
-	if !eventually(t, 2*time.Second, func() bool { return rec.count() == 2 }) {
+	if !eventually(t, 5*time.Second, func() bool { return rec.count() == 2 }) {
 		t.Fatalf("calls = %d after the window, want 2", rec.count())
 	}
 
 	// And nothing further arrives afterwards.
-	time.Sleep(2 * window)
+	time.Sleep(window / 2)
 	if got := rec.count(); got != 2 {
 		t.Errorf("calls = %d, want the burst to have settled at 2", got)
 	}
@@ -197,12 +201,16 @@ func TestPurgeAfterTheWindowGoesImmediately(t *testing.T) {
 // behaviour before a second one arrives and quietly starves the first.
 func TestPurgeThrottlesPerTag(t *testing.T) {
 	rec := &recorder{}
-	p := newTestPurger(t, rec, time.Second)
+	// A long window against a short deadline, deliberately: if the two tags
+	// shared one throttle, the second call would be a trailing purge five
+	// seconds out and could not possibly arrive inside the 200ms below. A
+	// window near the deadline would let a broken implementation squeak in.
+	p := newTestPurger(t, rec, 5*time.Second)
 
 	p.Purge("units")
 	p.Purge("something-else")
 
-	if !eventually(t, time.Second, func() bool { return rec.count() == 2 }) {
+	if !eventually(t, 200*time.Millisecond, func() bool { return rec.count() == 2 }) {
 		t.Errorf("calls = %d, want both tags purged immediately", rec.count())
 	}
 }

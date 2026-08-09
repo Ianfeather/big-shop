@@ -26,6 +26,11 @@ var negroniLambda *negroniadapter.NegroniAdapter
 var router *negroni.Negroni
 var openapiAPI huma.API
 
+// purgeConfigured is captured at startup so main can report it. Held here
+// rather than read from the environment again so that what is logged is what
+// the App actually built, not a second guess at it.
+var purgeConfigured bool
+
 // basePath is the prefix every route is registered under when this runs as a
 // server - the Fly container in production, and `serve` locally - and it is the
 // OpenAPI server URL. Netlify rewrites it to the Fly origin with status = 200,
@@ -119,6 +124,7 @@ func init() {
 		fmt.Println("Failed to create application")
 		fmt.Println(err)
 	}
+	purgeConfigured = application.PurgeConfigured()
 
 	router, _, err = application.GetRouter(routerBasePath())
 	if err != nil {
@@ -141,6 +147,17 @@ func main() {
 		}
 		fmt.Print(string(spec))
 	} else if isServeMode() {
+		// Said once at startup because the failure it describes is silent
+		// otherwise: with only one of NETLIFY_PURGE_TOKEN/NETLIFY_SITE_ID set,
+		// or neither, /units is never invalidated and simply expires on its
+		// s-maxage. That is the correct behaviour locally and in CI, and a
+		// misconfiguration on Fly - and nothing else distinguishes the two.
+		if purgeConfigured {
+			log.Println("edge cache purging enabled")
+		} else {
+			log.Println("edge cache purging disabled (NETLIFY_PURGE_TOKEN and NETLIFY_SITE_ID must both be set); /units will expire on its s-maxage instead")
+		}
+
 		// This branch is no longer dev-only: it is what the production
 		// container on Fly runs too (see Dockerfile), so its timeouts now
 		// apply to real traffic for the first time - the lambda.Start path

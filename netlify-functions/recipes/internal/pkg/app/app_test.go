@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"recipes/internal/pkg/common"
@@ -312,9 +313,19 @@ func TestEachRouteStampsItsOwnPolicy(t *testing.T) {
 	}
 }
 
-type spyPurger struct{ tags []string }
+// spyPurger records what was purged. Locked because the real Purger is called
+// from request handlers and is safe to use concurrently - a spy that is not
+// would turn a future concurrent test into a race rather than a failure.
+type spyPurger struct {
+	mu   sync.Mutex
+	tags []string
+}
 
-func (s *spyPurger) Purge(tag string) { s.tags = append(s.tags, tag) }
+func (s *spyPurger) Purge(tag string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tags = append(s.tags, tag)
+}
 
 // A Recipe create or edit runs insertUnits, which can coin a Unit the cached
 // /units response does not have - so both purge the edge cache.

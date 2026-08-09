@@ -26,6 +26,7 @@ package purge
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -43,6 +44,12 @@ const netlifyPurgeURL = "https://api.netlify.com/api/v1/purge"
 // which is deliberately the more conservative half of it. Purging twice in a
 // window buys nothing - the second call invalidates what the first already
 // did - whereas a 429 is a purge that silently did not happen.
+//
+// The spare half is not just caution. `last` is stamped when the send is
+// *decided*, not when Netlify receives it, so a request delayed by anything up
+// to the client timeout can arrive later than its slot implies and land closer
+// to its neighbour than five seconds. Spending one of the two allowed purges
+// leaves room for that without ever tipping into a 429.
 const rateLimitWindow = 5 * time.Second
 
 // requestTimeout bounds the background call. Nothing waits on it, so the only
@@ -127,11 +134,29 @@ func (p *Purger) Purge(tag string) {
 
 	// A trailing purge is already scheduled and will cover this call too. This
 	// is the branch that makes a burst cost one request.
+	//
+	// "Will cover this call" is the load-bearing claim, and it is worth
+	// spelling out because it looks unsafe: the callback below clears pending
+	// *before* it sends, so this early return could plausibly hand off to a
+	// purge that has already gone. It cannot. Seeing pending == true means this
+	// goroutine took p.mu before the callback did, and the callback only sends
+	// after taking p.mu - so the caller's write, this call, and that send are
+	// totally ordered, in that order. If the callback wins the mutex instead,
+	// pending is false by the time this reads it and the branch below schedules
+	// a fresh trailing purge.
+	//
+	// The invariant is therefore: pending must be cleared under the same mutex
+	// that orders the send. Moving the clear to after p.send - which reads like
+	// a tidy-up - breaks it silently, and the symptom is a Unit that never
+	// appears until the s-maxage expires.
 	if state.pending {
 		return
 	}
 
-	if wait := p.window - time.Since(state.last); wait > 0 && !state.last.IsZero() {
+	// No IsZero guard on state.last: time.Since on a zero Time saturates at
+	// ~2562047h, so wait is hugely negative on the first call and this branch
+	// is skipped without one.
+	if wait := p.window - time.Since(state.last); wait > 0 {
 		state.pending = true
 		time.AfterFunc(wait, func() {
 			p.mu.Lock()
@@ -173,6 +198,10 @@ func (p *Purger) send(tag string) {
 		return
 	}
 	defer resp.Body.Close()
+	// Drained, not just closed, so the connection can be reused. At one request
+	// per five seconds this saves almost nothing; it costs one line and avoids
+	// the reader wondering whether it was an oversight.
+	defer io.Copy(io.Discard, resp.Body)
 
 	// 429 is called out by name because it is the one failure the coalescing
 	// above is meant to prevent - seeing it in the logs means a burst got

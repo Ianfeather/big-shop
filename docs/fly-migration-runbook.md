@@ -77,7 +77,8 @@ being invalidated when a Recipe save coins a Unit. Nothing fails, and nothing 50
 is deliberately a degradation rather than a dependency, which is why local development, e2e
 and CI all run without them. Set them both or neither; one alone is treated as unset.
 
-Otherwise only `DSN` and `SENDGRID_API_KEY`. `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` are public identifiers and are already
+Otherwise only `DSN` and `SENDGRID_API_KEY`. `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` are public
+identifiers and are already
 pinned in `fly.toml`'s `[env]` block — deliberately, because getting them wrong does not
 fail loudly: with `AUTH0_DOMAIN` unset the JWKS fetch goes to `https:///.well-known/jwks.json`
 and every authenticated route rejects while `/health` stays green.

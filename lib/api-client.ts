@@ -11,6 +11,15 @@
 //    /api/recipe-image does it to authenticate the caller at all
 //    (lib/authenticate.ts), and rejects a request without one. Hence the
 //    optional token on all three.
+//
+// The `url` passed to the nextApi* helpers must be a **relative** path
+// (`/api/parse-recipe-url`), so the browser resolves it against the origin the
+// page is being served from. These used to be prefixed with the build-time
+// `NEXT_PUBLIC_HOST`, which .env.production pins to www.bigshop.life - so on a
+// Netlify deploy preview they were cross-origin calls into *production's* API
+// routes (follow-ups.md #48). Nothing about these routes wants an absolute URL:
+// they are served by this same Next.js app. lib/app-origin.ts covers the cases
+// that genuinely need an origin.
 
 async function parseBody(res: Response): Promise<unknown> {
   const text = await res.text();

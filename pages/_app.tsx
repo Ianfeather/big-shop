@@ -7,6 +7,7 @@ import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import useAuth0, { authDisabled } from '@hooks/use-auth';
 import { requireEnv } from '../lib/env';
+import { appOrigin } from '../lib/app-origin';
 
 const InnerApp = ({ Component, pageProps }: Pick<AppProps, 'Component' | 'pageProps'>) => {
   const { isAuthenticated, isLoading } = useAuth0();
@@ -77,9 +78,14 @@ export default function App({ Component, pageProps, router }: AppProps) {
       // to match the wire format. domain/clientId/useRefreshTokens/
       // cacheLocation stay top-level - they configure the client, not the
       // authorize request.
+      // redirect_uri is the origin we are actually being served from, not the
+      // build-time NEXT_PUBLIC_HOST - otherwise a deploy preview sends the user
+      // to production to finish logging in (follow-ups.md #48). Auth0 still has
+      // to allow whatever origin this resolves to; see lib/app-origin.ts and
+      // docs/deploy-previews.md.
       authorizationParams={{
         audience,
-        redirect_uri: process.env.NEXT_PUBLIC_HOST
+        redirect_uri: appOrigin()
       }}
       useRefreshTokens={true}
       cacheLocation="localstorage"

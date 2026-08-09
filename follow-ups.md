@@ -343,49 +343,40 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     No code change is implied. If a rewrite does happen, `pages/index.tsx` is the only file
     involved, and nothing under test asserts on this copy.
 
-48. **You cannot log in on a deploy preview, so branch deploys cannot be tested.** Hit while
-    trying to run the authenticated half of
-    [`api-hosting-migration.md`](./specs/api-hosting-migration.md)'s cutover verification
-    against `deploy-preview-76`, which had to be abandoned. Filed as "an Auth0 callback
-    config issue", which is half of it — the other half is in this repo.
+48. **You cannot log in on a deploy preview, so branch deploys cannot be tested.**
+    **Reduced rather than resolved: the code half is done, the Auth0 console half is not.**
+    Full account, and the runbook for the part that remains →
+    [`docs/deploy-previews.md`](./docs/deploy-previews.md).
 
-    **Root cause, in two layers.** The console setting is the second one, not the first:
+    **Done.** `NEXT_PUBLIC_HOST` is inlined at build time, so every production-mode build —
+    previews included — used `https://www.bigshop.life` as its own origin. All six call
+    sites are fixed, in two groups: Auth0's `redirect_uri` (`pages/_app.tsx`,
+    `hooks/use-login.ts`) and logout `returnTo` (`components/identity/logout`) now read
+    `window.location.origin` via `lib/app-origin.ts`; the calls to this app's *own* Next.js
+    API routes (`pages/recipes/new.tsx`, `components/method-import`,
+    `components/recipe-form/Form.tsx`) are relative paths, since they never wanted an
+    absolute URL at all — prefixed, they were cross-origin calls into **production's**
+    `/api/parse-recipe-url`, `/api/parse-method-url` and `/api/recipe-image` from every
+    preview, so import features on a preview exercised code that was not on the branch.
+    `lib/app-origin.test.ts` guards the build-time value never winning in the browser again.
 
-    - `pages/_app.tsx:82` passes `redirect_uri: process.env.NEXT_PUBLIC_HOST`, and
-      `.env.production` pins that to `https://www.bigshop.life`. `NEXT_PUBLIC_*` is inlined
-      at build time, so *every* production-mode build — previews included — tells Auth0 to
-      send the user to the live site. Auth0 obeys, and you land on production having
-      "logged in" somewhere else. Nothing in the console can fix that; the app is asking
-      for the wrong thing.
-    - Once that is fixed, Auth0 also has to *allow* the preview origin in Allowed Callback
-      URLs, Allowed Logout URLs and Allowed Web Origins. This is where it gets awkward:
-      Netlify preview hosts are `deploy-preview-<N>--big-shop.netlify.app`, and Auth0's
-      wildcard rules require `*` to be the leftmost subdomain component followed by a dot.
-      So `https://*--big-shop.netlify.app` is not expressible, and `https://*.netlify.app`
-      — which would be — grants callbacks to every site on Netlify and must not be used.
+    **Left, and it cannot be done from the repo:** Auth0 must *allow* the preview origin in
+    Allowed Callback URLs, Allowed Logout URLs and Allowed Web Origins. Netlify preview
+    hosts are `deploy-preview-<N>--big-shop.netlify.app`, and Auth0's wildcard rules require
+    `*` to be the leftmost subdomain component followed by a dot — so
+    `https://*--big-shop.netlify.app` is not expressible, and `https://*.netlify.app`, which
+    would be, grants callbacks to every site on Netlify and must not be used. The chosen
+    path is therefore one stable alias rather than every numbered preview: a branch deploy
+    on a fixed `preview` branch, allowlisted once. Until those three fields are filled in,
+    login on a preview fails with an Auth0 callback error instead of silently landing on
+    production — a better failure, but still a failure.
 
-    **The same constant breaks more than login.** `NEXT_PUBLIC_HOST` is also the base for
-    the Next.js API routes called from the browser: `pages/recipes/new.tsx` (91, 98, 113)
-    and `components/method-import/index.tsx` (68, 75, 87). On a preview those become
-    *cross-origin calls to production's* `/api/recipe-image`, `/api/parse-recipe-url` and
-    `/api/parse-method-url`. And `components/identity/logout/index.tsx:16` sends
-    `returnTo: NEXT_PUBLIC_HOST`, so logging out of a preview also lands on production. Any
-    fix should treat all four call sites together rather than patching `redirect_uri` alone.
-
-    **Likely shape of the fix**, not decided here: derive the origin at runtime
-    (`window.location.origin`) rather than at build time, with an SSR guard since `_app`
-    renders on the server too. Netlify exposes `DEPLOY_PRIME_URL` during the build as an
-    alternative, but that keeps the value build-time and would still need the Auth0
-    allowlist entry per preview. A pragmatic middle path is a single stable alias — a
-    branch deploy on a fixed subdomain — allowlisted once, rather than trying to make every
-    numbered preview work.
-
-    **Why it is worth fixing rather than living with.**
+    **Why it was worth fixing rather than living with.**
     [ADR-0006](./docs/adr/0006-go-api-leaves-netlify-functions.md) already accepts that
     branch deploys degrade under the Fly migration, because they proxy to the single
-    production API. That is a known, bounded cost. This is different and larger: it means a
-    preview cannot be exercised past the login screen *at all*, which removes the main
-    reason to have previews and pushed the migration's own verification onto production.
+    production API. That is a known, bounded cost. This was different and larger: a preview
+    could not be exercised past the login screen *at all*, which removed the main reason to
+    have previews and pushed the migration's own verification onto production.
 
 49. **Investigate why a request costs ~160ms per query, not ~90ms — and why `GET /shopping-list`
     issues nine of them.** Opened off the back of the Fly migration's latency measurement

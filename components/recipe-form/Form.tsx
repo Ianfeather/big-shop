@@ -145,7 +145,7 @@ export default function Form({initialRecipe = {}, mode = 'new', focusSection}: F
   const parseTextMutation = useMutation({
     mutationFn: async (payload: { text: string }) => {
       const token = await getAccessTokenSilently();
-      return nextApiPost<ParseTextResult>(`${process.env.NEXT_PUBLIC_HOST}/api/parse-recipe-text`, payload, token);
+      return nextApiPost<ParseTextResult>('/api/parse-recipe-text', payload, token);
     }
   });
 

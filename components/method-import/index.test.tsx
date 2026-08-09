@@ -30,7 +30,6 @@ const mockedNextApiGet = nextApiGet as unknown as Mock;
 const mockedNextApiPostFormData = nextApiPostFormData as unknown as Mock;
 
 beforeEach(() => {
-  vi.stubEnv('NEXT_PUBLIC_HOST', 'http://app.test');
   mockedUseAuth.mockReturnValue({ getAccessTokenSilently: vi.fn(async () => 'test-token') });
   mockedNextApiPost.mockReset();
   mockedNextApiGet.mockReset();
@@ -77,7 +76,9 @@ describe('MethodImport', () => {
 
     await waitFor(() => expect(onMethod).toHaveBeenCalledWith('1. Beat the eggs\n2. Fry them'));
     expect(mockedNextApiPost).toHaveBeenCalledWith(
-      'http://app.test/api/parse-method-url',
+      // Relative on purpose - see lib/api-client.ts. An absolute URL here would
+      // be a cross-origin call to production from every deploy preview.
+      '/api/parse-method-url',
       { url: 'https://example.com/recipe' },
       'test-token'
     );

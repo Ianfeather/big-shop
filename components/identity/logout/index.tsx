@@ -1,4 +1,5 @@
 import useAuth0 from '@hooks/use-auth';
+import { appOrigin } from '../../../lib/app-origin';
 import styles from '../index.module.css';
 
 interface LogoutProps {
@@ -13,7 +14,10 @@ const Logout = ({ className }: LogoutProps) => {
       onClick={() =>
         logout({
           logoutParams: {
-            returnTo: process.env.NEXT_PUBLIC_HOST,
+            // Where we are, not where the build was configured to think it is -
+            // otherwise signing out of a deploy preview lands on production
+            // (follow-ups.md #48). Auth0's Allowed Logout URLs must list it.
+            returnTo: appOrigin(),
           },
         })
       }

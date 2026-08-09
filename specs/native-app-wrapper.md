@@ -129,11 +129,14 @@ only one that does. That's a genuine head start.
 **What has to change:**
 
 1. **Origin and callback URL.** A Capacitor webview's origin is `capacitor://localhost`
-   (iOS) / `https://localhost` (Android), not `https://www.bigshop.life`. The current
-   `redirect_uri: process.env.NEXT_PUBLIC_HOST` (`pages/_app.tsx:79`, and again in
-   `components/identity/create/index.tsx:12`) is wrong for native. Needs a
-   platform-resolved value, plus new entries in the Auth0 application's Allowed
-   Callback/Logout URLs and Allowed Web Origins.
+   (iOS) / `https://localhost` (Android), not `https://www.bigshop.life`. This is
+   **mostly solved already**: `redirect_uri` used to be the build-time
+   `process.env.NEXT_PUBLIC_HOST`, and follow-ups.md #48 moved it to `lib/app-origin.ts`'s
+   `window.location.origin` so a deploy preview could be logged into — which returns the
+   Capacitor origin in a webview for free. What is still needed is the Auth0 side: new
+   entries in the application's Allowed Callback/Logout URLs and Allowed Web Origins.
+   Verify rather than assume that the webview's `location.origin` is the exact string
+   Auth0 wants.
 
 2. **Login must not happen in the embedded webview.** Google explicitly blocks OAuth in
    embedded webviews (`disallowed_useragent`), and Auth0's own guidance for

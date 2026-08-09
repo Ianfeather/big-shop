@@ -195,14 +195,21 @@ func TestDefaultCacheControl(t *testing.T) {
 	})
 }
 
-// The three unscoped routes each override the default differently, and the
-// nineteen account-scoped ones must never join them.
+// Exactly three routes may override app.go's default, and they are the three
+// global catalogs. The other twenty-two registered operations are
+// account-scoped, and a `public` on any of them would let one Account's data be
+// cached from an authenticated request and served to whoever asks next,
+// authenticated or not - Authorization is not part of Netlify's cache key.
 //
-// Asserted against the *registered* routes rather than a hand-kept list, so a
-// route added later is covered whether or not anyone remembers this test: the
-// OpenAPI document Huma builds is the same one docs/openapi.yaml is generated
-// from, so it cannot fall out of step with what is actually served.
-func TestPublicRoutesAreOnlyTheGlobalCatalogs(t *testing.T) {
+// Read out of the OpenAPI document Huma builds, which is the same one
+// docs/openapi.yaml is generated from, so the set of routes cannot drift from
+// what is actually served. The expected set below is still hand-kept - the
+// point is that adding a route does not silently widen it.
+//
+// What this cannot see: a header set imperatively (middleware, ctx.SetHeader)
+// never reaches the OpenAPI document, and neither does a non-Huma route like
+// /health.
+func TestOnlyTheGlobalCatalogsOverrideTheDefault(t *testing.T) {
 	t.Setenv("DISABLE_AUTH", "true")
 	application, err := NewApp(&common.Env{})
 	if err != nil {
@@ -213,74 +220,95 @@ func TestPublicRoutesAreOnlyTheGlobalCatalogs(t *testing.T) {
 		t.Fatalf("GetRouter() error = %v", err)
 	}
 
-	// The only three routes that may override app.go's default at all. The two
-	// of them that answer `public` are what makes this worth pinning: a `public`
-	// response on an account-scoped route would be cached from an authenticated
-	// request and served to whoever asks next, authenticated or not, because
-	// Authorization is not part of Netlify's cache key. The values themselves
-	// are pinned in TestCacheControlValues - the OpenAPI document names the
-	// header but does not carry what it is set to.
-	mayOverride := map[string]bool{"/tags": true, "/units": true, "/ingredients": true}
-
-	var checked int
+	declaring := map[string]bool{}
+	var operations int
 	for path, item := range api.OpenAPI().Paths {
-		for _, op := range []*huma.Operation{item.Get, item.Put, item.Post, item.Delete, item.Patch} {
+		// Every method huma.PathItem can carry, not just the five in use today
+		// - the whole value of reading the registered routes is that a later
+		// one cannot slip past.
+		for _, op := range []*huma.Operation{
+			item.Get, item.Put, item.Post, item.Delete,
+			item.Patch, item.Options, item.Head, item.Trace,
+		} {
 			if op == nil {
 				continue
 			}
+			operations++
 			for status, resp := range op.Responses {
-				if !strings.HasPrefix(status, "2") || resp.Headers == nil {
+				if !strings.HasPrefix(status, "2") {
 					continue
 				}
-				if _, ok := resp.Headers["Cache-Control"]; !ok {
-					continue
-				}
-				checked++
-				if !mayOverride[path] {
-					t.Errorf("%s %s declares its own Cache-Control; only /tags, /units and /ingredients may override the default",
-						op.Method, path)
+				// Case-insensitively: huma keys this map on the struct tag
+				// verbatim, so `header:"cache-control"` would key lowercase
+				// here while still going out canonicalised on the wire.
+				for name := range resp.Headers {
+					if strings.EqualFold(name, "Cache-Control") {
+						declaring[op.Method+" "+path] = true
+					}
 				}
 			}
 		}
 	}
 
-	// /ingredients declares one too, so three routes carry the header. Guards
-	// against this loop silently matching nothing and passing vacuously.
-	if checked != 3 {
-		t.Errorf("found %d routes declaring Cache-Control, want 3", checked)
+	want := map[string]bool{
+		"GET /tags":        true,
+		"GET /units":       true,
+		"GET /ingredients": true,
 	}
-}
-
-// Pins the exact header values, which the OpenAPI-shaped test above cannot see
-// (a declared header has no value in the spec, only a name).
-//
-// DISABLE_AUTH=true so the request reaches the handler, but the handlers hit a
-// nil DB and 500 - which is the wrong path. So these assert on the constants
-// directly, and TestPublicRoutesAreOnlyTheGlobalCatalogs is what ties them to
-// the routes. The end-to-end check that a real 200 carries them lives in the
-// PR's verification against a live stack.
-func TestCacheControlValues(t *testing.T) {
-	for name, tc := range map[string]struct{ got, want string }{
-		// A day. The `tag` table is seeded by migration and never written to.
-		"tags": {tagsCacheControl, "public, max-age=0, s-maxage=86400"},
-		// Five minutes - the backstop behind the purge, not the intended
-		// freshness. Shortening it costs edge hit rate; lengthening it extends
-		// how long a missed purge is visible.
-		"units": {unitsCacheControl, "public, max-age=0, s-maxage=300"},
-		// Not cached, and deliberately not `private` either - see the comment
-		// on the constant.
-		"ingredients": {ingredientsCacheControl, "no-store"},
-	} {
-		if tc.got != tc.want {
-			t.Errorf("%s cache-control = %q, want %q", name, tc.got, tc.want)
+	for route := range declaring {
+		if !want[route] {
+			t.Errorf("%s declares its own Cache-Control; only the three global catalogs may", route)
+		}
+	}
+	for route := range want {
+		if !declaring[route] {
+			t.Errorf("%s no longer declares a Cache-Control; it has fallen back to the default", route)
 		}
 	}
 
-	// A purge names a tag; a response carries one. If these two ever stop being
-	// the same string the purge becomes a silent no-op, which is the failure
-	// mode with no symptom - stale units, no error anywhere.
-	if UnitsCacheTag != "units" {
-		t.Errorf("UnitsCacheTag = %q, want %q", UnitsCacheTag, "units")
+	// #44 was written against 22 operations, of which it called nineteen
+	// account-scoped. Three have been added since. Not asserted exactly -
+	// adding a route is normal and should not fail a cache test - but a count
+	// that has collapsed means the loop above stopped seeing anything and the
+	// checks passed vacuously.
+	if operations < 25 {
+		t.Errorf("walked %d operations, expected at least the 25 registered", operations)
+	}
+}
+
+// Pins what each route actually emits.
+//
+// Asserted through withCachePolicy rather than on the constants, which is the
+// whole point: comparing `unitsCacheControl` to its own literal would still
+// pass with `tagsCacheControl` wired into UnitsOutput, and that swap - a day's
+// TTL on the Open catalog - is the one mistake here with no symptom until a
+// purge is missed. Going through the method asks each output type what it
+// stamps, which is what the handler returns.
+//
+// The handlers themselves are out of reach without a database, so the proof
+// that a real 200 carries these lives in the live-stack verification recorded
+// on the PR.
+func TestEachRouteStampsItsOwnPolicy(t *testing.T) {
+	// A day: the `tag` table is seeded by migration and never written to, so
+	// there is nothing to purge and nothing to go stale.
+	if got := (&TagsOutput{}).withCachePolicy().CacheControl; got != "public, max-age=0, s-maxage=86400" {
+		t.Errorf("/tags Cache-Control = %q", got)
+	}
+
+	// Five minutes: the backstop behind the purge, not the intended freshness.
+	units := (&UnitsOutput{}).withCachePolicy()
+	if got := units.CacheControl; got != "public, max-age=0, s-maxage=300" {
+		t.Errorf("/units Cache-Control = %q", got)
+	}
+	// A purge names a tag; a response carries one. If the two stop matching,
+	// the purge becomes a silent no-op - stale units and no error anywhere.
+	if units.NetlifyCacheTag != UnitsCacheTag || UnitsCacheTag != "units" {
+		t.Errorf("/units Netlify-Cache-Tag = %q, UnitsCacheTag = %q", units.NetlifyCacheTag, UnitsCacheTag)
+	}
+
+	// Not cached, and deliberately not `private` either - see the constant.
+	if got := (&IngredientsOutput{}).withCachePolicy().CacheControl; got != "no-store" {
+		t.Errorf("/ingredients Cache-Control = %q", got)
 	}
 }
 

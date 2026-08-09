@@ -31,7 +31,7 @@ type IngredientName service.Ingredient
 // two beside it. The real win for this route is an in-process cache in
 // known-names.ts, which is separate work - see follow-ups.md.
 //
-// `no-store` without `private`: unlike the account-scoped nineteen, there is
+// `no-store` without `private`: unlike the account-scoped routes, there is
 // nothing personal here to keep out of a shared cache - the point is only that
 // caching it buys nothing.
 const ingredientsCacheControl = "no-store"
@@ -40,6 +40,13 @@ const ingredientsCacheControl = "no-store"
 type IngredientsOutput struct {
 	CacheControl string `header:"Cache-Control"`
 	Body         []IngredientName
+}
+
+// withCachePolicy stamps this route's policy onto the response. See the same
+// method on UnitsOutput for why it is a method rather than a field assignment.
+func (o *IngredientsOutput) withCachePolicy() *IngredientsOutput {
+	o.CacheControl = ingredientsCacheControl
+	return o
 }
 
 func (a *App) getIngredients(ctx context.Context, _ *struct{}) (*IngredientsOutput, error) {
@@ -55,7 +62,7 @@ func (a *App) getIngredients(ctx context.Context, _ *struct{}) (*IngredientsOutp
 		names[i] = IngredientName(ing)
 	}
 
-	return &IngredientsOutput{CacheControl: ingredientsCacheControl, Body: names}, nil
+	return (&IngredientsOutput{Body: names}).withCachePolicy(), nil
 }
 
 func (a *App) registerIngredientsRoutes(api huma.API) {

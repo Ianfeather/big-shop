@@ -30,12 +30,39 @@ inert table rows that 401'd before routing and so could not observe method or
 path. The reviews' "no PR open yet" finding is step 5 of the run, not a defect.
 
 ## Session 2: The three unscoped routes
-Status: pending
+Status: done
 Scope: Huma output header fields on app/tags.go, app/units.go (+ Netlify-Cache-Tag)
 and app/ingredients.go; regenerate docs/openapi.yaml and types/api.d.ts
 Depends on: Session 1 (its middleware is the default these override)
-Commit:
-Notes:
+Commit: 8ab1c46 (+ review fixes, see below)
+Notes: Verified live (COMPOSE_PROJECT_NAME=bigshop-cc, API_PORT=8087):
+/tags `public, max-age=0, s-maxage=86400`; /units `public, max-age=0,
+s-maxage=300` + `Netlify-Cache-Tag: units`; /ingredients `no-store`;
+/recipes and /shopping-list still `private, no-store`. gofmt/vet/`go test
+./...` green, openapi.yaml + types/api.d.ts regenerated and in sync.
+
+**Count correction: there are 25 registered operations, not 22.** #44 was
+written against 22 (nineteen account-scoped); three account-scoped routes have
+been added since. Conclusions unchanged — the three unscoped routes are the
+same three — but the numbers were corrected in the spec and in app.go.
+
+Review fixes applied:
+- The value test compared each constant to its own literal, so wiring
+  `tagsCacheControl` into `UnitsOutput` would have passed — a day's TTL on the
+  Open catalog, the one mistake here with no symptom until a purge is missed.
+  Each output type now stamps its policy via a `withCachePolicy` method and the
+  test goes through that. Mutation-checked: the swap fails the test.
+- The route walk missed `Options`/`Head`/`Trace` on huma.PathItem, so a route
+  registered with one of those could have declared `public` unseen. All eight
+  methods now walked, header matching is case-insensitive (huma keys the map on
+  the struct tag verbatim), and the magic `checked != 3` became a set
+  comparison — which also closes the hole where a future `POST /units` would
+  have been waved through by a path-keyed allowlist.
+- Dropped two unearned comment claims: that the test covered any route added
+  later (the expected set is still hand-kept), and a description of a
+  request-issuing approach the test does not use.
+Both reviews also flagged the state file being un-checkpointed, which is this
+block, and the missing PR, which is step 5 of the run.
 
 ## Session 3: Purge `units` on write
 Status: pending

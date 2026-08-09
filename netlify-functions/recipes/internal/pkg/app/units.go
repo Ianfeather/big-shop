@@ -26,9 +26,10 @@ import (
 const unitsCacheControl = "public, max-age=0, s-maxage=300"
 
 // UnitsCacheTag is the Netlify cache tag attached to /units responses, and the
-// tag internal/pkg/purge purges when a Recipe write may have coined a Unit.
-// Named on both sides from here so the two cannot drift apart - a purge of a
-// tag no response carries is a silent no-op.
+// tag a Recipe write purges when it may have coined a Unit. Exported so the
+// purger names it from here rather than repeating the literal: a purge of a tag
+// no response carries is a silent no-op, with stale units and no error
+// anywhere.
 const UnitsCacheTag = "units"
 
 // UnitsOutput is the response body for listing units.
@@ -42,6 +43,19 @@ type UnitsOutput struct {
 	Body            []service.Unit
 }
 
+// withCachePolicy stamps this route's policy onto the response.
+//
+// A method rather than two fields assigned at the return site so that a test
+// can ask what /units actually emits without a database to reach the handler
+// through. The mistake worth catching is a one-word one - `tagsCacheControl`
+// pasted in here - and it has no symptom until a purge is missed, at which
+// point the Open catalog is a day stale instead of five minutes.
+func (o *UnitsOutput) withCachePolicy() *UnitsOutput {
+	o.CacheControl = unitsCacheControl
+	o.NetlifyCacheTag = UnitsCacheTag
+	return o
+}
+
 func (a *App) getUnits(ctx context.Context, _ *struct{}) (*UnitsOutput, error) {
 	units, err := service.GetAllUnits(a.db)
 
@@ -50,13 +64,10 @@ func (a *App) getUnits(ctx context.Context, _ *struct{}) (*UnitsOutput, error) {
 		return nil, huma.Error500InternalServerError("Failed to get units from db")
 	}
 
-	// Success path only - a 500 keeps app.go's safe default, so a failed read
-	// is neither cached nor tagged.
-	return &UnitsOutput{
-		CacheControl:    unitsCacheControl,
-		NetlifyCacheTag: UnitsCacheTag,
-		Body:            units,
-	}, nil
+	// Success path only - Huma writes an output struct's headers only when it
+	// has an output struct, so a 500 keeps app.go's safe default and a failed
+	// read is neither cached nor tagged.
+	return (&UnitsOutput{Body: units}).withCachePolicy(), nil
 }
 
 func (a *App) registerUnitsRoutes(api huma.API) {

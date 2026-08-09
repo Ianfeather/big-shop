@@ -37,6 +37,13 @@ type TagsOutput struct {
 	Body         []string
 }
 
+// withCachePolicy stamps this route's policy onto the response. See the same
+// method on UnitsOutput for why it is a method rather than a field assignment.
+func (o *TagsOutput) withCachePolicy() *TagsOutput {
+	o.CacheControl = tagsCacheControl
+	return o
+}
+
 func (a *App) getTags(ctx context.Context, _ *struct{}) (*TagsOutput, error) {
 	tags, err := service.GetAllTags(a.db)
 
@@ -45,9 +52,9 @@ func (a *App) getTags(ctx context.Context, _ *struct{}) (*TagsOutput, error) {
 		return nil, huma.Error500InternalServerError("Failed to get tags from db")
 	}
 
-	// Set on the success path only. An error returns before this, so the 500
-	// keeps the safe default rather than caching a failure for a day.
-	return &TagsOutput{CacheControl: tagsCacheControl, Body: tags}, nil
+	// Success path only. An error returns before this, so the 500 keeps the
+	// safe default rather than caching a failure for a day.
+	return (&TagsOutput{Body: tags}).withCachePolicy(), nil
 }
 
 func (a *App) registerTagsRoutes(api huma.API) {

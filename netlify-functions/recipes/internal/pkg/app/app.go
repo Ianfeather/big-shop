@@ -54,8 +54,10 @@ func healthHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 // defaultCacheControl is what every response carries unless its handler says
-// otherwise. Nineteen of the twenty-two routes are account-scoped and mutable
-// and want exactly this.
+// otherwise. Twenty-two of the twenty-five registered operations are
+// account-scoped and mutable and want exactly this. (follow-ups.md #44 counts
+// nineteen of twenty-two; three routes have been added since it was written,
+// all account-scoped.)
 //
 // It is a default rather than something each route opts into because the
 // failure mode is asymmetric: forgetting `no-store` on an account-scoped route

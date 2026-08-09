@@ -7,7 +7,12 @@ into a headers problem rather than an infrastructure one, and it is not repeated
 
 ## The problem
 
-The Go API sets no cache headers at all, on any of its 22 routes.
+The Go API sets no cache headers at all, on any of its routes.
+
+**There are 25 of them, not the 22 #44 counted.** Three account-scoped operations have been
+added since the audit was written, so the split is 22 account-scoped and 3 unscoped, not
+19 and 3. It does not change any of #44's conclusions — the three unscoped routes are the
+same three — but the numbers in #44 are stale and are corrected here rather than repeated.
 
 Since [ADR-0006](../docs/adr/0006-go-api-leaves-netlify-functions.md) browser API traffic
 crosses Netlify's edge, via the `/api/bigshop/*` `status = 200` rewrite in `netlify.toml`.
@@ -32,10 +37,10 @@ successes.
 First rather than just below the carve-out, which is where this was originally drafted:
 `/health` is answered by the carve-out without ever reaching a handler, so there is nothing
 downstream that could give it a policy, and an uptime monitor's health response is not
-something any intermediary should be storing either. It is outside the 22 routes the audit
+something any intermediary should be storing either. It is outside the 25 routes the audit
 covered, so this is a small deliberate widening of scope rather than an oversight.
 
-**The default is the mechanism, not a convenience.** Nineteen of the 22 routes are
+**The default is the mechanism, not a convenience.** Twenty-two of the 25 routes are
 account-scoped and mutable and want exactly this; a route added tomorrow gets it without
 anyone remembering to. `public` reaching an account-scoped route would serve one Account's
 Shopping List to another, and this is what makes that require a deliberate act.

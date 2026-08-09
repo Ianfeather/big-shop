@@ -62,7 +62,23 @@ fly secrets set \
 `fly secrets set` normally triggers a release to roll the new values out; with no machines
 created yet it simply stores them.
 
-Only these two. `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` are public identifiers and are already
+**Two optional extras, added after the migration** — the edge cache purge
+([ADR-0009](./adr/0009-edge-caching-the-global-catalogs.md)):
+
+```bash
+fly secrets set \
+  NETLIFY_PURGE_TOKEN='<a Netlify personal access token>' \
+  NETLIFY_SITE_ID='<the site API ID, from Netlify: Site configuration → General>'
+```
+
+Leave them unset and the purger is a no-op: `GET /units` still gets its `Netlify-Cache-Tag`
+and is still cached at the edge, it just expires on its own 5-minute `s-maxage` instead of
+being invalidated when a Recipe save coins a Unit. Nothing fails, and nothing 500s — this
+is deliberately a degradation rather than a dependency, which is why local development, e2e
+and CI all run without them. Set them both or neither; one alone is treated as unset.
+
+Otherwise only `DSN` and `SENDGRID_API_KEY`. `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` are public
+identifiers and are already
 pinned in `fly.toml`'s `[env]` block — deliberately, because getting them wrong does not
 fail loudly: with `AUTH0_DOMAIN` unset the JWKS fetch goes to `https:///.well-known/jwks.json`
 and every authenticated route rejects while `/health` stays green.

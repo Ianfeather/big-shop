@@ -2,7 +2,7 @@
 
 Small defects and doc-drift found while building `CONTEXT.md` from the codebase (2026-07-13). Not designed here — just flagged for later action.
 
-Items 1–30, 32, 33, 36, 39, 40 and 48 have all been resolved — see [`follow-ups-resolved.md`](./follow-ups-resolved.md) for the full history (numbering preserved for cross-references between entries).
+Items 1–30, 32, 33, 36, 39, 40, 44 and 48 have all been resolved — see [`follow-ups-resolved.md`](./follow-ups-resolved.md) for the full history (numbering preserved for cross-references between entries).
 
 Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are real but deliberately not being fixed, so they are not queued work.
 
@@ -190,60 +190,6 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     contested fit. The alternative — putting Faro under the analytics category — would
     blind error reporting for everyone who declines, which is the thing `observability.md`
     exists to provide.
-
-44. **Audit `Cache-Control` across the Go API.** Originally filed as "put cacheable pages
-    and endpoints behind a CDN so we can globally distribute". Most of that premise
-    dissolved on inspection, and what is left is a headers problem rather than an
-    infrastructure one:
-
-    - **The frontend is already fully CDN'd.** Netlify serves `.next` from its edge, and
-      every route bar `/` is a client-rendered SPA behind an auth gate, so there are no
-      cacheable *pages* beyond the marketing homepage and the hashed bundle.
-    - **There is no CDN to add for the API either.** Once
-      [`api-hosting-migration.md`](./specs/api-hosting-migration.md) lands, browser API
-      traffic already crosses Netlify's edge via the `/api/bigshop/*` 200 rewrite, and
-      Netlify's CDN *does* cache responses proxied from an external origin, honouring the
-      origin's `Cache-Control`/`s-maxage`. Only the headers are missing. **Depends on that
-      migration** for exactly this reason.
-
-    Audit all 22 routes. Nineteen are account-scoped and mutable and want explicit
-    `private`/`no-store`. Three take no account scoping and return the same bytes for
-    everyone — and each wants a different answer, which is the finding:
-
-    - **`/tags`** reads the `tag` table, a fixed list seeded by migration that no code path
-      writes to (see `hooks/use-tags.ts`, which documents why nothing invalidates it). Long
-      `s-maxage`, no purge needed.
-    - **`/units`** is an Open catalog — saving a Recipe upserts every Unit its ingredients
-      reference, so an import can coin `"bunch"`. Cache-tagged and **purged on write**,
-      with a moderate backstop `s-maxage`.
-    - **`/ingredients`** is read server-side by `lib/recipe-import/known-names.ts`, which
-      post-migration calls Fly directly via `API_HOST_INTERNAL` and so **bypasses the edge
-      entirely**. Edge caching buys it nothing; an in-process cache in that module is the
-      real win, and is a separate piece of work.
-
-    On the purge mechanism: Netlify supports `Netlify-Cache-Tag` plus a purge API on all
-    plans, so this is available. It costs a Netlify personal access token as a Fly secret
-    — a re-coupling to Netlify's control plane immediately after a migration that reduced
-    it, accepted knowingly. **The purge must be async and best-effort: it must never fail a
-    Recipe save.** Each tag can be purged only twice every five seconds before returning
-    429, which a burst of saves, the e2e suite or a re-run of
-    `scripts/backfill-recipe-method.mjs` can all exceed. The backstop `s-maxage` is what
-    makes a dropped or rate-limited purge self-heal, which is why it is minutes rather
-    than a year.
-
-    **Accepted consequence: the three cached routes become publicly readable.**
-    `Authorization` is not part of Netlify's default cache key and `Netlify-Vary` cannot be
-    made to vary on it, so a `public` response cached from an authenticated request is
-    served to whoever asks next, authenticated or not. That is acceptable here because the
-    catalog is global and non-personal by design ([ADR-0001](./docs/adr/0001-global-ingredient-catalog.md)).
-    **`public` must never extend to an account-scoped route** — one Account's Shopping List
-    would be served to another.
-
-    Finally, the near-miss worth recording because it would be misdiagnosed: a naive TTL on
-    `/units` defeats the post-save invalidation at `components/recipe-form/Form.tsx:101`
-    (asserted by `Form.test.tsx:201`). The client would dutifully refetch, hit the stale
-    edge copy, and the new Unit would stay missing from autosuggest — looking exactly like
-    a frontend cache bug, with the frontend innocent.
 
 45. **The API's deploy gate does not include e2e.**
     `.github/workflows/deploy-api.yml` is gated on the `CI` workflow succeeding
@@ -442,3 +388,109 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     - **#42 is the reason the lifecycle emails would work or not.** A retention email
       pointing someone back into an empty Account is the same wound from a different
       angle — sequencing matters more than content here.
+
+51. **Every Recipe Import fetches the whole Ingredient catalog across the Atlantic.**
+    Opened by the `Cache-Control` audit (#44, resolved), which concluded that `/ingredients`
+    is the one global catalog edge caching cannot help and named an in-process cache as
+    "the real win". That conclusion was too quick, and this item deliberately reopens the
+    question rather than inheriting it: the round trip is real, but an in-process cache is
+    only one of three ways to remove it, and probably not the best.
+
+    **What was actually verified**, by tracing every caller rather than by reading #44:
+
+    - **`/ingredients` has exactly one consumer**: `fetchKnownNames` in
+      `lib/recipe-import/known-names.ts`. The two browser hooks that used to read it
+      (`use-ingredient-names`, `use-ingredient-metadata`) no longer exist — they went when
+      the fetch moved server-side so the model would stop coining near-duplicates of names
+      created moments earlier. Dave does not touch it.
+    - **It runs on every ingredient-bearing import** — `/api/parse-recipe-url`,
+      `/api/parse-recipe-text` and `/api/recipe-image`, skipped only for a method-only
+      import.
+    - **The path is transatlantic.** Those are Next.js API routes, so they run as Netlify
+      functions, which [ADR-0006](./docs/adr/0006-go-api-leaves-netlify-functions.md)
+      records as defaulting to `cmh` (US East, Ohio) with region selection paywalled. They
+      call `API_HOST_INTERNAL` — the Fly origin in Frankfurt — *directly*, not through
+      `www.bigshop.life`. So the hop is Ohio → Frankfurt → TiDB and back, which is the
+      exact cost ADR-0006 moved the API to remove, reintroduced from the other side.
+    - **The payload has no ceiling.** `GetAllIngredients` is `SELECT name FROM ingredient`
+      — the entire global catalog, unscoped, unpaginated, growing monotonically as people
+      import recipes ([ADR-0001](./docs/adr/0001-global-ingredient-catalog.md)).
+
+    So the endpoint is not irrelevant — the data is what stops catalog fragmentation, which
+    migration 029 exists to undo — but its shape is an artifact of the extractor living in
+    a Netlify function while the catalog lives in Frankfurt.
+
+    **Three fixes, in increasing order of how much they actually solve.** Pick one
+    deliberately; they are alternatives, not stages.
+
+    - **Route the call through `www.bigshop.life` instead of the Fly origin.** Then it
+      crosses Netlify's edge like everything else and caches exactly like `/units` — and a
+      hit is served from the Ohio PoP rather than Frankfurt, which is the whole latency
+      problem gone. Cheapest by far: a host change plus the `public`/`s-maxage` header and
+      a cache tag, and `internal/pkg/purge` already exists to invalidate it. Costs: a hop
+      back through the platform the migration routed around; the catalog becomes publicly
+      readable (the same trade already accepted for `/tags` and `/units`, fine under
+      ADR-0001); and it needs purging on **every** Recipe save, since saves coin
+      ingredients far more often than units. **Unverified assumption, and the thing to test
+      first: that Netlify's CDN caches a response fetched by one of its own functions.**
+    - **Cache in-process in `known-names.ts`** — what #44 proposed. Works, but the ceiling
+      is lower than it looks: a module-level variable is only long-lived on a long-lived
+      process, and this runs in a Netlify function, where a cold start starts empty and
+      concurrent invocations do not share one. A short TTL is enough on correctness
+      grounds — a stale list costs a near-duplicate name, not a broken import, and
+      `extract.js` degrades honestly on an empty one.
+    - **Move Recipe Import extraction into the Go API.** The structurally correct answer:
+      co-located with the database, `fetchKnownNames` becomes a local query and
+      `/ingredients` can be deleted outright. Much the largest change — the LLM calls,
+      `OPENAI_API_KEY`, image upload and `formidable` all move — so it wants its own spec,
+      and it is worth noting as the destination even if the first option is what ships.
+
+    **Measure before building any of them.** Two numbers decide it: how long
+    `fetchKnownNames` actually takes in production, and how often imports happen. If
+    imports are rare, this is a round trip nobody is waiting on and the right answer is to
+    do nothing. `observability.md`'s tracing would answer both directly — as with #49, the
+    cheapest move may be to wait for it rather than to guess now.
+
+52. **The Go API has no DB-backed test harness, so no handler and no query is tested.**
+    Surfaced by the `Cache-Control` audit (#44), which wanted to assert that a Recipe write
+    purges the `units` cache tag and could not: reaching `addRecipe`/`editRecipe` needs a
+    database. The test that shipped, `TestRecipeWritesPurgeTheUnitsCache`, exercises the
+    `purgeUnitsCache` helper instead, so **it would still pass if both call sites were
+    deleted**. That is the concrete instance; the gap is general.
+
+    **The size of it:** 37 exported functions in `internal/pkg/service` take a `*sql.DB`,
+    and none has a test. Every Go test in the repo is either pure logic — combining,
+    rounding, display units, quantity parsing — or uses the `fakeExecer` interface, which
+    only covers the handful of `insert*` functions written to accept one. No `app` handler
+    is tested beyond routing, auth and headers, all of which are deliberately chosen to
+    need no DB.
+
+    **What this is not.** It is not "the database path is untested": `e2e/` drives real
+    Recipe CRUD and Shopping List flows through the real API against a real MySQL, and
+    catches a great deal. The gap is narrower and worth stating precisely — nothing tests
+    this code *at the Go level*, so:
+
+    - a defect only surfaces as a UI symptom, and only on a path the UI actually drives;
+    - error branches (`sql.ErrNoRows`, a failed insert mid-transaction) are unreachable
+      from e2e and therefore untested everywhere;
+    - anything with no visible surface is invisible. A purge that stops firing is exactly
+      that: `/units` goes stale for five minutes and no test, at any level, notices.
+
+    **Two shapes, and they are not equivalent.**
+
+    - **A real DB, via `TestMain` against `docker-compose.yml`'s `db` service**, behind a
+      build tag so `go test ./...` stays fast and Docker-free by default. Tests real SQL
+      against the real schema, which is most of the value — the queries here are
+      hand-written and the schema carries constraints (#4 added one). Costs: fixture and
+      isolation discipline, and CI has to stand the container up. Note that
+      `test:e2e:stop` passes `--volumes` precisely because a persisted volume silently
+      pins the schema to whenever it was created; the same trap would apply here.
+    - **`sqlmock`**, asserting the SQL a function issues. Cheap and hermetic, but it tests
+      that the code sent the string you expected, not that the string is correct — of
+      limited use for exactly the hand-written queries most worth covering.
+
+    **Worth doing when something forces it, not before.** e2e covers the flows that matter
+    today, and a harness with no tests in it is worse than none. The trigger is the second
+    time someone wants to assert Go-level behaviour and cannot — the first time was #44.
+    If it does get built, `addRecipe`/`editRecipe` purging the `units` tag is a good first
+    test: it is the case that motivated it, and it has no coverage anywhere else.

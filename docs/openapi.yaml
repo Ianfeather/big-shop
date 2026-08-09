@@ -507,6 +507,10 @@ paths:
                   - array
                   - "null"
           description: OK
+          headers:
+            Cache-Control:
+              schema:
+                type: string
         default:
           content:
             application/problem+json:
@@ -880,6 +884,10 @@ paths:
                   - array
                   - "null"
           description: OK
+          headers:
+            Cache-Control:
+              schema:
+                type: string
         default:
           content:
             application/problem+json:
@@ -904,6 +912,13 @@ paths:
                   - array
                   - "null"
           description: OK
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+            Netlify-Cache-Tag:
+              schema:
+                type: string
         default:
           content:
             application/problem+json:

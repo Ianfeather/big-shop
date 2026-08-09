@@ -723,6 +723,7 @@ export interface operations {
             /** @description OK */
             200: {
                 headers: {
+                    "Cache-Control"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -1220,6 +1221,7 @@ export interface operations {
             /** @description OK */
             200: {
                 headers: {
+                    "Cache-Control"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -1249,6 +1251,8 @@ export interface operations {
             /** @description OK */
             200: {
                 headers: {
+                    "Cache-Control"?: string;
+                    "Netlify-Cache-Tag"?: string;
                     [name: string]: unknown;
                 };
                 content: {

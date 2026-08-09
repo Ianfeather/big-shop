@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"recipes/internal/pkg/common"
+	"recipes/internal/pkg/purge"
 
 	jwtmiddleware "github.com/auth0/go-jwt-middleware"
 	"github.com/danielgtaylor/huma/v2"
@@ -22,6 +23,28 @@ import (
 // App will hold the dependencies of the application
 type App struct {
 	db *sql.DB
+	// purger invalidates Netlify's edge cache for /units after a write that may
+	// have coined a Unit. Never nil: unconfigured, purge.Purger is itself a
+	// no-op, which is what local development, e2e and CI get.
+	purger cachePurger
+}
+
+// PurgeConfigured reports whether edge cache purging will actually happen, for
+// the startup line in main.go. Unconfigured is correct locally and in CI and a
+// misconfiguration on Fly, and nothing else tells the two apart.
+func (a *App) PurgeConfigured() bool {
+	p, ok := a.purger.(*purge.Purger)
+	return ok && p.Configured()
+}
+
+// cachePurger is the slice of purge.Purger the handlers use.
+//
+// An interface rather than the concrete type only so a test can see that a
+// write purges, and purges the right tag - the alternative was exporting a
+// test-only constructor from the purge package. Purge takes no error return
+// and gives nothing back on purpose: see purge.Purger.Purge.
+type cachePurger interface {
+	Purge(tag string)
 }
 
 // Jwks will hold the response from the public server
@@ -44,13 +67,48 @@ type contextKey string
 // NewApp returns the application itself
 func NewApp(env *common.Env) (*App, error) {
 	app := &App{
-		db: env.DB,
+		db:     env.DB,
+		purger: purge.New(),
 	}
 	return app, nil
 }
 
 func healthHandler(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte("ok"))
+}
+
+// defaultCacheControl is what every response carries unless its handler says
+// otherwise. Twenty-two of the twenty-five registered operations are
+// account-scoped and mutable and want exactly this. (follow-ups.md #44 counts
+// nineteen of twenty-two; three routes have been added since it was written,
+// all account-scoped.)
+//
+// It is a default rather than something each route opts into because the
+// failure mode is asymmetric: forgetting `no-store` on an account-scoped route
+// lets an intermediary hand one Account's Shopping List to another, while
+// forgetting to opt a new global catalog route *into* caching merely costs a
+// round trip. So a route added tomorrow inherits the safe answer, and the three
+// routes that are genuinely public have to say so deliberately - see
+// tags.go, units.go and ingredients.go.
+const defaultCacheControl = "private, no-store"
+
+// cacheControlMiddleware stamps defaultCacheControl on every response before
+// dispatch.
+//
+// Before, no route set any cache header at all, which is not the same as
+// forbidding caching - it leaves the decision to whatever intermediary is in
+// the path. Since ADR-0006 there is one: browser traffic reaches the API
+// through Netlify's edge via netlify.toml's `/api/bigshop/*` rewrite.
+//
+// Set on the header map *before* next runs, so a handler that sets
+// Cache-Control itself (via a Huma output `header:"Cache-Control"` field)
+// simply replaces this value rather than fighting it. Deliberately positioned
+// ahead of the JWT middleware so it also covers the responses that middleware
+// produces itself - a 401 is exactly the kind of response that must not be
+// cached and handed to the next caller.
+func cacheControlMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	w.Header().Set("Cache-Control", defaultCacheControl)
+	next.ServeHTTP(w, r)
 }
 
 func userMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
@@ -216,6 +274,10 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, huma.API, error) {
 	healthPath := base + "/health"
 
 	n := negroni.New(negroni.NewLogger())
+	// First in the stack, so that everything below it carries a cache policy -
+	// including /health, which is answered by the carve-out below without ever
+	// reaching a handler that could set one.
+	n.Use(negroni.HandlerFunc(cacheControlMiddleware))
 	// /health must stay reachable without a JWT - it's used by uptime monitors,
 	// Fly's own health check and Lambda warmers, none of which can hold an
 	// Auth0 token - so it's handled before CORS/auth even run, not registered

@@ -53,6 +53,38 @@ func healthHandler(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte("ok"))
 }
 
+// defaultCacheControl is what every response carries unless its handler says
+// otherwise. Nineteen of the twenty-two routes are account-scoped and mutable
+// and want exactly this.
+//
+// It is a default rather than something each route opts into because the
+// failure mode is asymmetric: forgetting `no-store` on an account-scoped route
+// lets an intermediary hand one Account's Shopping List to another, while
+// forgetting to opt a new global catalog route *into* caching merely costs a
+// round trip. So a route added tomorrow inherits the safe answer, and the three
+// routes that are genuinely public have to say so deliberately - see
+// tags.go, units.go and ingredients.go.
+const defaultCacheControl = "private, no-store"
+
+// cacheControlMiddleware stamps defaultCacheControl on every response before
+// dispatch.
+//
+// Before, no route set any cache header at all, which is not the same as
+// forbidding caching - it leaves the decision to whatever intermediary is in
+// the path. Since ADR-0006 there is one: browser traffic reaches the API
+// through Netlify's edge via netlify.toml's `/api/bigshop/*` rewrite.
+//
+// Set on the header map *before* next runs, so a handler that sets
+// Cache-Control itself (via a Huma output `header:"Cache-Control"` field)
+// simply replaces this value rather than fighting it. Deliberately positioned
+// ahead of the JWT middleware so it also covers the responses that middleware
+// produces itself - a 401 is exactly the kind of response that must not be
+// cached and handed to the next caller.
+func cacheControlMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	w.Header().Set("Cache-Control", defaultCacheControl)
+	next.ServeHTTP(w, r)
+}
+
 func userMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	ctx := context.WithValue(
 		r.Context(),
@@ -216,6 +248,10 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, huma.API, error) {
 	healthPath := base + "/health"
 
 	n := negroni.New(negroni.NewLogger())
+	// First in the stack, so that everything below it carries a cache policy -
+	// including /health, which is answered by the carve-out below without ever
+	// reaching a handler that could set one.
+	n.Use(negroni.HandlerFunc(cacheControlMiddleware))
 	// /health must stay reachable without a JWT - it's used by uptime monitors,
 	// Fly's own health check and Lambda warmers, none of which can hold an
 	// Auth0 token - so it's handled before CORS/auth even run, not registered

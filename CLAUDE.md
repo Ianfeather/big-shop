@@ -266,6 +266,84 @@ Evals:
 npm run test:evals   # runs evals/run-evals.sh
 ```
 
+## Shipping work: pull requests
+
+These rules apply to **all** work in this repo, not just `/implement`. The
+`implement` skill's step 5 is one caller of them; a one-off fix asked for in
+conversation is another.
+
+**1. Finishing a spec or a task means opening a PR.** Work is not done when the
+code is written and the local tests pass — it is done when there is a PR open
+against `master` for it. Don't stop at "committed on a branch" and wait to be
+asked. This is not a stylistic preference: per the section above, a direct push
+to `master` is *rejected*, so a PR is the only route the work can take. Branch
+naming is free-form; `implement/<spec-slug>` is what the implement skill uses.
+
+**2. A visual or user-visible change needs screenshots in the PR body.** If a
+change alters anything a user can see — a component, a page, copy, a state, an
+error message — the PR must show it, not just describe it. Drive the real
+change in the app (the `run` skill, or `claude-in-chrome`) and capture the
+state that proves it works, not just a page load. A pure-backend change with no
+visible surface is exempt; don't manufacture a screenshot for something with
+nothing to show. The mechanics — where captured files are committed, and why an
+embedded image must use a commit-pinned `raw.githubusercontent.com` URL rather
+than a relative path — are in
+[`.claude/skills/implement/EVIDENCE.md`](./.claude/skills/implement/EVIDENCE.md);
+follow it for any PR, whether or not the implement skill produced it.
+
+**3. Poll the PR's checks and report back; debug any failure.** After opening a
+PR, watch its checks to a conclusion rather than handing over a PR of unknown
+state:
+
+```bash
+gh pr checks --watch            # blocks until every check concludes
+gh run view <run-id> --log-failed   # the failing step's output
+```
+
+Both `build-lint-test` and `e2e` are required and both must be green. A red
+check is work still owed on the task: read the failure, fix the cause, push,
+and watch again. Fix it rather than reporting it back as a question — go back
+to the user only if the failure needs a decision that is genuinely theirs (a
+product call, a deliberate behaviour change), and say precisely what failed and
+what you tried. **A flaky-looking e2e failure gets investigated, not
+re-run-until-green** — the suite tears down its volumes on every run precisely
+so failures are real. Report the outcome plainly when checks pass, including
+anything fixed along the way.
+
+**4. A merge conflict means rebase onto `master`, without being asked.** If the
+PR reports conflicts (`gh pr view --json mergeable,mergeStateStatus`):
+
+```bash
+git fetch origin master
+git rebase origin/master
+# resolve, then
+git push --force-with-lease
+```
+
+Use `--force-with-lease`, never a bare `--force`. Resolve the conflicts on
+their merits; if a resolution is a real judgement call about behaviour rather
+than a mechanical overlap, stop and ask. After pushing, go back to rule 3 — the
+checks must be re-watched on the rebased head, because that is a different
+commit from the one they last ran against. Note the ruleset is deliberately not
+"strict", so a branch does *not* need rebasing merely for being behind
+`master`; do this on an actual conflict, not on every unrelated push.
+
+**5. Merging is the user's call, and it has three steps.** Never merge on your
+own initiative. When the user does say to merge:
+
+```bash
+gh pr merge <n> --squash        # 1. merge (squash unless told otherwise)
+git checkout master && git pull origin master   # 2. resync local master
+git branch -d <branch>          # 3. delete the local branch
+```
+
+Do all three — leaving a stale local `master` and a dead branch behind is the
+part that quietly bites later, when the next branch is cut from an
+out-of-date `master`. `-d` (not `-D`) is deliberate: it refuses if the branch
+somehow isn't merged, which is a signal worth reading rather than overriding.
+The remote branch is deleted by `gh pr merge` if the repo is set to do so;
+check and delete it explicitly if it lingers.
+
 ## Useful External Links
 
 - [Netlify Dashboard](https://app.netlify.com/sites/big-shop/overview)

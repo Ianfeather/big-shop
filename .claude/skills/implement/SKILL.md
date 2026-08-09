@@ -1,10 +1,10 @@
 ---
 name: implement
-description: Implements a spec file end-to-end — breaks it into Sessions, works through each behind a test gate and a review gate, checkpoints progress to a state file so work survives across separate conversations, then opens a PR with evidence of what shipped. Run explicitly as /implement <spec path>.
+description: Implements a spec file end-to-end — breaks it into Sessions, works through each behind a test gate and a review gate, checkpoints progress to a state file so work survives across separate conversations, then opens a PR with evidence of what shipped and drives its checks green. Run explicitly as /implement <spec path>.
 disable-model-invocation: true
 ---
 
-Drives a spec file under `specs/` to a PR. The spec is broken into **Sessions** — coherent, independently testable slices of the work — each checkpointed to a state file on disk as it completes, so the run can pause and resume across entirely separate conversations without losing progress.
+Drives a spec file under `specs/` to a green PR. The spec is broken into **Sessions** — coherent, independently testable slices of the work — each checkpointed to a state file on disk as it completes, so the run can pause and resume across entirely separate conversations without losing progress.
 
 ## Process
 
@@ -52,13 +52,43 @@ Any Session still `pending` → back to step 3. Every Session `done` → step 5.
 
 ### 5. Gather evidence and open the PR
 
-See [EVIDENCE.md](./EVIDENCE.md) for what counts as evidence and how to capture it — the rest of this skill doesn't need that detail, this one step does.
+**A completed spec always ends in a PR** — never in "committed on the branch, tell me when you want it raised". See CLAUDE.md's "Shipping work: pull requests" for the repo-wide rules; this step is the implement-specific version of them.
+
+See [EVIDENCE.md](./EVIDENCE.md) for what counts as evidence and how to capture it — the rest of this skill doesn't need that detail, this one step does. **If any Session touched a user-visible surface, screenshots are required, not optional**: capture the golden path the spec describes, in the running app. Only a spec with no visible surface at all ships on metadata alone.
 
 Push the branch, then `gh pr create` with a body containing: a summary of what the spec asked for and what shipped, a Session-by-session checklist, the gathered evidence, and any `follow-ups.md` items opened along the way.
 
 Set the state file's `status: complete` with the PR URL, then move the spec and its state file into `specs/completed/` — matching this repo's existing convention for finished specs.
 
 Completion criterion: PR open and linked from the state file; state file `status: complete`; spec relocated.
+
+### 6. Drive the PR to green
+
+The run isn't over when the PR opens. Watch its checks to a conclusion:
+
+```bash
+gh pr checks --watch
+```
+
+- **Anything red is still your work.** `gh run view <run-id> --log-failed`, find the cause, fix it, push, watch again. Loop until `build-lint-test` and `e2e` are both green. Go back to the user only if a failure needs a decision genuinely theirs — a product call or a deliberate behaviour change — and say exactly what failed and what you tried. Don't re-run a flaky-looking e2e failure hoping it passes; the suite wipes its volumes every run, so failures are real.
+- **A merge conflict is handled automatically, not reported.** If `gh pr view --json mergeable,mergeStateStatus` shows a conflict, `git fetch origin master && git rebase origin/master`, resolve, `git push --force-with-lease` — then re-watch the checks, since they last ran against a commit that no longer exists. Stop and ask only if a resolution is a real judgement call about behaviour rather than a mechanical overlap.
+- **Then report back**: checks green, the PR URL, and anything that had to be fixed to get there.
+
+If a rebase or a fix lands new commits, update the state file's Session `Commit:` SHAs so it still describes what is actually on the branch — and re-check any commit-pinned evidence URL from step 5, since a rebase rewrites the SHA it points at.
+
+Completion criterion: every required check green on the PR's current head, and the user told so.
+
+### 7. Merge — only when the user says so
+
+Never merge on your own initiative; the spec being finished and the checks being green is not permission. When the user does ask, all three steps, in order:
+
+```bash
+gh pr merge <n> --squash
+git checkout master && git pull origin master
+git branch -d implement/<spec-slug>
+```
+
+Resyncing `master` and deleting the branch are part of the task, not tidying to be skipped — the next spec's branch gets cut from whatever `master` is left behind. `-d` rather than `-D` deliberately: a refusal means something is off and is worth reading.
 
 ## State file format
 

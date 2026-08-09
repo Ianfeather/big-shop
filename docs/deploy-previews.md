@@ -1,12 +1,21 @@
 # Logging in on a deploy preview
 
-Until this was fixed you could not get past the login screen on a Netlify
-preview, which removed most of the reason to have previews at all — the Fly
-migration's own cutover verification had to be run against production because of
-it (follow-ups.md #48).
+**Working, on one fixed host:
+[`preview--big-shop.netlify.app`](https://preview--big-shop.netlify.app).** Push
+a branch into that slot and you can log in and use the app:
 
-There were two layers. **The first is fixed in the repo; the second is a
-one-time change in the Auth0 console that has to be made by hand.**
+```bash
+git push --force origin <branch>:preview
+```
+
+It is a shared slot — one branch at a time. A *numbered* preview
+(`deploy-preview-<N>--…`) still cannot be logged into, deliberately; see layer 2.
+
+Until this was fixed you could not get past the login screen on any preview,
+which removed most of the reason to have previews at all — the Fly migration's
+own cutover verification had to be run against production because of it
+(follow-ups.md #48). There were two layers, and the console setting was the
+second one, not the first.
 
 ## Layer 1 — the app asked to be sent to the wrong place (fixed)
 
@@ -38,11 +47,14 @@ Four call sites were affected, and they wanted two different fixes:
 as the default web origin for `scripts/backfill-recipe-method.mjs`. It is no
 longer what the browser acts on.
 
-## Layer 2 — Auth0 has to allow the origin (manual, one-time)
+## Layer 2 — Auth0 has to allow the origin (done, but by hand)
 
 Asking for the right `redirect_uri` is not enough; Auth0 rejects any callback to
 an origin that is not allowlisted on the application
 ([console](https://manage.auth0.com/dashboard/eu/dev-x-n37k6b/applications/HxkTOH3ZYxjbsgrVI4ii1CV2TQx7hk9G/settings)).
+**This has been done for `preview--big-shop.netlify.app`** — recorded here
+because it lives in the console, not in the repo, so nothing in a checkout will
+tell you it exists (or warn you if someone removes it).
 
 **Numbered previews cannot be allowlisted.** Netlify names them
 `deploy-preview-<N>--big-shop.netlify.app`, and Auth0's wildcard rules require
@@ -56,15 +68,20 @@ named `preview` (Netlify → Site configuration → Build & deploy → Branches 
 deploy contexts), which is served at a fixed host, and add it to all three
 fields:
 
-| Auth0 field | Add |
-| --- | --- |
-| Allowed Callback URLs | `https://preview--big-shop.netlify.app` |
-| Allowed Logout URLs | `https://preview--big-shop.netlify.app` |
-| Allowed Web Origins | `https://preview--big-shop.netlify.app` |
+| Auth0 field | Entry | Why this field |
+| --- | --- | --- |
+| Allowed Callback URLs | `https://preview--big-shop.netlify.app` | where Auth0 may return you after login |
+| Allowed Logout URLs | `https://preview--big-shop.netlify.app` | logout's `returnTo` |
+| Allowed Web Origins | `https://preview--big-shop.netlify.app` | CORS for the token call |
 
-To exercise a branch past the login screen, push it to `preview`
-(`git push --force origin <branch>:preview`) rather than relying on the PR's own
-numbered preview. It is a shared slot — one branch at a time.
+Two things that will waste an afternoon if missed:
+
+- **No trailing slash.** The app sends the bare origin (verified:
+  `redirect_uri=https%3A%2F%2Fpreview--big-shop.netlify.app`), and Auth0 matches
+  the callback exactly, so an entry ending in `/` fails.
+- **Allowed Web Origins is not optional.** The app sets `useRefreshTokens`, so
+  omitting it lets login *complete* and then fails the `/oauth/token` call on
+  CORS — which reads as a different bug entirely.
 
 ## What a preview still cannot tell you
 

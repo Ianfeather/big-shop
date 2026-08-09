@@ -181,3 +181,47 @@ cross-references between entries (e.g. #9 references #16).
     purpose: the bug *was* the page's size, so a trimmed fixture would pass against
     the broken code it exists to catch. Verified end to end against the live URL with
     a real extraction call, which now returns all six ingredients and the method.
+
+48. ~~You cannot log in on a deploy preview, so branch deploys cannot be tested.~~
+    **Resolved** — verified end to end by completing a real login, and a real logout, on a
+    branch deploy. Runbook: [`docs/deploy-previews.md`](./docs/deploy-previews.md).
+
+    Two layers, and the console setting was the second one, not the first.
+    `NEXT_PUBLIC_HOST` is inlined at build time and `.env.production` pins it to
+    `https://www.bigshop.life`, so *every* production-mode build — previews included — used
+    the live site as its own origin. Six call sites, fixed in two groups:
+
+    - **Auth0 needs an absolute origin**, because it is handed to a third party.
+      `redirect_uri` (`pages/_app.tsx`, `hooks/use-login.ts`) and logout `returnTo`
+      (`components/identity/logout`) now read `window.location.origin` via the new
+      `lib/app-origin.ts`, which falls back to `NEXT_PUBLIC_HOST` under SSR.
+      `lib/app-origin.test.ts` guards the build-time value never winning in the browser
+      again.
+    - **This app's own Next.js API routes never wanted one at all**, and are now relative
+      paths. This was the worse half: prefixed, `pages/recipes/new.tsx`,
+      `components/method-import` and `components/recipe-form/Form.tsx` were making
+      cross-origin calls into **production's** `/api/parse-recipe-url`,
+      `/api/parse-method-url` and `/api/recipe-image`, so import features on a preview
+      appeared to work while exercising code that was not on the branch. The rule is
+      written down in `lib/api-client.ts` next to the helpers.
+
+    **The Auth0 half could not be solved in the repo, and not by a wildcard either.**
+    Netlify preview hosts are `deploy-preview-<N>--big-shop.netlify.app`, and Auth0 requires
+    `*` to be the leftmost subdomain component *followed by a dot* — so
+    `https://*--big-shop.netlify.app` is not expressible, and `https://*.netlify.app`, which
+    is, would grant callbacks to every site on Netlify. The answer is one stable alias
+    instead of every numbered preview: a branch deploy on a fixed `preview` branch, added
+    once to Allowed Callback URLs, Allowed Logout URLs and Allowed Web Origins. Push a
+    branch into that slot (`git push --force origin <branch>:preview`) to exercise it. A
+    numbered preview still cannot be logged into, deliberately.
+
+    Two things worth keeping in mind next time this is touched. Auth0 matches the callback
+    string exactly and the app sends the **bare origin with no trailing slash**, so an entry
+    ending in `/` silently fails. And **Allowed Web Origins matters as much as the callback**
+    — the app sets `useRefreshTokens`, so without it login completes and the token call then
+    fails CORS, which looks like a different bug entirely.
+
+    Unchanged, and not what this was about: per
+    [ADR-0006](./docs/adr/0006-go-api-leaves-netlify-functions.md), a preview still proxies
+    to the single production Fly API, so it exercises production data. Previews are for
+    frontend changes; API changes are verified against the local stack and the e2e suite.

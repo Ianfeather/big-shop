@@ -1,6 +1,6 @@
 ---
 spec: specs/observability.md
-status: planned
+status: in-progress
 branch: observability
 pr:
 ---
@@ -25,14 +25,27 @@ than by editing the spec:
    the Go API.
 
 ## Session 0: Go toolchain 1.23 → 1.25
-Status: pending
-Scope: Prerequisite for current OTel. Five pins — `netlify-functions/recipes/go.mod`
-(`go`/`toolchain`), `Dockerfile` and `Dockerfile.dev` build stages, `.github/workflows/ci.yml`
-`go-version`, `netlify.toml` `GO_VERSION`. Huma stays at v2.35.0.
+Status: done
+Scope: Prerequisite for current OTel. Five pins — `netlify-functions/recipes/go.mod`,
+`Dockerfile` and `Dockerfile.dev` build stages, `.github/workflows/ci.yml` `go-version`,
+`netlify.toml` `GO_VERSION`. Huma stays at v2.35.0.
 Depends on: none
-Commit:
+Commit: 203de84
 Notes: No Go toolchain on the host — all Go commands run inside the api container, per
-`scripts/build-local.sh`.
+`scripts/build-local.sh`, and in this worktree that needs
+`COMPOSE_PROJECT_NAME=bigshop-obs DB_PORT=3310 API_PORT=8082` or compose resolves to the
+*other* checkout's stack (CLAUDE.md's multi-worktree trap; `docker compose ls` showed project
+`big-shop` running from `/Users/ianfeather/Repositories/big-shop`).
+
+`go mod tidy` **removed** `toolchain go1.23.12` rather than bumping it — a toolchain line is
+only retained when it names a version above the `go` directive. go.sum unchanged.
+
+Test gate: `scripts/build-local.sh` green — gofmt, vet, full Go suite, and both the
+openapi.yaml and api.d.ts drift checks.
+Review gate: both axes clean on scope. Both independently caught one real miss —
+`technical-architecture.md:306` still claimed Go 1.23 — now fixed. Also fixed, as judgement
+calls: the stale go-1.23 rationale on the Huma pin in `follow-ups-resolved.md:17`, and a
+netlify.toml comment of mine that mis-stated *why* tidy drops a redundant toolchain line.
 
 ## Session 1: Phase 1 — vertical slice against local LGTM
 Status: pending
@@ -45,6 +58,18 @@ spans, `slog` via `otelslog`, the HTTP duration histogram. Telemetry init that c
 Depends on: Session 0
 Commit:
 Notes: Evidence is Grafana screenshots showing trace → logs → metric correlating.
+
+**Known obstacle, found while planning:** the service layer calls `db.Query`/`db.Exec`/
+`db.QueryRow` — 55 call sites, none of them the `*Context` variants — and takes no
+`context.Context` at all (`GetAllRecipes(db *sql.DB, userID string)`). `otelsql` emits a child
+span only when the call carries a context holding the parent span, so "otelsql child spans for
+each query" is not a drop-in: it needs `ctx` threaded from the Huma handler into the service
+function and the call switched to `QueryContext`. Session 1 does this for `GET /recipes`'s path
+only; Session 3 carries it across the rest. Related to `follow-ups.md` #52, which counts 37
+service functions taking a bare `*sql.DB`.
+
+Pin `grafana/otel-lgtm:0.30.1` (matching the repo's habit of pinning `mysql:8.0`,
+`air@v1.61.1`), not `latest`.
 
 ## Session 2: Phase 2 — production, and the checkpoint
 Status: pending

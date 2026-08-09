@@ -389,32 +389,64 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
       pointing someone back into an empty Account is the same wound from a different
       angle — sequencing matters more than content here.
 
-51. **Cache `/ingredients` in-process, in `lib/recipe-import/known-names.ts`.** Opened by
-    the `Cache-Control` audit (#44, resolved), which found that this route is the one
-    global catalog edge caching cannot help. Its only consumer runs server-side in a
-    Netlify function and calls Fly directly via `API_HOST_INTERNAL`, so the request never
-    crosses Netlify's edge and an `s-maxage` on it would be a header nothing acts on. The
-    route is `no-store` today for exactly that reason.
+51. **Every Recipe Import fetches the whole Ingredient catalog across the Atlantic.**
+    Opened by the `Cache-Control` audit (#44, resolved), which concluded that `/ingredients`
+    is the one global catalog edge caching cannot help and named an in-process cache as
+    "the real win". That conclusion was too quick, and this item deliberately reopens the
+    question rather than inheriting it: the round trip is real, but an in-process cache is
+    only one of three ways to remove it, and probably not the best.
 
-    The win is a cache in the module itself. `fetchKnownNames` fetches the full Ingredient
-    catalog on **every** import — a URL parse, a paste, a photo — and the list changes only
-    when a Recipe save coins a name. That is a whole round trip to Frankfurt on the
-    critical path of an import that is already slow, spent re-reading a list that is
-    almost always identical to last time.
+    **What was actually verified**, by tracing every caller rather than by reading #44:
 
-    Two things to settle when this is picked up:
+    - **`/ingredients` has exactly one consumer**: `fetchKnownNames` in
+      `lib/recipe-import/known-names.ts`. The two browser hooks that used to read it
+      (`use-ingredient-names`, `use-ingredient-metadata`) no longer exist — they went when
+      the fetch moved server-side so the model would stop coining near-duplicates of names
+      created moments earlier. Dave does not touch it.
+    - **It runs on every ingredient-bearing import** — `/api/parse-recipe-url`,
+      `/api/parse-recipe-text` and `/api/recipe-image`, skipped only for a method-only
+      import.
+    - **The path is transatlantic.** Those are Next.js API routes, so they run as Netlify
+      functions, which [ADR-0006](./docs/adr/0006-go-api-leaves-netlify-functions.md)
+      records as defaulting to `cmh` (US East, Ohio) with region selection paywalled. They
+      call `API_HOST_INTERNAL` — the Fly origin in Frankfurt — *directly*, not through
+      `www.bigshop.life`. So the hop is Ohio → Frankfurt → TiDB and back, which is the
+      exact cost ADR-0006 moved the API to remove, reintroduced from the other side.
+    - **The payload has no ceiling.** `GetAllIngredients` is `SELECT name FROM ingredient`
+      — the entire global catalog, unscoped, unpaginated, growing monotonically as people
+      import recipes ([ADR-0001](./docs/adr/0001-global-ingredient-catalog.md)).
 
-    - **Where the cache lives.** A module-level variable is the obvious answer and is
-      correct on Fly, where the process is long-lived. This code does not run on Fly — it
-      runs in a Netlify function, where a cold start means an empty cache and concurrent
-      invocations do not share one. That does not make it worthless (a warm function
-      serves several imports) but it does mean the ceiling is lower than it looks, and it
-      is worth measuring before building anything more elaborate.
-    - **How it expires.** A short TTL is almost certainly enough — a stale list costs a
-      near-duplicate ingredient name, not a broken import, and `extract.js` already
-      degrades honestly on an empty one. Resist reaching for the purge mechanism #44 built
-      for `/units`: that exists because an edge cache is shared between users and cannot
-      be reasoned about locally, which is not the situation here.
+    So the endpoint is not irrelevant — the data is what stops catalog fragmentation, which
+    migration 029 exists to undo — but its shape is an artifact of the extractor living in
+    a Netlify function while the catalog lives in Frankfurt.
 
-    Worth checking first whether it is actually hot: if imports are rare enough, this is
-    a round trip nobody is waiting on.
+    **Three fixes, in increasing order of how much they actually solve.** Pick one
+    deliberately; they are alternatives, not stages.
+
+    - **Route the call through `www.bigshop.life` instead of the Fly origin.** Then it
+      crosses Netlify's edge like everything else and caches exactly like `/units` — and a
+      hit is served from the Ohio PoP rather than Frankfurt, which is the whole latency
+      problem gone. Cheapest by far: a host change plus the `public`/`s-maxage` header and
+      a cache tag, and `internal/pkg/purge` already exists to invalidate it. Costs: a hop
+      back through the platform the migration routed around; the catalog becomes publicly
+      readable (the same trade already accepted for `/tags` and `/units`, fine under
+      ADR-0001); and it needs purging on **every** Recipe save, since saves coin
+      ingredients far more often than units. **Unverified assumption, and the thing to test
+      first: that Netlify's CDN caches a response fetched by one of its own functions.**
+    - **Cache in-process in `known-names.ts`** — what #44 proposed. Works, but the ceiling
+      is lower than it looks: a module-level variable is only long-lived on a long-lived
+      process, and this runs in a Netlify function, where a cold start starts empty and
+      concurrent invocations do not share one. A short TTL is enough on correctness
+      grounds — a stale list costs a near-duplicate name, not a broken import, and
+      `extract.js` degrades honestly on an empty one.
+    - **Move Recipe Import extraction into the Go API.** The structurally correct answer:
+      co-located with the database, `fetchKnownNames` becomes a local query and
+      `/ingredients` can be deleted outright. Much the largest change — the LLM calls,
+      `OPENAI_API_KEY`, image upload and `formidable` all move — so it wants its own spec,
+      and it is worth noting as the destination even if the first option is what ships.
+
+    **Measure before building any of them.** Two numbers decide it: how long
+    `fetchKnownNames` actually takes in production, and how often imports happen. If
+    imports are rare, this is a round trip nobody is waiting on and the right answer is to
+    do nothing. `observability.md`'s tracing would answer both directly — as with #49, the
+    cheapest move may be to wait for it rather than to guess now.

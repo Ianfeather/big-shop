@@ -97,7 +97,11 @@ recorded as an ADR.
 
 ## Out of scope
 
-- The in-process cache for `lib/recipe-import/known-names.ts` — #44 names it as the real
-  win for `/ingredients` and as separate work. Opened as a new follow-up.
+- Making `/ingredients` cheap. #44 names an in-process cache in
+  `lib/recipe-import/known-names.ts` as the real win and scopes it out; tracing the callers
+  afterwards showed that is one of three options, and probably not the best — the call is
+  Ohio to Frankfurt on every import, and routing it through `www.bigshop.life` would make
+  it edge-cacheable after all. Opened as follow-up #51, which frames the choice rather than
+  presuming it.
 - Setting the two secrets on Fly. That is a deploy step; the purger degrades to a no-op
   until they exist, so nothing here is blocked on it.

@@ -86,8 +86,17 @@ freshness with room to be wrong in.
 same bytes for everyone — and gets `no-store` anyway. Its only consumer is
 `lib/recipe-import/known-names.ts`, which runs server-side in a Netlify function and calls
 Fly directly via `API_HOST_INTERNAL`. That request never crosses the edge, so an `s-maxage`
-would be a header nothing acts on, bought at the price of `public`. The real win there is
-an in-process cache in that module, tracked as a follow-up.
+would be a header nothing acts on, bought at the price of `public`.
+
+**This rejection is conditional on that call path, and the call path is worth revisiting.**
+Those Netlify functions default to `cmh` (US East, Ohio) per ADR-0006, so every import
+fetches the whole unbounded Ingredient catalog from Frankfurt and back — the transatlantic
+cost ADR-0006 existed to remove, reintroduced from the other side. Pointing that one call
+at `www.bigshop.life` rather than the Fly origin would put it back on the edge and make it
+cacheable exactly like `/units`, served from a PoP beside the caller. Not done here because
+it is a change to how the import path reaches the API rather than a header, and it deserves
+measuring first. Tracked as follow-up #51, which frames that choice against an in-process
+cache and against moving extraction into the Go API altogether.
 
 **`Netlify-CDN-Cache-Control` instead of `Cache-Control`.** More precise — it is
 Netlify-specific and invisible to the browser — but it would mean the policy is legible

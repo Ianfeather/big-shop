@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"recipes/internal/pkg/common"
+	"recipes/internal/pkg/purge"
 
 	jwtmiddleware "github.com/auth0/go-jwt-middleware"
 	"github.com/danielgtaylor/huma/v2"
@@ -22,6 +23,20 @@ import (
 // App will hold the dependencies of the application
 type App struct {
 	db *sql.DB
+	// purger invalidates Netlify's edge cache for /units after a write that may
+	// have coined a Unit. Never nil: unconfigured, purge.Purger is itself a
+	// no-op, which is what local development, e2e and CI get.
+	purger cachePurger
+}
+
+// cachePurger is the slice of purge.Purger the handlers use.
+//
+// An interface rather than the concrete type only so a test can see that a
+// write purges, and purges the right tag - the alternative was exporting a
+// test-only constructor from the purge package. Purge takes no error return
+// and gives nothing back on purpose: see purge.Purger.Purge.
+type cachePurger interface {
+	Purge(tag string)
 }
 
 // Jwks will hold the response from the public server
@@ -44,7 +59,8 @@ type contextKey string
 // NewApp returns the application itself
 func NewApp(env *common.Env) (*App, error) {
 	app := &App{
-		db: env.DB,
+		db:     env.DB,
+		purger: purge.New(),
 	}
 	return app, nil
 }

@@ -2,7 +2,7 @@
 
 Small defects and doc-drift found while building `CONTEXT.md` from the codebase (2026-07-13). Not designed here — just flagged for later action.
 
-Items 1–30, 32, 33, 36, 39, 40 and 48 have all been resolved — see [`follow-ups-resolved.md`](./follow-ups-resolved.md) for the full history (numbering preserved for cross-references between entries).
+Items 1–30, 32, 33, 36, 39, 40, 44 and 48 have all been resolved — see [`follow-ups-resolved.md`](./follow-ups-resolved.md) for the full history (numbering preserved for cross-references between entries).
 
 Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are real but deliberately not being fixed, so they are not queued work.
 
@@ -190,60 +190,6 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     contested fit. The alternative — putting Faro under the analytics category — would
     blind error reporting for everyone who declines, which is the thing `observability.md`
     exists to provide.
-
-44. **Audit `Cache-Control` across the Go API.** Originally filed as "put cacheable pages
-    and endpoints behind a CDN so we can globally distribute". Most of that premise
-    dissolved on inspection, and what is left is a headers problem rather than an
-    infrastructure one:
-
-    - **The frontend is already fully CDN'd.** Netlify serves `.next` from its edge, and
-      every route bar `/` is a client-rendered SPA behind an auth gate, so there are no
-      cacheable *pages* beyond the marketing homepage and the hashed bundle.
-    - **There is no CDN to add for the API either.** Once
-      [`api-hosting-migration.md`](./specs/api-hosting-migration.md) lands, browser API
-      traffic already crosses Netlify's edge via the `/api/bigshop/*` 200 rewrite, and
-      Netlify's CDN *does* cache responses proxied from an external origin, honouring the
-      origin's `Cache-Control`/`s-maxage`. Only the headers are missing. **Depends on that
-      migration** for exactly this reason.
-
-    Audit all 22 routes. Nineteen are account-scoped and mutable and want explicit
-    `private`/`no-store`. Three take no account scoping and return the same bytes for
-    everyone — and each wants a different answer, which is the finding:
-
-    - **`/tags`** reads the `tag` table, a fixed list seeded by migration that no code path
-      writes to (see `hooks/use-tags.ts`, which documents why nothing invalidates it). Long
-      `s-maxage`, no purge needed.
-    - **`/units`** is an Open catalog — saving a Recipe upserts every Unit its ingredients
-      reference, so an import can coin `"bunch"`. Cache-tagged and **purged on write**,
-      with a moderate backstop `s-maxage`.
-    - **`/ingredients`** is read server-side by `lib/recipe-import/known-names.ts`, which
-      post-migration calls Fly directly via `API_HOST_INTERNAL` and so **bypasses the edge
-      entirely**. Edge caching buys it nothing; an in-process cache in that module is the
-      real win, and is a separate piece of work.
-
-    On the purge mechanism: Netlify supports `Netlify-Cache-Tag` plus a purge API on all
-    plans, so this is available. It costs a Netlify personal access token as a Fly secret
-    — a re-coupling to Netlify's control plane immediately after a migration that reduced
-    it, accepted knowingly. **The purge must be async and best-effort: it must never fail a
-    Recipe save.** Each tag can be purged only twice every five seconds before returning
-    429, which a burst of saves, the e2e suite or a re-run of
-    `scripts/backfill-recipe-method.mjs` can all exceed. The backstop `s-maxage` is what
-    makes a dropped or rate-limited purge self-heal, which is why it is minutes rather
-    than a year.
-
-    **Accepted consequence: the three cached routes become publicly readable.**
-    `Authorization` is not part of Netlify's default cache key and `Netlify-Vary` cannot be
-    made to vary on it, so a `public` response cached from an authenticated request is
-    served to whoever asks next, authenticated or not. That is acceptable here because the
-    catalog is global and non-personal by design ([ADR-0001](./docs/adr/0001-global-ingredient-catalog.md)).
-    **`public` must never extend to an account-scoped route** — one Account's Shopping List
-    would be served to another.
-
-    Finally, the near-miss worth recording because it would be misdiagnosed: a naive TTL on
-    `/units` defeats the post-save invalidation at `components/recipe-form/Form.tsx:101`
-    (asserted by `Form.test.tsx:201`). The client would dutifully refetch, hit the stale
-    edge copy, and the new Unit would stay missing from autosuggest — looking exactly like
-    a frontend cache bug, with the frontend innocent.
 
 45. **The API's deploy gate does not include e2e.**
     `.github/workflows/deploy-api.yml` is gated on the `CI` workflow succeeding
@@ -442,3 +388,33 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     - **#42 is the reason the lifecycle emails would work or not.** A retention email
       pointing someone back into an empty Account is the same wound from a different
       angle — sequencing matters more than content here.
+
+51. **Cache `/ingredients` in-process, in `lib/recipe-import/known-names.ts`.** Opened by
+    the `Cache-Control` audit (#44, resolved), which found that this route is the one
+    global catalog edge caching cannot help. Its only consumer runs server-side in a
+    Netlify function and calls Fly directly via `API_HOST_INTERNAL`, so the request never
+    crosses Netlify's edge and an `s-maxage` on it would be a header nothing acts on. The
+    route is `no-store` today for exactly that reason.
+
+    The win is a cache in the module itself. `fetchKnownNames` fetches the full Ingredient
+    catalog on **every** import — a URL parse, a paste, a photo — and the list changes only
+    when a Recipe save coins a name. That is a whole round trip to Frankfurt on the
+    critical path of an import that is already slow, spent re-reading a list that is
+    almost always identical to last time.
+
+    Two things to settle when this is picked up:
+
+    - **Where the cache lives.** A module-level variable is the obvious answer and is
+      correct on Fly, where the process is long-lived. This code does not run on Fly — it
+      runs in a Netlify function, where a cold start means an empty cache and concurrent
+      invocations do not share one. That does not make it worthless (a warm function
+      serves several imports) but it does mean the ceiling is lower than it looks, and it
+      is worth measuring before building anything more elaborate.
+    - **How it expires.** A short TTL is almost certainly enough — a stale list costs a
+      near-duplicate ingredient name, not a broken import, and `extract.js` already
+      degrades honestly on an empty one. Resist reaching for the purge mechanism #44 built
+      for `/units`: that exists because an edge cache is shared between users and cannot
+      be reasoned about locally, which is not the situation here.
+
+    Worth checking first whether it is actually hot: if imports are rare enough, this is
+    a round trip nobody is waiting on.

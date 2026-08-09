@@ -253,6 +253,45 @@ unproxied origin to every visitor and undo the same-origin property.
 - `SENDGRID_API_KEY` — Email invitations
 - `AUTH0_DOMAIN` / `AUTH0_AUDIENCE` — Go JWT validation
 
+**Fly secrets, read by the Go API only** (`fly secrets set …`, see the
+[runbook](./docs/fly-migration-runbook.md)):
+- `NETLIFY_PURGE_TOKEN` — a Netlify personal access token, used to purge the edge cache
+- `NETLIFY_SITE_ID` — the Netlify site's API ID, sent with each purge
+
+Both are **optional**. With either unset the purger is a no-op — which is what local
+development, e2e and CI run as — and `/units` simply falls back to expiring on its
+`s-maxage`. See Caching below.
+
+## Caching
+
+Every API response carries a `Cache-Control` header. The default, set by middleware in
+`internal/pkg/app/app.go` ahead of everything else in the negroni stack, is
+`private, no-store`; 22 of the 25 registered operations are account-scoped and want exactly
+that, and so does anything added later.
+
+Three routes override it, each differently — the reasoning is in
+[ADR-0009](./docs/adr/0009-edge-caching-the-global-catalogs.md) and the audit that produced
+it is `follow-ups.md` #44:
+
+| Route | `Cache-Control` | Notes |
+|---|---|---|
+| `GET /tags` | `public, max-age=0, s-maxage=86400` | `tag` is seeded by migration and never written to, so nothing purges it |
+| `GET /units` | `public, max-age=0, s-maxage=300` | Also `Netlify-Cache-Tag: units`. Purged on Recipe create/edit, since both can coin a Unit |
+| `GET /ingredients` | `no-store` | Read server-side via `API_HOST_INTERNAL`, so it never crosses the edge and caching buys nothing |
+
+Netlify does not cache proxied responses without a cache header, so before this the edge
+cached nothing and every catalog read crossed to Frankfurt.
+
+**`public` must never reach an account-scoped route** — `Authorization` is not part of
+Netlify's cache key, so one Account's response would be served to the next caller.
+`TestOnlyTheGlobalCatalogsOverrideTheDefault` walks the registered operations and fails if
+the set of overriding routes grows.
+
+The purge itself (`internal/pkg/purge`) is asynchronous, best-effort and **must never fail
+a Recipe save**. It also coalesces: Netlify 429s a tag purged more than twice in five
+seconds, which a burst of saves or a `scripts/backfill-recipe-method.mjs` re-run would
+otherwise hit. The `s-maxage` is what makes a missed purge self-heal.
+
 ## Deployment
 
 Two independent pipelines, one per deployable — an accepted consequence of

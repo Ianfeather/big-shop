@@ -312,6 +312,28 @@ func TestEachRouteStampsItsOwnPolicy(t *testing.T) {
 	}
 }
 
+type spyPurger struct{ tags []string }
+
+func (s *spyPurger) Purge(tag string) { s.tags = append(s.tags, tag) }
+
+// A Recipe create or edit runs insertUnits, which can coin a Unit the cached
+// /units response does not have - so both purge the edge cache.
+//
+// Exercised through purgeUnitsCache rather than through addRecipe/editRecipe,
+// which cannot be reached without a database. What that leaves untested is the
+// call site itself; the e2e suite covers it by saving real Recipes, and a
+// missing call would show up there as a stale unit list rather than an error.
+func TestRecipeWritesPurgeTheUnitsCache(t *testing.T) {
+	spy := &spyPurger{}
+	application := &App{purger: spy}
+
+	application.purgeUnitsCache()
+
+	if len(spy.tags) != 1 || spy.tags[0] != UnitsCacheTag {
+		t.Errorf("purged %v, want exactly [%s]", spy.tags, UnitsCacheTag)
+	}
+}
+
 // The /health carve-out sits ahead of CORS and the JWT middleware in the
 // negroni stack, which is the only reason an uptime monitor or Fly's health
 // check - neither of which can hold an Auth0 token - can reach it at all. That

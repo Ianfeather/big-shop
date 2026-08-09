@@ -79,6 +79,8 @@ func (a *App) addRecipe(ctx context.Context, input *RecipeInput) (*AddRecipeOutp
 		return nil, huma.Error500InternalServerError("could not insert ingredients")
 	}
 
+	a.purgeUnitsCache()
+
 	return &AddRecipeOutput{Body: common.CreatedResponse{Status: "ok", ID: id}}, nil
 }
 
@@ -93,7 +95,26 @@ func (a *App) editRecipe(ctx context.Context, input *RecipeInput) (*StatusOutput
 		return nil, huma.Error500InternalServerError("could not update recipe")
 	}
 
+	a.purgeUnitsCache()
+
 	return &StatusOutput{Body: common.SimpleResponse{Status: "ok"}}, nil
+}
+
+// purgeUnitsCache invalidates the cached /units response at Netlify's edge.
+//
+// Called after a Recipe create or edit because both run insertUnits, which
+// upserts every Unit the Recipe's ingredients reference - so either can coin a
+// Unit ("bunch", arriving via an import) that the cached catalog does not have.
+// Delete is deliberately not wired: it removes a Recipe's parts, never a Unit,
+// so there is nothing to invalidate and a purge there would only spend the rate
+// limit.
+//
+// Returns nothing and is called for effect, after the write has already
+// succeeded. It cannot fail the save: Purge dispatches in the background and
+// swallows its own errors, and if it were to do nothing at all the five-minute
+// s-maxage on /units is what makes that self-heal.
+func (a *App) purgeUnitsCache() {
+	a.purger.Purge(UnitsCacheTag)
 }
 
 func (a *App) deleteRecipe(ctx context.Context, input *DeleteRecipeInput) (*StatusOutput, error) {

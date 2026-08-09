@@ -2,7 +2,7 @@
 
 Small defects and doc-drift found while building `CONTEXT.md` from the codebase (2026-07-13). Not designed here — just flagged for later action.
 
-Items 1–30, 32, 33, 36, 39, 40, 44 and 48 have all been resolved — see [`follow-ups-resolved.md`](./follow-ups-resolved.md) for the full history (numbering preserved for cross-references between entries).
+Items 1–30, 32, 33, 36, 39, 40, 44, 48 and 49 have all been resolved — see [`follow-ups-resolved.md`](./follow-ups-resolved.md) for the full history (numbering preserved for cross-references between entries).
 
 Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are real but deliberately not being fixed, so they are not queued work.
 
@@ -289,61 +289,6 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     No code change is implied. If a rewrite does happen, `pages/index.tsx` is the only file
     involved, and nothing under test asserts on this copy.
 
-49. **Investigate why a request costs ~160ms per query, not ~90ms — and why `GET /shopping-list`
-    issues nine of them.** Opened off the back of the Fly migration's latency measurement
-    (see [ADR-0006](./docs/adr/0006-go-api-leaves-netlify-functions.md)'s Measured outcome).
-    An investigation, not a fix: the numbers do not add up yet, and guessing which way they
-    are wrong is how the wrong thing gets optimised.
-
-    **What is known.** `GET /shopping-list` on the Lambda took ~1,624ms of server time and
-    ~165ms on Fly. Counted from the code, that request makes **nine sequential DB round
-    trips**:
-
-    | Call | Queries |
-    | --- | --- |
-    | `GetRecipesFromList` | `GetAccountID` + 1 |
-    | `GetIngredientListItems` | `GetAccountID` + 1 |
-    | `GetExtraListItems` | `GetAccountID` + 1 |
-    | `GetUnitCatalog` | 1 |
-    | `GetIngredientCatalog` | 2 |
-
-    No N+1 loops — every one is a flat query. Two things fall out:
-
-    - **`GetAccountID` is resolved three times per request**, from the same `userID`, to get
-      the same answer. Transatlantic that was ~270ms of pure waste; from Frankfurt it is
-      small but still free to remove. Resolving it once in the handler and passing it down
-      is the obvious change, and it touches every service function's signature, which is why
-      it wants deciding rather than doing on impulse.
-    - **The arithmetic does not close.** ADR-0006 assumed ~90ms a round trip, so nine
-      queries predicts ~810ms — but the Lambda spent ~1,624ms. Something accounts for the
-      other ~800ms, and it is not query count.
-
-    **The leading hypothesis is connection establishment, not queries.** TiDB Serverless
-    requires TLS, so a new connection costs a TCP handshake plus a TLS handshake — three to
-    four round trips, ~270–360ms transatlantic, before a single query runs. `main.go` sets
-    no pool limits at all, so `database/sql` defaults apply (`MaxIdleConns` 2), and every
-    cold Lambda container built a fresh pool and `Ping`ed during `init()` — a consequence
-    ADR-0006 already names. Whether a *warm* container was still paying handshakes, and how
-    often Netlify recycled them, is exactly what nobody knows.
-
-    **What would settle it**, cheapest first:
-
-    - `observability.md`'s tracing, once it lands. A span per query against a span for the
-      request answers this directly and permanently, with no bespoke work — which is the
-      argument for simply waiting rather than investigating now.
-    - `db.Stats()` on the Fly process (`OpenConnections`, `Idle`, `WaitCount`) exposed on a
-      debug route or as a metric. Cheap, and tells you whether the pool is actually being
-      reused now that the process is long-lived.
-    - Explicit `SetMaxOpenConns` / `SetMaxIdleConns` / `SetConnMaxLifetime`. Currently
-      unset, which was defensible when every container was short-lived and is now just
-      undecided. Note TiDB Serverless has its own connection ceiling, so this is a real
-      choice, not a formality.
-
-    **Deliberately not urgent.** At 165ms the endpoint is fine, and the migration already
-    took ~90% of the cost out. This is filed so the *reason* is understood before anyone
-    reaches for caching (#44 reasons about a query profile that had never been measured) or
-    concludes that query count was the problem. The interesting finding is that the biggest
-    win came from something other than the mechanism the ADR predicted.
 
 50. **Email: Big Shop sends exactly one, and it doesn't work.** A placeholder so this isn't
     forgotten — **it wants a full spec of its own before any of it is built**, and nothing
@@ -494,3 +439,53 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     time someone wants to assert Go-level behaviour and cannot — the first time was #44.
     If it does get built, `addRecipe`/`editRecipe` purging the `units` tag is a good first
     test: it is the case that motivated it, and it has no coverage anywhere else.
+
+53. **Cut the round trips per request, now that there is a measurement to cut against.**
+    Filed out of #49, which established that `GET /shopping-list` costs **15** blocking DB
+    round trips (not the nine everyone had counted), `POST /shopping-list` around **50** for
+    a two-Recipe list and growing by 8 per Recipe, and that one request re-resolves the same
+    Account up to nine times.
+
+    **Designed: [`specs/request-model-optimisations.md`](./specs/request-model-optimisations.md).**
+    Six phases, each independently shippable, with the measured baseline for every route and
+    the rig to verify each change against. Phase 1 is #52. Phase 2 —
+    `interpolateParams=true`, worth ~40% of every route — is the one that needs a decision
+    from Ian rather than a diff, because it moves parameter escaping from TiDB into the
+    driver.
+
+54. **The Auth0 JWKS is re-fetched on every authenticated request.** Found while measuring
+    #49 and arguably more important than what it went looking for. `getPemCert`
+    (`netlify-functions/recipes/internal/pkg/app/app.go`) does a bare
+    `http.Get(".../.well-known/jwks.json")` with no cache, and `go-jwt-middleware` v1 calls
+    the `ValidationKeyGetter` once per request. Auth0's own guidance is to cache the key set
+    and refresh on an unknown `kid`; v2 of the library ships a caching provider that does
+    this, which is the likely fix.
+
+    Measured against the real tenant: a request carrying a well-formed token costs ~15–18ms
+    where one carrying no token costs ~2ms, on every request rather than the first. Go's
+    default transport keeps the connection alive, so it is normally one round trip — but the
+    idle timeout is 90s, and a quiet period costs the full TCP+TLS reconnect (~140ms
+    measured, and it was a transatlantic ~350ms on the Lambda).
+
+    Three reasons it is worth fixing beyond the milliseconds:
+
+    - **It is an availability coupling nobody chose.** Big Shop's request rate is its JWKS
+      request rate. If Auth0 rate-limits, slows, or has an incident on that endpoint, every
+      authenticated request fails — not just logins.
+    - **It is unauthenticated work.** Anyone who can send a syntactically valid token with
+      the right (public) `aud` and `iss` makes the API perform an outbound HTTPS request.
+      That is a cheap amplification primitive, and the audience/issuer values are in
+      `fly.toml` and `.env.development` by design.
+    - **It is on the critical path of every request**, ahead of the database, so it is pure
+      serial latency on the endpoint #49 was measuring and on every other one.
+
+    The related panic — a token whose `kid` matched nothing killed the request rather than
+    returning 401 — was fixed alongside #49 rather than left here, since it was a defect
+    rather than a design question. Fixing the caching should not reintroduce it: an unknown
+    `kid` is exactly the case a cache must handle by refreshing and then *failing cleanly*.
+
+    **Designed as Phase 1 of
+    [`specs/request-model-optimisations.md`](./specs/request-model-optimisations.md)**,
+    which is where the implementation detail lives — including the one constraint that
+    decides the approach: `go-jwt-middleware` **v2.3.0** is the last release declaring
+    `go 1.23.0`, and this repo pins Go 1.23 in four places.

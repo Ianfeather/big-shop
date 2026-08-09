@@ -84,26 +84,38 @@ best case.
 **1,459ms removed — about 90% of the request, a 10x improvement.** Three to five times
 the 300–500ms this decision was justified on.
 
-**Why the estimate was low is not yet settled, and the obvious answer is wrong.** Counted
-from the code, `GET /shopping-list` issues **nine** sequential DB round trips — three of
-them re-resolving `GetAccountID` from the same `userID` — with no N+1 loop anywhere. At the
-~90ms round trip assumed above, nine predicts ~810ms, but the Lambda spent ~1,624ms. So
-roughly 800ms is unaccounted for by query *count*.
+**Why the estimate was low is now settled, and neither the count nor the hypothesis below
+was right.** Follow-up #49 measured it (see `follow-ups-resolved.md` for the method and the
+numbers). The short version: **`GET /shopping-list` costs fifteen blocking round trips, not
+nine.** Nine is the number of *queries*, and a query is not a round trip. Six of the nine
+carry parameters, and `database/sql` over `go-sql-driver` serves a parameterised query as a
+server-side prepared statement — `COM_STMT_PREPARE`, wait, `COM_STMT_EXECUTE`, wait — so
+each costs **two**. The three catalog queries take no parameters and go as a single
+`COM_QUERY`. Six twos and three ones is fifteen, and fifteen at the ~90ms assumed above is
+~1,350ms rather than ~810ms. The rest of the 1,624ms is the Netlify-edge-to-`us-east-2` hop
+and one more transatlantic round trip nobody had counted at all: **every authenticated
+request re-fetched the Auth0 JWKS**, uncached, before touching the database.
 
-The leading hypothesis is connection establishment rather than queries: TiDB Serverless
-requires TLS, so a new connection costs a TCP plus a TLS handshake — three to four round
-trips, ~270–360ms transatlantic — before any query runs, and `main.go` sets no pool limits
-at all. That would make the last consequence listed below ("connection pooling starts
-working properly") the dominant effect rather than a footnote. It is a hypothesis, not a
-finding; follow-up #49 carries the investigation, and
-[ADR-0007](./0007-observability-otel-grafana-cloud.md)'s per-query spans will settle it for
-free once they land.
+*This paragraph's original text is preserved below because being wrong in a specific,
+recorded way is the useful part.* The leading hypothesis was connection establishment
+rather than queries: TiDB Serverless requires TLS, so a new connection costs a TCP plus a
+TLS handshake — three to four round trips — before any query runs, and `main.go` sets no
+pool limits at all. That turned out to be real but not dominant: measured, a TLS MySQL
+connection costs ~5 round trips (~450ms transatlantic), but it is paid **once per
+connection**, and these samples were warm. It was the right suspicion about the wrong
+term — the request was indeed paying for something other than queries, just not that.
 
 The honest caveats: one endpoint, one Account, one moment. It is the endpoint this ADR
 singled out as worst, so it is the right one to quote, but it is a headline rather than a
-distribution — real percentiles arrive with the observability work. And the mechanism
-credited above is the one that was *predicted*; the measurement suggests the biggest single
-win may have come from somewhere else.
+distribution — real percentiles arrive with the observability work.
+
+The decision itself survives the correction intact, and for a better reason than it was
+made on. Moving to the same metro as the database was justified on "several sequential
+queries at ~90ms"; it turned out to be paying that ~90ms **fifteen** times per request
+rather than nine, plus once more to Auth0. Every one of those is a transatlantic hop that
+Frankfurt makes local, which is why the move recovered three times what was claimed for it.
+The reason it over-delivered is that the round trips were undercounted, not that the
+mechanism was wrong.
 
 ## Consequences
 
@@ -130,4 +142,6 @@ win may have come from somewhere else.
   address Fly directly and carry no such header, so unsigned traffic must be accepted
   regardless. Recorded because it is the obvious thing to reach for if that changes.
 - Connection pooling to TiDB starts working properly. Every cold Lambda container
-  previously built a fresh pool and `Ping`ed across the Atlantic during `init()`.
+  previously built a fresh pool and `Ping`ed across the Atlantic during `init()` — since
+  measured at ~5 round trips for a TLS MySQL connection, so ~450ms transatlantic, once per
+  connection.

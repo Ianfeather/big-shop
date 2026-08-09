@@ -227,3 +227,97 @@ cross-references between entries (e.g. #9 references #16).
     [ADR-0006](./docs/adr/0006-go-api-leaves-netlify-functions.md), a preview still proxies
     to the single production Fly API, so it exercises production data. Previews are for
     frontend changes; API changes are verified against the local stack and the e2e suite.
+
+49. ~~Investigate why a request costs ~160ms per query, not ~90ms — and why `GET /shopping-list`
+    issues nine of them.~~ **Resolved** — measured 2026-08-09. The premise in the title is
+    wrong in a way that turns out to be the whole answer: the request does not issue nine
+    round trips at ~160ms each. It issues **fifteen**, at roughly the ~90ms
+    [ADR-0006](./docs/adr/0006-go-api-leaves-netlify-functions.md) assumed all along. Nine
+    was a count of *queries*, and a query is not a round trip.
+
+    **A parameterised query costs two round trips, not one.** `database/sql` hands a query
+    carrying arguments to `go-sql-driver` as a server-side prepared statement, because
+    `mysqlConn.query` returns `driver.ErrSkip` for anything with arguments unless
+    `interpolateParams` is set, and it is not set. So each one goes `COM_STMT_PREPARE`,
+    wait, `COM_STMT_EXECUTE`, wait. (`COM_STMT_CLOSE` follows but the MySQL protocol sends
+    no reply to it, so it costs nothing to wait for.) A query with *no* parameters is sent
+    as a single `COM_QUERY` and costs one. `GET /shopping-list` runs six of the former and
+    three of the latter:
+
+    | Call | Statements | Blocking round trips |
+    | --- | --- | --- |
+    | `GetRecipesFromList` | `GetAccountID` + 1, both parameterised | 4 |
+    | `GetIngredientListItems` | `GetAccountID` + 1, both parameterised | 4 |
+    | `GetExtraListItems` | `GetAccountID` + 1, both parameterised | 4 |
+    | `GetUnitCatalog` | 1, no parameters | 1 |
+    | `GetIngredientCatalog` | 2, no parameters | 2 |
+    | | | **15** |
+
+    **How it was measured, because counting is exactly what went wrong the first time.**
+    A `toxiproxy` was inserted between the API container and MySQL, injecting a known delay
+    on each server response, and the endpoint timed at several delays. Total request time is
+    linear in injected latency and **the slope is the round-trip count** — no interpretation
+    required, and immune to how the driver chooses to log itself:
+
+    | Injected latency | `GET /shopping-list` |
+    | --- | --- |
+    | 0ms | 6.3ms |
+    | 10ms | 185.2ms |
+    | 25ms | 415.5ms |
+    | 50ms | 788.2ms |
+
+    Slope **15.2 round trips**, against 15 counted from MySQL's general log. Re-run with
+    `interpolateParams=true` in the DSN, the slope falls to **9.2** — which is the nine the
+    ADR counted, and confirms the mechanism precisely: that flag is exactly the difference
+    between a query and a round trip here.
+
+    **The arithmetic closes.** 15 × ~90ms is ~1,350ms of the Lambda's 1,624ms. The rest is
+    the Netlify-edge-to-`us-east-2` hop, plus one transatlantic round trip nobody had
+    counted at all — see the JWKS finding below.
+
+    **The connection-establishment hypothesis was real but not the answer.** Measured the
+    same way, a TLS MySQL connection costs **~5.0 round trips** to establish (plain TCP:
+    ~3.0), so ~450ms transatlantic against TiDB. But that is paid once per connection, not
+    per request, and the ADR's samples were warm. It was the right instinct — the request
+    *was* paying for something other than queries — applied to the wrong term. Where it did
+    bite is exactly where ADR-0006 already says it did: every cold Lambda container built a
+    fresh pool during `init()`.
+
+    **Two things found on the way that are worth more than the original question.**
+
+    - **`POST /shopping-list` is far worse than the endpoint that was measured**, and it is
+      the one that does the actual work. Measured at **~57 blocking round trips** for a
+      two-recipe list (census: ~50), resolving `GetAccountID` **nine** times. It loops
+      `GetRecipeByID` per Recipe, so it grows with the size of the list — ADR-0006's "no
+      N+1 loops" is true of `GET`, not of `POST`. On the Lambda that was ~5 seconds. Filed
+      as #53.
+    - **Every authenticated request re-fetched the Auth0 JWKS**, uncached, before touching
+      the database — `getPemCert` in `internal/pkg/app/app.go` does a bare `http.Get` and
+      `go-jwt-middleware` v1 calls it per request. Confirmed by measurement, not by reading:
+      against the real tenant, a request with a well-formed token costs ~15–18ms where one
+      with no token at all costs ~2ms, on every request rather than the first. On the Lambda
+      that was a transatlantic hop to an EU Auth0 tenant on every single request. Filed as
+      #54.
+
+    **What was already true and stays true: none of this is urgent.** At 165ms the endpoint
+    is fine and the migration took ~90% of the cost out. The point of the item was to
+    understand the reason before anyone optimised on a guess, and the reason turned out to
+    contradict both the guess *and* the number in the title.
+
+    One note for #44, which landed alongside this and reasoned about a query profile that
+    had never been measured. Nothing in its conclusions depended on the count, and none of
+    them change: the three cacheable routes are the three cheapest here (1 round trip each),
+    and the expensive routes are all account-scoped and correctly `private, no-store`. What
+    the measurement adds is why that split is so lopsided — the mutable routes are not
+    merely uncacheable, they are where every round trip actually is.
+
+    Fixed here rather than filed, being a real defect found directly on the measured path:
+    **a token whose `kid` names no key in the tenant's JWKS panicked the handler** instead
+    of returning 401. Anyone could send one — the audience and issuer checks pass on public
+    values, and the key lookup is the next step. `net/http` recovers per-connection so the
+    process survived, but the caller got an empty reply and a torn-down connection rather
+    than a refusal. The same defect `normalizeAudience`'s comment describes, one branch
+    further down. Now returned as an error, with a regression test
+    (`TestKeyLookupFailureIsRefusedNotPanicked`) that unwinds on the panic; the discarded
+    error from `jwt.ParseRSAPublicKeyFromPEM` next to it, which returned a nil key with a
+    nil error, is returned too.

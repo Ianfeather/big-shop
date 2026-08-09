@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"os"
 	"recipes/internal/pkg/common"
@@ -230,15 +229,24 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, huma.API, error) {
 				return nil, errors.New("invalid issuer")
 			}
 
+			// Returned, never panicked. Both of these are reachable by an
+			// unauthenticated caller: getPemCert fails whenever the token's
+			// `kid` names no key in the tenant's JWKS, which anyone can send.
+			// The panic this replaces was recovered per-connection by
+			// net/http, so the process survived - but the request got no
+			// response at all (curl reports an empty reply) instead of the
+			// 401 it should. Same defect normalizeAudience's comment above
+			// describes, one branch further down, and the reason it matters
+			// is the same: there is no Recovery middleware in the negroni
+			// stack to turn a panic into a response.
 			cert, err := getPemCert(token)
 			if err != nil {
-
-				panic(err.Error())
+				return nil, err
 			}
-			result, _ := jwt.ParseRSAPublicKeyFromPEM([]byte(cert))
-			fmt.Println("valid token:")
-			fmt.Println(result)
-			return result, nil
+			// The error here used to be discarded, which returned a nil key
+			// with a nil error and left the jwt library to fail on it later,
+			// somewhere less obvious.
+			return jwt.ParseRSAPublicKeyFromPEM([]byte(cert))
 		},
 		SigningMethod: jwt.SigningMethodRS256,
 	})

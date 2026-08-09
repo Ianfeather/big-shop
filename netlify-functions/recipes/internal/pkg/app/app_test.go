@@ -1,11 +1,14 @@
 package app
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"recipes/internal/pkg/common"
 
@@ -406,4 +409,60 @@ func TestHealthCarveOut(t *testing.T) {
 			t.Error("HEAD /health = 200; the carve-out is meant to be GET-only")
 		}
 	})
+}
+
+// TestKeyLookupFailureIsRefusedNotPanicked covers the last panic on the auth
+// path. A token whose `kid` names no key in the tenant's JWKS is something any
+// unauthenticated caller can send, and the key lookup used to panic on it: the
+// process survived (net/http recovers per-connection) but the caller got an
+// empty reply rather than a 401, and the connection was torn down.
+//
+// AUTH0_DOMAIN is pointed at a name that cannot resolve, which fails the same
+// lookup one step earlier - no JWKS fixture, and no network. The claims below
+// have to match the environment exactly, because the audience and issuer
+// checks run *before* the key lookup and would otherwise be what rejects the
+// token, proving nothing.
+func TestKeyLookupFailureIsRefusedNotPanicked(t *testing.T) {
+	t.Setenv("DISABLE_AUTH", "")
+	t.Setenv("AUTH0_AUDIENCE", testAudience)
+	t.Setenv("AUTH0_DOMAIN", "tenant.invalid")
+
+	application, err := NewApp(&common.Env{})
+	if err != nil {
+		t.Fatalf("NewApp() error = %v", err)
+	}
+	router, _, err := application.GetRouter("/api/bigshop")
+	if err != nil {
+		t.Fatalf("GetRouter() error = %v", err)
+	}
+
+	// Signed with a throwaway key, so the signature is valid RS256 and parsing
+	// gets as far as the key lookup. Which key signed it is irrelevant - the
+	// lookup fails before anything is verified against it.
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("GenerateKey() error = %v", err)
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"iss": "https://tenant.invalid/",
+		"aud": []string{testAudience},
+		"sub": "auth0|unknown-kid",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	token.Header["kid"] = "no-such-key"
+	signed, err := token.SignedString(key)
+	if err != nil {
+		t.Fatalf("SignedString() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/bigshop/shopping-list", nil)
+	req.Header.Set("Authorization", "Bearer "+signed)
+	rec := httptest.NewRecorder()
+
+	// A panic here fails the test by unwinding it, which is the regression.
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("GET /shopping-list with an unknown kid = %d, want 401", rec.Code)
+	}
 }

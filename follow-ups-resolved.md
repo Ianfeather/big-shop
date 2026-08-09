@@ -297,17 +297,19 @@ cross-references between entries (e.g. #9 references #16).
       against the real tenant, a request with a well-formed token costs ~15–18ms where one
       with no token at all costs ~2ms, on every request rather than the first. On the Lambda
       that was a transatlantic hop to an EU Auth0 tenant on every single request. Filed as
-      #52.
+      #54.
 
     **What was already true and stays true: none of this is urgent.** At 165ms the endpoint
     is fine and the migration took ~90% of the cost out. The point of the item was to
     understand the reason before anyone optimised on a guess, and the reason turned out to
     contradict both the guess *and* the number in the title.
 
-    One consequence for other queued work: **#44 reasons about a query profile that is now
-    known to be wrong** — it is a headers/caching item and nothing in it depends on the
-    count, but its framing of the API as "22 routes, nineteen of them account-scoped and
-    mutable" should be read alongside the fact that the mutable ones are the expensive ones.
+    One note for #44, which landed alongside this and reasoned about a query profile that
+    had never been measured. Nothing in its conclusions depended on the count, and none of
+    them change: the three cacheable routes are the three cheapest here (1 round trip each),
+    and the expensive routes are all account-scoped and correctly `private, no-store`. What
+    the measurement adds is why that split is so lopsided — the mutable routes are not
+    merely uncacheable, they are where every round trip actually is.
 
     Fixed here rather than filed, being a real defect found directly on the measured path:
     **a token whose `kid` names no key in the tenant's JWKS panicked the handler** instead

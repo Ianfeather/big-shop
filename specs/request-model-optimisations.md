@@ -7,9 +7,10 @@ spec covers the *how*.
 
 **Not urgent, and worth saying so at the top.** Post-Fly, `GET /shopping-list` is ~165ms
 and nothing here is a fire. The reason to do it is that #49 found the cost model everyone
-was reasoning from was wrong by a factor of ~1.7, and #44 is already reasoning about
-caching on top of it. Phases are ordered so each is independently shippable and each one
-leaves the API in a working state.
+was reasoning from was wrong by a factor of ~1.7, and work has already started landing on
+top of it — #44 shipped `Cache-Control` across the API against a query profile nobody had
+measured. Phases are ordered so each is independently shippable and each one leaves the API
+in a working state.
 
 ## The unit of cost is a round trip, not a query
 
@@ -115,6 +116,13 @@ The upgrade also retires two unmaintained dependencies: `go-jwt-middleware` v1.0
 5. Keep `TestKeyLookupFailureIsRefusedNotPanicked` **unchanged**. It is the cross-version
    regression guard: an unknown `kid` must still produce a 401 and not a panic or an empty
    reply. If it needs editing to pass, that is a finding, not a chore.
+6. **Do not disturb the middleware order.** `cacheControlMiddleware` sits at `app.go:288`,
+   ahead of the health carve-out, CORS and auth, precisely so it stamps the JWT
+   middleware's own 401s — which is what `TestDefaultCacheControl`'s first case asserts.
+   Phase 1 replaces what `n.Use` is *given* at `app.go:314`, not where it sits.
+   `TestDefaultCacheControl`, `TestOnlyTheGlobalCatalogsOverrideTheDefault` and
+   `TestEachRouteStampsItsOwnPolicy` (all #44) must stay green; a 401 from v2's middleware
+   still has to carry `private, no-store`.
 
 ### Verify
 
@@ -291,10 +299,20 @@ process** since ADR-0006, where on Lambda every container would have held its ow
 copy. Invalidate from `AddRecipe`/`EditRecipe` — the same write path that already coins new
 Units (`components/recipe-form/Form.tsx:101` refetches `/units` for exactly this reason).
 
-Note the overlap with **#44**, which proposes edge-caching `/units` and `/ingredients` for
-*clients*. This is the complement for the API's own use, and #44 already concludes an
-in-process cache is the real win for `lib/recipe-import/known-names.ts`. Do not let the two
-invalidation mechanisms drift; a Recipe save has to clear both.
+**This is a different cache from the one #44 shipped, and they have to be invalidated
+together.** #44 (resolved, [ADR-0009](../docs/adr/0009-edge-caching-the-global-catalogs.md))
+put `GET /units` behind Netlify's edge with a `units` cache tag, purged on Recipe
+create/edit through the new `internal/pkg/purge` package. That cache serves *clients*; this
+one serves the API's own combining logic. A Recipe save must clear both, so hang the
+in-process invalidation off the same call site in `AddRecipe`/`EditRecipe` that already
+purges the tag — one place that knows the catalog changed, not two that have to stay in
+step.
+
+Not to be confused with **#51** either, which is a third path: `/ingredients` fetched from a
+Netlify function by `lib/recipe-import/known-names.ts` on every import. Same table, but that
+round trip is Ohio → Frankfurt and an in-process cache in a Netlify function is exactly what
+#51 argues is the weakest of its three options. Nothing here depends on how #51 resolves; if
+it resolves by moving extraction into the Go API, this cache serves that too.
 
 `GET /tags` is the extreme case — a fixed list seeded by migration that no code path writes
 to (`hooks/use-tags.ts` documents this), re-read on every call.

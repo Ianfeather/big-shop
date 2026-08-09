@@ -450,3 +450,47 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     imports are rare, this is a round trip nobody is waiting on and the right answer is to
     do nothing. `observability.md`'s tracing would answer both directly — as with #49, the
     cheapest move may be to wait for it rather than to guess now.
+
+52. **The Go API has no DB-backed test harness, so no handler and no query is tested.**
+    Surfaced by the `Cache-Control` audit (#44), which wanted to assert that a Recipe write
+    purges the `units` cache tag and could not: reaching `addRecipe`/`editRecipe` needs a
+    database. The test that shipped, `TestRecipeWritesPurgeTheUnitsCache`, exercises the
+    `purgeUnitsCache` helper instead, so **it would still pass if both call sites were
+    deleted**. That is the concrete instance; the gap is general.
+
+    **The size of it:** 37 exported functions in `internal/pkg/service` take a `*sql.DB`,
+    and none has a test. Every Go test in the repo is either pure logic — combining,
+    rounding, display units, quantity parsing — or uses the `fakeExecer` interface, which
+    only covers the handful of `insert*` functions written to accept one. No `app` handler
+    is tested beyond routing, auth and headers, all of which are deliberately chosen to
+    need no DB.
+
+    **What this is not.** It is not "the database path is untested": `e2e/` drives real
+    Recipe CRUD and Shopping List flows through the real API against a real MySQL, and
+    catches a great deal. The gap is narrower and worth stating precisely — nothing tests
+    this code *at the Go level*, so:
+
+    - a defect only surfaces as a UI symptom, and only on a path the UI actually drives;
+    - error branches (`sql.ErrNoRows`, a failed insert mid-transaction) are unreachable
+      from e2e and therefore untested everywhere;
+    - anything with no visible surface is invisible. A purge that stops firing is exactly
+      that: `/units` goes stale for five minutes and no test, at any level, notices.
+
+    **Two shapes, and they are not equivalent.**
+
+    - **A real DB, via `TestMain` against `docker-compose.yml`'s `db` service**, behind a
+      build tag so `go test ./...` stays fast and Docker-free by default. Tests real SQL
+      against the real schema, which is most of the value — the queries here are
+      hand-written and the schema carries constraints (#4 added one). Costs: fixture and
+      isolation discipline, and CI has to stand the container up. Note that
+      `test:e2e:stop` passes `--volumes` precisely because a persisted volume silently
+      pins the schema to whenever it was created; the same trap would apply here.
+    - **`sqlmock`**, asserting the SQL a function issues. Cheap and hermetic, but it tests
+      that the code sent the string you expected, not that the string is correct — of
+      limited use for exactly the hand-written queries most worth covering.
+
+    **Worth doing when something forces it, not before.** e2e covers the flows that matter
+    today, and a harness with no tests in it is worse than none. The trigger is the second
+    time someone wants to assert Go-level behaviour and cannot — the first time was #44.
+    If it does get built, `addRecipe`/`editRecipe` purging the `units` tag is a good first
+    test: it is the case that motivated it, and it has no coverage anywhere else.

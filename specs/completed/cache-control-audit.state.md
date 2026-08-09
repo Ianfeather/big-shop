@@ -103,3 +103,6 @@ Known limit, accepted: `TestRecipeWritesPurgeTheUnitsCache` exercises
 `purgeUnitsCache`, not the two call sites, so it would still pass if both calls
 were deleted. Reaching addRecipe/editRecipe needs a database and the repo has no
 DB-backed Go harness. The call sites are one line each and visible in the diff.
+Filed as follow-up #52 — the general gap, not this one test: 37 exported service
+functions take a *sql.DB and none is tested, and no handler is tested beyond
+routing, auth and headers.

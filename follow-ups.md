@@ -445,6 +445,10 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     round trips and `POST /shopping-list` around **57** for a two-recipe list. Everything
     here was measurable before and is now measured; nothing below is designed.
 
+    **The full prioritised list, extended across every route and with the measured baseline
+    for each, is [`specs/request-model-optimisations.md`](./specs/request-model-optimisations.md).**
+    What follows is the summary; that document is what to work from.
+
     Three changes, in descending order of ratio-of-win-to-risk:
 
     - **`interpolateParams=true` in the DSN.** One parameter, and #49 measured the endpoint

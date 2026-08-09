@@ -135,6 +135,7 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     onboarding screen in `pages/index.tsx` (shown once, then marked onboarded in the
     background) is worth keeping at all if the two items above land — it currently exists
     only to say "you're in" to someone who has nowhere to go yet.
+
 43. **Google Analytics, and the consent foundation it requires.** The other half of a
     decision already made: [`observability.md`](./specs/observability.md) puts long-horizon
     product questions ("is Dave used more than three months ago") explicitly out of scope
@@ -441,3 +442,47 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     reaches for caching (#44 reasons about a query profile that had never been measured) or
     concludes that query count was the problem. The interesting finding is that the biggest
     win came from something other than the mechanism the ADR predicted.
+
+50. **Email: Big Shop sends exactly one, and it doesn't work.** A placeholder so this isn't
+    forgotten — **it wants a full spec of its own before any of it is built**, and nothing
+    below is designed. The one email that exists today is the Account invite
+    (`internal/pkg/app/user.go`, via SendGrid), and #46 records that it is broken end to
+    end: no `SENDGRID_API_KEY` anywhere, a dead API Gateway link, a hardcoded sender. There
+    is no welcome email, no lifecycle email, and no sending mechanism beyond that one
+    inline call at request time.
+
+    Two families, and they are genuinely different work — worth resisting the urge to
+    build them as one thing:
+
+    - **Lifecycle / marketing.** A welcome email, a top-tips email (what the product
+      actually does well: URL import, the list adding itself, sharing an Account), and a
+      series of acquisition/retention emails. These are scheduled rather than
+      request-triggered, which is the part that does not exist at all: something has to
+      decide "this Account signed up three days ago and has one Recipe" and send. No
+      scheduler, no send log, no suppression list.
+    - **Admin / transactional.** Forgotten password is the named example. **Audit before
+      building**: there is no password-reset code in this repo — Auth0's Universal Login
+      owns that flow entirely, so the audit is of the *Auth0 tenant*, not the codebase.
+      What to check there: whether the connection is username/password at all or
+      social-only (if social-only there is no forgotten-password to fix); whether the
+      Change Password, Verification and Blocked Account templates are still Auth0's
+      defaults; and critically whether the tenant is still sending from Auth0's shared
+      dev mail provider, which is rate-limited and explicitly not for production. Also in
+      this family: email change, Account deletion confirmation, and the invite itself
+      once #46 lands.
+
+    Things already known that constrain the eventual spec:
+
+    - **The address is already stored.** `user.email` is upserted on user create
+      (`service/user.go:11`), so there is a list; nobody has ever checked how complete or
+      accurate it is.
+    - **Sender identity is one task, not several.** #46 has to pick a verified sender and
+      set the SendGrid key regardless; SPF/DKIM on `bigshop.life` and a single `From`
+      identity should be settled once, there, rather than re-litigated per email type.
+    - **Marketing email drags in the same compliance surface as #43** (privacy policy,
+      consent). Under UK PECR the lifecycle family needs a lawful basis and a working
+      unsubscribe in every send; the transactional family does not. That split is the main
+      reason to keep them separate in the design.
+    - **#42 is the reason the lifecycle emails would work or not.** A retention email
+      pointing someone back into an empty Account is the same wound from a different
+      angle — sequencing matters more than content here.

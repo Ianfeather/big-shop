@@ -2,11 +2,13 @@
 
 Disclosed reference for `implement`'s step 5. What to gather, where it lives, and how it ends up visible in the PR body.
 
+**Not implement-only.** CLAUDE.md's "Shipping work: pull requests" applies the same rules to every PR in this repo, however the work was started — a one-off fix asked for in conversation included. Follow this file for any of them.
+
 ## What counts as evidence
 
 Pick whichever of these apply — not every spec produces all three, and forcing one that doesn't fit is worse than skipping it:
 
-- **Screenshots** — for any Session that changed a UI-visible surface. Use the `run` skill (or `claude-in-chrome` directly) to drive the actual golden path the spec describes, and capture the state that proves it works — not just a page load. One screenshot per user-visible capability the spec added is the bar, not one per Session.
+- **Screenshots — required for any user-visible change**, not a nice-to-have. If the work altered anything a user can see (a component, a page, copy, a state, an error message), the PR shows it rather than describing it. Use the `run` skill (or `claude-in-chrome` directly) to drive the actual golden path the spec describes, and capture the state that proves it works — not just a page load. One screenshot per user-visible capability the spec added is the bar, not one per Session. A PR that changed a visible surface and carries no image is incomplete; go back and capture it rather than shipping the description alone.
 - **Screen recordings** — when the evidence is a multi-step interaction a still can't show (e.g. a workflow spanning several pages, or a before/after that only reads as motion). Use `claude-in-chrome`'s `gif_creator`. Don't reach for this by default — a screenshot that proves the same thing is cheaper to review.
 - **Metadata** — always include, regardless of whether the spec has a visual surface: a summary of test output (what ran, what passed), the list of migration files added/changed, any `follow-ups.md` items opened or resolved during the run, and the final Session checklist from the state file.
 
@@ -52,3 +54,9 @@ curl -s -o /dev/null -w "%{http_code}\n" "https://raw.githubusercontent.com/<own
 A `200` confirms the image will render; anything else (404 while GitHub
 finishes propagating a fresh push, or a wrong path) means fix it before
 handing off the PR.
+
+**Re-check the URL after any rebase.** Pinning to a SHA is what keeps the link
+stable under a force-push of the *same* commits, but a rebase onto `master`
+rewrites them — the evidence commit gets a new SHA and the old one is
+unreachable, so the image silently 404s. Re-run the `curl` above and update the
+PR body after resolving a conflict.

@@ -442,48 +442,16 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
 
 53. **Cut the round trips per request, now that there is a measurement to cut against.**
     Filed out of #49, which established that `GET /shopping-list` costs **15** blocking DB
-    round trips and `POST /shopping-list` around **57** for a two-recipe list. Everything
-    here was measurable before and is now measured; nothing below is designed.
+    round trips (not the nine everyone had counted), `POST /shopping-list` around **50** for
+    a two-Recipe list and growing by 8 per Recipe, and that one request re-resolves the same
+    Account up to nine times.
 
-    **The full prioritised list, extended across every route and with the measured baseline
-    for each, is [`specs/request-model-optimisations.md`](./specs/request-model-optimisations.md).**
-    What follows is the summary; that document is what to work from.
-
-    Three changes, in descending order of ratio-of-win-to-risk:
-
-    - **`interpolateParams=true` in the DSN.** One parameter, and #49 measured the endpoint
-      going from 15.2 round trips to 9.2 — it eliminates the `COM_STMT_PREPARE` before every
-      parameterised query by having the driver interpolate arguments client-side instead.
-      **This is the one that needs a real decision rather than a diff**: it moves parameter
-      escaping from the database to `go-sql-driver`. The driver's interpolation is
-      deliberate and refuses rather than guesses (it bails on non-UTF-8 and will not
-      interpolate at all under `multiStatements`), and TiDB is unaffected either way, but
-      "the database is what escapes our parameters" is a property worth losing knowingly or
-      not at all. Note it also stops the statement cache being useful, which matters less
-      here than it sounds since nothing reuses a prepared statement across requests anyway.
-    - **Resolve `GetAccountID` once per request.** Unchanged from #49's original framing,
-      but the numbers are bigger than it thought: three times on `GET`, **nine** times on
-      `POST`. Resolving it in middleware (`userMiddleware` already has the hook, and carries
-      a `TODO` proposing exactly this) and passing it down touches every service function's
-      signature, which is the actual cost and the reason it wants deciding.
-    - **`POST /shopping-list`'s per-Recipe loop.** `GenerateShoppingList` calls
-      `GetRecipeByID` per Recipe, at 6 round trips each plus its own `GetAccountID`, so the
-      cost grows with the size of the list — a real N+1, and on the endpoint that does the
-      work rather than the one that reads it. Fetching every Recipe's lines in one query is
-      the obvious shape.
-
-    Still worth having regardless, and unchanged from #49: explicit `SetMaxOpenConns` /
-    `SetMaxIdleConns` / `SetConnMaxLifetime`, which are currently unset. #49 measured a TLS
-    MySQL connection at ~5 round trips to establish, so the pool's behaviour is worth
-    choosing rather than defaulting — and TiDB Serverless has its own connection ceiling, so
-    it is a real choice. `db.Stats()` as a metric is the cheap way to know whether any of it
-    is working; ADR-0007's per-query spans are the permanent way.
-
-    **Sequencing note.** The measurement rig is reusable and cost about an hour: a
-    `toxiproxy` between the API container and MySQL, injecting a known per-response delay,
-    then timing an endpoint at several delays — the slope is the round-trip count. Any of
-    these changes can be verified the same way before it goes near production, which is what
-    makes them safe to do without waiting for ADR-0007.
+    **Designed: [`specs/request-model-optimisations.md`](./specs/request-model-optimisations.md).**
+    Six phases, each independently shippable, with the measured baseline for every route and
+    the rig to verify each change against. Phase 1 is #52. Phase 2 —
+    `interpolateParams=true`, worth ~40% of every route — is the one that needs a decision
+    from Ian rather than a diff, because it moves parameter escaping from TiDB into the
+    driver.
 
 54. **The Auth0 JWKS is re-fetched on every authenticated request.** Found while measuring
     #49 and arguably more important than what it went looking for. `getPemCert`
@@ -515,3 +483,9 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     returning 401 — was fixed alongside #49 rather than left here, since it was a defect
     rather than a design question. Fixing the caching should not reintroduce it: an unknown
     `kid` is exactly the case a cache must handle by refreshing and then *failing cleanly*.
+
+    **Designed as Phase 1 of
+    [`specs/request-model-optimisations.md`](./specs/request-model-optimisations.md)**,
+    which is where the implementation detail lives — including the one constraint that
+    decides the approach: `go-jwt-middleware` **v2.3.0** is the last release declaring
+    `go 1.23.0`, and this repo pins Go 1.23 in four places.

@@ -8,6 +8,8 @@ import (
 
 	"recipes/internal/pkg/common"
 
+	"github.com/danielgtaylor/huma/v2"
+
 	"github.com/form3tech-oss/jwt-go"
 )
 
@@ -191,6 +193,95 @@ func TestDefaultCacheControl(t *testing.T) {
 		}
 		assertDefault(t, rec)
 	})
+}
+
+// The three unscoped routes each override the default differently, and the
+// nineteen account-scoped ones must never join them.
+//
+// Asserted against the *registered* routes rather than a hand-kept list, so a
+// route added later is covered whether or not anyone remembers this test: the
+// OpenAPI document Huma builds is the same one docs/openapi.yaml is generated
+// from, so it cannot fall out of step with what is actually served.
+func TestPublicRoutesAreOnlyTheGlobalCatalogs(t *testing.T) {
+	t.Setenv("DISABLE_AUTH", "true")
+	application, err := NewApp(&common.Env{})
+	if err != nil {
+		t.Fatalf("NewApp() error = %v", err)
+	}
+	_, api, err := application.GetRouter(testBase)
+	if err != nil {
+		t.Fatalf("GetRouter() error = %v", err)
+	}
+
+	// The only three routes that may override app.go's default at all. The two
+	// of them that answer `public` are what makes this worth pinning: a `public`
+	// response on an account-scoped route would be cached from an authenticated
+	// request and served to whoever asks next, authenticated or not, because
+	// Authorization is not part of Netlify's cache key. The values themselves
+	// are pinned in TestCacheControlValues - the OpenAPI document names the
+	// header but does not carry what it is set to.
+	mayOverride := map[string]bool{"/tags": true, "/units": true, "/ingredients": true}
+
+	var checked int
+	for path, item := range api.OpenAPI().Paths {
+		for _, op := range []*huma.Operation{item.Get, item.Put, item.Post, item.Delete, item.Patch} {
+			if op == nil {
+				continue
+			}
+			for status, resp := range op.Responses {
+				if !strings.HasPrefix(status, "2") || resp.Headers == nil {
+					continue
+				}
+				if _, ok := resp.Headers["Cache-Control"]; !ok {
+					continue
+				}
+				checked++
+				if !mayOverride[path] {
+					t.Errorf("%s %s declares its own Cache-Control; only /tags, /units and /ingredients may override the default",
+						op.Method, path)
+				}
+			}
+		}
+	}
+
+	// /ingredients declares one too, so three routes carry the header. Guards
+	// against this loop silently matching nothing and passing vacuously.
+	if checked != 3 {
+		t.Errorf("found %d routes declaring Cache-Control, want 3", checked)
+	}
+}
+
+// Pins the exact header values, which the OpenAPI-shaped test above cannot see
+// (a declared header has no value in the spec, only a name).
+//
+// DISABLE_AUTH=true so the request reaches the handler, but the handlers hit a
+// nil DB and 500 - which is the wrong path. So these assert on the constants
+// directly, and TestPublicRoutesAreOnlyTheGlobalCatalogs is what ties them to
+// the routes. The end-to-end check that a real 200 carries them lives in the
+// PR's verification against a live stack.
+func TestCacheControlValues(t *testing.T) {
+	for name, tc := range map[string]struct{ got, want string }{
+		// A day. The `tag` table is seeded by migration and never written to.
+		"tags": {tagsCacheControl, "public, max-age=0, s-maxage=86400"},
+		// Five minutes - the backstop behind the purge, not the intended
+		// freshness. Shortening it costs edge hit rate; lengthening it extends
+		// how long a missed purge is visible.
+		"units": {unitsCacheControl, "public, max-age=0, s-maxage=300"},
+		// Not cached, and deliberately not `private` either - see the comment
+		// on the constant.
+		"ingredients": {ingredientsCacheControl, "no-store"},
+	} {
+		if tc.got != tc.want {
+			t.Errorf("%s cache-control = %q, want %q", name, tc.got, tc.want)
+		}
+	}
+
+	// A purge names a tag; a response carries one. If these two ever stop being
+	// the same string the purge becomes a silent no-op, which is the failure
+	// mode with no symptom - stale units, no error anywhere.
+	if UnitsCacheTag != "units" {
+		t.Errorf("UnitsCacheTag = %q, want %q", UnitsCacheTag, "units")
+	}
 }
 
 // The /health carve-out sits ahead of CORS and the JWT middleware in the

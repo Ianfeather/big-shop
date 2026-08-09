@@ -10,7 +10,7 @@ Status: done
 Scope: negroni middleware in internal/pkg/app/app.go's GetRouter, first in the
 stack; tests in app_test.go
 Depends on: none
-Commit: 8bee5ad
+Commit: 5c2d4a1
 Notes: gofmt/go vet/`go test ./...` green; no openapi.yaml drift (middleware
 only). Verified against a live isolated stack (COMPOSE_PROJECT_NAME=bigshop-cc,
 DB_PORT=3327 API_PORT=8087): /health, /recipes, /shopping-list, /tags, /units

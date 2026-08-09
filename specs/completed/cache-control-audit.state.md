@@ -1,8 +1,8 @@
 ---
 spec: specs/completed/cache-control-audit.md
-status: in-progress
+status: complete
 branch: implement/cache-control-audit
-pr:
+pr: https://github.com/Ianfeather/big-shop/pull/88
 ---
 
 ## Session 1: Safe default — `private, no-store` on every route

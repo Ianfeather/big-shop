@@ -303,7 +303,7 @@ Two independent pipelines, one per deployable — an accepted consequence of
 - Next.js Runtime: `@netlify/plugin-nextjs` v5 (pinned as a devDependency so
   `netlify.toml`'s `[[plugins]]` entry resolves during the deploy build). v5 is
   required for Next.js 13.5+; the v4 runtime only supported Next.js 10–13.4
-- Environment: Node 22 (`.node-version`, matching both CI workflows; Next.js 16 requires >=20.9.0), Go 1.23 (`netlify.toml` `GO_VERSION`, matches `go.mod`)
+- Environment: Node 22 (`.node-version`, matching both CI workflows; Next.js 16 requires >=20.9.0), Go 1.25 (`netlify.toml` `GO_VERSION`, matches `go.mod`)
 - `GO_VERSION` is still needed even though `build.sh` no longer runs anything Go:
   Netlify goes on compiling the `netlify-functions/recipes` Lambda on every deploy
   throughout the migration's cooling-off period, because that Lambda is the rollback

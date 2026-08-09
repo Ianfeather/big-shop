@@ -4,7 +4,7 @@
 # hot reload and is what docker-compose.yml and the e2e stack build. This one
 # is a static binary on a base image containing nothing else.
 
-FROM golang:1.23-bookworm AS build
+FROM golang:1.25-bookworm AS build
 
 WORKDIR /src
 

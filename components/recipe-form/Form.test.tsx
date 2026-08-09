@@ -44,7 +44,6 @@ const mockedNextApiPost = nextApiPost as unknown as Mock;
 
 beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_API_HOST', 'http://api.test');
-  vi.stubEnv('NEXT_PUBLIC_HOST', 'http://app.test');
   pushMock.mockClear();
   mockedUseAuth.mockReturnValue({ getAccessTokenSilently: vi.fn(async () => 'test-token') });
   mockedApiPost.mockResolvedValue({ status: 'ok', id: 42 });

@@ -213,6 +213,20 @@ NEXT_PUBLIC_HOST=https://www.bigshop.life
 Netlify UI wins over this file. That is what makes the UI the control surface and this the
 default — and why rolling the API cutover back means changing the UI values, not this file.
 
+### `NEXT_PUBLIC_HOST` is a fallback, not the app's origin
+
+Every `NEXT_PUBLIC_*` value is inlined into the bundle at build time, so this one
+says `https://www.bigshop.life` in *every* production-mode build — Netlify deploy
+previews included. Using it as the origin meant a preview sent its Auth0
+`redirect_uri` and its logout `returnTo` to the live site, and called
+production's `/api/parse-recipe-url` and friends cross-origin. The browser now
+reads `window.location.origin` via `lib/app-origin.ts`, and calls to this app's
+own API routes use a relative path. `NEXT_PUBLIC_HOST` remains as the SSR
+fallback and as `scripts/backfill-recipe-method.mjs`'s default web origin.
+
+Full account, including the Auth0 allowlist entries that previews also need →
+[docs/deploy-previews.md](./docs/deploy-previews.md).
+
 ### The two API host variables
 
 They are the same value locally and deliberately different in production, and

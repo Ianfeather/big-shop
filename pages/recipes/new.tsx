@@ -88,14 +88,14 @@ const NewRecipe = () => {
   const uploadImageMutation = useMutation({
     mutationFn: async (formData: FormData) => {
       const token = await getAccessTokenSilently();
-      return nextApiPostFormData<{ jobId: string }>(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image`, formData, token);
+      return nextApiPostFormData<{ jobId: string }>('/api/recipe-image', formData, token);
     }
   });
 
   const parseUrlMutation = useMutation({
     mutationFn: async (payload: { url: string }) => {
       const token = await getAccessTokenSilently();
-      return nextApiPost<ParseUrlResult>(`${process.env.NEXT_PUBLIC_HOST}/api/parse-recipe-url`, payload, token);
+      return nextApiPost<ParseUrlResult>('/api/parse-recipe-url', payload, token);
     }
   });
 
@@ -110,7 +110,7 @@ const NewRecipe = () => {
     // hands back only that Account's job.
     queryFn: async () => {
       const token = await getAccessTokenSilently();
-      return nextApiGet<ImageJobStatus>(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image?jobId=${processingJob!.jobId}`, token);
+      return nextApiGet<ImageJobStatus>(`/api/recipe-image?jobId=${processingJob!.jobId}`, token);
     },
     refetchInterval: (query) => {
       const status = query.state.data?.status;

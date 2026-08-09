@@ -65,14 +65,14 @@ const MethodImport = ({ currentMethod, onMethod, defaultOpen = false }: MethodIm
   const parseUrlMutation = useMutation({
     mutationFn: async (payload: { url: string }) => {
       const token = await getAccessTokenSilently();
-      return nextApiPost<{ method: string }>(`${process.env.NEXT_PUBLIC_HOST}/api/parse-method-url`, payload, token);
+      return nextApiPost<{ method: string }>('/api/parse-method-url', payload, token);
     }
   });
 
   const uploadImageMutation = useMutation({
     mutationFn: async (formData: FormData) => {
       const token = await getAccessTokenSilently();
-      return nextApiPostFormData<{ jobId: string }>(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image`, formData, token);
+      return nextApiPostFormData<{ jobId: string }>('/api/recipe-image', formData, token);
     }
   });
 
@@ -84,7 +84,7 @@ const MethodImport = ({ currentMethod, onMethod, defaultOpen = false }: MethodIm
     enabled: !!job,
     queryFn: async () => {
       const token = await getAccessTokenSilently();
-      return nextApiGet<MethodJobStatus>(`${process.env.NEXT_PUBLIC_HOST}/api/recipe-image?jobId=${job!.jobId}`, token);
+      return nextApiGet<MethodJobStatus>(`/api/recipe-image?jobId=${job!.jobId}`, token);
     },
     refetchInterval: (query) => {
       const status = query.state.data?.status;

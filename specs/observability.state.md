@@ -151,13 +151,33 @@ was deployed and did not work. Read this before trying again:
   fell back to an empty `DSN` and died on `dial tcp 127.0.0.1:3306: connect: connection
   refused` — which is what `sql.Open("mysql", "")` defaults to. All four secrets existed and
   read `Deployed` throughout. Fly documents secrets as reaching every container in a Machine;
-  it did not happen. **Working hypothesis, unproven:** a compose service's `environment:` block
-  *replaces* the injected environment rather than merging with it — both services declared one.
-  If so, the fix is to move every value into `fly.toml`'s `[env]` (which does apply to all
-  containers) and declare no `environment:` in compose at all.
-- **Test it somewhere other than production.** A throwaway Fly app with the same config shape
-  and its own secrets, in the manner of `api-hosting-migration.md`'s Phase 0 probe. That is a
-  spend/approach decision for the user, not something to assume.
+  it did not happen.
+- **The cause is now established, and it is not what was first assumed.** The hypothesis was
+  that a compose service's `environment:` block *replaces* the injected environment. That is
+  **wrong**. A probe deployed on 2026-08-10 (canary strategy, so it never touched a serving
+  machine; user gave one-off permission to test against production because the experiment needs
+  the real secrets, which cannot be copied to a throwaway app without exposing them) ran a
+  sidecar printing its environment variable *names* — never values — alongside an `api` service
+  declaring **no** `environment:` block at all. Result:
+
+  ```
+  PROBE_SEES_NAMES: AUTH0_AUDIENCE AUTH0_DOMAIN DEPLOY_ENV FLY_ALLOC_ID FLY_APP_NAME
+                    FLY_IMAGE_REF FLY_MACHINE_ID FLY_MACHINE_VERSION FLY_PRIVATE_IP
+                    FLY_PROCESS_GROUP FLY_REGION FLY_VM_MEMORY_MB HOME PATH PRIMARY_REGION
+                    PWD SHLVL
+  PROBE_DSN_PRESENT: no
+  PROBE_GRAFANA_ENDPOINT_PRESENT: no
+  ```
+
+  So under `[build.compose]`: **`fly.toml`'s `[env]` values DO reach containers; `fly secrets`
+  do NOT reach them at all.** Not a compose-`environment:` interaction — secrets simply are not
+  injected into containers in a multi-container Machine. The `api` container died on the same
+  empty-DSN ping as before despite declaring no `environment:`.
+
+  This is a platform behaviour that contradicts Fly's documentation, and it blocks the sidecar
+  outright: the API needs `DSN` from a secret, so the moment the Machine becomes
+  multi-container the application cannot start. Putting `DSN` in `[env]` is not a workaround —
+  that is a database credential in version control.
 - **Two operational lessons, both of which cost time here:**
   - `flyctl deploy` **skips stopped machines**. A green deploy does not mean the fleet is
     consistent; the failed machine sat on the broken config through two subsequent successful

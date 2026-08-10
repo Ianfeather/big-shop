@@ -63,8 +63,19 @@ one server span (`account.id`, `user.sub`, route, status, `x-nf-request-id`), `o
 spans, `slog` via `otelslog`, the HTTP duration histogram. Telemetry init that cannot
 `log.Fatal`; SDK `ErrorHandler` replaced.
 Depends on: Session 0
-Commit:
-Notes: Evidence is Grafana screenshots showing trace → logs → metric correlating.
+Commit: ac89efc
+Notes: Evidence is three Grafana screenshots under `specs/evidence/observability/`, showing
+the trace's span attributes, its log line found by `trace_id`, and the duration histogram
+labelled by route.
+
+Test gate: `scripts/build-local.sh` green; `npm run test:e2e` 27/27. All three signals
+verified against local LGTM by querying Tempo, Loki and Prometheus directly, not just by
+observing that export succeeded.
+Review gate: both axes clean on scope. Standards found two hard issues — every new dependency
+left `// indirect` (`go mod tidy` had not been re-run) and ADR-0007 left asserting e2e uses
+LGTM — plus three untrue comments, all fixed. Spec found the two gaps recorded above, plus a
+path-keyed allow-list that would also have traced `POST /recipes`; now keyed on method and
+route together.
 
 **Known obstacle, found while planning:** the service layer calls `db.Query`/`db.Exec`/
 `db.QueryRow` — 55 call sites, none of them the `*Context` variants — and takes no

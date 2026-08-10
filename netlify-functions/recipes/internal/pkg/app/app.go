@@ -111,7 +111,8 @@ func cacheControlMiddleware(w http.ResponseWriter, r *http.Request, next http.Ha
 // which makes the exposure theoretical rather than live.
 const jwksCacheTTL = 5 * time.Minute
 
-// jwtMiddleware builds the negroni handler that validates Auth0 tokens.
+// jwtHandler builds the negroni handler that validates Auth0 tokens, wrapping
+// the *jwtmiddleware.JWTMiddleware that newJWTMiddleware constructs.
 //
 // Built once, when the router is. That is the entire point of the change it
 // came from: `getPemCert` fetched the tenant's JWKS over HTTPS on *every*
@@ -126,12 +127,15 @@ const jwksCacheTTL = 5 * time.Minute
 // gate). Failing here would break the build for a path that never serves a
 // request; refusing every request is the fail-closed answer for the path that
 // does.
-func jwtMiddleware() negroni.HandlerFunc {
+func jwtHandler() negroni.HandlerFunc {
 	middleware, err := newJWTMiddleware()
 	if err != nil {
 		log.Printf("auth is not configured, every request will be refused: %v", err)
 		return func(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-			unauthorized(w)
+			// Deliberately the same body a bad token gets. Whether this API is
+			// misconfigured is not something an unauthenticated caller should
+			// be able to read off the response.
+			unauthorized(w, "JWT is invalid.")
 		}
 	}
 
@@ -175,19 +179,23 @@ func newJWTMiddleware() (*jwtmiddleware.JWTMiddleware, error) {
 }
 
 // authErrorHandler answers 401 for a refused token, whether it was missing or
-// invalid.
+// invalid, while still saying which.
 //
 // Not cosmetic. v2's DefaultErrorHandler answers a *missing* token with 400 and
 // only an invalid one with 401, where v1 answered 401 for both - so taking the
 // default would change what every unauthenticated request gets back, which is a
 // contract change no part of this work asked for. TestDefaultCacheControl pins
-// it directly.
+// it directly. Only the status is overridden; the two cases keep the distinct
+// messages the library would have given them.
 func authErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, jwtmiddleware.ErrJWTMissing) || errors.Is(err, jwtmiddleware.ErrJWTInvalid) {
-		unauthorized(w)
-		return
+	switch {
+	case errors.Is(err, jwtmiddleware.ErrJWTMissing):
+		unauthorized(w, "JWT is missing.")
+	case errors.Is(err, jwtmiddleware.ErrJWTInvalid):
+		unauthorized(w, "JWT is invalid.")
+	default:
+		jwtmiddleware.DefaultErrorHandler(w, r, err)
 	}
-	jwtmiddleware.DefaultErrorHandler(w, r, err)
 }
 
 // userMiddleware lifts the authenticated subject out of the validated JWT and
@@ -203,7 +211,7 @@ func authErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
 func (a *App) userMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	claims, ok := r.Context().Value(jwtmiddleware.ContextKey{}).(*validator.ValidatedClaims)
 	if !ok || claims.RegisteredClaims.Subject == "" {
-		unauthorized(w)
+		unauthorized(w, "JWT is invalid.")
 		return
 	}
 
@@ -240,14 +248,14 @@ func callerFrom(ctx context.Context) *common.Caller {
 
 // unauthorized writes the 401 body shape go-jwt-middleware itself uses, so a
 // refusal looks the same wherever in the auth chain it came from.
-func unauthorized(w http.ResponseWriter) {
+func unauthorized(w http.ResponseWriter, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
-	_, _ = w.Write([]byte(`{"message":"JWT is invalid."}`))
+	_, _ = w.Write([]byte(`{"message":"` + message + `"}`))
 }
 
 // devUserMiddleware stands in for the jwt+user middleware pair when
-// DISABLE_AUTH=true, so the API can be run locally (`go run . dev`) without a
+// DISABLE_AUTH=true, so the API can be run locally (`go run . serve`) without a
 // real Auth0 token. The user ID it injects must exist in the local DB
 // (account_user) for requests to resolve to an account.
 func (a *App) devUserMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
@@ -340,7 +348,7 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, huma.API, error) {
 	if os.Getenv("DISABLE_AUTH") == "true" {
 		n.Use(negroni.HandlerFunc(a.devUserMiddleware))
 	} else {
-		n.Use(jwtMiddleware())
+		n.Use(jwtHandler())
 		n.Use(negroni.HandlerFunc(a.userMiddleware))
 	}
 	// After the auth pair, deliberately: the server span is opened outside this

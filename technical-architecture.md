@@ -55,7 +55,7 @@ Located in `netlify-functions/recipes/`:
   `fly secrets set` alone is not enough, and a missing declaration fails silently
 - `machine_config.json` / `otel-collector.yaml`: the sidecar definition and the
   collector's config, delivered as a real file via per-container `files`
-- `internal/pkg/app/app.go`: App struct, JWT middleware, all route definitions (`GetRouter`, ~line 145)
+- `internal/pkg/app/app.go`: App struct, JWT middleware, all route definitions (`GetRouter`)
 - `internal/pkg/app/*.go`: Feature handlers
 - `internal/pkg/telemetry/`: OpenTelemetry setup (`telemetry.go`) and the HTTP
   instrumentation (`http.go`)
@@ -88,7 +88,7 @@ Instrumentation currently covers `GET /recipes` only — an allow-list in
 `telemetry/http.go` (`phase1Routes`) — which the observability spec widens to
 every route next.
 
-**Route list**: routes are registered in `internal/pkg/app/app.go`'s `GetRouter`, using [Huma](https://github.com/danielgtaylor/huma) (`humamux`, on top of the same `gorilla/mux` router) so each operation's request/response types double as its OpenAPI schema - no separate hand-maintained doc to drift. The generated spec is committed at [`docs/openapi.yaml`](./docs/openapi.yaml); regenerate it with `cd netlify-functions/recipes && go run . openapi > ../../docs/openapi.yaml` (no DB needed - route registration never touches it). `.github/workflows/ci.yml`'s `go` job fails if the committed spec is stale relative to `app.go` (it used to be `build.sh`, i.e. only during a Netlify deploy). All routes except `/health` require Auth0 JWT validation; the user ID is extracted from the JWT `sub` claim and threaded through context to handlers.
+**Route list**: routes are registered in `internal/pkg/app/app.go`'s `GetRouter`, using [Huma](https://github.com/danielgtaylor/huma) (`humamux`, on top of the same `gorilla/mux` router) so each operation's request/response types double as its OpenAPI schema - no separate hand-maintained doc to drift. The generated spec is committed at [`docs/openapi.yaml`](./docs/openapi.yaml); regenerate it with `cd netlify-functions/recipes && go run . openapi > ../../docs/openapi.yaml` (no DB needed - route registration never touches it). `.github/workflows/ci.yml`'s `go` job fails if the committed spec is stale relative to `app.go` (it used to be `build.sh`, i.e. only during a Netlify deploy). All routes except `/health` require Auth0 JWT validation, against a JWKS held in process for 5 minutes by `go-jwt-middleware` v2's `jwks.CachingProvider` (built once, in `GetRouter` - it used to be fetched over HTTPS on every request). `userMiddleware` takes the `sub` claim and puts a **`common.Caller`** in the request context; handlers read it with `callerFrom(ctx)`. A `Caller` carries the user ID and resolves that user's Account **lazily**, at most once per request - so a route that never needs an Account (`/tags`, `/units`, `/ingredients`, `/user`, `/invites`) still makes no lookup at all, while `POST /shopping-list` makes one instead of nine.
 
 ### API Testing
 For authenticated endpoints, copy the `Authorization` header from browser dev tools — no established curl/Postman workflow exists yet.
@@ -422,4 +422,4 @@ Two independent pipelines, one per deployable — an accepted consequence of
 
 **Frontend:** `next@16`, `react@19`, `@tanstack/react-query`, `@auth0/auth0-react@2`, `openai`, `@netlify/blobs`
 
-**Backend (Go):** `gorilla/mux`, `auth0/go-jwt-middleware`, `aws/aws-lambda-go`, `go-sql-driver/mysql`, `sendgrid/sendgrid-go`, `urfave/negroni`
+**Backend (Go):** `gorilla/mux`, `auth0/go-jwt-middleware/v2` (with `go-jose.v2`, which it brings and the tests mint tokens with), `aws/aws-lambda-go`, `go-sql-driver/mysql`, `sendgrid/sendgrid-go`, `urfave/negroni`

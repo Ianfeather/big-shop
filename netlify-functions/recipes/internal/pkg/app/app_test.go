@@ -40,6 +40,11 @@ func TestRefusalsAnswer401(t *testing.T) {
 		if rec.Code != http.StatusUnauthorized {
 			t.Errorf("status = %d, want 401 (v2's default for a missing token is 400)", rec.Code)
 		}
+		// Only the status is overridden, not the diagnosis - a caller who sent
+		// no token should not be told their token is invalid.
+		if got := rec.Body.String(); !strings.Contains(got, "JWT is missing") {
+			t.Errorf("body = %q, want it to say the JWT is missing", got)
+		}
 	})
 
 	t.Run("when auth is not configured at all", func(t *testing.T) {

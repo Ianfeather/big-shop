@@ -537,6 +537,17 @@ func GenerateShoppingList(ctx context.Context, recipeIDs []string, caller *commo
 		}
 	}
 
+	// The Caller is already resolved by this point - GetRecipeByID and
+	// GetIngredientListItems above both asked for the Account - so the calls
+	// inside the transaction read a memoised value and issue no query at all.
+	// That is better than it was, where each one re-resolved the Account on the
+	// transaction's own connection.
+	//
+	// Worth keeping that way. The Caller resolves against the pool, not this
+	// tx, so a reordering that made the transaction the *first* thing to ask
+	// would have it take a second connection while this one is held. Nothing
+	// here writes account_user, so it would still be correct - just needlessly
+	// wide at exactly the moment a connection is scarcest.
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err

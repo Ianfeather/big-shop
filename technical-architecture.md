@@ -320,10 +320,34 @@ local development and e2e working, where the public value is absolute anyway).
 unproxied origin to every visitor and undo the same-origin property.
 
 **Server-side secrets (set in Netlify UI / local `.env.local`):**
-- `DSN` — TiDB connection string
+- `DSN` — TiDB connection string. Carries two query parameters that are load-bearing rather
+  than incidental, and a third that must never be added — see below.
 - `OPENAI_API_KEY` — GPT-4 Vision + GPT-3.5-turbo
 - `SENDGRID_API_KEY` — Email invitations
 - `AUTH0_DOMAIN` / `AUTH0_AUDIENCE` — Go JWT validation
+
+#### The DSN's query parameters
+
+The DSN is set in exactly two places — `docker-compose.yml`'s `api` service (which covers
+local development *and* e2e) and a Fly secret for production. There is no `.env` copy by
+design (`docker/README.md`). Anyone rewriting it needs all three of these:
+
+| Parameter | Why |
+| --- | --- |
+| `parseTime=true` | `DATETIME`/`TIMESTAMP` columns scan into `time.Time` rather than `[]byte`. |
+| `interpolateParams=true` | The driver interpolates arguments client-side instead of preparing them server-side. A parameterised query costs **two** blocking round trips as a server-side prepare (`COM_STMT_PREPARE`, wait, `COM_STMT_EXECUTE`, wait) and **one** interpolated. Measured on the local stack: `GET /shopping-list` 15.2 → 9.1 round trips, `POST /shopping-list` 50.8 → 29.4. |
+| `collation=utf8mb4_general_ci` | **Pinned because of `interpolateParams`, not for its own sake.** Interpolation moves parameter escaping from TiDB into the driver, and the driver's guard against the multibyte escape-bypass charsets (`gbk`, `big5`, `sjis`, `cp932`, `gb2312`, `gb18030`) is `InterpolateParams && Collation != "" && unsafeCollations[Collation]`. Since driver v1.8 the collation defaults to *empty*, so leaving it unset silently disarms that guard. Drop this and the protection goes with it, with nothing visibly changing. |
+
+**`multiStatements` must never be added.** Unlike an unsafe collation — which the driver
+refuses outright, failing the process at startup — nothing stops `multiStatements` being
+combined with `interpolateParams`, and it is the parameter that would turn any future
+escaping defect into stacked statements.
+
+One accepted consequence of `interpolateParams`: argument values now travel *inside* the
+query text, so they appear in MySQL's general and slow-query logs and in TiDB Cloud's
+slow-query UI. That includes invite tokens and email addresses
+(`internal/pkg/service/invite.go`). Don't add statement-level logging to the API without
+revisiting it. The full analysis is in `specs/request-model-optimisations.md`.
 
 **Fly secrets, read by the Go API only** (`fly secrets set …`, see the
 [runbook](./docs/fly-migration-runbook.md)):

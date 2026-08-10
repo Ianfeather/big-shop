@@ -3,19 +3,22 @@ package app
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"recipes/internal/pkg/common"
 	"recipes/internal/pkg/purge"
 	"recipes/internal/pkg/telemetry"
 	"sort"
+	"time"
 
-	jwtmiddleware "github.com/auth0/go-jwt-middleware"
+	jwtmiddleware "github.com/auth0/go-jwt-middleware/v2"
+	"github.com/auth0/go-jwt-middleware/v2/jwks"
+	"github.com/auth0/go-jwt-middleware/v2/validator"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humamux"
-	"github.com/form3tech-oss/jwt-go"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
 	"github.com/urfave/negroni"
@@ -46,21 +49,6 @@ func (a *App) PurgeConfigured() bool {
 // and gives nothing back on purpose: see purge.Purger.Purge.
 type cachePurger interface {
 	Purge(tag string)
-}
-
-// Jwks will hold the response from the public server
-type Jwks struct {
-	Keys []JSONWebKeys `json:"keys"`
-}
-
-// JSONWebKeys refers to the remove public key data
-type JSONWebKeys struct {
-	Kty string   `json:"kty"`
-	Kid string   `json:"kid"`
-	Use string   `json:"use"`
-	N   string   `json:"n"`
-	E   string   `json:"e"`
-	X5c []string `json:"x5c"`
 }
 
 type contextKey string
@@ -112,14 +100,122 @@ func cacheControlMiddleware(w http.ResponseWriter, r *http.Request, next http.Ha
 	next.ServeHTTP(w, r)
 }
 
-func userMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-	ctx := context.WithValue(
-		r.Context(),
-		contextKey("userID"),
-		// TODO: Add account ID here too via DB lookup?
-		r.Context().Value("user").(*jwt.Token).Claims.(jwt.MapClaims)["sub"].(string),
+// jwksCacheTTL is how long the tenant's key set is held in process.
+//
+// The trade-off it settles: CachingProvider caches the whole key set for the
+// TTL and does *not* refresh on an unknown `kid`, so a token signed by a key
+// minted inside the current window would be refused until the window expires.
+// Five minutes is chosen against that. The tenant publishes two keys at once,
+// so a new key appears in the JWKS well before Auth0 signs anything with it,
+// which makes the exposure theoretical rather than live.
+const jwksCacheTTL = 5 * time.Minute
+
+// jwtMiddleware builds the negroni handler that validates Auth0 tokens.
+//
+// Built once, when the router is. That is the entire point of the change it
+// came from: `getPemCert` fetched the tenant's JWKS over HTTPS on *every*
+// request, so Big Shop's request rate was its Auth0 request rate, and a rate
+// limit or an incident on that endpoint failed every request rather than just
+// logins. A provider constructed per request would cache nothing and restore
+// exactly that.
+//
+// Unconfigured, it refuses every request rather than returning an error, which
+// looks odd until you notice `go run . openapi` builds this same router with no
+// Auth0 environment at all (main.go's spec-generation mode, and a CI drift
+// gate). Failing here would break the build for a path that never serves a
+// request; refusing every request is the fail-closed answer for the path that
+// does.
+func jwtMiddleware() negroni.HandlerFunc {
+	middleware, err := newJWTMiddleware()
+	if err != nil {
+		log.Printf("auth is not configured, every request will be refused: %v", err)
+		return func(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+			unauthorized(w)
+		}
+	}
+
+	// v2 has no HandlerWithNext, which is what v1 handed negroni directly.
+	// CheckJWT wraps a handler instead, so negroni's continuation goes in as
+	// that handler - which keeps this middleware exactly where it sat in the
+	// stack, behind cacheControlMiddleware and the /health carve-out.
+	return func(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+		middleware.CheckJWT(next).ServeHTTP(w, r)
+	}
+}
+
+func newJWTMiddleware() (*jwtmiddleware.JWTMiddleware, error) {
+	domain := os.Getenv("AUTH0_DOMAIN")
+	audience := os.Getenv("AUTH0_AUDIENCE")
+	if domain == "" || audience == "" {
+		return nil, errors.New("AUTH0_DOMAIN and AUTH0_AUDIENCE are both required")
+	}
+
+	issuerURL, err := url.Parse("https://" + domain + "/")
+	if err != nil {
+		return nil, err
+	}
+
+	provider := jwks.NewCachingProvider(issuerURL, jwksCacheTTL)
+
+	// Issuer and audience are checked by the validator itself, and both are
+	// required rather than checked-if-present - a token this tenant signed for
+	// some other audience is exactly what this API must refuse.
+	jwtValidator, err := validator.New(
+		provider.KeyFunc,
+		validator.RS256,
+		issuerURL.String(),
+		[]string{audience},
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	return jwtmiddleware.New(jwtValidator.ValidateToken, jwtmiddleware.WithErrorHandler(authErrorHandler)), nil
+}
+
+// authErrorHandler answers 401 for a refused token, whether it was missing or
+// invalid.
+//
+// Not cosmetic. v2's DefaultErrorHandler answers a *missing* token with 400 and
+// only an invalid one with 401, where v1 answered 401 for both - so taking the
+// default would change what every unauthenticated request gets back, which is a
+// contract change no part of this work asked for. TestDefaultCacheControl pins
+// it directly.
+func authErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, jwtmiddleware.ErrJWTMissing) || errors.Is(err, jwtmiddleware.ErrJWTInvalid) {
+		unauthorized(w)
+		return
+	}
+	jwtmiddleware.DefaultErrorHandler(w, r, err)
+}
+
+// userMiddleware lifts the authenticated subject out of the validated JWT and
+// puts it in the request context, where the handlers read it.
+//
+// Runs only after the JWT middleware, so the claims should always be present -
+// but the assertion is guarded anyway and answers 401 rather than panicking if
+// they are not. The line this replaced chained three unchecked assertions
+// (`Value("user").(*jwt.Token).Claims.(jwt.MapClaims)["sub"].(string)`), any of
+// which would panic on a shape it did not expect. There is no Recovery
+// middleware in the negroni stack, so that panic is an empty reply rather than
+// a response - the same defect #49 fixed one layer further down.
+func userMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	claims, ok := r.Context().Value(jwtmiddleware.ContextKey{}).(*validator.ValidatedClaims)
+	if !ok || claims.RegisteredClaims.Subject == "" {
+		unauthorized(w)
+		return
+	}
+
+	ctx := context.WithValue(r.Context(), contextKey("userID"), claims.RegisteredClaims.Subject)
 	next.ServeHTTP(w, r.WithContext(ctx))
+}
+
+// unauthorized writes the 401 body shape go-jwt-middleware itself uses, so a
+// refusal looks the same wherever in the auth chain it came from.
+func unauthorized(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	_, _ = w.Write([]byte(`{"message":"JWT is invalid."}`))
 }
 
 // devUserMiddleware stands in for the jwt+user middleware pair when
@@ -133,69 +229,6 @@ func devUserMiddleware(w http.ResponseWriter, r *http.Request, next http.Handler
 	}
 	ctx := context.WithValue(r.Context(), contextKey("userID"), devUserID)
 	next.ServeHTTP(w, r.WithContext(ctx))
-}
-
-// normalizeAudience rewrites the `aud` claim into a shape MapClaims.
-// VerifyAudience understands.
-//
-// It accepts only []string or string and returns false for anything else,
-// while encoding/json decodes a JSON array into []interface{} - which is what
-// Auth0 sends whenever a token was requested with an audience. Hence the
-// conversion (https://github.com/form3tech-oss/jwt-go/issues/7).
-//
-// Returns an error rather than asserting. The `claims["aud"].([]interface{})`
-// this replaced panicked outright on a token whose `aud` was absent or a bare
-// string, and there is no Recovery middleware in the negroni stack to turn
-// that into a response - so an unauthenticated request could kill the handler
-// instead of being refused by it.
-func normalizeAudience(claims jwt.MapClaims) error {
-	switch aud := claims["aud"].(type) {
-	case []interface{}:
-		values := make([]string, len(aud))
-		for i, v := range aud {
-			value, ok := v.(string)
-			if !ok {
-				return errors.New("invalid audience")
-			}
-			values[i] = value
-		}
-		claims["aud"] = values
-	case []string, string:
-		// Already a shape VerifyAudience reads.
-	default:
-		return errors.New("missing audience")
-	}
-	return nil
-}
-
-func getPemCert(token *jwt.Token) (string, error) {
-	cert := ""
-	resp, err := http.Get("https://" + os.Getenv("AUTH0_DOMAIN") + "/.well-known/jwks.json")
-
-	if err != nil {
-		return cert, err
-	}
-	defer resp.Body.Close()
-
-	var jwks = Jwks{}
-	err = json.NewDecoder(resp.Body).Decode(&jwks)
-
-	if err != nil {
-		return cert, err
-	}
-
-	for k := range jwks.Keys {
-		if token.Header["kid"] == jwks.Keys[k].Kid {
-			cert = "-----BEGIN CERTIFICATE-----\n" + jwks.Keys[k].X5c[0] + "\n-----END CERTIFICATE-----"
-		}
-	}
-
-	if cert == "" {
-		err := errors.New("unable to find appropriate key")
-		return cert, err
-	}
-
-	return cert, nil
 }
 
 // RouteTemplates lists the path templates registered on an API - "/recipes",
@@ -219,56 +252,6 @@ func RouteTemplates(api huma.API) []string {
 // it, from which the OpenAPI spec can be generated (see the `openapi` mode in
 // main.go) without needing to start a server or hold a DB connection.
 func (a *App) GetRouter(base string) (*negroni.Negroni, huma.API, error) {
-
-	jwtMiddleware := jwtmiddleware.New(jwtmiddleware.Options{
-		ValidationKeyGetter: func(token *jwt.Token) (interface{}, error) {
-			claims, ok := token.Claims.(jwt.MapClaims)
-			if !ok {
-				return nil, errors.New("invalid claims")
-			}
-
-			if err := normalizeAudience(claims); err != nil {
-				return nil, err
-			}
-
-			// Both claims are *required*, not merely checked-if-present. With
-			// the `false` this passed before, verifyAud returns true for an
-			// empty `aud` and VerifyIssuer returns true for a token carrying
-			// no `iss` at all - so any token the tenant's key signed was
-			// accepted, whatever it was minted for. The signature check below
-			// meant that was never an open door, but a token issued by this
-			// Auth0 tenant for some other audience is exactly what this API
-			// must refuse.
-			if !claims.VerifyAudience(os.Getenv("AUTH0_AUDIENCE"), true) {
-				return nil, errors.New("invalid audience")
-			}
-
-			iss := "https://" + os.Getenv("AUTH0_DOMAIN") + "/"
-			if !claims.VerifyIssuer(iss, true) {
-				return nil, errors.New("invalid issuer")
-			}
-
-			// Returned, never panicked. Both of these are reachable by an
-			// unauthenticated caller: getPemCert fails whenever the token's
-			// `kid` names no key in the tenant's JWKS, which anyone can send.
-			// The panic this replaces was recovered per-connection by
-			// net/http, so the process survived - but the request got no
-			// response at all (curl reports an empty reply) instead of the
-			// 401 it should. Same defect normalizeAudience's comment above
-			// describes, one branch further down, and the reason it matters
-			// is the same: there is no Recovery middleware in the negroni
-			// stack to turn a panic into a response.
-			cert, err := getPemCert(token)
-			if err != nil {
-				return nil, err
-			}
-			// The error here used to be discarded, which returned a nil key
-			// with a nil error and left the jwt library to fail on it later,
-			// somewhere less obvious.
-			return jwt.ParseRSAPublicKeyFromPEM([]byte(cert))
-		},
-		SigningMethod: jwt.SigningMethodRS256,
-	})
 
 	router := mux.NewRouter()
 
@@ -330,7 +313,7 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, huma.API, error) {
 	if os.Getenv("DISABLE_AUTH") == "true" {
 		n.Use(negroni.HandlerFunc(devUserMiddleware))
 	} else {
-		n.Use(negroni.HandlerFunc(jwtMiddleware.HandlerWithNext))
+		n.Use(jwtMiddleware())
 		n.Use(negroni.HandlerFunc(userMiddleware))
 	}
 	// After the auth pair, deliberately: the server span is opened outside this

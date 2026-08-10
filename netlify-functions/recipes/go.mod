@@ -4,11 +4,10 @@ go 1.25.0
 
 require (
 	github.com/XSAM/otelsql v0.43.0
-	github.com/auth0/go-jwt-middleware v1.0.0
+	github.com/auth0/go-jwt-middleware/v2 v2.3.0
 	github.com/aws/aws-lambda-go v1.22.0
 	github.com/awslabs/aws-lambda-go-api-proxy v0.9.0
 	github.com/danielgtaylor/huma/v2 v2.35.0
-	github.com/form3tech-oss/jwt-go v3.2.2+incompatible
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gorilla/mux v1.8.1
 	github.com/rs/cors v1.7.0
@@ -25,6 +24,7 @@ require (
 	go.opentelemetry.io/otel/sdk/log v0.21.0
 	go.opentelemetry.io/otel/sdk/metric v1.45.0
 	go.opentelemetry.io/otel/trace v1.45.0
+	gopkg.in/go-jose/go-jose.v2 v2.6.3
 )
 
 require (
@@ -43,7 +43,9 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.45.0 // indirect
 	go.opentelemetry.io/otel/metric v1.45.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.11.0 // indirect
+	golang.org/x/crypto v0.54.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect

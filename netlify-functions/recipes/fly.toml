@@ -18,8 +18,17 @@ app = "big-shop-api"
 # accepted in ADR-0006; it is still ~90ms better than us-east-2.
 primary_region = "fra"
 
-[build]
-  dockerfile = "Dockerfile"
+# Two containers in one Machine: the Go API and an OpenTelemetry Collector
+# sidecar (docs/adr/0007). `file` is explicit because Fly's auto-detection looks
+# for compose.yaml/docker-compose.yml in the build context - this directory -
+# and would find nothing; the repo-root docker-compose.yml is the local
+# development stack and must never be what gets deployed.
+#
+# This replaces `dockerfile = "Dockerfile"`: the Dockerfile is now named by the
+# `api` service inside the compose file instead. Both keys together would be two
+# answers to the same question.
+[build.compose]
+  file = "compose.fly.yml"
 
 # The Go process reads five environment variables (grep os.Getenv). Two are
 # public identifiers and live here, in version control, so a deploy cannot
@@ -40,9 +49,20 @@ primary_region = "fra"
 # The fifth, DISABLE_AUTH, must never be set here. It is a local-development
 # switch that makes the API resolve every request to DEV_USER_ID without
 # validating a token; docker-compose.yml is the only place it belongs.
+# Note these reach *every* container in the Machine, the collector included -
+# as do `fly secrets`, which cannot be scoped to one service. That is worth
+# knowing when reading ADR-0007's "credentials live in collector config, not
+# application code": true of the source, which names no Grafana credential, but
+# not of the process environment, where the API can see them too.
 [env]
   AUTH0_DOMAIN = "dev-x-n37k6b.eu.auth0.com"
   AUTH0_AUDIENCE = "https://big-shop-api"
+
+  # Without this, production telemetry arrives labelled `development` (the
+  # default in telemetry.environment()) and is indistinguishable from a laptop's
+  # in the same Tempo - which, on a single shared stack, is the whole of the
+  # separation.
+  DEPLOY_ENV = "production"
 
 [http_service]
   internal_port = 8080
@@ -69,5 +89,9 @@ primary_region = "fra"
 [[vm]]
   size = "shared-cpu-1x"
   # 512MB rather than the 256MB a Go API of this size needs, to leave room for
-  # the OpenTelemetry collector sidecar that specs/observability.md adds next.
+  # the OpenTelemetry collector sidecar - which specs/observability.md has now
+  # added, so this is occupied rather than reserved. Measured at ~36MB idle
+  # running the committed config locally, and the collector's own memory_limiter
+  # is set to cap it at 96MB + a 32MB spike allowance, so it cannot grow into
+  # the API's share under load or a stalled export.
   memory = "512mb"

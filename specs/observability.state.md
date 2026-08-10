@@ -131,7 +131,27 @@ Notes: **BLOCKED on the user.** Needs, before any of this session can run:
    nothing about where the collector forwards to.
 3. Go-ahead to deploy to production.
 
-Researched while waiting, so the session can move immediately once unblocked:
+**Secrets are set** (confirmed by the user, 2026-08-10). Everything below the deploy line is
+written and locally verified; what remains is the deploy itself and the three exit criteria.
+
+Built and validated while blocked:
+- `compose.fly.yml` — the two-container Machine definition, plus the collector config it
+  carries. Validated with `otelcol validate` inside the real `0.158.0` image, then *run*
+  against a blackholed endpoint: it starts, stays up, logs nothing and sits at ~36MB. That is
+  exit criterion 3 rehearsed locally, though it still has to be demonstrated in production.
+  Running it is what caught the `otlphttp` → `otlp_http` rename; `validate` alone passed it.
+- `fly.toml` — `[build.compose]` replacing `dockerfile`, and `DEPLOY_ENV = "production"`.
+- `deploy-api.yml` — passes `--build-arg SERVICE_VERSION` from the tested commit's sha.
+
+**The deploy route is the pull request, not a manual `fly deploy`.** `deploy-api.yml` fires on
+CI success against `master`, and deliberately refuses per-branch deploys ("dispatching from a
+feature branch would otherwise push that branch straight onto the production machine, and
+per-branch API deploys are explicitly out of scope"). So Phase 2's production checkpoint
+cannot happen before Sessions 0–2 are merged — which inverts the spec's implied order, where
+the checkpoint gates the widening. Sessions 3–7 therefore land in later PRs, after this one
+has proved itself in production.
+
+Researched while blocked:
 
 - **The sidecar is achievable.** Fly supports multi-container Machines via a `[build.compose]`
   section in `fly.toml` naming a compose file; containers share a network namespace, so the Go

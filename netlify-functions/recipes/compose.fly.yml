@@ -1,0 +1,137 @@
+# Multi-container Machine definition for Fly: the Go API plus an OpenTelemetry
+# Collector sidecar, per docs/adr/0007-observability-otel-grafana-cloud.md.
+#
+# NOT a local-development file. `docker-compose.yml` at the repository root is
+# the local stack (MySQL, the API with hot reload, and grafana/otel-lgtm); this
+# one is only ever read by `fly deploy`, via fly.toml's [build.compose]. It is
+# named explicitly there because Fly's auto-detection looks for
+# compose.yaml/docker-compose.yml in the build context - which is this directory,
+# where neither exists - and because two files called "compose" that mean
+# different things is precisely the confusion worth spending a filename on.
+#
+# Containers in a Machine share a network namespace, which is what lets the Go
+# process export to localhost:4318 with no service discovery and no credentials.
+#
+# Fly requires that *exactly one* service specify `build`. That is `api`; the
+# collector must therefore run a prebuilt image, which has a consequence worth
+# stating because it drives the odd-looking config below: **there is no way to
+# put a config file into the collector container.** It cannot be baked into an
+# image (no build), and Fly ignores `volumes:` and `configs:` in a Compose file,
+# and there is no host filesystem to mount from anyway. The collector's
+# `--config=env:` support is the remaining route, so its entire configuration
+# travels as an environment variable.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Matches fly.toml's http_service.internal_port - this is the container the
+    # Fly proxy sends inbound requests to. Only one container can be.
+    ports:
+      - "8080:8080"
+    environment:
+      # The whole point of the sidecar: the application exports to a collector
+      # on loopback and knows nothing about Grafana, its region, or its
+      # credentials.
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://localhost:4318"
+
+  otelcol:
+    # Pinned, like every other image in this repo (mysql:8.0, otel-lgtm:0.30.1).
+    # Verified to publish linux/amd64, which is what Fly Machines run - the
+    # deployed API image is single-arch amd64, built by Fly's remote builder.
+    image: otel/opentelemetry-collector-contrib:0.158.0
+    command: ["--config=env:OTELCOL_CONFIG"]
+    environment:
+      # Credentials are NOT here. `${env:...}` is resolved by the collector at
+      # startup from the process environment, which is where Fly injects the
+      # secrets set by `fly secrets set`. So this file - config, routing,
+      # everything shaped - stays in version control, and the three secret
+      # values never appear in it.
+      #
+      # Names match what Grafana Cloud's own OpenTelemetry tile emits, so its
+      # documentation and snippets need no translation.
+      OTELCOL_CONFIG: |
+        receivers:
+          otlp:
+            protocols:
+              http:
+                # Loopback only. The collector must not be reachable from
+                # outside the Machine; the Fly proxy is pointed at the API's
+                # 8080 and nothing routes here.
+                endpoint: 127.0.0.1:4318
+
+        processors:
+          # First in the pipeline and not optional on a 512MB machine shared
+          # with the API. Without it, a burst or a stalled export grows the
+          # collector's queue until the OOM killer picks a process - and it may
+          # well pick the API. Telemetry must never affect the application
+          # (ADR-0007), and on a shared VM that has to include memory.
+          memory_limiter:
+            check_interval: 1s
+            limit_mib: 96
+            spike_limit_mib: 32
+
+          # Batching is what makes the export efficient; the Go SDK already
+          # batches, and this coalesces across both.
+          batch:
+            timeout: 5s
+            send_batch_size: 512
+
+        exporters:
+          otlp_http/grafana:
+            endpoint: ${env:GRAFANA_CLOUD_OTLP_ENDPOINT}
+            auth:
+              authenticator: basicauth/grafana
+            # A dead or slow Grafana must never become backpressure that stalls
+            # the collector and, through it, the Machine. Bounded queue, bounded
+            # retries, and then drop - the spec's Phase 2 exit criteria include
+            # proving exactly this by blackholing the endpoint.
+            sending_queue:
+              enabled: true
+              num_consumers: 2
+              queue_size: 512
+            retry_on_failure:
+              enabled: true
+              initial_interval: 1s
+              max_interval: 30s
+              # Bounded, unlike the default's effectively-forever. After this,
+              # the batch is dropped and the collector moves on.
+              max_elapsed_time: 120s
+
+        extensions:
+          # Does the base64 of instance-id:token itself. Grafana's tile hands
+          # out a pre-encoded Authorization header; taking the two values raw
+          # and letting this encode them keeps the secrets individually
+          # readable and inspectable, rather than one opaque blob that is
+          # impossible to eyeball and easy to mangle in transit.
+          basicauth/grafana:
+            client_auth:
+              username: ${env:GRAFANA_CLOUD_INSTANCE_ID}
+              password: ${env:GRAFANA_CLOUD_API_KEY}
+
+          # Backs Fly's own health checking of this container.
+          health_check:
+            endpoint: 127.0.0.1:13133
+
+        service:
+          extensions: [basicauth/grafana, health_check]
+          telemetry:
+            logs:
+              # The collector's own logs go to the Machine's log stream, where
+              # `fly logs` will show them. Kept at warn: at info it narrates
+              # every batch, which on a small machine is most of the log volume
+              # and none of the signal.
+              level: warn
+          pipelines:
+            traces:
+              receivers: [otlp]
+              processors: [memory_limiter, batch]
+              exporters: [otlp_http/grafana]
+            metrics:
+              receivers: [otlp]
+              processors: [memory_limiter, batch]
+              exporters: [otlp_http/grafana]
+            logs:
+              receivers: [otlp]
+              processors: [memory_limiter, batch]
+              exporters: [otlp_http/grafana]

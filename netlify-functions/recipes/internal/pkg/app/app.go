@@ -10,6 +10,7 @@ import (
 	"os"
 	"recipes/internal/pkg/common"
 	"recipes/internal/pkg/purge"
+	"recipes/internal/pkg/service"
 	"recipes/internal/pkg/telemetry"
 	"sort"
 	"time"
@@ -199,15 +200,42 @@ func authErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
 // which would panic on a shape it did not expect. There is no Recovery
 // middleware in the negroni stack, so that panic is an empty reply rather than
 // a response - the same defect #49 fixed one layer further down.
-func userMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+func (a *App) userMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	claims, ok := r.Context().Value(jwtmiddleware.ContextKey{}).(*validator.ValidatedClaims)
 	if !ok || claims.RegisteredClaims.Subject == "" {
 		unauthorized(w)
 		return
 	}
 
-	ctx := context.WithValue(r.Context(), contextKey("userID"), claims.RegisteredClaims.Subject)
-	next.ServeHTTP(w, r.WithContext(ctx))
+	next.ServeHTTP(w, r.WithContext(a.withCaller(r.Context(), claims.RegisteredClaims.Subject)))
+}
+
+// withCaller puts a Caller for this request into the context.
+//
+// A method on *App because the Caller needs the database to resolve the
+// Account - lazily, so a route that never asks for an Account still makes no
+// query at all. One Caller per request, never shared.
+//
+// The lookup closes over the request's context, so the one query it may make is
+// attributed to the request that caused it like every other - the middleware
+// runs inside the server span, so this is the same span the handler would have
+// passed in had the Caller taken a context of its own.
+func (a *App) withCaller(ctx context.Context, userID string) context.Context {
+	caller := common.NewCaller(userID, func() (int, error) {
+		return service.GetAccountID(ctx, a.db, userID)
+	})
+	return context.WithValue(ctx, contextKey("caller"), caller)
+}
+
+// callerFrom lifts the request's Caller back out of the context.
+//
+// Panics if it is absent, which is deliberate and safe: every route is behind
+// either userMiddleware or devUserMiddleware, both of which install one, so an
+// absent Caller means the middleware stack has been misassembled - a
+// programming error that should fail loudly in the first test that runs, not
+// resolve to a zero user ID that quietly reads another Account's data.
+func callerFrom(ctx context.Context) *common.Caller {
+	return ctx.Value(contextKey("caller")).(*common.Caller)
 }
 
 // unauthorized writes the 401 body shape go-jwt-middleware itself uses, so a
@@ -222,13 +250,12 @@ func unauthorized(w http.ResponseWriter) {
 // DISABLE_AUTH=true, so the API can be run locally (`go run . dev`) without a
 // real Auth0 token. The user ID it injects must exist in the local DB
 // (account_user) for requests to resolve to an account.
-func devUserMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+func (a *App) devUserMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	devUserID := os.Getenv("DEV_USER_ID")
 	if devUserID == "" {
 		devUserID = "local-dev-user"
 	}
-	ctx := context.WithValue(r.Context(), contextKey("userID"), devUserID)
-	next.ServeHTTP(w, r.WithContext(ctx))
+	next.ServeHTTP(w, r.WithContext(a.withCaller(r.Context(), devUserID)))
 }
 
 // RouteTemplates lists the path templates registered on an API - "/recipes",
@@ -311,10 +338,10 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, huma.API, error) {
 	}))
 	n.Use(c)
 	if os.Getenv("DISABLE_AUTH") == "true" {
-		n.Use(negroni.HandlerFunc(devUserMiddleware))
+		n.Use(negroni.HandlerFunc(a.devUserMiddleware))
 	} else {
 		n.Use(jwtMiddleware())
-		n.Use(negroni.HandlerFunc(userMiddleware))
+		n.Use(negroni.HandlerFunc(a.userMiddleware))
 	}
 	// After the auth pair, deliberately: the server span is opened outside this
 	// whole stack (main.go wraps it), but the identity that makes the span worth

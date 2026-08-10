@@ -52,14 +52,14 @@ type AddRecipeOutput struct {
 }
 
 func (a *App) getRecipe(ctx context.Context, input *RecipeByIDInput) (*RecipeOutput, error) {
-	userID := ctx.Value(contextKey("userID")).(string)
+	caller := callerFrom(ctx)
 
 	var recipe *common.Recipe
 	var err error
 	if id, convErr := strconv.Atoi(input.ID); convErr == nil {
-		recipe, err = service.GetRecipeByID(ctx, id, userID, a.db)
+		recipe, err = service.GetRecipeByID(ctx, id, caller, a.db)
 	} else {
-		recipe, err = service.GetRecipeBySlug(ctx, input.ID, userID, a.db)
+		recipe, err = service.GetRecipeBySlug(ctx, input.ID, caller, a.db)
 	}
 
 	if err != nil {
@@ -76,9 +76,9 @@ func (a *App) getRecipe(ctx context.Context, input *RecipeByIDInput) (*RecipeOut
 }
 
 func (a *App) addRecipe(ctx context.Context, input *RecipeInput) (*AddRecipeOutput, error) {
-	userID := ctx.Value(contextKey("userID")).(string)
+	caller := callerFrom(ctx)
 
-	id, err := service.AddRecipe(ctx, input.Body, userID, a.db)
+	id, err := service.AddRecipe(ctx, input.Body, caller, a.db)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("could not insert ingredients")
 	}
@@ -89,13 +89,13 @@ func (a *App) addRecipe(ctx context.Context, input *RecipeInput) (*AddRecipeOutp
 }
 
 func (a *App) editRecipe(ctx context.Context, input *RecipeInput) (*StatusOutput, error) {
-	userID := ctx.Value(contextKey("userID")).(string)
+	caller := callerFrom(ctx)
 
 	if input.Body.ID == 0 {
 		return nil, huma.Error400BadRequest("Error: missing id")
 	}
 
-	if err := service.EditRecipe(ctx, input.Body, userID, a.db); err != nil {
+	if err := service.EditRecipe(ctx, input.Body, caller, a.db); err != nil {
 		return nil, huma.Error500InternalServerError("could not update recipe")
 	}
 
@@ -122,13 +122,13 @@ func (a *App) purgeUnitsCache() {
 }
 
 func (a *App) deleteRecipe(ctx context.Context, input *DeleteRecipeInput) (*StatusOutput, error) {
-	userID := ctx.Value(contextKey("userID")).(string)
+	caller := callerFrom(ctx)
 
 	if input.Body.ID == 0 {
 		return nil, huma.Error400BadRequest("Error: missing id")
 	}
 
-	if err := service.DeleteRecipe(ctx, common.Recipe{ID: input.Body.ID}, userID, a.db); err != nil {
+	if err := service.DeleteRecipe(ctx, common.Recipe{ID: input.Body.ID}, caller, a.db); err != nil {
 		return nil, huma.Error500InternalServerError("could not delete recipe")
 	}
 

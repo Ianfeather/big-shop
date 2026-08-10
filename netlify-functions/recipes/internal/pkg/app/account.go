@@ -20,8 +20,8 @@ type AccountUserInput struct {
 }
 
 func (a *App) getAccount(ctx context.Context, _ *struct{}) (*AccountOutput, error) {
-	userID := ctx.Value(contextKey("userID")).(string)
-	account, err := service.GetAccount(ctx, a.db, userID)
+	caller := callerFrom(ctx)
+	account, err := service.GetAccount(ctx, a.db, caller)
 
 	if err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("Failed to get Account from db"), err)
@@ -31,10 +31,10 @@ func (a *App) getAccount(ctx context.Context, _ *struct{}) (*AccountOutput, erro
 }
 
 func (a *App) addUserToAccount(ctx context.Context, input *AccountUserInput) (*AccountOutput, error) {
-	userID := ctx.Value(contextKey("userID")).(string)
+	caller := callerFrom(ctx)
 	newUser := input.Body
 
-	accountID, err := service.GetAccountID(ctx, a.db, userID)
+	accountID, err := caller.AccountID()
 	if err != nil {
 		// Was: log the guess "current user is not associated with an account"
 		// and discard err - so a TiDB outage was reported, to the logs and to
@@ -52,7 +52,7 @@ func (a *App) addUserToAccount(ctx context.Context, input *AccountUserInput) (*A
 		return nil, fail(ctx, huma.Error500InternalServerError("Failed to add user to account"), err)
 	}
 
-	account, err := service.GetAccount(ctx, a.db, userID)
+	account, err := service.GetAccount(ctx, a.db, caller)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("Failed to get Account from db")
 	}
@@ -61,10 +61,10 @@ func (a *App) addUserToAccount(ctx context.Context, input *AccountUserInput) (*A
 }
 
 func (a *App) removeUserFromAccount(ctx context.Context, input *AccountUserInput) (*AccountOutput, error) {
-	userID := ctx.Value(contextKey("userID")).(string)
+	caller := callerFrom(ctx)
 	outgoingUser := input.Body
 
-	accountID, err := service.GetAccountID(ctx, a.db, userID)
+	accountID, err := caller.AccountID()
 	if err != nil {
 		// Was: log the guess "current user is not associated with an account"
 		// and discard err - so a TiDB outage was reported, to the logs and to
@@ -78,7 +78,7 @@ func (a *App) removeUserFromAccount(ctx context.Context, input *AccountUserInput
 		return nil, fail(ctx, huma.Error500InternalServerError("Failed to remove user from account"), err)
 	}
 
-	account, err := service.GetAccount(ctx, a.db, userID)
+	account, err := service.GetAccount(ctx, a.db, caller)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("Failed to get Account from db")
 	}

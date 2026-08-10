@@ -71,8 +71,8 @@ func getIngredientsByRecipeID(ctx context.Context, id int, db *sql.DB) ([]common
 }
 
 // GetRecipeBySlug fetches a recipe from the database by Slug
-func GetRecipeBySlug(ctx context.Context, slug string, userID string, db *sql.DB) (*common.Recipe, error) {
-	accountID, err := GetAccountID(ctx, db, userID)
+func GetRecipeBySlug(ctx context.Context, slug string, caller *common.Caller, db *sql.DB) (*common.Recipe, error) {
+	accountID, err := caller.AccountID()
 	if err != nil {
 		return nil, err
 	}
@@ -140,8 +140,8 @@ func GetRecipeBySlug(ctx context.Context, slug string, userID string, db *sql.DB
 }
 
 // GetRecipeByID fetches a recipe from the database by ID
-func GetRecipeByID(ctx context.Context, id int, userID string, db *sql.DB) (*common.Recipe, error) {
-	accountID, err := GetAccountID(ctx, db, userID)
+func GetRecipeByID(ctx context.Context, id int, caller *common.Caller, db *sql.DB) (*common.Recipe, error) {
+	accountID, err := caller.AccountID()
 	if err != nil {
 		return nil, fmt.Errorf("resolving account: %w", err)
 	}
@@ -214,10 +214,10 @@ func GetRecipeByID(ctx context.Context, id int, userID string, db *sql.DB) (*com
 // through (e.g. a bad unit) doesn't leave an orphaned recipe with no Ingredient Lines.
 // Returns the new recipe's ID so the caller can hand it back to the client
 // (e.g. for a post-create redirect) without a follow-up lookup.
-func AddRecipe(ctx context.Context, recipe common.Recipe, userID string, db *sql.DB) (int, error) {
+func AddRecipe(ctx context.Context, recipe common.Recipe, caller *common.Caller, db *sql.DB) (int, error) {
 	recipe = withCanonicalUnits(recipe)
 
-	accountID, err := GetAccountID(ctx, db, userID)
+	accountID, err := caller.AccountID()
 	if err != nil {
 		return 0, err
 	}
@@ -264,10 +264,10 @@ func AddRecipe(ctx context.Context, recipe common.Recipe, userID string, db *sql
 // writes then happen in one transaction, so a failure partway through (e.g. between
 // deleting and reinserting the recipe's Ingredient Lines) doesn't leave the recipe with
 // no Ingredient Lines.
-func EditRecipe(ctx context.Context, recipe common.Recipe, userID string, db *sql.DB) error {
+func EditRecipe(ctx context.Context, recipe common.Recipe, caller *common.Caller, db *sql.DB) error {
 	recipe = withCanonicalUnits(recipe)
 
-	accountID, err := GetAccountID(ctx, db, userID)
+	accountID, err := caller.AccountID()
 	if err != nil {
 		return fmt.Errorf("resolving account: %w", err)
 	}
@@ -318,8 +318,8 @@ func EditRecipe(ctx context.Context, recipe common.Recipe, userID string, db *sq
 }
 
 // DeleteRecipe removes a recipe from the db
-func DeleteRecipe(ctx context.Context, recipe common.Recipe, userID string, db *sql.DB) error {
-	accountID, err := GetAccountID(ctx, db, userID)
+func DeleteRecipe(ctx context.Context, recipe common.Recipe, caller *common.Caller, db *sql.DB) error {
+	accountID, err := caller.AccountID()
 	if err != nil {
 		return fmt.Errorf("resolving account: %w", err)
 	}

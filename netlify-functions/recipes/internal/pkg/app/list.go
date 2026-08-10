@@ -40,9 +40,9 @@ type ShoppingListHistoryOutput struct {
 }
 
 func (a *App) getList(ctx context.Context, _ *struct{}) (*ShoppingListOutput, error) {
-	userID := ctx.Value(contextKey("userID")).(string)
+	caller := callerFrom(ctx)
 
-	list, err := service.GetShoppingList(ctx, userID, a.db)
+	list, err := service.GetShoppingList(ctx, caller, a.db)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("Error Fetching Shopping List")
 	}
@@ -51,10 +51,10 @@ func (a *App) getList(ctx context.Context, _ *struct{}) (*ShoppingListOutput, er
 }
 
 func (a *App) createList(ctx context.Context, input *CreateListInput) (*ShoppingListOutput, error) {
-	userID := ctx.Value(contextKey("userID")).(string)
+	caller := callerFrom(ctx)
 	recipeIDs := input.Body
 
-	list, err := service.GenerateShoppingList(ctx, recipeIDs, userID, a.db)
+	list, err := service.GenerateShoppingList(ctx, recipeIDs, caller, a.db)
 
 	if err != nil {
 		if err == service.ErrInvalidRecipeID {
@@ -67,14 +67,14 @@ func (a *App) createList(ctx context.Context, input *CreateListInput) (*Shopping
 }
 
 func (a *App) addExtraListItem(ctx context.Context, input *ListItemInput) (*StatusOutput, error) {
-	userID := ctx.Value(contextKey("userID")).(string)
+	caller := callerFrom(ctx)
 	extraItem := input.Body
 
 	if extraItem.Name == "" {
 		return nil, huma.Error400BadRequest("Missing item name")
 	}
 
-	if err := service.AddExtraListItem(ctx, userID, extraItem.Name, extraItem.IsBought, a.db); err != nil {
+	if err := service.AddExtraListItem(ctx, caller, extraItem.Name, extraItem.IsBought, a.db); err != nil {
 		return nil, huma.Error500InternalServerError("Cannot add list items")
 	}
 
@@ -82,18 +82,18 @@ func (a *App) addExtraListItem(ctx context.Context, input *ListItemInput) (*Stat
 }
 
 func (a *App) buyListItem(ctx context.Context, input *ListItemInput) (*ShoppingListOutput, error) {
-	userID := ctx.Value(contextKey("userID")).(string)
+	caller := callerFrom(ctx)
 	listItem := input.Body
 
 	if listItem.Name == "" {
 		return nil, huma.Error400BadRequest("Missing item name")
 	}
 
-	if err := service.BuyListItem(ctx, userID, listItem.Name, listItem.IsBought, a.db); err != nil {
+	if err := service.BuyListItem(ctx, caller, listItem.Name, listItem.IsBought, a.db); err != nil {
 		return nil, huma.Error500InternalServerError("Error marking item as bought")
 	}
 
-	list, err := service.GetShoppingList(ctx, userID, a.db)
+	list, err := service.GetShoppingList(ctx, caller, a.db)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("Error getting shopping list")
 	}
@@ -102,14 +102,14 @@ func (a *App) buyListItem(ctx context.Context, input *ListItemInput) (*ShoppingL
 }
 
 func (a *App) clearList(ctx context.Context, _ *struct{}) (*ShoppingListOutput, error) {
-	userID := ctx.Value(contextKey("userID")).(string)
+	caller := callerFrom(ctx)
 
-	if err := service.RemoveAllListItems(ctx, userID, a.db); err != nil {
+	if err := service.RemoveAllListItems(ctx, caller, a.db); err != nil {
 		return nil, huma.Error500InternalServerError("Error removing list items")
 	}
 
 	// Log clear event for meal planning intelligence
-	if logErr := service.LogShoppingListClearEvent(ctx, userID, a.db); logErr != nil {
+	if logErr := service.LogShoppingListClearEvent(ctx, caller, a.db); logErr != nil {
 		// Recorded, not returned: clearing the list succeeded, and failing the
 		// request because its history row did not get written would be worse
 		// than losing the row.
@@ -120,14 +120,14 @@ func (a *App) clearList(ctx context.Context, _ *struct{}) (*ShoppingListOutput, 
 }
 
 func (a *App) getShoppingListHistory(ctx context.Context, _ *struct{}) (*ShoppingListHistoryOutput, error) {
-	userID := ctx.Value(contextKey("userID")).(string)
+	caller := callerFrom(ctx)
 
-	recentRecipes, err := service.GetRecentRecipeUsage(ctx, userID, 30, 10, a.db)
+	recentRecipes, err := service.GetRecentRecipeUsage(ctx, caller, 30, 10, a.db)
 	if err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("Error getting recent recipes"), err)
 	}
 
-	favoriteRecipes, err := service.GetFavoriteRecipes(ctx, userID, 10, a.db)
+	favoriteRecipes, err := service.GetFavoriteRecipes(ctx, caller, 10, a.db)
 	if err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("Error getting favorite recipes"), err)
 	}

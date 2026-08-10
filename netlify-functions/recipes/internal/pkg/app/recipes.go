@@ -21,8 +21,8 @@ type RecipesOutput struct {
 }
 
 func (a *App) getRecipes(ctx context.Context, _ *struct{}) (*RecipesOutput, error) {
-	userID := ctx.Value(contextKey("userID")).(string)
-	recipes, err := service.GetAllRecipes(ctx, a.db, userID)
+	caller := callerFrom(ctx)
+	recipes, err := service.GetAllRecipes(ctx, a.db, caller)
 
 	if err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("Failed to get recipes from db"), err)

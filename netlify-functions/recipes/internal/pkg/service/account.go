@@ -42,8 +42,8 @@ func GetAccountID(ctx context.Context, db dbConn, userID string) (int, error) {
 	return accountID, nil
 }
 
-func GetAccount(ctx context.Context, db *sql.DB, userID string) (a *common.Account, e error) {
-	accountID, err := GetAccountID(ctx, db, userID)
+func GetAccount(ctx context.Context, db *sql.DB, caller *common.Caller) (a *common.Account, e error) {
+	accountID, err := caller.AccountID()
 
 	if err != nil {
 		return nil, fmt.Errorf("resolving account: %w", err)

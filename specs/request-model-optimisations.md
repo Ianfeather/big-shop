@@ -76,6 +76,13 @@ bumping Go everywhere first — which is a reasonable thing to want (it would al
 Huma from v2.35.0, pinned for the same reason) but it is a different piece of work and
 must not be smuggled in here.
 
+> **This constraint has since lifted.** The observability work (#91) moved the repo to
+> **Go 1.25**, so v2.3.1 and v3 are both reachable now, as are Huma past v2.35.0 and
+> `go-sql-driver/mysql` v1.10.0 (Phase 2's amendment 3 pinned v1.9.3 for exactly the same
+> reason). The pins this spec shipped are therefore conservative rather than forced, and
+> nothing depends on them. Taking newer versions is still its own piece of work — the point
+> stands that it should not ride along inside something else.
+
 The upgrade also retires two unmaintained dependencies: `go-jwt-middleware` v1.0.0 and
 `form3tech-oss/jwt-go` (a fork of the abandoned `dgrijalva/jwt-go`).
 

@@ -174,6 +174,23 @@ was deployed and did not work. Read this before trying again:
   injected into containers in a multi-container Machine. The `api` container died on the same
   empty-DSN ping as before despite declaring no `environment:`.
 
+  **That first probe was flawed and was re-run.** It checked presence with `$DSN` inside the
+  command string, and Docker Compose interpolates `$VAR` at parse time from the *deploy-time*
+  environment — so those checks were substituted to empty before the container started and
+  proved nothing. Separately, `DSN` turned out to be `Staged` rather than `Deployed` at the
+  time, which would have explained the `api` failure on its own. Both faults were corrected: a
+  second canary probe ran with `DSN` confirmed `Deployed`, and with a command containing no `$`
+  at all (every check done by `grep` against `env` inside the container). Same answer:
+
+  ```
+  PROBERESULT DSN absent
+  PROBERESULT GRAFANA_ENDPOINT absent
+  PROBERESULT total_vars 17
+  ```
+
+  Seventeen variables: the three from `[env]`, nine `FLY_*`, and `HOME`/`PATH`/`PRIMARY_REGION`/
+  `PWD`/`SHLVL`. No secret of any kind. The finding is now clean.
+
   This is a platform behaviour that contradicts Fly's documentation, and it blocks the sidecar
   outright: the API needs `DSN` from a secret, so the moment the Machine becomes
   multi-container the application cannot start. Putting `DSN` in `[env]` is not a workaround —

@@ -113,15 +113,42 @@ present and is wrong:
   declared in the telemetry package, and Go compares context keys by type as well as value.
 
 ## Session 2: Phase 2 — production, and the checkpoint
-Status: pending
+Status: blocked
 Scope: OTel Collector as a sidecar in the Fly app; Go exports to `localhost:4318`; Grafana
 credentials in collector config only. The three exit criteria: production trace + correlated
 logs + metric; latency statistically unchanged; blackhole failure injection proving a dead
 collector is a silent drop.
 Depends on: Session 1
 Commit:
-Notes: **Will block on the user** — needs a Grafana Cloud Free stack in eu-central-1 (permanent
-per ADR-0007), its OTLP endpoint/instance ID/token set as `fly secrets`, and go-ahead to deploy.
+Notes: **BLOCKED on the user.** Needs, before any of this session can run:
+1. A Grafana Cloud Free stack (region is permanent — ADR-0007 picks eu-central-1/Frankfurt).
+2. Its OTLP endpoint, instance ID and token, to be set with `fly secrets set` — never committed.
+3. Go-ahead to deploy to production.
+
+Researched while waiting, so the session can move immediately once unblocked:
+
+- **The sidecar is achievable.** Fly supports multi-container Machines via a `[build.compose]`
+  section in `fly.toml` naming a compose file; containers share a network namespace, so the Go
+  process reaches the collector on `localhost:4318` exactly as ADR-0007 describes. Constraint:
+  *exactly one* service in that compose file may specify `build` — every other must use a
+  prebuilt image, which the collector does. The compose file must live in the build context
+  (`netlify-functions/recipes/`) and be named explicitly, since Fly's auto-detection would
+  otherwise find nothing there, and must not be confused with the repo-root `docker-compose.yml`
+  that serves local development.
+- **The collector's config needs a delivery mechanism.** It cannot be baked into an image
+  (no `build` allowed for sidecars) and there is no host filesystem to mount from. The
+  collector supports `--config=env:VAR`, so the whole YAML can travel as one Fly secret.
+- **A wrinkle in ADR-0007's stated rationale, worth knowing before relying on it.** The ADR
+  justifies the sidecar partly with "Grafana credentials live in collector config, not
+  application code". On Fly, `fly secrets` are exposed to *every* container in a Machine and
+  cannot be scoped to one service. So the separation is real at the level of *code* — nothing
+  in the Go source references a Grafana credential — but not at the level of process
+  environment. Not a reason to change the decision; a reason not to overstate it later.
+- **`SERVICE_VERSION` must be passed at deploy** (see Session 1's notes), or every production
+  trace claims to be `unknown`:
+  `fly deploy ./netlify-functions/recipes --build-arg SERVICE_VERSION=$(git rev-parse --short HEAD)`
+- **`DEPLOY_ENV=production`** needs setting in `fly.toml`'s `[env]`, or production telemetry
+  arrives labelled `development` and is indistinguishable from a laptop's in the same Tempo.
 
 ## Session 3: Phase 3a — widen the Go API
 Status: pending

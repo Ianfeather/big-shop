@@ -1,6 +1,6 @@
 ---
 spec: specs/request-model-optimisations.md
-status: planned
+status: in-progress
 branch: implement/request-model-optimisations
 pr:
 ---
@@ -16,23 +16,30 @@ Phase 2's "Decision required from Ian" gate was answered at planning: take
 `interpolateParams`, with the four amendments from the spec's security review.
 
 ## Session 0: Record the security review in the spec
-Status: pending
+Status: done
 Scope: The Phase 2 security review — corrects two false claims about the driver, adds the
 four amendments (DSN invariants, query-text log exposure, driver bump + collation pin,
 `[]byte` footgun), and states the recommendation.
 Depends on: none
-Commit:
+Commit: dc5b9ff
 Notes: Written before the run started, as an answer to Ian's question about prepared-query
 security. Committed first so the rest of the branch builds on the amended spec.
 
 ## Session 1: Phase 1 — Cache the JWKS
-Status: pending
+Status: done
 Scope: Upgrade `go-jwt-middleware` v1 → v2.3.0, cache the JWKS via `jwks.CachingProvider`,
 rewrite `userMiddleware` for v2 claims, delete `getPemCert`/`Jwks`/`JSONWebKeys`/
 `normalizeAudience` and their tests. Retires `form3tech-oss/jwt-go`.
 Depends on: Session 0
-Commit:
-Notes: Three deviations from the spec's literal instructions, all found by checking v2.3.0's
+Commit: ce9e104
+Notes: Green — gofmt, go vet, `go test ./... -race`, and the openapi drift check all pass;
+`TestKeyLookupFailureIsRefusedNotPanicked`, `TestHealthCarveOut`, `TestDefaultCacheControl`,
+`TestOnlyTheGlobalCatalogsOverrideTheDefault` and `TestEachRouteStampsItsOwnPolicy` verified
+individually. Measured against the real Auth0 tenant: **before** 115ms then ~14-18ms every
+request; **after** 96ms then ~0.02ms. The tenant does publish two keys at once, which is the
+premise the 5-minute TTL rests on — confirmed by the probe.
+
+Three deviations from the spec's literal instructions, all found by checking v2.3.0's
 actual source and all agreed in the approved plan:
   1. v2 has no `HandlerWithNext` — needs a negroni adapter around `CheckJWT`.
   2. v2's default error handler answers a *missing* token with 400 where v1 answered 401.

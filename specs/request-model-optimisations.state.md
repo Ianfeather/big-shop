@@ -1,8 +1,8 @@
 ---
 spec: specs/request-model-optimisations.md
-status: in-progress
+status: complete
 branch: implement/request-model-optimisations
-pr:
+pr: https://github.com/Ianfeather/big-shop/pull/90
 ---
 
 ## Scope of this run

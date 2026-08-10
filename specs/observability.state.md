@@ -123,6 +123,12 @@ Commit:
 Notes: **BLOCKED on the user.** Needs, before any of this session can run:
 1. A Grafana Cloud Free stack (region is permanent — ADR-0007 picks eu-central-1/Frankfurt).
 2. Its OTLP endpoint, instance ID and token, to be set with `fly secrets set` — never committed.
+   **Use the names Grafana's own OpenTelemetry tile emits**, so its snippets and docs line up
+   with what is actually set rather than needing translation at every reading:
+   `GRAFANA_CLOUD_OTLP_ENDPOINT`, `GRAFANA_CLOUD_INSTANCE_ID`, `GRAFANA_CLOUD_API_KEY`.
+   These are read by the *collector config only*. No Go code references them, and none should:
+   the application knows about `OTEL_EXPORTER_OTLP_ENDPOINT` pointing at `localhost:4318` and
+   nothing about where the collector forwards to.
 3. Go-ahead to deploy to production.
 
 Researched while waiting, so the session can move immediately once unblocked:

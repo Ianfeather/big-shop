@@ -143,6 +143,33 @@ Built and validated while blocked:
 - `fly.toml` — `[build.compose]` replacing `dockerfile`, and `DEPLOY_ENV = "production"`.
 - `deploy-api.yml` — passes `--build-arg SERVICE_VERSION` from the tested commit's sha.
 
+**ATTEMPTED AND FAILED, 2026-08-10 (PR #91 merged, PR #92 reverted the wiring).** The sidecar
+was deployed and did not work. Read this before trying again:
+
+- **`fly secrets` reached neither container.** The collector exited on `Configuration
+  references unset environment variable {"name": "GRAFANA_CLOUD_OTLP_ENDPOINT"}`, and the API
+  fell back to an empty `DSN` and died on `dial tcp 127.0.0.1:3306: connect: connection
+  refused` — which is what `sql.Open("mysql", "")` defaults to. All four secrets existed and
+  read `Deployed` throughout. Fly documents secrets as reaching every container in a Machine;
+  it did not happen. **Working hypothesis, unproven:** a compose service's `environment:` block
+  *replaces* the injected environment rather than merging with it — both services declared one.
+  If so, the fix is to move every value into `fly.toml`'s `[env]` (which does apply to all
+  containers) and declare no `environment:` in compose at all.
+- **Test it somewhere other than production.** A throwaway Fly app with the same config shape
+  and its own secrets, in the manner of `api-hosting-migration.md`'s Phase 0 probe. That is a
+  spend/approach decision for the user, not something to assume.
+- **Two operational lessons, both of which cost time here:**
+  - `flyctl deploy` **skips stopped machines**. A green deploy does not mean the fleet is
+    consistent; the failed machine sat on the broken config through two subsequent successful
+    deploys, and would have rebooted into it.
+  - `fly machine update --image` does **not** clear `containers[]`. A machine that has once
+    held a multi-container config has to be replaced, not updated. Cloning a healthy machine
+    and destroying the broken one is the way back without dropping below capacity.
+- **No outage, and the reason matters:** the app runs two machines and the rolling deploy
+  aborted after the first, so the second served the old image throughout. `fly.toml`'s comments
+  discuss "the machine" in the singular; that second machine is the only reason this was a
+  failed deploy rather than downtime. Do not scale to one.
+
 **The deploy route is the pull request, not a manual `fly deploy`.** `deploy-api.yml` fires on
 CI success against `master`, and deliberately refuses per-branch deploys ("dispatching from a
 feature branch would otherwise push that branch straight onto the production machine, and

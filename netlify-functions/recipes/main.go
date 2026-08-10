@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,7 +12,9 @@ import (
 
 	"recipes/internal/pkg/app"
 	"recipes/internal/pkg/common"
+	"recipes/internal/pkg/telemetry"
 
+	"github.com/XSAM/otelsql"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	negroniadapter "github.com/awslabs/aws-lambda-go-api-proxy/negroni"
@@ -20,6 +22,8 @@ import (
 	"github.com/go-sql-driver/mysql"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/urfave/negroni"
+	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var negroniLambda *negroniadapter.NegroniAdapter
@@ -30,6 +34,17 @@ var openapiAPI huma.API
 // rather than read from the environment again so that what is logged is what
 // the App actually built, not a second guess at it.
 var purgeConfigured bool
+
+// shutdownTelemetry flushes the three OTel providers at exit. Replaced by
+// init() with the real one; telemetry.Setup always returns a callable shutdown
+// even when telemetry is disabled or setup failed.
+//
+// Initialised to a no-op rather than left nil because init() returns early in
+// openapi mode, before Setup is ever reached. main() happens to branch away
+// before using it there, so a nil would not actually panic today - which is
+// exactly the kind of invariant that holds by accident until someone moves a
+// line. Cheaper to make it true than to rely on it.
+var shutdownTelemetry = func(context.Context) error { return nil }
 
 // basePath is the prefix every route is registered under when this runs as a
 // server - the Fly container in production, and `serve` locally - and it is the
@@ -105,7 +120,54 @@ func init() {
 		return
 	}
 
-	db, err := sql.Open("mysql", os.Getenv("DSN"))
+	// Telemetry is set up before the database is opened, and the order is
+	// load-bearing: otelsql captures the tracer provider when the DB is opened,
+	// so a Setup that ran afterwards would leave every query span going to the
+	// no-op provider installed by default - instrumentation that looks present
+	// and silently emits nothing.
+	//
+	// The error is deliberately swallowed. Setup already promises never to
+	// return a fatal condition (see its doc comment), and the whole point of
+	// ADR-0007's "telemetry must never affect the application" is that this
+	// line cannot be the reason Big Shop does not start. Unlike the DB ping
+	// below, which log.Fatalfs precisely because there is nothing to serve
+	// without it.
+	shutdownTelemetry, _ = telemetry.Setup(context.Background())
+
+	db, err := otelsql.Open("mysql", os.Getenv("DSN"),
+		otelsql.WithAttributes(semconv.DBSystemNameMySQL),
+		otelsql.WithSpanOptions(otelsql.SpanOptions{
+			// Emit a query span only when the caller passed a context that
+			// already carries one. Almost all of the service layer still calls
+			// db.Query/Exec/QueryRow rather than the *Context variants - 57 such
+			// call sites against a single Context one, the GetAllRecipes query
+			// this session threaded - and those resolve to context.Background(),
+			// which otelsql would otherwise turn into a *root* span, flooding
+			// Tempo with rootless single-span traces that mean nothing.
+			//
+			// This makes the incremental rollout self-managing rather than
+			// hazardous: a query lights up the moment its route is threaded
+			// with a context, and stays silent until then, with no further
+			// configuration. Session 3 threads the rest.
+			SpanFilter: func(ctx context.Context, _ otelsql.Method, _ string, _ []driver.NamedValue) bool {
+				return trace.SpanContextFromContext(ctx).IsValid()
+			},
+			// Connection acquisition is pool bookkeeping, not work anyone is
+			// debugging; it would double the span count for no information.
+			OmitConnectorConnect: true,
+			OmitConnResetSession: true,
+			// driver.ErrSkip is not a failure. It is how database/sql and the
+			// driver negotiate: the driver declines the fast path, the stack
+			// falls back to prepare-then-execute, and the query succeeds. Left
+			// recorded, *every* query span carries STATUS_CODE_ERROR and an
+			// "exception" event reading "driver: skip fast-path; continue as if
+			// unimplemented" - so every trace looks broken, and any error-rate
+			// metric or alert built on span status later is measuring nothing
+			// but this. Caught by reading the first trace back rather than by
+			// assuming it was fine.
+			DisableErrSkip: true,
+		}),
+	)
 
 	if err != nil {
 		fmt.Println("Failed to connect to database")
@@ -167,16 +229,36 @@ func main() {
 		// above the Netlify proxy's own 26s ceiling so the proxy is what
 		// gives up first rather than the origin truncating a response
 		// mid-flight.
+		if telemetry.Enabled() {
+			log.Println("telemetry enabled, exporting to " + os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+		} else {
+			log.Println("telemetry disabled (set OTEL_EXPORTER_OTLP_ENDPOINT to enable)")
+		}
+
 		server := http.Server{
 			Addr:         ":8080",
 			ReadTimeout:  10 * time.Second,
 			WriteTimeout: 30 * time.Second,
 			IdleTimeout:  120 * time.Second,
-			Handler:      router,
+			// Outside the negroni stack, so the span covers auth, CORS and
+			// routing rather than just the handler. Only the server mode is
+			// wrapped: the Lambda below is the rollback target from ADR-0006 and
+			// is left exactly as it was, which is also why it needs no telemetry
+			// of its own - it serves no traffic unless the migration is undone.
+			Handler: telemetry.Handler(router, basePath),
 		}
 		// Fatal rather than ignored: a bind failure used to exit 0 silently,
 		// which on Fly would be a restart loop with no reason recorded.
-		log.Fatal(server.ListenAndServe())
+		//
+		// ListenAndServe only returns on failure, so this is the end of the
+		// process either way and the buffered telemetry is about to be lost.
+		// Flushing first costs a bounded five seconds and means the trace of
+		// whatever went wrong immediately beforehand actually arrives.
+		err := server.ListenAndServe()
+		flushCtx, cancel := context.WithTimeout(context.Background(), telemetry.ShutdownTimeout)
+		_ = shutdownTelemetry(flushCtx)
+		cancel()
+		log.Fatal(err)
 	} else {
 		lambda.Start(handler)
 	}

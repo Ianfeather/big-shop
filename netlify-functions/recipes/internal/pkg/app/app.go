@@ -10,6 +10,7 @@ import (
 	"os"
 	"recipes/internal/pkg/common"
 	"recipes/internal/pkg/purge"
+	"recipes/internal/pkg/telemetry"
 
 	jwtmiddleware "github.com/auth0/go-jwt-middleware"
 	"github.com/danielgtaylor/huma/v2"
@@ -306,6 +307,18 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, huma.API, error) {
 		n.Use(negroni.HandlerFunc(jwtMiddleware.HandlerWithNext))
 		n.Use(negroni.HandlerFunc(userMiddleware))
 	}
+	// After the auth pair, deliberately: the server span is opened outside this
+	// whole stack (main.go wraps it), but the identity that makes the span worth
+	// finding is only on the context once one of the two middlewares above has
+	// put it there. Before them, there is nothing to record.
+	//
+	// The accessor is passed in rather than let telemetry read the context
+	// itself, because contextKey is unexported and Go compares context keys by
+	// type - see telemetry.Middleware's comment.
+	n.Use(negroni.HandlerFunc(telemetry.Middleware(base, func(r *http.Request) string {
+		sub, _ := r.Context().Value(contextKey("userID")).(string)
+		return sub
+	})))
 	n.UseHandler(router)
 
 	return n, api, nil

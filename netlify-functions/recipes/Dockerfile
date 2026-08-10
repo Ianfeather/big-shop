@@ -25,6 +25,16 @@ FROM gcr.io/distroless/static-debian12:nonroot
 
 COPY --from=build /out/recipes /usr/local/bin/recipes
 
+# The deployed revision, surfaced as OTel's service.version so a trace can be
+# tied to the build that produced it ("is this still happening after the fix?").
+# Passed at deploy time:
+#   fly deploy ./netlify-functions/recipes --build-arg SERVICE_VERSION=$(git rev-parse --short HEAD)
+# Defaults to "unknown" rather than a fake sha: telemetry.version() falls back to
+# "dev", and a container claiming to be a dev build is less misleading than one
+# claiming to be a commit it isn't.
+ARG SERVICE_VERSION=unknown
+ENV SERVICE_VERSION=$SERVICE_VERSION
+
 USER nonroot:nonroot
 
 EXPOSE 8080

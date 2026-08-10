@@ -23,6 +23,13 @@ than by editing the spec:
 4. Phase 3's "remaining metrics" (import-outcome, LLM tokens) are relocated to Session 5. No Go
    file references OpenAI — every LLM call is in Next.js — and import *source* is never known to
    the Go API.
+5. **e2e runs without telemetry** — decided during Session 1, not at planning time, and
+   recorded here because it contradicts a spec decision line and an ADR sentence.
+   `playwright.config.ts` passes `START_LGTM=false` and an empty
+   `OTEL_EXPORTER_OTLP_ENDPOINT`. `grafana/otel-lgtm` is a ~1GB image running five services;
+   nothing in `e2e/` asserts on telemetry, so the pull would be added to every CI run to prove
+   nothing. ADR-0007 has been amended rather than left contradicting the code — the clause
+   exists to protect the credential boundary, which holds either way.
 
 ## Session 0: Go toolchain 1.23 → 1.25
 Status: done
@@ -48,7 +55,7 @@ calls: the stale go-1.23 rationale on the Huma pin in `follow-ups-resolved.md:17
 netlify.toml comment of mine that mis-stated *why* tidy drops a redundant toolchain line.
 
 ## Session 1: Phase 1 — vertical slice against local LGTM
-Status: pending
+Status: done
 Scope: `grafana/otel-lgtm` as a third docker-compose service (OTLP 4318, Grafana on
 `GRAFANA_PORT:-3200`); verify `dev-full.sh` and `e2e/env.ts`'s `COMPOSE_PROJECT_NAME` isolation
 still hold with a third service. `GET /recipes` instrumented end to end: resource attributes,
@@ -70,6 +77,29 @@ service functions taking a bare `*sql.DB`.
 
 Pin `grafana/otel-lgtm:0.30.1` (matching the repo's habit of pinning `mysql:8.0`,
 `air@v1.61.1`), not `latest`.
+
+**Two Phase 1 items are knowingly incomplete, and Session 3 / Session 2 own them:**
+
+- *"otelsql child spans for each query"* — `GET /recipes` runs two queries, and only one is
+  spanned. `GetAllRecipes` was threaded to `QueryContext`, but it first calls
+  `GetAccountID(db, userID)`, which has no context and is therefore suppressed by the
+  SpanFilter (correctly — the alternative is a rootless span). Threading `GetAccountID` means
+  21 call sites, 18 of which would take `context.Background()` because their own callers have
+  no context either, and Session 3 would immediately rewrite all of them. Deferred to
+  Session 3 rather than churned twice.
+- *`service.version` (git sha)* — `version()` reads `SERVICE_VERSION`, and the Dockerfile now
+  declares the build arg that carries it, defaulting to `unknown`. Nothing passes a real sha
+  yet because nothing deploys yet: **Session 2 must add
+  `--build-arg SERVICE_VERSION=$(git rev-parse --short HEAD)` to the Fly deploy**, or every
+  production trace will claim to be `unknown`.
+
+Two bugs found by reading telemetry back rather than trusting that export succeeded, both
+recorded because they are the failure mode of this whole spec — instrumentation that looks
+present and is wrong:
+- Every query span carried `STATUS_CODE_ERROR` from `driver.ErrSkip`, which is fast-path
+  negotiation, not a failure. Fixed with `DisableErrSkip`.
+- `user.sub` was silently absent: the value was looked up with a same-shaped context key type
+  declared in the telemetry package, and Go compares context keys by type as well as value.
 
 ## Session 2: Phase 2 — production, and the checkpoint
 Status: pending

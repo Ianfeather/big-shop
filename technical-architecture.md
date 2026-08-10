@@ -52,6 +52,36 @@ Located in `netlify-functions/recipes/`:
 - `fly.toml`: one always-on `shared-cpu-1x`/512MB machine in `fra`
 - `internal/pkg/app/app.go`: App struct, JWT middleware, all route definitions (`GetRouter`, ~line 145)
 - `internal/pkg/app/*.go`: Feature handlers
+- `internal/pkg/telemetry/`: OpenTelemetry setup (`telemetry.go`) and the HTTP
+  instrumentation (`http.go`)
+
+### Observability
+
+Traces, metrics and logs go out over OTLP/HTTP to whatever
+`OTEL_EXPORTER_OTLP_ENDPOINT` names — `grafana/otel-lgtm` locally, an OTel
+Collector sidecar on Fly in production. **An unset endpoint disables the SDK
+entirely**, which is what `go test`, the Lambda path and the e2e stack get.
+Decisions: [ADR-0007](./docs/adr/0007-observability-otel-grafana-cloud.md);
+what telemetry deliberately omits: [ADR-0008](./docs/adr/0008-what-telemetry-does-not-carry.md).
+
+Three things about the wiring are easy to break by tidying:
+
+- **`telemetry.Setup` runs before the DB is opened** in `main.go`'s `init()`.
+  `otelsql` captures the tracer provider at `Open`, so setting up afterwards
+  leaves every query span going to the no-op provider — instrumentation that
+  looks present and emits nothing.
+- **`otelsql` only spans a query whose context already carries one**
+  (`SpanFilter` in `main.go`). Most of the service layer still calls
+  `db.Query` rather than `QueryContext`, and those would otherwise become
+  *root* spans — rootless single-span traces by the thousand. A route lights
+  up when its context is threaded through, and stays silent until then.
+- **`DisableErrSkip`** is set because `driver.ErrSkip` is not a failure: it is
+  how `database/sql` and the driver negotiate the fast path. Left recorded,
+  every query span carries `STATUS_CODE_ERROR`.
+
+Instrumentation currently covers `GET /recipes` only — an allow-list in
+`telemetry/http.go` (`phase1Routes`) — which the observability spec widens to
+every route next.
 
 **Route list**: routes are registered in `internal/pkg/app/app.go`'s `GetRouter`, using [Huma](https://github.com/danielgtaylor/huma) (`humamux`, on top of the same `gorilla/mux` router) so each operation's request/response types double as its OpenAPI schema - no separate hand-maintained doc to drift. The generated spec is committed at [`docs/openapi.yaml`](./docs/openapi.yaml); regenerate it with `cd netlify-functions/recipes && go run . openapi > ../../docs/openapi.yaml` (no DB needed - route registration never touches it). `.github/workflows/ci.yml`'s `go` job fails if the committed spec is stale relative to `app.go` (it used to be `build.sh`, i.e. only during a Netlify deploy). All routes except `/health` require Auth0 JWT validation; the user ID is extracted from the JWT `sub` claim and threaded through context to handlers.
 

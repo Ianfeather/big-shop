@@ -50,10 +50,17 @@ This runs `scripts/dev-full.sh`, which:
   `serve` mode — the same one the production container on Fly runs —
   `DISABLE_AUTH=true`, hot-reloaded with `air` — edit any `.go` file and
   it rebuilds automatically) services.
+- Brings up `lgtm` (`grafana/otel-lgtm` — Collector, Tempo, Loki, Prometheus
+  and Grafana in one image), the local stand-in for the Grafana Cloud stack.
+  Grafana is on **3200**, not 3000 — the web app keeps 3000. The API exports
+  to it over the compose network at `lgtm:4318` and is never blocked on it
+  being up. Opt out with `START_LGTM=false`, which is what the e2e suite does
+  (see below). See [ADR-0007](./docs/adr/0007-observability-otel-grafana-cloud.md).
 - Waits for the API's `/health` endpoint, then runs Next.js natively on the
   host (not dockerized — keeps fast refresh) on port 3000 by default.
 - Ports are overridable if they clash with another checkout/worktree:
-  `DB_PORT`, `API_PORT`, `WEB_PORT` env vars (see the script for defaults).
+  `DB_PORT`, `API_PORT`, `WEB_PORT`, `GRAFANA_PORT`, `OTLP_HTTP_PORT` env vars
+  (see the script for defaults).
 - The seeded dev user is `local-dev-user`, already linked to account id 1
   (the account `migrations/008_user.sql` creates on a fresh DB), with two
   sample recipes. `docker compose down -v` wipes the DB volume, so the next
@@ -187,6 +194,14 @@ run `test:e2e:stop` first to tear down any containers left over from an
 interrupted previous run (otherwise `dev-full.sh`'s own auto-increment-on-
 collision port logic silently drifts to different ports than the ones pinned
 in `e2e/env.ts`).
+
+**The e2e stack deliberately runs without telemetry.** `playwright.config.ts`
+passes `START_LGTM=false` and an empty `OTEL_EXPORTER_OTLP_ENDPOINT`, so
+neither the LGTM container nor the OTel SDK inside the Go API starts. Nothing
+in `e2e/` asserts on telemetry, and `grafana/otel-lgtm` is a ~1GB image whose
+pull would be added to every CI run to prove nothing. ADR-0007's "local LGTM
+for dev and e2e" is about keeping Grafana Cloud credentials out of everything
+but production, which holds either way.
 
 **`test:e2e:stop` passes `--volumes`, so every run starts from a freshly
 migrated and seeded database.** That matters more than it sounds: MySQL only

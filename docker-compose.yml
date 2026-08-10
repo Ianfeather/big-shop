@@ -27,6 +27,30 @@ services:
       timeout: 5s
       retries: 20
 
+  # Collector, Tempo, Loki, Prometheus and Grafana in one image - the local
+  # stand-in for the Grafana Cloud stack, so no cloud credentials exist outside
+  # production and development noise never touches the free-tier quota
+  # (docs/adr/0007-observability-otel-grafana-cloud.md).
+  #
+  # Grafana is on ${GRAFANA_PORT:-3200}, NOT 3000. specs/observability.md says
+  # 3000 is free because "dev-full.sh serves the web app on 3001" - it doesn't:
+  # scripts/dev-full.sh defaults WEB_PORT to 3000 and only moves off it on a
+  # collision. Publishing Grafana there would silently push the web app to 3001
+  # on every `npm run dev:full`, so Grafana gets its own port instead.
+  #
+  # No healthcheck and nothing depends_on it: a dead collector must never be
+  # able to hold up the API (ADR-0007's "telemetry must never affect the
+  # application"), and that has to be true of the local stack too or the failure
+  # mode is only ever exercised in production.
+  lgtm:
+    image: grafana/otel-lgtm:0.30.1
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3200}:3000"
+      - "${OTLP_HTTP_PORT:-4318}:4318"
+    volumes:
+      - bigshop-lgtm-data:/data
+
   api:
     build:
       context: ./netlify-functions/recipes
@@ -39,6 +63,14 @@ services:
       DSN: "root:root@tcp(db:3306)/bigshop?parseTime=true"
       DISABLE_AUTH: "true"
       DEV_USER_ID: "local-dev-user"
+      # Read by the OTel SDK's own env handling (telemetry.Setup passes no
+      # explicit endpoint). Empty means telemetry is off, which is what
+      # `go test`, the Lambda path and the e2e stack get.
+      #
+      # The `-` (not `:-`) is deliberate: it substitutes the default only when
+      # the variable is *unset*, so e2e can pass an explicit empty string to
+      # turn telemetry off, rather than having the default reinstated.
+      OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT-http://lgtm:4318}"
     ports:
       - "${API_PORT:-8080}:8080"
     volumes:
@@ -46,3 +78,4 @@ services:
 
 volumes:
   bigshop-db-data:
+  bigshop-lgtm-data:

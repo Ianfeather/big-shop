@@ -31,11 +31,20 @@ That asymmetry is the point: the awkward pattern is confined to the four routes 
 does not matter, rather than applied to the whole API. See
 [ADR-0006](./0006-go-api-leaves-netlify-functions.md).
 
-**Local development and e2e** use `grafana/otel-lgtm` in `docker-compose.yml` — Collector,
+**Local development** uses `grafana/otel-lgtm` in `docker-compose.yml` — Collector,
 Tempo, Loki, Prometheus and Grafana in one image — exporting to `localhost:4318`. Grafana
 Cloud credentials therefore exist only in Fly and Netlify production config, development
 noise never touches the free-tier quota, and the feedback loop while writing
 instrumentation is sub-second.
+
+**e2e does not run it.** This clause originally read "Local development and e2e", and the
+e2e half was dropped when it was implemented: `playwright.config.ts` passes
+`START_LGTM=false` and an empty `OTEL_EXPORTER_OTLP_ENDPOINT`, so neither the container nor
+the SDK inside the Go API starts. `grafana/otel-lgtm` is a ~1GB image running five
+services, and nothing in `e2e/` asserts on telemetry — that pull would be added to every CI
+run to prove nothing. What this clause exists to protect is the credential boundary, which
+holds either way: there is still no Grafana Cloud credential outside production. Revisit if
+an e2e test ever needs to assert on emitted telemetry.
 
 ## The Netlify flush has dangerous defaults
 

@@ -71,8 +71,22 @@ jobs:
       # `fly tokens create deploy` - app-scoped and deploy-only, unlike a
       # personal access token. See docs/fly-migration-runbook.md. Until it
       # exists, every run of this workflow fails at this step.
+      # SERVICE_VERSION becomes OTel's service.version on every span, metric and
+      # log line the API emits, which is what makes "is this still happening
+      # after the fix?" answerable at all. It has to be passed here because the
+      # image is built by Fly's remote builder from a context that is the Go
+      # module alone - there is no .git in it to derive a sha from.
+      #
+      # The same ref the checkout above used, so the version a trace reports and
+      # the commit CI tested are the same thing. Falls back to github.sha for
+      # workflow_dispatch, where there is no triggering workflow_run. Without
+      # this the Dockerfile's default applies and every production trace claims
+      # to be "unknown" - which fails quietly, since telemetry still flows.
       - name: Deploy
-        run: flyctl deploy --remote-only --config fly.toml
+        run: |
+          flyctl deploy --remote-only --config fly.toml \
+            --build-arg SERVICE_VERSION="${SERVICE_VERSION::7}"
         working-directory: netlify-functions/recipes
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          SERVICE_VERSION: ${{ github.event.workflow_run.head_sha || github.sha }}

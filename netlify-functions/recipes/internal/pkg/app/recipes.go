@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"recipes/internal/pkg/service"
+	"recipes/internal/pkg/telemetry"
 
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -22,7 +23,7 @@ type RecipesOutput struct {
 
 func (a *App) getRecipes(ctx context.Context, _ *struct{}) (*RecipesOutput, error) {
 	userID := ctx.Value(contextKey("userID")).(string)
-	recipes, err := service.GetAllRecipes(a.db, userID)
+	recipes, err := service.GetAllRecipes(ctx, a.db, userID)
 
 	if err != nil {
 		log.Println(err)
@@ -33,6 +34,15 @@ func (a *App) getRecipes(ctx context.Context, _ *struct{}) (*RecipesOutput, erro
 	for i, r := range recipes {
 		summaries[i] = RecipeSummary(r)
 	}
+
+	// A structural count, not content: how many Recipes came back is exactly the
+	// kind of thing worth knowing when reconstructing a slow request afterwards,
+	// and their names are exactly what ADR-0008 §1 says must not be here.
+	//
+	// InfoContext, not Info: the trace_id is read from the context, and a log
+	// line without one still arrives in Loki but can no longer be tied to the
+	// trace it belongs to.
+	telemetry.Logger().InfoContext(ctx, "listed recipes", "recipe.count", len(summaries))
 
 	return &RecipesOutput{Body: summaries}, nil
 }

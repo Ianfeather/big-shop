@@ -46,6 +46,13 @@ export default defineConfig({
       API_PORT: String(API_PORT),
       DB_PORT: String(DB_PORT),
       COMPOSE_PROJECT_NAME,
+      // No observability stack for e2e: nothing here asserts on telemetry, and
+      // grafana/otel-lgtm is a ~1GB image whose pull would be added to every CI
+      // run to prove nothing. The empty endpoint turns the SDK off inside the
+      // Go API too, so there are no background exporters retrying against a
+      // collector that was never started. See scripts/dev-full.sh.
+      START_LGTM: 'false',
+      OTEL_EXPORTER_OTLP_ENDPOINT: '',
     },
   },
 });

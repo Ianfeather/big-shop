@@ -17,15 +17,15 @@ package = "@netlify/plugin-nextjs"
 # here - which is exactly why removing this pin looks safe from the repo alone.)
 #
 # Dropping it would hand that build whatever Go version Netlify's image
-# defaults to. go.mod's `toolchain go1.23.12` line means a default of 1.21+
-# would fetch the right toolchain and survive; a default below that fails, and a
+# defaults to. go.mod's `go 1.25.0` directive means a default of 1.21+ would
+# fetch the matching toolchain and survive; a default below that fails, and a
 # failed Netlify build takes the whole site down, not just the API. Netlify's
 # default has historically trailed well behind - not a bet worth taking for the
 # sake of deleting two lines a few days early.
 #
 # Phase 5 deletes the function, and this pin goes with it.
 [build.environment]
-  GO_VERSION = "1.23"
+  GO_VERSION = "1.25"
 
 # Proxies the Go API, which now runs on Fly.io in Frankfurt
 # (docs/adr/0006-go-api-leaves-netlify-functions.md), so it stays on

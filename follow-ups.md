@@ -486,9 +486,10 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
 
     **Designed as Phase 1 of
     [`specs/request-model-optimisations.md`](./specs/request-model-optimisations.md)**,
-    which is where the implementation detail lives — including the one constraint that
-    decides the approach: `go-jwt-middleware` **v2.3.0** is the last release declaring
-    `go 1.23.0`, and this repo pins Go 1.23 in four places.
+    which is where the implementation detail lives. That spec's approach turned on one
+    constraint — `go-jwt-middleware` **v2.3.0** was the last release declaring `go 1.23.0`,
+    and this repo pinned Go 1.23 in four places. **That constraint is gone**: #91 moved the
+    repo to Go 1.25, and the API now runs v2.3.1. Going further is #57.
 
 55. **Photo Import's extraction runs after the response, and nothing establishes that a
     Netlify function stays alive to finish it.** `pages/api/recipe-image.ts` answers `202`
@@ -541,3 +542,42 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     of read, which is exactly what CLAUDE.md's "a flaky-looking e2e failure gets investigated, not
     re-run-until-green" exists to prevent. And a 500 here is a lie to any client: the browser's
     delete button cannot tell "already gone, refresh your list" from "the API is down".
+
+57. **Upgrade `go-jwt-middleware` to v3.** Split off while removing the Go 1.23 version
+    pins (see #54 and `specs/request-model-optimisations.md`). Once #91 moved the repo to
+    Go 1.25, three pinned dependencies came unstuck at once — `go-sql-driver/mysql` and
+    Huma were straight version bumps and were taken there and then, but
+    `go-jwt-middleware` v2 → v3 is a **major version**, so it is queued here rather than
+    smuggled into an unrelated PR. The API sits at **v2.3.1**, the newest v2, in the
+    meantime; nothing is blocked.
+
+    It is a rewrite of the wiring, not a version swap:
+
+    - **Constructors became options-based and now return errors.**
+      `validator.New(keyFunc, RS256, issuer, []string{audience})` becomes
+      `validator.New(WithKeyFunc(...), WithAlgorithm(...), WithIssuer(...), WithAudience(...))`,
+      and both `jwks.NewCachingProvider` and `jwtmiddleware.New` gained an `error` return.
+      `internal/pkg/app/app.go`'s `newJWTMiddleware` is the only place that has to change,
+      which is the one piece of good news.
+    - **The underlying JWT library changed** from `go-jose` to `lestrrat-go/jwx`. That
+      reaches the tests: `TestKeyLookupFailureIsRefusedNotPanicked` mints its token with
+      go-jose, so either go-jose stays as a test-only dependency or the fixture moves to
+      `jwx`. It has already been rewritten once for the same reason (it used
+      `form3tech-oss/jwt-go` before v2).
+    - **Claims move out of `ContextKey{}`** and into `core.GetClaims[T](ctx)`, so
+      `userMiddleware` changes too.
+
+    Two things to check rather than assume, both of which the v2 work had to pin down:
+
+    - **A missing token must still answer 401, not 400.** v2's `DefaultErrorHandler`
+      answers 400, which is why `authErrorHandler` exists at all; `TestRefusalsAnswer401`
+      guards it and must stay green.
+    - **`CachingProvider`'s TTL semantics.** v2 caches the whole key set for the TTL and
+      does not refresh on an unknown `kid` — an accepted limitation, argued against the
+      tenant publishing two keys at once. v3 adds `WithCache` and
+      `WithStrictJWKSURIOrigin`, so re-read that argument rather than carrying it over.
+
+    Worth doing for more than currency: v3 validates the issuer **before** fetching the
+    JWKS, explicitly to prevent SSRF. On v2 a token carrying an attacker-chosen `iss`
+    reaches the key fetch first, which is the shape #54 flagged as "unauthenticated work"
+    in the first place.

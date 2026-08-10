@@ -18,17 +18,26 @@ app = "big-shop-api"
 # accepted in ADR-0006; it is still ~90ms better than us-east-2.
 primary_region = "fra"
 
-# Two containers in one Machine: the Go API and an OpenTelemetry Collector
-# sidecar (docs/adr/0007). `file` is explicit because Fly's auto-detection looks
-# for compose.yaml/docker-compose.yml in the build context - this directory -
-# and would find nothing; the repo-root docker-compose.yml is the local
-# development stack and must never be what gets deployed.
+# Single container, deliberately - see compose.fly.yml, which is written and
+# validated but NOT wired up here.
 #
-# This replaces `dockerfile = "Dockerfile"`: the Dockerfile is now named by the
-# `api` service inside the compose file instead. Both keys together would be two
-# answers to the same question.
-[build.compose]
-  file = "compose.fly.yml"
+# It was, briefly, and the deploy failed: under `[build.compose]`, `fly secrets`
+# reached neither container. The collector exited with "Configuration references
+# unset environment variable GRAFANA_CLOUD_OTLP_ENDPOINT", and the API - which
+# has read DSN from a secret since it moved to Fly - fell back to an empty DSN
+# and died on `dial tcp 127.0.0.1:3306: connect: connection refused`. Both
+# containers hit their restart limits and the machine stopped. Fly's docs say
+# "Secrets set with fly secrets are available to every container in the
+# Machine"; that did not hold here, and the likeliest reason is that a compose
+# service's `environment:` block replaces the injected environment rather than
+# merging with it.
+#
+# Restored to the single-container build until that is understood and proved.
+# The Go instrumentation stays shipped and is simply dormant: with no
+# OTEL_EXPORTER_OTLP_ENDPOINT set, telemetry.Setup is a no-op and the process
+# behaves exactly as it did before any of this.
+[build]
+  dockerfile = "Dockerfile"
 
 # The Go process reads five environment variables (grep os.Getenv). Two are
 # public identifiers and live here, in version control, so a deploy cannot

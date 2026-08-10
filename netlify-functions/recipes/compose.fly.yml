@@ -1,6 +1,21 @@
 # Multi-container Machine definition for Fly: the Go API plus an OpenTelemetry
 # Collector sidecar, per docs/adr/0007-observability-otel-grafana-cloud.md.
 #
+# !! NOT CURRENTLY WIRED UP. fly.toml points at the Dockerfile, not at this
+# file. !!
+#
+# It was wired up once and the deploy failed: `fly secrets` reached neither
+# container. The collector exited on "Configuration references unset environment
+# variable GRAFANA_CLOUD_OTLP_ENDPOINT"; the API fell back to an empty DSN and
+# died on "dial tcp 127.0.0.1:3306: connect: connection refused". All four
+# secrets existed and read `Deployed` at the time. Fly documents secrets as
+# available to every container in a Machine, so the working hypothesis is that
+# the `environment:` blocks below *replace* the injected environment rather than
+# merging with it - which would mean the fix is to move every value into
+# fly.toml's `[env]` (which does apply to all containers) and declare no
+# `environment:` here at all. Unproven; that is the next thing to test, and it
+# must be tested somewhere other than the machine serving production.
+#
 # NOT a local-development file. `docker-compose.yml` at the repository root is
 # the local stack (MySQL, the API with hot reload, and grafana/otel-lgtm); this
 # one is only ever read by `fly deploy`, via fly.toml's [build.compose]. It is

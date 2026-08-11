@@ -18,26 +18,37 @@ app = "big-shop-api"
 # accepted in ADR-0006; it is still ~90ms better than us-east-2.
 primary_region = "fra"
 
-# Single container for now - the collector sidecar is coming, but via
-# `[experimental] machine_config`, not `[build.compose]`.
+# Two containers in one Machine - the Go API and an OpenTelemetry Collector
+# sidecar (docs/adr/0007-observability-otel-grafana-cloud.md) - defined in
+# machine_config.json. `container` names which of them receives the image built
+# from the Dockerfile below; the collector runs a published image.
 #
-# A `[build.compose]` deploy was tried and failed: no `fly secrets` reached
-# either container, so the API fell back to an empty DSN and died on
-# `dial tcp 127.0.0.1:3306: connect: connection refused` before it could serve
-# anything. The cause is **not** a platform bug, and not the
-# compose-`environment:` interaction first suspected: in a multi-container
-# Machine each container must *declare* which secrets it receives, and the
-# compose path provides no way to say so. Proved by probe, three times over -
-# see specs/observability.state.md.
+# **Why machine_config and not [build.compose].** A compose deploy was tried
+# first and failed outright: no `fly secrets` reached either container, so the
+# API fell back to an empty DSN and died on
+# `dial tcp 127.0.0.1:3306: connect: connection refused` before serving
+# anything. The cause is not a platform bug - in a multi-container Machine a
+# container receives ONLY the secrets it declares, and the compose path gives no
+# way to declare them. Proved by probe; see specs/observability.state.md.
 #
-# The mechanism that does work is a machine_config JSON naming, per container,
-# a `secrets: [{"env_var": "DSN"}]` array. That is strictly better than compose
-# here: it also carries per-container `files`, so the collector's config can be
-# a real file rather than smuggled through an environment variable.
+# **The trap this introduces, and it is a quiet one.** `fly secrets set` is no
+# longer sufficient by itself. A secret not listed in that container's `secrets`
+# array is simply absent at runtime, with nothing anywhere reporting a problem -
+# which for a credential means a feature that fails only when exercised. Adding
+# a secret is now a two-part change: set it, and declare it.
 #
-# Until that lands, the Go instrumentation stays shipped and dormant: with no
-# OTEL_EXPORTER_OTLP_ENDPOINT set, telemetry.Setup is a no-op and the process
-# behaves exactly as it did before any of this.
+# Live example: SENDGRID_API_KEY is read by internal/pkg/app/user.go for
+# invitation emails and is NOT currently set on this app at all (`fly secrets
+# list`), so that flow is already broken independently of any of this. When it
+# is set, it must also be added to the `api` container's `secrets` array or it
+# still will not arrive.
+#
+# `[experimental]` is Fly's own naming for this block, not a comment on how
+# settled the approach is.
+[experimental]
+  machine_config = "machine_config.json"
+  container = "api"
+
 [build]
   dockerfile = "Dockerfile"
 

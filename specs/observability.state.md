@@ -113,7 +113,7 @@ present and is wrong:
   declared in the telemetry package, and Go compares context keys by type as well as value.
 
 ## Session 2: Phase 2 — production, and the checkpoint
-Status: blocked
+Status: in-progress
 Scope: OTel Collector as a sidecar in the Fly app; Go exports to `localhost:4318`; Grafana
 credentials in collector config only. The three exit criteria: production trace + correlated
 logs + metric; latency statistically unchanged; blackhole failure injection proving a dead
@@ -143,56 +143,21 @@ Built and validated while blocked:
 - `fly.toml` — `[build.compose]` replacing `dockerfile`, and `DEPLOY_ENV = "production"`.
 - `deploy-api.yml` — passes `--build-arg SERVICE_VERSION` from the tested commit's sha.
 
-**ATTEMPTED AND FAILED, 2026-08-10 (PR #91 merged, PR #92 reverted the wiring).** The sidecar
-was deployed and did not work. Read this before trying again:
+**Implemented via `machine_config`, after a failed attempt with `[build.compose]`.**
 
-- **`fly secrets` reached neither container.** The collector exited on `Configuration
-  references unset environment variable {"name": "GRAFANA_CLOUD_OTLP_ENDPOINT"}`, and the API
-  fell back to an empty `DSN` and died on `dial tcp 127.0.0.1:3306: connect: connection
-  refused` — which is what `sql.Open("mysql", "")` defaults to. All four secrets existed and
-  read `Deployed` throughout. Fly documents secrets as reaching every container in a Machine;
-  it did not happen.
-- **The cause is now established, and it is a configuration requirement, not a platform bug.**
-  Ian pushed back on the "Fly bug" conclusion - correctly, on the grounds that a fault this
-  severe would have been hit and fixed by many customers - and pointed at
-  https://community.fly.io/t/secrets-not-injecting-as-env-vars-for-multi-container-machine-config-setup/28066
-  **In a multi-container Machine, each container receives only the secrets it explicitly
-  declares.** There is no automatic injection, and `[build.compose]` offers no way to declare
-  them - which is why every secret was missing under compose.
+`machine_config.json` defines two containers; `otel-collector.yaml` is the collector's config,
+delivered as a real file through per-container `files`. Both validated *and run* in the real
+`0.158.0` image before deploying — starts clean, silent, ~37MB against a 96MB limiter.
 
-  The mechanism that works is `[experimental] machine_config` in fly.toml pointing at a JSON
-  file whose containers each carry a `secrets` array:
+**The thing to know before touching secrets again:** a container receives ONLY the secrets its
+`secrets` array names. `fly secrets set` alone does nothing for it, and the failure is silent —
+the variable is simply absent, which for a credential means a feature that breaks only when
+exercised. Adding a secret is a two-part change: set it, and declare it.
 
-  ```json
-  { "name": "api", "secrets": [{ "env_var": "DSN" }] }
-  ```
-
-  Proved by a third canary probe, which **succeeded** where the compose ones failed: the API
-  booted (so `DSN` arrived), and a probe container declaring only
-  `GRAFANA_CLOUD_OTLP_ENDPOINT` reported `GRAFANA_ENDPOINT present` / `DSN absent`.
-
-  Two consequences, both good:
-  - **Secrets can be scoped per container.** Fly's compose docs say the opposite ("you can't
-    scope a secret to a single service") and an earlier version of these notes repeated it.
-    ADR-0007's "credentials live in collector config, not application code" therefore holds
-    *more* strongly than written: the API container need never be handed a Grafana credential,
-    nor the collector `DSN`.
-  - **machine_config also supports per-container `files`** (`guest_path` + `local_path`), so
-    the collector config becomes a real file instead of being smuggled through
-    `--config=env:`. `compose.fly.yml` and its env-var config hack should be deleted, not
-    fixed.
-
-- **Two operational lessons, both of which cost time here:**
-  - `flyctl deploy` **skips stopped machines**. A green deploy does not mean the fleet is
-    consistent; the failed machine sat on the broken config through two subsequent successful
-    deploys, and would have rebooted into it.
-  - `fly machine update --image` does **not** clear `containers[]`. A machine that has once
-    held a multi-container config has to be replaced, not updated. Cloning a healthy machine
-    and destroying the broken one is the way back without dropping below capacity.
-- **No outage, and the reason matters:** the app runs two machines and the rolling deploy
-  aborted after the first, so the second served the old image throughout. `fly.toml`'s comments
-  discuss "the machine" in the singular; that second machine is the only reason this was a
-  failed deploy rather than downtime. Do not scale to one.
+Found while doing this: **`SENDGRID_API_KEY` is not set on the Fly app at all**, though
+`internal/pkg/app/user.go:149` reads it for invitation emails, and `fly.toml` claimed it was set
+out-of-band. That flow is already broken, independently of any of this work. Not fixed here —
+it needs a real key — but it must also be *declared* in `machine_config.json` when it is set.
 
 **The deploy route is the pull request, not a manual `fly deploy`.** `deploy-api.yml` fires on
 CI success against `master`, and deliberately refuses per-branch deploys ("dispatching from a

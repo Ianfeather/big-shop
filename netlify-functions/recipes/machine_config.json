@@ -1,0 +1,29 @@
+{
+  "containers": [
+    {
+      "name": "api",
+      "secrets": [
+        { "env_var": "DSN" }
+      ],
+      "env": {
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"
+      }
+    },
+    {
+      "name": "otelcol",
+      "image": "otel/opentelemetry-collector-contrib:0.158.0",
+      "cmd": ["--config=/etc/otelcol/config.yaml"],
+      "files": [
+        {
+          "guest_path": "/etc/otelcol/config.yaml",
+          "local_path": "otel-collector.yaml"
+        }
+      ],
+      "secrets": [
+        { "env_var": "GRAFANA_CLOUD_OTLP_ENDPOINT" },
+        { "env_var": "GRAFANA_CLOUD_INSTANCE_ID" },
+        { "env_var": "GRAFANA_CLOUD_API_KEY" }
+      ]
+    }
+  ]
+}

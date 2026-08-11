@@ -1,8 +1,8 @@
 ---
 spec: specs/observability.md
 status: in-progress
-branch: observability
-pr:
+branch: observability-phase4
+pr: https://github.com/Ianfeather/big-shop/pull/95
 ---
 
 Decisions and rationale live in [ADR-0007](../docs/adr/0007-observability-otel-grafana-cloud.md)
@@ -350,7 +350,7 @@ exporter timeout, bounded context on every `ForceFlush`, three providers flushed
 package-level circuit breaker, delta temporality. Plus the two relocated metrics: import-outcome
 (source × result) and LLM tokens (model × direction).
 Depends on: Session 4
-Commit:
+Commit: 26ce489 + 596b03d (PR #95)
 Notes: Verified against local LGTM by reading all three signals back, not by observing that
 export succeeded. A Dave turn is **one** trace across both runtimes — Next's server span ->
 `POST /api/dave/chat` -> `dave.tool search_recipes` -> `bigshop-api GET /recipes` (with

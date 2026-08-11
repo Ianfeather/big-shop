@@ -1,0 +1,95 @@
+# OpenTelemetry Collector config for the sidecar container in the Fly Machine
+# (docs/adr/0007-observability-otel-grafana-cloud.md).
+#
+# Delivered as a real file via machine_config.json's per-container `files`
+# (guest_path /etc/otelcol/config.yaml). An earlier attempt smuggled the whole
+# of this through an environment variable, because `[build.compose]` offers no
+# way to attach a file to a sidecar; machine_config does, so it doesn't.
+#
+# Credentials are not in here. `${env:...}` is resolved by the collector at
+# startup from its own process environment, which is where Fly injects the
+# secrets that machine_config.json declares for this container - and *only*
+# this container. The API container is never given a Grafana credential.
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        # Loopback only. Containers in a Machine share a network namespace, so
+        # this is reachable by the API and by nothing else; the Fly proxy is
+        # pointed at the API's 8080 and nothing routes here.
+        endpoint: 127.0.0.1:4318
+
+processors:
+  # First in the pipeline, and not optional on a 512MB machine shared with the
+  # API. Without it, a burst or a stalled export grows the collector's queue
+  # until the OOM killer picks a process - and it may well pick the API.
+  # "Telemetry must never affect the application" has to include memory when the
+  # two share a VM.
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 96
+    spike_limit_mib: 32
+
+  # The Go SDK already batches; this coalesces across both.
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+
+exporters:
+  # `otlp_http`, not `otlphttp`: the latter is a deprecated alias that still
+  # works but warns on every start. Found by running the collector rather than
+  # only validating it - `otelcol validate` accepts the old spelling silently.
+  otlp_http/grafana:
+    endpoint: ${env:GRAFANA_CLOUD_OTLP_ENDPOINT}
+    auth:
+      authenticator: basicauth/grafana
+    # A dead or slow Grafana must never become backpressure that stalls the
+    # collector and, through it, the Machine. Bounded queue, bounded retries,
+    # then drop - which is what the spec's third exit criterion checks by
+    # blackholing this endpoint.
+    sending_queue:
+      enabled: true
+      num_consumers: 2
+      queue_size: 512
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 30s
+      # Bounded, unlike the default's effectively-forever.
+      max_elapsed_time: 120s
+
+extensions:
+  # Does the base64 of instance-id:token itself. Grafana's tile hands out a
+  # pre-encoded Authorization header; taking the two values raw and letting this
+  # encode them keeps each secret individually readable and rotatable, rather
+  # than one opaque blob that cannot be eyeballed and is easy to mangle.
+  basicauth/grafana:
+    client_auth:
+      username: ${env:GRAFANA_CLOUD_INSTANCE_ID}
+      password: ${env:GRAFANA_CLOUD_API_KEY}
+
+  health_check:
+    endpoint: 127.0.0.1:13133
+
+service:
+  extensions: [basicauth/grafana, health_check]
+  telemetry:
+    logs:
+      # Goes to the Machine's log stream, where `fly logs` shows it. Kept at
+      # warn: at info the collector narrates every batch, which on a small
+      # machine is most of the log volume and none of the signal.
+      level: warn
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http/grafana]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http/grafana]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http/grafana]

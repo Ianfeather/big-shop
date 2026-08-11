@@ -49,7 +49,12 @@ Located in `netlify-functions/recipes/`:
   target during the cooling-off period
 - `Dockerfile`: production image (static binary on distroless, non-root) — distinct from
   `Dockerfile.dev`, the toolchain-plus-`air` image `docker-compose.yml` builds
-- `fly.toml`: one always-on `shared-cpu-1x`/512MB machine in `fra`
+- `fly.toml`: always-on `shared-cpu-1x`/512MB machines in `fra`. Two containers per
+  Machine, defined in `machine_config.json`: the API and an OpenTelemetry Collector
+  sidecar. **A container receives only the secrets its `secrets` array names** —
+  `fly secrets set` alone is not enough, and a missing declaration fails silently
+- `machine_config.json` / `otel-collector.yaml`: the sidecar definition and the
+  collector's config, delivered as a real file via per-container `files`
 - `internal/pkg/app/app.go`: App struct, JWT middleware, all route definitions (`GetRouter`, ~line 145)
 - `internal/pkg/app/*.go`: Feature handlers
 - `internal/pkg/telemetry/`: OpenTelemetry setup (`telemetry.go`) and the HTTP

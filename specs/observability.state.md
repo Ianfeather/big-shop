@@ -113,7 +113,7 @@ present and is wrong:
   declared in the telemetry package, and Go compares context keys by type as well as value.
 
 ## Session 2: Phase 2 — production, and the checkpoint
-Status: blocked
+Status: in-progress
 Scope: OTel Collector as a sidecar in the Fly app; Go exports to `localhost:4318`; Grafana
 credentials in collector config only. The three exit criteria: production trace + correlated
 logs + metric; latency statistically unchanged; blackhole failure injection proving a dead
@@ -142,6 +142,22 @@ Built and validated while blocked:
   Running it is what caught the `otlphttp` → `otlp_http` rename; `validate` alone passed it.
 - `fly.toml` — `[build.compose]` replacing `dockerfile`, and `DEPLOY_ENV = "production"`.
 - `deploy-api.yml` — passes `--build-arg SERVICE_VERSION` from the tested commit's sha.
+
+**Implemented via `machine_config`, after a failed attempt with `[build.compose]`.**
+
+`machine_config.json` defines two containers; `otel-collector.yaml` is the collector's config,
+delivered as a real file through per-container `files`. Both validated *and run* in the real
+`0.158.0` image before deploying — starts clean, silent, ~37MB against a 96MB limiter.
+
+**The thing to know before touching secrets again:** a container receives ONLY the secrets its
+`secrets` array names. `fly secrets set` alone does nothing for it, and the failure is silent —
+the variable is simply absent, which for a credential means a feature that breaks only when
+exercised. Adding a secret is a two-part change: set it, and declare it.
+
+Found while doing this: **`SENDGRID_API_KEY` is not set on the Fly app at all**, though
+`internal/pkg/app/user.go:149` reads it for invitation emails, and `fly.toml` claimed it was set
+out-of-band. That flow is already broken, independently of any of this work. Not fixed here —
+it needs a real key — but it must also be *declared* in `machine_config.json` when it is set.
 
 **The deploy route is the pull request, not a manual `fly deploy`.** `deploy-api.yml` fires on
 CI success against `master`, and deliberately refuses per-branch deploys ("dispatching from a

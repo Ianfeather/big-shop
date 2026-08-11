@@ -270,8 +270,20 @@ middleware at the Huma boundary (`span.RecordError` + `span.SetStatus`);
 spans every query rather than only `/recipes`. **`/health` is deliberately not changed** — see
 correction 6.
 Depends on: Session 2
-Commit:
-Notes:
+Commit: ce2549e
+Notes: Verified against local LGTM by reading traces back, not by assuming export worked.
+Every route now carries DB child spans where before only `/recipes` did, and only one of its
+two queries: `/shopping-list` 30 sql spans, `/recipe/{id}` 12, `/account` 8, `/user` 4,
+`/tags`/`/units`/`/ingredients` 2 each. `/health` produces none. `http_route` label values are
+exactly the registered templates plus `unmatched`.
+
+Test gate: `scripts/build-local.sh` green (four Go packages, both drift checks);
+`npm run test:e2e` 27/27.
+Review gate: two real defects caught and fixed before commit, both of which had gone live the
+moment the allow-list came off — an unbounded/content-carrying `http.route` (slugs and
+unregistered paths), and `huma.Error500InternalServerError(msg, err)` serialising the cause to
+the client while *not* recording it on the span. Also fixed: three comments that had become
+false, `db.Begin` → `BeginTx`, and a bare `500`.
 
 ## Session 4: Phase 3b — the log cleanup
 Status: pending

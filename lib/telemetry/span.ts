@@ -7,6 +7,43 @@
 
 import { SpanStatusCode, trace } from '@opentelemetry/api';
 
+// Turns anything thrown into an Error safe to put on a span.
+//
+// Two jobs, and the second is the one that matters. The first is the dull
+// `unknown` -> `Error` narrowing every call site would otherwise repeat.
+//
+// The second: **`JSON.parse` puts a slice of its input into its error message**,
+// and on these paths that input is model output or a Go API response body -
+// which is to say recipe names, ingredient text, someone's photographed page.
+// ADR-0008 §1 says telemetry does not carry those, and states the cost
+// explicitly: "when an LLM extraction fails because GPT returned unparseable
+// JSON, the response body *is* the evidence, and it will not be in the trace."
+// A SyntaxError reaching `recordException` unedited would quietly reverse that
+// decision, on the exact failure it was written about.
+//
+// Scrubbed here, at the boundary where an error becomes telemetry, rather than
+// at the handful of `JSON.parse` call sites - a rule that has to be remembered
+// at every future parse is a rule that will be broken at one of them. The
+// replacement keeps the type name, which is the part worth having: "an
+// extraction came back unparseable" is the finding, and the bytes are
+// reproducible locally.
+export function safeError(error: unknown): Error {
+  if (error instanceof SyntaxError) {
+    return new Error(
+      'SyntaxError parsing a response body (message withheld: it quotes the ' +
+        'content being parsed - ADR-0008 §1)'
+    );
+  }
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+// The same scrubbing, for the call sites that want a string rather than an
+// Error - a span status message, a log attribute, or a tool result that is fed
+// back to the model and returned to the browser.
+export function safeErrorMessage(error: unknown): string {
+  return safeError(error).message;
+}
+
 // Attaches the caller's Account to the current span.
 //
 // Called by the routes that authenticate, after they have. `account.id` is the
@@ -37,7 +74,7 @@ export function recordAccount(accountId: number): void {
 export function recordError(error: unknown): void {
   const span = trace.getActiveSpan();
   if (!span) return;
-  span.recordException(error instanceof Error ? error : new Error(String(error)));
+  span.recordException(safeError(error));
   span.setStatus({ code: SpanStatusCode.ERROR });
 }
 
@@ -51,8 +88,6 @@ export function recordError(error: unknown): void {
 export function recordWarning(message: string, error?: unknown): void {
   trace.getActiveSpan()?.addEvent('warning', {
     message,
-    ...(error !== undefined
-      ? { error: error instanceof Error ? error.message : String(error) }
-      : {}),
+    ...(error !== undefined ? { error: safeErrorMessage(error) } : {}),
   });
 }

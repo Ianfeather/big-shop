@@ -5,6 +5,7 @@ import type { Recipe, RecipeSummary } from '../../types/models';
 import { serverApiHost } from '../api-host';
 import { withTraceHeaders } from '../telemetry/propagate';
 import { toolSpan } from '../telemetry/tool-span';
+import { safeErrorMessage } from '../telemetry/span';
 
 // Where these tools reach the Go API.
 //
@@ -85,7 +86,7 @@ export async function searchRecipes({ query = '', tags = '' }: { query?: string;
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: safeErrorMessage(error),
       message: 'Failed to search recipes'
     };
   }
@@ -119,7 +120,7 @@ export async function getRecipeDetails({ recipeId }: { recipeId: string }, authT
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: safeErrorMessage(error),
       message: 'Failed to get recipe details'
     };
   }
@@ -153,7 +154,7 @@ export async function getShoppingHistory(args: unknown, authToken: string, useMo
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: safeErrorMessage(error),
       message: 'Failed to get shopping history'
     };
   }
@@ -213,7 +214,7 @@ export async function createShoppingList({ recipeIds }: { recipeIds: string[] },
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: safeErrorMessage(error),
       message: 'Failed to update shopping list'
     };
   }

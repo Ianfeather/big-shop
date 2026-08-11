@@ -67,6 +67,34 @@ describe('withTelemetry', () => {
     expect(finished().name).not.toContain('a-user-controlled-value');
   });
 
+  // The spec calls this out by name: it is the only handle that correlates a Big
+  // Shop trace with Netlify's own request logs. The key must match the Go
+  // middleware's spelling exactly, or the one query it exists for cannot be
+  // written.
+  it('carries the Netlify request id when there is one', async () => {
+    await withTelemetry('/api/dave/chat', async () => {})(
+      req({ headers: { 'x-nf-request-id': '01JABCD-ef01' } }),
+      res()
+    );
+
+    expect(finished().attributes['netlify.request_id']).toBe('01JABCD-ef01');
+  });
+
+  it('sets no Netlify attribute when the request did not come through Netlify', async () => {
+    await withTelemetry('/api/dave/chat', async () => {})(req({ headers: {} }), res());
+
+    expect(finished().attributes).not.toHaveProperty('netlify.request_id');
+  });
+
+  it('survives a request mock with no headers at all', async () => {
+    // Every existing route test under pages/api builds its NextApiRequest from
+    // the two or three fields the handler reads. A wrapper that assumes the full
+    // interface breaks all of them at once.
+    await expect(
+      withTelemetry('/api/dave/chat', async () => {})(req(), res())
+    ).resolves.toBeUndefined();
+  });
+
   it('records the response status', async () => {
     await withTelemetry('/api/parse-recipe-url', async () => {})(req(), res(422));
 

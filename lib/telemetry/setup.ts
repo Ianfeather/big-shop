@@ -54,7 +54,7 @@ export const INSTRUMENTATION_SCOPE = 'bigshop-web';
 // Labels log records emitted through the bridge in log.ts. Named to match the
 // Go side's LoggerName, which is 'recipes' for the same reason: it names the
 // emitting component within the service rather than repeating the service.
-export const LoggerName = 'web';
+export const LOGGER_NAME = 'web';
 
 // The per-attempt export timeout, overriding the SDK's 10 second default.
 //

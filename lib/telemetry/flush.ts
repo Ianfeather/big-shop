@@ -17,10 +17,12 @@ import { providers, EXPORT_TIMEOUT_MS } from './setup';
 
 // The bound on the whole flush - all three providers, in parallel.
 //
-// Deliberately larger than one exporter timeout and much smaller than three:
-// the three run concurrently (see below), so the expected worst case is roughly
-// EXPORT_TIMEOUT_MS plus scheduling, and this leaves room for that without ever
-// approaching the seconds-long stall the ADR is written to prevent.
+// A backstop rather than the primary limit. Each exporter is already bounded by
+// EXPORT_TIMEOUT_MS and the three run concurrently (see below), so a healthy
+// worst case is about one of those plus scheduling; this only has to catch a
+// hang the exporters' own timeouts somehow do not. Three times one exporter's
+// timeout is therefore deliberately generous - and still 750ms, nowhere near
+// the seconds-long stall ADR-0007 is written to prevent.
 const FLUSH_TIMEOUT_MS = 3 * EXPORT_TIMEOUT_MS;
 
 // How many consecutive failures before this container stops trying.
@@ -77,24 +79,35 @@ export async function flushTelemetry(): Promise<void> {
   // round trips to the same endpoint for no benefit whatsoever, on a code path
   // that runs before every response. Promise.allSettled rather than Promise.all
   // so one provider failing does not abandon the other two mid-flight.
-  const flushes = Promise.allSettled([
-    p.tracerProvider.forceFlush(),
-    p.meterProvider.forceFlush(),
-    p.loggerProvider.forceFlush(),
-  ]);
-
-  // The bound. forceFlush() takes no timeout argument in this SDK, so the
-  // equivalent of Go's `context.WithTimeout` - which ADR-0007 requires on every
-  // flush, and requires never to be the unbounded one - has to be built from a
-  // race. The timer is unref'd so a pending flush can never be the reason a
-  // process stays alive.
+  //
+  // **Constructed inside the `try`, which is load-bearing rather than tidy.**
+  // `Promise.allSettled` converts a *rejected* promise into a settled result,
+  // but it cannot do anything about a provider that throws *synchronously* -
+  // that throw happens while the argument array is still being evaluated, before
+  // allSettled is called at all. Built one line higher, outside the try, it
+  // would escape this function; and since api-route.ts awaits this in a
+  // `finally`, a rejection there replaces the handler's outcome and turns a
+  // perfectly good 200 into a 500. Telemetry taking the application down is the
+  // exact failure ADR-0007 exists to prevent.
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const bound = new Promise<'timeout'>((resolve) => {
-    timer = setTimeout(() => resolve('timeout'), FLUSH_TIMEOUT_MS);
-    timer.unref?.();
-  });
 
   try {
+    const flushes = Promise.allSettled([
+      p.tracerProvider.forceFlush(),
+      p.meterProvider.forceFlush(),
+      p.loggerProvider.forceFlush(),
+    ]);
+
+    // The bound. forceFlush() takes no timeout argument in this SDK, so the
+    // equivalent of Go's `context.WithTimeout` - which ADR-0007 requires on
+    // every flush, and requires never to be the unbounded one - has to be built
+    // from a race. The timer is unref'd so a pending flush can never be the
+    // reason a process stays alive.
+    const bound = new Promise<'timeout'>((resolve) => {
+      timer = setTimeout(() => resolve('timeout'), FLUSH_TIMEOUT_MS);
+      timer.unref?.();
+    });
+
     const outcome = await Promise.race([flushes, bound]);
 
     if (outcome === 'timeout') {

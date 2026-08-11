@@ -54,6 +54,29 @@ describe('flushTelemetry', () => {
     await expect(flushTelemetry()).resolves.toBeUndefined();
   });
 
+  // Regression. The three forceFlush() calls used to be evaluated one line
+  // above the try block, so a provider that threw *synchronously* escaped -
+  // and api-route.ts awaits this inside a `finally`, where a rejection replaces
+  // the handler's outcome and turns a 200 into a 500. Promise.allSettled cannot
+  // help: the throw happens while its argument array is still being built.
+  //
+  // Distinct from the async case below, which that arrangement did handle, and
+  // which is why the original test passed while the bug was live.
+  it('never rejects when a provider throws synchronously', async () => {
+    (globalThis as Record<symbol, unknown>)[PROVIDERS] = {
+      tracerProvider: {
+        forceFlush: () => {
+          throw new Error('provider already shut down');
+        },
+      },
+      meterProvider: { forceFlush: async () => {} },
+      loggerProvider: { forceFlush: async () => {} },
+    };
+
+    await expect(flushTelemetry()).resolves.toBeUndefined();
+    expect(circuitOpen()).toBe(false);
+  });
+
   it('never rejects when a provider throws', async () => {
     // The whole contract of this module: the caller is a request handler that
     // has already done its real work, and a dead collector must not become the

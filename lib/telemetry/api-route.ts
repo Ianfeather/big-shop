@@ -22,6 +22,7 @@ import { SpanStatusCode, context, trace } from '@opentelemetry/api';
 import type { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
 import { flushTelemetry } from './flush';
 import { tracer } from './setup';
+import { safeError } from './span';
 
 // The route templates this runtime serves. A closed set, written out so that
 // `http.route` is provably bounded rather than bounded by inspection.
@@ -48,6 +49,29 @@ export function withTelemetry(route: Route, handler: NextApiHandler): NextApiHan
       },
     });
 
+    // "Put `x-nf-request-id` on the server span for any request arriving via the
+    // Netlify proxy. It is the only handle that correlates a Big Shop trace with
+    // Netlify's own request logs, and it costs one attribute." - specs/
+    // observability.md. The Go API's middleware does this for requests reaching
+    // it through the proxy; these five routes *are* Netlify functions, so it
+    // matters here at least as much.
+    //
+    // The attribute key is `netlify.request_id`, spelled to match
+    // telemetry/http.go:106 exactly. A different spelling on each side would
+    // still be two perfectly good attributes, and would still make the one query
+    // this exists for - find both runtimes' work for one Netlify request -
+    // impossible to write as one query.
+    //
+    // Absent locally, where there is no Netlify in front. `headers` itself is
+    // optional-chained for the same reason `res.statusCode` is guarded below:
+    // the route tests hand-roll a NextApiRequest out of the two or three fields
+    // the handler reads, and a wrapper that assumes the whole interface turns
+    // every one of those into a TypeError.
+    const netlifyRequestId = req.headers?.['x-nf-request-id'];
+    if (typeof netlifyRequestId === 'string') {
+      span.setAttribute('netlify.request_id', netlifyRequestId);
+    }
+
     try {
       // The handler runs inside the span's context so that anything it calls -
       // span.ts's recordAccount, the tool spans in lib/dave/tools.ts, the
@@ -57,7 +81,7 @@ export function withTelemetry(route: Route, handler: NextApiHandler): NextApiHan
         handler(req, res)
       );
     } catch (error) {
-      span.recordException(error instanceof Error ? error : new Error(String(error)));
+      span.recordException(safeError(error));
       span.setStatus({ code: SpanStatusCode.ERROR });
       throw error;
     } finally {

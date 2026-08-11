@@ -24,12 +24,19 @@ export type ImportSource =
 
 // How an import ended.
 //
-// `empty` is separate from `error` because the two mean different things to a
-// cook and to whoever is reading the dashboard: `error` is this app failing,
-// `empty` is the extraction succeeding against a page that had nothing
-// extractable on it. Collapsing them would hide the single most common Import
-// complaint (follow-ups.md #40) inside the error rate.
-export type ImportResult = 'success' | 'empty' | 'error';
+// Four values rather than two, because only one of them is this app failing and
+// a dashboard that cannot tell them apart is a dashboard that reads its own
+// error rate wrong:
+//
+//   - `success` - a recipe or method came back.
+//   - `empty` - the extraction ran and found nothing to extract. Separate from
+//     `error` because it is the extraction succeeding against a page that had
+//     nothing on it, and collapsing the two would hide the single most common
+//     Import complaint (follow-ups.md #40) inside the error rate.
+//   - `rejected` - the upload was refused before any extraction: no file, not an
+//     image, over 5MB. The caller's problem, answered with a 400.
+//   - `error` - this app, or OpenAI, failed. The one that should page someone.
+export type ImportResult = 'success' | 'empty' | 'rejected' | 'error';
 
 // Resolved lazily, on first use, rather than at module load.
 //

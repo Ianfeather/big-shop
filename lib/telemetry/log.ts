@@ -19,7 +19,8 @@
 // where the telemetry backend is the thing that is misconfigured.
 
 import { SeverityNumber, logs } from '@opentelemetry/api-logs';
-import { LoggerName } from './setup';
+import { LOGGER_NAME } from './setup';
+import { safeErrorMessage } from './span';
 
 // Emitted with no explicit context, so the SDK reads the active one - which is
 // what puts the request's trace_id on the record and makes "show me the logs for
@@ -34,14 +35,12 @@ export function logError(message: string, error?: unknown): void {
   }
 
   try {
-    logs.getLogger(LoggerName).emit({
+    logs.getLogger(LOGGER_NAME).emit({
       severityNumber: SeverityNumber.ERROR,
       severityText: 'ERROR',
       body: message,
       attributes:
-        error !== undefined
-          ? { 'exception.message': error instanceof Error ? error.message : String(error) }
-          : undefined,
+        error !== undefined ? { 'exception.message': safeErrorMessage(error) } : undefined,
     });
   } catch {
     // Telemetry must never affect the application (ADR-0007). The console.error

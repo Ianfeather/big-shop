@@ -11,6 +11,7 @@
 
 import { SpanStatusCode } from '@opentelemetry/api';
 import { tracer } from './setup';
+import { safeError } from './span';
 
 // Runs `fn` inside a span named after the tool, and returns whatever it returns.
 //
@@ -39,7 +40,7 @@ export async function toolSpan<T extends { success: boolean; error?: string }>(
       }
       return result;
     } catch (error) {
-      span.recordException(error instanceof Error ? error : new Error(String(error)));
+      span.recordException(safeError(error));
       span.setStatus({ code: SpanStatusCode.ERROR });
       throw error;
     } finally {

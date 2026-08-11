@@ -365,6 +365,47 @@ Test gate: `npm run test` 220/220 (22 of them new, covering the flush and breake
 label discipline, and the route wrapper); `npm run typecheck`, `npm run lint`, `npm run build`;
 `scripts/build-local.sh` green; `npm run test:e2e` 27/27.
 
+Review gate: **four real defects, three of them in code that was already verified working
+against LGTM** — a reminder that "the trace looked right" and "the code is right" are different
+claims.
+
+1. **The flush could reject into a request handler.** The three `forceFlush()` calls were
+   evaluated one line above the `try`, so a provider throwing *synchronously* escaped
+   `flushTelemetry()` — and `api-route.ts` awaits it in a `finally`, where a rejection replaces
+   the handler's outcome. A telemetry fault would have turned a perfectly good 200 into a 500,
+   which is the precise failure ADR-0007's first rule exists to prevent. `Promise.allSettled`
+   is no help: the throw happens while its argument array is still being built. The existing
+   test missed it by using an `async` function, which converts a throw into a rejection.
+2. **`JSON.parse` puts the content it was parsing into its error message**, and that message
+   reached `recordException`. On these paths the parsed content is model output or a Go API
+   response body, so a failed extraction would have written recipe text onto a span — reversing
+   ADR-0008 §1 on the exact failure §1 is written about ("the response body *is* the evidence,
+   and it will not be in the trace"). Demonstrated rather than assumed: `JSON.parse('{"name":
+   Sunday Roast Potatoes}')` gives `Unexpected token 'S', "{"name": Sunday Roa"...`. Now
+   scrubbed in `span.ts`'s `safeError`, at the one boundary where an error becomes telemetry,
+   rather than at each `JSON.parse` — a rule that must be remembered at every future parse is a
+   rule that will be broken at one of them.
+3. **`x-nf-request-id` was missing**, though the spec names it under "things to get right" and
+   the Go middleware already sets it. These five routes *are* the Netlify functions, so it
+   matters here at least as much. Added as `netlify.request_id`, spelled to match
+   `telemetry/http.go:106` — two spellings would be two perfectly good attributes and one
+   unwritable query.
+4. **`recipe-image.ts` counted user-input 400s as errors.** Its outer `catch` recorded
+   `'error'` and reddened the span before branching to "no image provided" / "not an image" /
+   "over 5MB" — undoing, one file away, the discipline `api-route.ts` sets out in its own
+   header comment. `ImportResult` gains a fourth value, `rejected`, so those stay countable
+   without polluting the error rate.
+
+Also fixed: an unterminated detached promise chain in `recipe-image.ts` (a rejection in the
+background job's `.catch` would have been an unhandled rejection, which kills the Node process);
+a `FLUSH_TIMEOUT_MS` comment that said "much smaller than three" exporter timeouts directly
+above `3 * EXPORT_TIMEOUT_MS`; the `error instanceof Error ? … : new Error(String(…))` dance
+repeated at six sites, now `safeError`; and `LoggerName` in PascalCase among a file of
+SCREAMING_SNAKE constants.
+
+Correction 11 was **rewritten** rather than defended: review was right that its second clause
+("buys Next.js's own spans for free") contradicted correction 12 in the next breath.
+
 **Production is wired in code but not in configuration — and this needs Ian.** Unlike the Go
 API, these functions have no collector sidecar to hold credentials: ADR-0007 has them exporting
 OTLP straight to Grafana Cloud. So nothing leaves Netlify until two variables are set in the
@@ -397,9 +438,16 @@ which is the property the ADR actually wanted. One number, doing the job of two.
 
 The spec says "instrument SSR and the four API routes". The only `getServerSideProps` in the
 whole app are in `pages/dev/api-docs.tsx` and `pages/dev/design-system.tsx`, both of which
-`notFound` outside development; everything else is client-rendered through TanStack Query. So
-the SSR half reduces to registering a tracer provider, which buys Next.js's own render and
-route-dispatch spans for free. Nothing was skipped — there is nothing there.
+`notFound` outside development; everything else is client-rendered through TanStack Query.
+**Nothing was skipped because there is nothing there** — that reason, on its own, is what
+settles this one.
+
+An earlier draft of this correction added that registering a provider "buys Next.js's own
+render and route-dispatch spans for free". Review caught that as an overclaim, and it is:
+correction 12 says in the next breath that nothing outside `withTelemetry` flushes, so on a
+frozen Lambda those spans are buffered and lost. Free to *emit*, not free to *deliver*. If SSR
+data fetching ever arrives in this app it will need a flush of its own, and that is a Session
+of its own rather than something this one quietly covered.
 
 (Also: five routes, not four. That was already correction 3.)
 

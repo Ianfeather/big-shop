@@ -249,14 +249,39 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       // Its own flush, because the request's flush has already happened by the
       // time any of the above runs. Bounded and swallowing like every other, so
       // it cannot delay or break a job write that succeeded.
-      .finally(() => flushTelemetry());
+      .finally(() => flushTelemetry())
+      // Terminates the chain. Nothing awaits any of the above - the handler has
+      // long since returned 202 - so a rejection anywhere in it (the job write
+      // in the `.catch`, most likely, since that runs when things are already
+      // going wrong) would be an unhandled rejection, and Node kills the process
+      // on those. Swallowing is right rather than merely convenient: this whole
+      // chain is best-effort work whose failure the client discovers by polling
+      // a job that never completes.
+      .catch(() => {});
 
     // Return the job ID immediately
     return res.status(202).json({ jobId });
   } catch (error) {
-    recordImportOutcome(source, 'error');
-    recordError(error);
     const message = error instanceof Error ? error.message : String(error);
+
+    // Classified before it is recorded, because three of the five answers below
+    // are 400s about what the caller sent - no file, not an image, over 5MB.
+    // Counting those as `error` and marking the span red would undo, one file
+    // away, the discipline lib/telemetry/api-route.ts sets out: a 400 is this
+    // route working, and "show me the errors" must not come to mean "show me
+    // the traffic". They are still counted - a Source that suddenly rejects
+    // every upload is worth seeing - just not as failures of this app.
+    const rejected =
+      message.includes('No image file provided') ||
+      message.includes('File must be an image') ||
+      message.includes('Image size must be less than 5MB');
+
+    if (rejected) {
+      recordImportOutcome(source, 'rejected');
+    } else {
+      recordImportOutcome(source, 'error');
+      recordError(error);
+    }
 
     // Handle specific error cases
     if (message.includes('timed out')) {

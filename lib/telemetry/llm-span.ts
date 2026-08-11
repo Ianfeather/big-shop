@@ -15,6 +15,7 @@
 
 import { SpanStatusCode } from '@opentelemetry/api';
 import { tracer } from './setup';
+import { safeError } from './span';
 
 export async function llmSpan<T>(
   model: string,
@@ -33,7 +34,7 @@ export async function llmSpan<T>(
     try {
       return await fn();
     } catch (error) {
-      span.recordException(error instanceof Error ? error : new Error(String(error)));
+      span.recordException(safeError(error));
       span.setStatus({ code: SpanStatusCode.ERROR });
       throw error;
     } finally {

@@ -113,7 +113,7 @@ present and is wrong:
   declared in the telemetry package, and Go compares context keys by type as well as value.
 
 ## Session 2: Phase 2 — production, and the checkpoint
-Status: in-progress (deployed; exit criteria not yet met)
+Status: done
 Scope: OTel Collector as a sidecar in the Fly app; Go exports to `localhost:4318`; Grafana
 credentials in collector config only. The three exit criteria: production trace + correlated
 logs + metric; latency statistically unchanged; blackhole failure injection proving a dead
@@ -127,7 +127,23 @@ as a 401/403, and the config logs at `warn`, so failures are not being swallowed
 probe container from the investigation is gone — this deploy cleared it by declaring
 `containers` explicitly, which is the only thing that can.
 
-**The three exit criteria remain open, and one cannot be checked from here:**
+**Exit criteria, as actually resolved:**
+1. **Met.** A production trace was read back in Tempo: root `bigshop/bigshop-api GET /recipes`
+   (77.65ms) with `sql.conn.query` and `sql.rows` beneath it, `Route /recipes`, 200. Confirmed
+   by Ian, who has the Grafana access this side deliberately does not.
+2. **Preliminary only.** No new per-request cost visible, but the measurement is weak (see
+   below); not a controlled before/after.
+3. **Not run.** Waived by Ian in favour of moving to Phase 3. Proven locally — the collector
+   starts, stays up and logs nothing against a blackholed endpoint — but never demonstrated in
+   production, which is what the spec asked for. Recorded as skipped rather than passed.
+
+While diagnosing, one thing worth keeping: Tempo's search table can show
+`<root span not yet received>` for a perfectly good trace. A span is exported when it *ends*,
+and the root ends last, so children reach the index in an earlier batch than their parent. It
+resolves itself. Single-span traces (e.g. a 401 that never touches the DB) never show it, which
+makes it look like a pattern with meaning when it has none.
+
+**Original notes, kept because they explain the shape of the work:**
 1. *Trace in Tempo + logs in Loki + metric in Mimir.* Requires querying Grafana Cloud, whose
    credentials are Fly secrets scoped to the collector container and deliberately never seen by
    anyone working on the Go side. Needs a human with Grafana access, and an **authenticated**

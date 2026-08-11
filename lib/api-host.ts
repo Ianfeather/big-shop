@@ -1,3 +1,5 @@
+import { logError } from './telemetry/log';
+
 // Where server-side code finds the Go API.
 //
 // The browser and a Netlify function need different answers, and this is the
@@ -41,7 +43,7 @@ export function serverApiHost(): string | undefined {
   // that throws for no stated reason. Callers already know how to report a
   // missing host; this makes an unusable one take that same path.
   if (host.startsWith('/')) {
-    console.error(
+    logError(
       `API_HOST_INTERNAL is not set, and NEXT_PUBLIC_API_HOST ("${host}") is relative, ` +
         'so it cannot be used from a Node process. Set API_HOST_INTERNAL to the API origin.'
     );

@@ -1,5 +1,7 @@
 import type { NextApiRequest } from 'next';
 import { serverApiHost } from './api-host';
+import { withTraceHeaders } from './telemetry/propagate';
+import { logError } from './telemetry/log';
 
 // Who the caller of a Next.js API route is.
 //
@@ -31,7 +33,7 @@ export async function authenticateAccount(req: NextApiRequest): Promise<Authenti
   // lib/api-host.ts.
   const host = serverApiHost();
   if (!host) {
-    console.error('No API host configured (API_HOST_INTERNAL, or NEXT_PUBLIC_API_HOST locally) - cannot authenticate the caller');
+    logError('No API host configured (API_HOST_INTERNAL, or NEXT_PUBLIC_API_HOST locally) - cannot authenticate the caller');
     return { ok: false, status: 500, error: 'Authentication is not configured' };
   }
 
@@ -41,7 +43,13 @@ export async function authenticateAccount(req: NextApiRequest): Promise<Authenti
   }
 
   try {
-    const res = await fetch(`${host}/account`, { headers: { Authorization: authorization } });
+    // traceparent alongside the token, so the account lookup this route pays for
+    // appears inside the route's own trace rather than as a trace of its own.
+    // Every instrumented route here authenticates, so without it every single
+    // request would produce an orphan GET /account beside the real trace.
+    const res = await fetch(`${host}/account`, {
+      headers: withTraceHeaders({ Authorization: authorization }),
+    });
 
     if (!res.ok) {
       return { ok: false, status: 401, error: 'Authentication required' };
@@ -49,7 +57,7 @@ export async function authenticateAccount(req: NextApiRequest): Promise<Authenti
 
     const account = (await res.json()) as { id?: unknown };
     if (typeof account?.id !== 'number') {
-      console.error('Token accepted but the API returned no account id');
+      logError('Token accepted but the API returned no account id');
       return { ok: false, status: 500, error: 'Could not verify authentication' };
     }
 
@@ -58,7 +66,7 @@ export async function authenticateAccount(req: NextApiRequest): Promise<Authenti
     // Unlike fetchKnownNames, this deliberately does not degrade to a usable
     // result when the API is unreachable. Losing canonical names costs a bonus;
     // a gate that fails open is not a gate.
-    console.error('Could not reach the API to authenticate the caller', e);
+    logError('Could not reach the API to authenticate the caller', e);
     return { ok: false, status: 500, error: 'Could not verify authentication' };
   }
 }

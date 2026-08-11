@@ -9,6 +9,10 @@ import { imageToInput } from '../../lib/recipe-import/photo';
 import { requireEnv } from '../../lib/env';
 import { fetchKnownNames } from '../../lib/recipe-import/known-names';
 import { authenticateAccount } from '../../lib/authenticate';
+import { withTelemetry } from '../../lib/telemetry/api-route';
+import { recordAccount, recordError, recordWarning } from '../../lib/telemetry/span';
+import { flushTelemetry } from '../../lib/telemetry/flush';
+import { recordImportOutcome, type ImportSource } from '../../lib/telemetry/metrics';
 
 // Configure API route to handle form data
 export const config: PageConfig = {
@@ -112,13 +116,14 @@ const updateJobStatus = async (jobId: string, accountId: number, status: string,
   return job;
 };
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {
     // Handle job status check
     const auth = await authenticateAccount(req);
     if (!auth.ok) {
       return res.status(auth.status).json({ error: auth.error });
     }
+    recordAccount(auth.account.id);
 
     const jobId = req.query.jobId as string | undefined;
     if (!jobId) {
@@ -151,7 +156,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       return res.status(200).json(job);
     } catch (error) {
-      console.error('Error fetching job:', error);
+      recordError(error);
       return res.status(500).json({ error: 'Failed to fetch job status' });
     }
   }
@@ -167,6 +172,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!auth.ok) {
     return res.status(auth.status).json({ error: auth.error });
   }
+  recordAccount(auth.account.id);
+
+  // Declared out here so the catch below can attribute a failure to the right
+  // Source. It starts as 'photo' because most of what can fail before the mode
+  // field has been read - a 5MB upload, a malformed form, a missing file - is
+  // reached by both Sources, and whole-recipe Photo Import is overwhelmingly the
+  // commoner of the two.
+  let source: ImportSource = 'photo';
 
   try {
     // Parse the form data
@@ -181,6 +194,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // whole-recipe import.
     const [mode] = fields.mode || [];
     const methodOnly = mode === 'method';
+    source = methodOnly ? 'method-photo' : 'photo';
 
     // Read from the database rather than taken from the form fields - see
     // lib/recipe-import/known-names.ts for why the client is no longer asked.
@@ -207,19 +221,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ? processMethodImage(base64Image)
       : processImage(base64Image, knownIngredients, knownUnits);
 
+    // The extraction outcome is counted from here rather than from the request,
+    // because the request is over long before there is an outcome to count.
+    //
+    // **This telemetry shares the fate of the work it measures, and that fate is
+    // not certain.** A Lambda's execution environment freezes when the handler
+    // returns, so whether this `.then` ever runs depends on whether the platform
+    // waits for the event loop to drain first - which is a property of Netlify's
+    // function wrapper, not of this code, and is not something this change
+    // established either way. If the background job completes at all then this
+    // records it and flushes it; if it does not, then the import was already
+    // silently broken before any of it was instrumented, and this metric going
+    // flat is how that becomes visible. Written down rather than guessed at, and
+    // filed as a follow-up rather than fixed here: making the extraction
+    // reliable is a change to how Photo Import works, not to how it is observed.
     processing
       .then(async (result) => {
+        const empty = !methodOnly && !(result as { ingredients?: unknown[] }).ingredients?.length;
+        recordImportOutcome(source, empty ? 'empty' : 'success');
         await updateJobStatus(jobId, auth.account.id, 'completed', result);
       })
       .catch(async (error) => {
-        console.error('Error processing recipe:', error);
+        recordImportOutcome(source, 'error');
+        recordWarning('photo import failed after the request returned', error);
         await updateJobStatus(jobId, auth.account.id, 'failed', null, error instanceof Error ? error.message : String(error));
-      });
+      })
+      // Its own flush, because the request's flush has already happened by the
+      // time any of the above runs. Bounded and swallowing like every other, so
+      // it cannot delay or break a job write that succeeded.
+      .finally(() => flushTelemetry());
 
     // Return the job ID immediately
     return res.status(202).json({ jobId });
   } catch (error) {
-    console.error('Error processing recipe:', error);
+    recordImportOutcome(source, 'error');
+    recordError(error);
     const message = error instanceof Error ? error.message : String(error);
 
     // Handle specific error cases
@@ -258,3 +294,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 }
+
+// The GET half of this route is a poll, and it is traced like any other request
+// rather than carved out the way /health is on the Go side (Phase 3's correction
+// 7). The two look similar and are not: /health is polled forever, by machines,
+// at a fixed rate whether or not anyone is using the app, whereas this is polled
+// for a few seconds by one person who is in the middle of importing something -
+// which is exactly the window worth being able to see.
+export default withTelemetry('/api/recipe-image', handler);

@@ -53,9 +53,18 @@ This runs `scripts/dev-full.sh`, which:
 - Brings up `lgtm` (`grafana/otel-lgtm` — Collector, Tempo, Loki, Prometheus
   and Grafana in one image), the local stand-in for the Grafana Cloud stack.
   Grafana is on **3200**, not 3000 — the web app keeps 3000. The API exports
-  to it over the compose network at `lgtm:4318` and is never blocked on it
-  being up. Opt out with `START_LGTM=false`, which is what the e2e suite does
-  (see below). See [ADR-0007](./docs/adr/0007-observability-otel-grafana-cloud.md).
+  to it over the compose network at `lgtm:4318`; Next.js runs on the host, so
+  `dev-full.sh` points it at the published `OTLP_HTTP_PORT` instead. Neither is
+  ever blocked on it being up. Opt out with `START_LGTM=false`, which is what
+  the e2e suite does (see below). See
+  [ADR-0007](./docs/adr/0007-observability-otel-grafana-cloud.md).
+
+  **Restarting the `lgtm` container means restarting `next dev` too.** The
+  Netlify-side exporter has a circuit breaker that stops flushing after three
+  consecutive failures for the rest of the *container's* life, relying on
+  container churn to reset it — right for a Lambda, wrong for a dev server that
+  lives for hours. A restart of LGTM trips it, and the symptom is silence:
+  traces already exported, nothing new, nothing logged.
 - Waits for the API's `/health` endpoint, then runs Next.js natively on the
   host (not dockerized — keeps fast refresh) on port 3000 by default.
 - Ports are overridable if they clash with another checkout/worktree:

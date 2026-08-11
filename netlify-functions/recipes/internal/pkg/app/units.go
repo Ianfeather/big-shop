@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"log"
 	"net/http"
 
 	"recipes/internal/pkg/service"
@@ -57,11 +56,10 @@ func (o *UnitsOutput) withCachePolicy() *UnitsOutput {
 }
 
 func (a *App) getUnits(ctx context.Context, _ *struct{}) (*UnitsOutput, error) {
-	units, err := service.GetAllUnits(a.db)
+	units, err := service.GetAllUnits(ctx, a.db)
 
 	if err != nil {
-		log.Println(err)
-		return nil, huma.Error500InternalServerError("Failed to get units from db")
+		return nil, fail(ctx, huma.Error500InternalServerError("Failed to get units from db"), err)
 	}
 
 	// Success path only - Huma writes an output struct's headers only when it
@@ -71,7 +69,7 @@ func (a *App) getUnits(ctx context.Context, _ *struct{}) (*UnitsOutput, error) {
 }
 
 func (a *App) registerUnitsRoutes(api huma.API) {
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "list-units",
 		Method:      http.MethodGet,
 		Path:        "/units",

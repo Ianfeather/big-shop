@@ -10,8 +10,8 @@ and [ADR-0008](../docs/adr/0008-what-telemetry-does-not-carry.md). Sessions 1–
 spec's Phases 1–6, with Phase 3 split across two Sessions and a preparatory Session 0 the spec
 does not contain.
 
-Four corrections to the spec, agreed at planning time and applied by the Sessions below rather
-than by editing the spec:
+Corrections to the spec, applied by the Sessions below rather than by editing the spec. The
+first four were agreed at planning time; the rest were forced by what the work turned up.
 
 1. `go.opentelemetry.io/otel` v1.45.0 declares `go 1.25.0`; the module is on `go 1.23.0`. Hence
    Session 0. (User chose the bump over pinning otel to a ~18-month-old v1.35.x.)
@@ -113,14 +113,51 @@ present and is wrong:
   declared in the telemetry package, and Go compares context keys by type as well as value.
 
 ## Session 2: Phase 2 — production, and the checkpoint
-Status: in-progress
+Status: done
 Scope: OTel Collector as a sidecar in the Fly app; Go exports to `localhost:4318`; Grafana
 credentials in collector config only. The three exit criteria: production trace + correlated
 logs + metric; latency statistically unchanged; blackhole failure injection proving a dead
 collector is a silent drop.
 Depends on: Session 1
-Commit:
-Notes: **BLOCKED on the user.** Needs, before any of this session can run:
+Commit: 5f94c8f (PR #93)
+
+**Deployed 2026-08-11. Not verified.** Both machines run `['api', 'otelcol']`, 1/1, health
+200; the collector started cleanly on both with no export errors (a bad credential would show
+as a 401/403, and the config logs at `warn`, so failures are not being swallowed). The stray
+probe container from the investigation is gone — this deploy cleared it by declaring
+`containers` explicitly, which is the only thing that can.
+
+**Exit criteria, as actually resolved:**
+1. **Met.** A production trace was read back in Tempo: root `bigshop/bigshop-api GET /recipes`
+   (77.65ms) with `sql.conn.query` and `sql.rows` beneath it, `Route /recipes`, 200. Confirmed
+   by Ian, who has the Grafana access this side deliberately does not.
+2. **Preliminary only.** No new per-request cost visible, but the measurement is weak (see
+   below); not a controlled before/after.
+3. **Not run.** Waived by Ian in favour of moving to Phase 3. Proven locally — the collector
+   starts, stays up and logs nothing against a blackholed endpoint — but never demonstrated in
+   production, which is what the spec asked for. Recorded as skipped rather than passed.
+
+While diagnosing, one thing worth keeping: Tempo's search table can show
+`<root span not yet received>` for a perfectly good trace. A span is exported when it *ends*,
+and the root ends last, so children reach the index in an earlier batch than their parent. It
+resolves itself. Single-span traces (e.g. a 401 that never touches the DB) never show it, which
+makes it look like a pattern with meaning when it has none.
+
+**Original notes, kept because they explain the shape of the work:**
+1. *Trace in Tempo + logs in Loki + metric in Mimir.* Requires querying Grafana Cloud, whose
+   credentials are Fly secrets scoped to the collector container and deliberately never seen by
+   anyone working on the Go side. Needs a human with Grafana access, and an **authenticated**
+   `GET /recipes` — unauthenticated 401s do produce spans (otelhttp wraps outside the auth
+   middleware) but carry no `account.id`/`user.sub`, so they prove the pipeline and not the
+   attributes. **Check `service.version` first**: a 7-char sha means the `--build-arg` wiring
+   works, `unknown` means it silently didn't.
+2. *Latency unchanged.* Preliminary only: `/recipes` 401s at 48–89ms against `/health` at
+   44–60ms, both dominated by the network hop to Frankfurt. No new per-request cost visible,
+   but this is weak evidence, not a measurement.
+3. *Blackhole failure injection.* **Not done.** Proven locally; the spec asks for it in
+   production, which means deliberately misconfiguring a working export and a deploy cycle.
+
+Original blocking notes, kept for the record: **BLOCKED on the user.** Needs, before any of this session can run:
 1. A Grafana Cloud Free stack (region is permanent — ADR-0007 picks eu-central-1/Frankfurt).
 2. Its OTLP endpoint, instance ID and token, to be set with `fly secrets set` — never committed.
    **Use the names Grafana's own OpenTelemetry tile emits**, so its snippets and docs line up
@@ -192,23 +229,117 @@ Researched while blocked:
 - **`DEPLOY_ENV=production`** needs setting in `fly.toml`'s `[env]`, or production telemetry
   arrives labelled `development` and is indistinguishable from a laptop's in the same Tempo.
 
+### Correction 6 — `/health` stays as it is
+
+The spec's Phase 3 says **"Fix `/health` to `SELECT 1`"**, and its "Current state" calls the
+present check "a health check that checks nothing". Ian decided against it on 2026-08-11:
+`/health` should answer only "is this machine up and the Go process serving", and database
+connectivity should be observed through telemetry rather than through a health check.
+
+**Why this is the better answer, now:** `/health` backs a *Fly health check*. Making it depend
+on TiDB means a database outage causes Fly to fail health checks and start cycling machines
+that are themselves perfectly healthy — turning a degraded dependency into a restart storm, and
+removing the one thing still able to serve cached or non-DB responses. The spec's complaint was
+that a warm container with a dead database looks fine; the answer to that is a metric and an
+alert, which is what the rest of this spec builds.
+
+Also worth recording, because it makes the check less empty than the spec implies: `main.go`
+`log.Fatalf`s on a failed DB ping during init, so a process that is serving at all did reach
+the database at startup. What is missing is only the *continuous* signal — and that is
+telemetry's job.
+
+### Correction 7 — two carve-outs in Session 3, both deliberate
+
+- **`/health` is not traced.** The spec says "instrument every route via middleware". Every
+  route is, bar this one: Fly polls it every 30s per machine and Session 7 adds a Grafana
+  synthetic check at ~1/min, so tracing it would add thousands of identical spans a day and
+  drag the duration histogram's p99 towards the cost of a health check rather than of a
+  request.
+- **`span.SetStatus` fires only on 5xx**, though `span.RecordError` fires on every returned
+  error. The spec says "`span.RecordError` + `span.SetStatus` on any returned error". A 404 for
+  a Recipe that does not exist is the API working; marking those spans failed would make "show
+  me the errors" mean "show me the traffic". The cause is still recorded and readable — only
+  the red flag is withheld.
+
 ## Session 3: Phase 3a — widen the Go API
-Status: pending
+Status: done
 Scope: every route instrumented via middleware rather than per-handler code; error-recording
-middleware at the Huma boundary (`span.RecordError` + `span.SetStatus`); `/health` becomes a
-real `SELECT 1`; `internal/pkg/app/account.go:41` stops discarding the real error.
+middleware at the Huma boundary (`span.RecordError` + `span.SetStatus`);
+`internal/pkg/app/account.go` stops discarding the real error at **both** sites (`:41` and
+`:69` — the spec names only one); and `ctx` threaded through the service layer so `otelsql`
+spans every query rather than only `/recipes`. **`/health` is deliberately not changed** — see
+correction 6.
 Depends on: Session 2
-Commit:
-Notes:
+Commit: ce2549e
+Notes: Verified against local LGTM by reading traces back, not by assuming export worked.
+Every route now carries DB child spans where before only `/recipes` did, and only one of its
+two queries: `/shopping-list` 30 sql spans, `/recipe/{id}` 12, `/account` 8, `/user` 4,
+`/tags`/`/units`/`/ingredients` 2 each. `/health` produces none. `http_route` label values are
+exactly the registered templates plus `unmatched`.
+
+Test gate: `scripts/build-local.sh` green (four Go packages, both drift checks);
+`npm run test:e2e` 27/27.
+Review gate: two real defects caught and fixed before commit, both of which had gone live the
+moment the allow-list came off — an unbounded/content-carrying `http.route` (slugs and
+unregistered paths), and `huma.Error500InternalServerError(msg, err)` serialising the cause to
+the client while *not* recording it on the span. Also fixed: three comments that had become
+false, `db.Begin` → `BeginTx`, and a bare `500`.
+
+### Correction 8 — where the removed logging actually went
+
+The spec says "Convert only those carrying genuine extra context to `slog`". Nothing was
+converted to slog. Two substitutions were made instead:
+
+- **Span events, not slog, for the four best-effort failures** (catalog enrichment, shopping-
+  list history). Their callers deliberately ignore the error, so there is nothing to wrap and
+  return; `telemetry.RecordWarning` attaches the fact to the request's span. This keeps the
+  service layer free of logging entirely, which ADR-0008 §3 asks for and slog would not have.
+- **`main.go` and `internal/pkg/purge/purge.go` keep stdlib `log`** — 11 lines. Startup and
+  fatal messages happen before any request exists, and the purger is a detached fire-and-forget
+  goroutine with no request context, so in both cases there is no span to attach to and no
+  trace_id to correlate by. The consequence, worth stating: those lines reach Fly's log stream
+  and never Loki. A purge that silently stops working is therefore still invisible in Grafana —
+  a real gap, and a candidate for `follow-ups.md` rather than for widening this session.
+
+### Correction 9 — the spec's log counts were measured with the wrong instrument
+
+The spec says "70 `log.*` calls ... 26 of them a bare `log.Println(err)`", and earlier notes
+here corrected that to 87/27. All three counts only ever matched `log.*`. The service layer
+also had **21 `fmt.Print*` calls**, including — on the invite path —
+
+```go
+fmt.Println(email)
+fmt.Println(token)
+```
+
+An email address is named in ADR-0008 §1 as excluded by rule, and an invite token is a bearer
+credential; both were being written to stdout, which on Fly is the log stream. Found by review,
+not by the counting. Session 4 removes all 21.
 
 ## Session 4: Phase 3b — the log cleanup
-Status: pending
-Scope: delete the 27 bare `log.Println(err)` calls and everything else the span makes redundant;
+Status: done
+Scope: delete the bare `log.Println(err)` calls and everything else the span makes redundant;
 service layer stops logging and wraps errors per ADR-0008 §3; convert only genuinely-extra-
 context lines to `slog`. Net fewer lines than we started with.
 Depends on: Session 3
-Commit:
-Notes: Split from Session 3 on purpose — 17 files, far easier to review once the spans that
+Commit: 89cbb1c
+Notes: Verified end to end against local LGTM by stopping the database and reading the trace
+back: root `GET /recipes` with `STATUS_CODE_ERROR` and two exception events — the wrapped cause
+(`getting account ID: dial tcp: lookup db ... no such host`) and what the client was told
+(`Failed to get recipes from db`) — while the HTTP body carried only the opaque message.
+
+Final state: 0 log/print calls in `internal/pkg/service`, 0 `fmt.Print*` anywhere in
+`internal/`, 11 stdlib `log` calls left in `main.go` and `purge.go` (correction 8). Net −31
+lines across the session.
+
+Test gate: `scripts/build-local.sh` green; `npm run test:e2e` 27/27.
+Review gate: both axes blocked on the same finding — 21 `fmt.Print*` calls the `log.*` count
+could not see, two of them writing an invite email and token to stdout (correction 9). Also
+fixed: `fail()` classifying span errors by client status rather than cause, a wrapped
+`sql.ErrNoRows` plus the `==` comparison that would have broken on it, four wrap-text defects,
+and ten `%v` formats in `history.go` that never wrapped.
+
+Split from Session 3 on purpose — 17 files, far easier to review once the spans that
 justify each deletion already exist. Spec's counts (70/26) were stale; actual is 87/27.
 
 ## Session 5: Phase 4 — Next.js functions and propagation

@@ -10,6 +10,7 @@ import (
 	"recipes/internal/pkg/common"
 	"recipes/internal/pkg/purge"
 	"recipes/internal/pkg/telemetry"
+	"sort"
 
 	jwtmiddleware "github.com/auth0/go-jwt-middleware"
 	"github.com/danielgtaylor/huma/v2"
@@ -197,6 +198,23 @@ func getPemCert(token *jwt.Token) (string, error) {
 	return cert, nil
 }
 
+// RouteTemplates lists the path templates registered on an API - "/recipes",
+// "/recipe/{id}" and so on.
+//
+// This is the authority for what counts as a known route, and it comes from the
+// router itself rather than a hand-kept list precisely so it cannot drift: add
+// an operation and its template is in here the moment it is registered. What
+// depends on that is telemetry's label cardinality - see telemetry.route.
+func RouteTemplates(api huma.API) []string {
+	paths := api.OpenAPI().Paths
+	templates := make([]string, 0, len(paths))
+	for p := range paths {
+		templates = append(templates, p)
+	}
+	sort.Strings(templates)
+	return templates
+}
+
 // GetRouter returns the application router and the Huma API instance backing
 // it, from which the OpenAPI spec can be generated (see the `openapi` mode in
 // main.go) without needing to start a server or hold a DB connection.
@@ -323,7 +341,7 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, huma.API, error) {
 	// The accessor is passed in rather than let telemetry read the context
 	// itself, because contextKey is unexported and Go compares context keys by
 	// type - see telemetry.Middleware's comment.
-	n.Use(negroni.HandlerFunc(telemetry.Middleware(base, func(r *http.Request) string {
+	n.Use(negroni.HandlerFunc(telemetry.Middleware(base, RouteTemplates(api), func(r *http.Request) string {
 		sub, _ := r.Context().Value(contextKey("userID")).(string)
 		return sub
 	})))

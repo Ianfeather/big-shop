@@ -1,11 +1,12 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"log"
 	"math"
 	"recipes/internal/pkg/common"
+	"recipes/internal/pkg/telemetry"
 	"sort"
 	"strconv"
 
@@ -500,31 +501,31 @@ func roundToSignificantFigures(v float64, digits int) float64 {
 // are untouched either way (see CONTEXT.md's "Generate Shopping List"). An Ingredient
 // Item already marked bought carries that state forward if it's still present in the
 // recomputed set, so regenerating the list doesn't silently un-buy things.
-func GenerateShoppingList(recipeIDs []string, userID string, db *sql.DB) (*common.ShoppingList, error) {
+func GenerateShoppingList(ctx context.Context, recipeIDs []string, userID string, db *sql.DB) (*common.ShoppingList, error) {
 	recipes := make([]common.Recipe, 0)
 	for _, idStr := range recipeIDs {
 		id, err := strconv.Atoi(idStr)
 		if err != nil {
 			return nil, ErrInvalidRecipeID
 		}
-		recipe, err := GetRecipeByID(id, userID, db)
+		recipe, err := GetRecipeByID(ctx, id, userID, db)
 		if err != nil {
 			return nil, err
 		}
 		recipes = append(recipes, *recipe)
 	}
 
-	previousIngredients, err := GetIngredientListItems(userID, db)
+	previousIngredients, err := GetIngredientListItems(ctx, userID, db)
 	if err != nil {
 		return nil, err
 	}
 
 	// Loaded here and passed in, so CombineIngredients stays a pure function.
-	units, err := GetUnitCatalog(db)
+	units, err := GetUnitCatalog(ctx, db)
 	if err != nil {
 		return nil, err
 	}
-	ingredientCatalog, err := GetIngredientCatalog(db, units)
+	ingredientCatalog, err := GetIngredientCatalog(ctx, db, units)
 	if err != nil {
 		return nil, err
 	}
@@ -536,17 +537,17 @@ func GenerateShoppingList(recipeIDs []string, userID string, db *sql.DB) (*commo
 		}
 	}
 
-	tx, err := db.Begin()
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
 
-	if err := RemoveIngredientListItems(userID, tx); err != nil {
+	if err := RemoveIngredientListItems(ctx, userID, tx); err != nil {
 		return nil, err
 	}
 	if len(combinedIngredients) > 0 {
-		if err := AddIngredientListItems(userID, combinedIngredients, tx); err != nil {
+		if err := AddIngredientListItems(ctx, userID, combinedIngredients, tx); err != nil {
 			return nil, err
 		}
 	}
@@ -557,42 +558,39 @@ func GenerateShoppingList(recipeIDs []string, userID string, db *sql.DB) (*commo
 	// Log shopping list history for meal planning intelligence, best-effort - a
 	// logging failure shouldn't fail the whole generate operation.
 	if intRecipeIDs, err := GetRecipeIDsFromStrings(recipeIDs); err == nil {
-		if logErr := LogShoppingListEvent(userID, "add_recipe", intRecipeIDs, db); logErr != nil {
-			log.Printf("Failed to log shopping list history: %v", logErr)
+		if logErr := LogShoppingListEvent(ctx, userID, "add_recipe", intRecipeIDs, db); logErr != nil {
+			telemetry.RecordWarning(ctx, "log shopping list history", logErr)
 		}
 	}
 
-	return GetShoppingList(userID, db)
+	return GetShoppingList(ctx, userID, db)
 }
 
 // GetShoppingList returns the full shopping list for a user
-func GetShoppingList(userID string, db *sql.DB) (*common.ShoppingList, error) {
-	recipes, err := GetRecipesFromList(userID, db)
+func GetShoppingList(ctx context.Context, userID string, db *sql.DB) (*common.ShoppingList, error) {
+	recipes, err := GetRecipesFromList(ctx, userID, db)
 	if err != nil {
-		fmt.Println("could not get recipes from list")
-		return nil, err
+		return nil, fmt.Errorf("get recipes from list: %w", err)
 	}
 
-	ingredients, err := GetIngredientListItems(userID, db)
+	ingredients, err := GetIngredientListItems(ctx, userID, db)
 	if err != nil {
-		fmt.Println("could not get ingredients from list")
-		return nil, err
+		return nil, fmt.Errorf("get ingredients from list: %w", err)
 	}
 
-	extras, err := GetExtraListItems(userID, db)
+	extras, err := GetExtraListItems(ctx, userID, db)
 	if err != nil {
-		fmt.Println("could not get extra list items")
-		return nil, err
+		return nil, fmt.Errorf("get extra list items: %w", err)
 	}
 
 	// Display Units are applied here rather than when the list is generated, so
 	// correcting a Unit Size or Display Unit improves a Shopping List that's
 	// already been generated. Extras carry no Amounts, so they're untouched.
-	units, err := GetUnitCatalog(db)
+	units, err := GetUnitCatalog(ctx, db)
 	if err != nil {
 		return nil, err
 	}
-	ingredientCatalog, err := GetIngredientCatalog(db, units)
+	ingredientCatalog, err := GetIngredientCatalog(ctx, db, units)
 	if err != nil {
 		return nil, err
 	}
@@ -614,39 +612,34 @@ func GetShoppingList(userID string, db *sql.DB) (*common.ShoppingList, error) {
 }
 
 // RemoveAllListItems removes all list items for a user
-func RemoveAllListItems(userID string, db *sql.DB) error {
-	accountID, err := GetAccountID(db, userID)
+func RemoveAllListItems(ctx context.Context, userID string, db *sql.DB) error {
+	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
-		fmt.Println("could not delete ingredients")
-		return err
+		return fmt.Errorf("delete ingredients: %w", err)
 	}
-	if _, err := db.Exec("DELETE FROM list WHERE account_id = ?;", accountID); err != nil {
-		fmt.Println("could not delete ingredients")
-		return err
+	if _, err := db.ExecContext(ctx, "DELETE FROM list WHERE account_id = ?;", accountID); err != nil {
+		return fmt.Errorf("delete ingredients: %w", err)
 	}
 	return nil
 }
 
 // RemoveIngredientListItems removes all ingredient list items
-func RemoveIngredientListItems(userID string, db dbConn) error {
-	accountID, err := GetAccountID(db, userID)
+func RemoveIngredientListItems(ctx context.Context, userID string, db dbConn) error {
+	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
-		fmt.Println("could not delete ingredients")
-		return err
+		return fmt.Errorf("delete ingredients: %w", err)
 	}
-	if _, err := db.Exec("DELETE FROM list WHERE account_id = ? AND type = 'ingredient';", accountID); err != nil {
-		fmt.Println("could not delete ingredients")
-		return err
+	if _, err := db.ExecContext(ctx, "DELETE FROM list WHERE account_id = ? AND type = 'ingredient';", accountID); err != nil {
+		return fmt.Errorf("delete ingredients: %w", err)
 	}
 	return nil
 }
 
 // AddIngredientListItems adds passed ingredients to the db
-func AddIngredientListItems(userID string, ingredients map[string]*common.ListIngredient, db dbConn) error {
-	accountID, err := GetAccountID(db, userID)
+func AddIngredientListItems(ctx context.Context, userID string, ingredients map[string]*common.ListIngredient, db dbConn) error {
+	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
-		fmt.Println("could not add ingredients to shopping list")
-		return err
+		return fmt.Errorf("add ingredients to shopping list: %w", err)
 	}
 
 	sqlStr := "INSERT INTO list(account_id, name, type, quantity, department, is_bought, recipe_id, unit_id) VALUES "
@@ -670,17 +663,15 @@ func AddIngredientListItems(userID string, ingredients map[string]*common.ListIn
 	}
 
 	sqlStr = sqlStr[0 : len(sqlStr)-1]
-	if _, err := db.Exec(sqlStr, vals...); err != nil {
-		fmt.Println(err)
-		fmt.Println("could not add ingredients to shopping list")
-		return err
+	if _, err := db.ExecContext(ctx, sqlStr, vals...); err != nil {
+		return fmt.Errorf("add ingredients to shopping list: %w", err)
 	}
 	return nil
 }
 
 // AddExtraListItem inserts an item of type 'extra'
-func AddExtraListItem(userID string, name string, isBought bool, db *sql.DB) error {
-	accountID, err := GetAccountID(db, userID)
+func AddExtraListItem(ctx context.Context, userID string, name string, isBought bool, db *sql.DB) error {
+	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
 		return err
 	}
@@ -689,21 +680,21 @@ func AddExtraListItem(userID string, name string, isBought bool, db *sql.DB) err
 			(account_id, name, type, quantity, department, is_bought, unit_id)
 			VALUES (?, ?, ?, ?, '', ?, ?)
 	`
-	if _, err := db.Exec(query, accountID, name, "extra", 0, isBought, 1); err != nil {
+	if _, err := db.ExecContext(ctx, query, accountID, name, "extra", 0, isBought, 1); err != nil {
 		return err
 	}
 	return nil
 }
 
 // GetRecipesFromList returns recipes used to create the shopping list
-func GetRecipesFromList(userID string, db *sql.DB) ([]string, error) {
-	accountID, err := GetAccountID(db, userID)
+func GetRecipesFromList(ctx context.Context, userID string, db *sql.DB) ([]string, error) {
+	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
 		return nil, err
 	}
 
 	query := "SELECT DISTINCT recipe_id FROM list WHERE account_id = ? and type = 'ingredient';"
-	results, err := db.Query(query, accountID)
+	results, err := db.QueryContext(ctx, query, accountID)
 
 	if err != nil {
 		return nil, err
@@ -723,8 +714,8 @@ func GetRecipesFromList(userID string, db *sql.DB) ([]string, error) {
 }
 
 // GetIngredientListItems returns items of type 'ingredient'
-func GetIngredientListItems(userID string, db *sql.DB) (map[string]*common.ListIngredient, error) {
-	accountID, err := GetAccountID(db, userID)
+func GetIngredientListItems(ctx context.Context, userID string, db *sql.DB) (map[string]*common.ListIngredient, error) {
+	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -734,7 +725,7 @@ func GetIngredientListItems(userID string, db *sql.DB) (map[string]*common.ListI
 	// like - otherwise "50 g + 2 tbsp" could render either way round between
 	// requests.
 	query := "SELECT list.name as name, unit.name as unit, quantity, department, is_bought as isBought FROM list INNER JOIN unit on unit_id = unit.id WHERE account_id = ? and type = 'ingredient' ORDER BY list.id;"
-	results, err := db.Query(query, accountID)
+	results, err := db.QueryContext(ctx, query, accountID)
 
 	if err != nil {
 		return nil, err
@@ -772,13 +763,13 @@ func GetIngredientListItems(userID string, db *sql.DB) (map[string]*common.ListI
 }
 
 // GetExtraListItems returns items of type 'extra'
-func GetExtraListItems(userID string, db *sql.DB) (map[string]*common.ListIngredient, error) {
-	accountID, err := GetAccountID(db, userID)
+func GetExtraListItems(ctx context.Context, userID string, db *sql.DB) (map[string]*common.ListIngredient, error) {
+	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
 		return nil, err
 	}
 	query := "SELECT list.name as name, is_bought as isBought FROM list WHERE account_id = ? and type = 'extra' ORDER BY list.id;"
-	results, err := db.Query(query, accountID)
+	results, err := db.QueryContext(ctx, query, accountID)
 
 	if err != nil {
 		return nil, err
@@ -808,12 +799,12 @@ func GetExtraListItems(userID string, db *sql.DB) (map[string]*common.ListIngred
 }
 
 // BuyListItem toggles the isBought state of a list item in the db
-func BuyListItem(userID string, name string, isBought bool, db *sql.DB) error {
-	accountID, err := GetAccountID(db, userID)
+func BuyListItem(ctx context.Context, userID string, name string, isBought bool, db *sql.DB) error {
+	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
 		return err
 	}
-	if _, err := db.Exec("UPDATE list SET is_bought = ? WHERE name = ? AND account_id = ?", isBought, name, accountID); err != nil {
+	if _, err := db.ExecContext(ctx, "UPDATE list SET is_bought = ? WHERE name = ? AND account_id = ?", isBought, name, accountID); err != nil {
 		return err
 	}
 	return nil

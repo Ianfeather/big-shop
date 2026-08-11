@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"log"
 	"net/http"
 
 	"recipes/internal/pkg/service"
@@ -50,11 +49,10 @@ func (o *IngredientsOutput) withCachePolicy() *IngredientsOutput {
 }
 
 func (a *App) getIngredients(ctx context.Context, _ *struct{}) (*IngredientsOutput, error) {
-	ingredients, err := service.GetAllIngredients(a.db)
+	ingredients, err := service.GetAllIngredients(ctx, a.db)
 
 	if err != nil {
-		log.Println(err)
-		return nil, huma.Error500InternalServerError("Failed to get ingredients from db")
+		return nil, fail(ctx, huma.Error500InternalServerError("Failed to get ingredients from db"), err)
 	}
 
 	names := make([]IngredientName, len(ingredients))
@@ -66,7 +64,7 @@ func (a *App) getIngredients(ctx context.Context, _ *struct{}) (*IngredientsOutp
 }
 
 func (a *App) registerIngredientsRoutes(api huma.API) {
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "list-ingredients",
 		Method:      http.MethodGet,
 		Path:        "/ingredients",

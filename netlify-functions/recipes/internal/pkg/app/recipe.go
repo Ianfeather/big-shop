@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"net/http"
 	"recipes/internal/pkg/common"
 	"recipes/internal/pkg/service"
@@ -56,13 +57,16 @@ func (a *App) getRecipe(ctx context.Context, input *RecipeByIDInput) (*RecipeOut
 	var recipe *common.Recipe
 	var err error
 	if id, convErr := strconv.Atoi(input.ID); convErr == nil {
-		recipe, err = service.GetRecipeByID(id, userID, a.db)
+		recipe, err = service.GetRecipeByID(ctx, id, userID, a.db)
 	} else {
-		recipe, err = service.GetRecipeBySlug(input.ID, userID, a.db)
+		recipe, err = service.GetRecipeBySlug(ctx, input.ID, userID, a.db)
 	}
 
 	if err != nil {
-		if err == sql.ErrNoRows {
+		// errors.Is, not ==: the service layer wraps its errors now, and a
+		// sentinel compared by identity stops matching the moment anything in
+		// the call chain adds context to it.
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, huma.Error404NotFound("Recipe not found")
 		}
 		return nil, huma.Error500InternalServerError("Failed to parse recipe from db")
@@ -74,7 +78,7 @@ func (a *App) getRecipe(ctx context.Context, input *RecipeByIDInput) (*RecipeOut
 func (a *App) addRecipe(ctx context.Context, input *RecipeInput) (*AddRecipeOutput, error) {
 	userID := ctx.Value(contextKey("userID")).(string)
 
-	id, err := service.AddRecipe(input.Body, userID, a.db)
+	id, err := service.AddRecipe(ctx, input.Body, userID, a.db)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("could not insert ingredients")
 	}
@@ -91,7 +95,7 @@ func (a *App) editRecipe(ctx context.Context, input *RecipeInput) (*StatusOutput
 		return nil, huma.Error400BadRequest("Error: missing id")
 	}
 
-	if err := service.EditRecipe(input.Body, userID, a.db); err != nil {
+	if err := service.EditRecipe(ctx, input.Body, userID, a.db); err != nil {
 		return nil, huma.Error500InternalServerError("could not update recipe")
 	}
 
@@ -124,7 +128,7 @@ func (a *App) deleteRecipe(ctx context.Context, input *DeleteRecipeInput) (*Stat
 		return nil, huma.Error400BadRequest("Error: missing id")
 	}
 
-	if err := service.DeleteRecipe(common.Recipe{ID: input.Body.ID}, userID, a.db); err != nil {
+	if err := service.DeleteRecipe(ctx, common.Recipe{ID: input.Body.ID}, userID, a.db); err != nil {
 		return nil, huma.Error500InternalServerError("could not delete recipe")
 	}
 
@@ -132,7 +136,7 @@ func (a *App) deleteRecipe(ctx context.Context, input *DeleteRecipeInput) (*Stat
 }
 
 func (a *App) registerRecipeRoutes(api huma.API) {
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "get-recipe",
 		Method:      http.MethodGet,
 		Path:        "/recipe/{id}",
@@ -141,7 +145,7 @@ func (a *App) registerRecipeRoutes(api huma.API) {
 		Tags:        []string{"Recipes"},
 	}, a.getRecipe)
 
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID:   "add-recipe",
 		Method:        http.MethodPost,
 		Path:          "/recipe",
@@ -150,7 +154,7 @@ func (a *App) registerRecipeRoutes(api huma.API) {
 		DefaultStatus: http.StatusCreated,
 	}, a.addRecipe)
 
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "edit-recipe",
 		Method:      http.MethodPut,
 		Path:        "/recipe",
@@ -158,7 +162,7 @@ func (a *App) registerRecipeRoutes(api huma.API) {
 		Tags:        []string{"Recipes"},
 	}, a.editRecipe)
 
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "delete-recipe",
 		Method:      http.MethodDelete,
 		Path:        "/recipe",

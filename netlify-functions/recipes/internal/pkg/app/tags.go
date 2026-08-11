@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"log"
 	"net/http"
 
 	"recipes/internal/pkg/service"
@@ -45,11 +44,10 @@ func (o *TagsOutput) withCachePolicy() *TagsOutput {
 }
 
 func (a *App) getTags(ctx context.Context, _ *struct{}) (*TagsOutput, error) {
-	tags, err := service.GetAllTags(a.db)
+	tags, err := service.GetAllTags(ctx, a.db)
 
 	if err != nil {
-		log.Println(err)
-		return nil, huma.Error500InternalServerError("Failed to get tags from db")
+		return nil, fail(ctx, huma.Error500InternalServerError("Failed to get tags from db"), err)
 	}
 
 	// Success path only. An error returns before this, so the 500 keeps the
@@ -58,7 +56,7 @@ func (a *App) getTags(ctx context.Context, _ *struct{}) (*TagsOutput, error) {
 }
 
 func (a *App) registerTagsRoutes(api huma.API) {
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "list-tags",
 		Method:      http.MethodGet,
 		Path:        "/tags",

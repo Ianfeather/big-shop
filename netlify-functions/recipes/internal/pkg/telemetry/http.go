@@ -7,28 +7,29 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
-// phase1Routes is the allow-list of operations that produce a server span.
+// healthRoute is the one path deliberately left untraced.
 //
-// specs/observability.md's Phase 1 is deliberately *one* route end to end
-// rather than everything at once, so that the first thing proved is that the
-// pipeline works - trace, its logs and its metric, correlated - on a surface
-// small enough to reason about. Phase 3 (Session 3) widens this to every route,
-// at which point this filter and Middleware's use of it both go away.
+// Phase 1's allow-list of a single route is gone: every route is instrumented
+// now, which is what Phase 3 asks for. What replaces it is a single exclusion,
+// because /health is polled rather than requested. Fly checks it every 30s on
+// every machine, and Session 7 adds a Grafana synthetic check at roughly 1/min
+// on top - several thousand spans a day, all identical, none of which anyone
+// will ever read. Left in, they would also dominate the duration histogram and
+// make the p99 of "a Big Shop request" mean nothing.
 //
-// Keyed by method and route together, and compared against route() rather than
-// the raw path, so the entries here are the same route templates that appear on
-// spans and metric labels rather than a second, subtly different spelling of
-// them. (A suffix match on the raw path would also work today - no other route
-// ends in "/recipes" - but only by luck: "/recipe" and "/recipes" are one
-// character apart and both exist.)
-//
-// Including the method is what makes this honestly "one route": keyed by path
-// alone, a POST or PUT to the same path would be traced too, which is one more
-// route than Phase 1 says it is instrumenting.
-var phase1Routes = map[string]bool{"GET /recipes": true}
+// Compared against route() rather than the raw path, so it is the same route
+// template that appears on spans and metric labels rather than a second,
+// subtly different spelling of it.
+const healthRoute = "/health"
+
+// unmatchedRoute is the single bucket every unrecognised path collapses into,
+// so that traffic nobody registered - 404s, vulnerability scanners, a typo -
+// cannot add label values to the metrics from outside.
+const unmatchedRoute = "unmatched"
 
 // Handler wraps the whole HTTP stack in OpenTelemetry instrumentation: one
 // server span per request, plus the http.server.request.duration histogram that
@@ -40,13 +41,13 @@ var phase1Routes = map[string]bool{"GET /recipes": true}
 // as well as the handler - if auth or CORS is what is slow, the span should say
 // so. The consequence is that the span starts before the user is known, which
 // is why the identifying attributes are added later, by Middleware.
-func Handler(next http.Handler, basePath string) http.Handler {
+func Handler(next http.Handler, basePath string, templates []string) http.Handler {
 	return otelhttp.NewHandler(next, "",
 		otelhttp.WithFilter(func(r *http.Request) bool {
-			return isTracedRoute(basePath, r.Method, r.URL.Path)
+			return isTracedRoute(basePath, templates, r.URL.Path)
 		}),
 		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
-			return r.Method + " " + route(basePath, r.URL.Path)
+			return r.Method + " " + route(basePath, templates, r.URL.Path)
 		}),
 		// otelhttp does not put http.route on its metrics unless told: it only
 		// knows the concrete URL, and guessing a template from it is the
@@ -60,7 +61,7 @@ func Handler(next http.Handler, basePath string) http.Handler {
 		// is bounded by the number of registered routes, not by the size of the
 		// recipe table.
 		otelhttp.WithMetricAttributesFn(func(r *http.Request) []attribute.KeyValue {
-			return []attribute.KeyValue{attribute.String("http.route", route(basePath, r.URL.Path))}
+			return []attribute.KeyValue{attribute.String("http.route", route(basePath, templates, r.URL.Path))}
 		}),
 	)
 }
@@ -86,12 +87,12 @@ func Handler(next http.Handler, basePath string) http.Handler {
 // The returned middleware is a no-op when the request was filtered out of
 // tracing - SpanFromContext gives back a non-recording span and every
 // SetAttributes call on it is discarded, so it needs no guard of its own.
-func Middleware(basePath string, userSub func(*http.Request) string) func(http.ResponseWriter, *http.Request, http.HandlerFunc) {
+func Middleware(basePath string, templates []string, userSub func(*http.Request) string) func(http.ResponseWriter, *http.Request, http.HandlerFunc) {
 	return func(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 		span := trace.SpanFromContext(r.Context())
 
 		attrs := []attribute.KeyValue{
-			attribute.String("http.route", route(basePath, r.URL.Path)),
+			attribute.String("http.route", route(basePath, templates, r.URL.Path)),
 		}
 
 		if sub := userSub(r); sub != "" {
@@ -125,47 +126,112 @@ func SetAccountID(ctx context.Context, accountID int) {
 	trace.SpanFromContext(ctx).SetAttributes(attribute.Int("account.id", accountID))
 }
 
-// isTracedRoute reports whether a method and path are in the Phase 1 allow-list.
-func isTracedRoute(basePath, method, path string) bool {
-	return phase1Routes[method+" "+route(basePath, path)]
+// isTracedRoute reports whether a request should produce a server span. Every
+// route does, except the health check - see healthRoute.
+//
+// One test covers both paths app.go answers the check on. `base + "/health"`
+// has its prefix stripped by route(); a bare "/health" does not match the
+// prefix and passes through unchanged. Both arrive here as "/health".
+func isTracedRoute(basePath string, templates []string, path string) bool {
+	return route(basePath, templates, path) != healthRoute
 }
 
 // route reduces a request path to the low-cardinality template that belongs on
-// a span and, more importantly, on the duration histogram's labels.
+// a span name and, more importantly, on the duration histogram's labels.
 //
-// Without this, "/recipe/41" and "/recipe/42" are different label values and the
-// series count grows with the Recipe table - the unbounded-label failure
-// ADR-0008 §2 is about.
+// Matched against the templates the router actually registered, rather than
+// inferred from the shape of the path. Inferring was the first implementation
+// and it was wrong in a way that mattered: it replaced any *numeric* segment
+// with {id}, which is fine for "/recipe/41" and useless for "/recipe/katsu-
+// curry" - `GET /recipe/{id}` accepts a slug too (app/recipe.go tries
+// strconv.Atoi and falls back to a slug lookup). That put a **recipe name**
+// into the span name and into an `http.route` metric label: content on a span,
+// which ADR-0008 §1 forbids, and an unbounded label, which §2 forbids and
+// which grows the series count with the size of the recipe table.
 //
-// basePath is passed in rather than hardcoded because main.go already owns that
-// value and it is genuinely two different strings at runtime - "/api/bigshop"
-// for the server, "/.netlify/functions/recipes" for the Lambda. A copy of the
-// literal here would go stale silently: routes would keep their prefix, every
-// label would change, and nothing would fail.
-func route(basePath, path string) string {
+// Anything not matching a registered template collapses to "unmatched" - one
+// bucket for 404s, scanners and probes, which are otherwise the easiest way for
+// a stranger to add label values to your metrics from the outside.
+func route(basePath string, templates []string, path string) string {
 	if basePath != "" && strings.HasPrefix(path, basePath) {
 		path = path[len(basePath):]
 	}
-	if path == "" {
-		return "/"
+	if path == healthRoute {
+		return healthRoute
 	}
 	segments := strings.Split(path, "/")
-	for i, s := range segments {
-		if isNumeric(s) {
-			segments[i] = "{id}"
+	for _, t := range templates {
+		if matchTemplate(strings.Split(t, "/"), segments) {
+			return t
 		}
 	}
-	return strings.Join(segments, "/")
+	return unmatchedRoute
 }
 
-func isNumeric(s string) bool {
-	if s == "" {
+// matchTemplate reports whether a concrete path matches a route template,
+// treating any {placeholder} segment as a wildcard.
+func matchTemplate(tmpl, segments []string) bool {
+	if len(tmpl) != len(segments) {
 		return false
 	}
-	for _, c := range s {
-		if c < '0' || c > '9' {
+	for i, t := range tmpl {
+		if strings.HasPrefix(t, "{") && strings.HasSuffix(t, "}") {
+			if segments[i] == "" {
+				return false
+			}
+			continue
+		}
+		if t != segments[i] {
 			return false
 		}
 	}
 	return true
+}
+
+// RecordHandlerError attaches a failed handler's error to the request's span.
+//
+// Split by status deliberately. The error is always *recorded*, so the cause is
+// there to read whatever happened - but only 5xx sets the span's status to
+// Error. A 404 for a Recipe that does not exist, or a 422 for a malformed body,
+// is the API working correctly; marking those spans failed would make "show me
+// the errors" mean "show me the traffic", which is the fastest way to make an
+// error rate worthless.
+//
+// A no-op on an untraced request: SpanFromContext returns a non-recording span
+// and discards both calls.
+func RecordHandlerError(ctx context.Context, err error, status int) {
+	span := trace.SpanFromContext(ctx)
+	span.RecordError(err)
+	if status >= http.StatusInternalServerError {
+		span.SetStatus(codes.Error, err.Error())
+	}
+}
+
+// RecordWarning notes a non-fatal problem on the request's span.
+//
+// For the failures a caller deliberately ignores - best-effort catalog
+// enrichment, a shopping-list history row that did not get written - where
+// there is no error to return and wrapping is therefore not available. A span
+// event keeps the service layer free of logging (ADR-0008 §3) while leaving the
+// fact somewhere it can be found, attached to the request that caused it.
+//
+// `what` names the operation and is expected to be a short fixed string, not a
+// formatted detail: the lines this replaced named the ingredient ("could not
+// set unit size %q for %q"), and ingredient text is what ADR-0008 §1 says
+// telemetry does not carry. That is a real loss of resolution, and it is the
+// trade the ADR already makes explicit - the identifiers narrow it to one
+// request and one Account, and the rest is reproducible locally.
+//
+// It is a convention rather than a guarantee, and worth being honest about:
+// err.Error() is passed through, and some driver errors embed the offending
+// value (MySQL 1062 reads `Duplicate entry 'chicken thighs' for key ...`). The
+// same is true of any error reaching a span through fail(). Sanitising driver
+// text was considered and rejected as the kind of filter that is wrong in both
+// directions; the containment is that these are Grafana Cloud, not a public
+// surface.
+func RecordWarning(ctx context.Context, what string, err error) {
+	trace.SpanFromContext(ctx).AddEvent("warning", trace.WithAttributes(
+		attribute.String("warning.operation", what),
+		attribute.String("warning.error", err.Error()),
+	))
 }

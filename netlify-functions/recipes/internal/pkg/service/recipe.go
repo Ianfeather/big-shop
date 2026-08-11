@@ -1,19 +1,20 @@
 package service
 
 import (
+	"context"
 	"recipes/internal/pkg/common"
+	"recipes/internal/pkg/telemetry"
 	"strings"
 
 	"database/sql"
 	"fmt"
-	"log"
 )
 
 // execer is the minimal interface insertIngredients, insertUnits, insertParts, and
 // insertTags need - satisfied by both *sql.DB and *sql.Tx, so AddRecipe/EditRecipe can pass
 // either a bare connection or an in-flight transaction through the same call sites.
 type execer interface {
-	Exec(query string, args ...interface{}) (sql.Result, error)
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 }
 
 // dbConn is the minimal interface GetAccountID needs, and so - transitively - anything
@@ -22,10 +23,10 @@ type execer interface {
 // and *sql.Tx.
 type dbConn interface {
 	execer
-	QueryRow(query string, args ...interface{}) *sql.Row
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
 }
 
-func getIngredientsByRecipeID(id int, db *sql.DB) ([]common.Ingredient, error) {
+func getIngredientsByRecipeID(ctx context.Context, id int, db *sql.DB) ([]common.Ingredient, error) {
 	query := `
 		SELECT
 			ingredient.name as name,
@@ -41,12 +42,11 @@ func getIngredientsByRecipeID(id int, db *sql.DB) ([]common.Ingredient, error) {
 		WHERE
 		recipe_id = ?;
 	`
-	results, err := db.Query(query, id)
+	results, err := db.QueryContext(ctx, query, id)
 	ingredients := make([]common.Ingredient, 0)
 
 	if err != nil {
-		log.Println(err)
-		return nil, err
+		return nil, fmt.Errorf("querying ingredients for recipe %d: %w", id, err)
 	}
 	defer results.Close()
 
@@ -56,8 +56,7 @@ func getIngredientsByRecipeID(id int, db *sql.DB) ([]common.Ingredient, error) {
 		err = results.Scan(&ingredient.Name, &ingredient.Unit, &ingredient.Quantity, &department)
 
 		if err != nil {
-			log.Println(err)
-			return nil, err
+			return nil, fmt.Errorf("scanning ingredient row for recipe %d: %w", id, err)
 		}
 
 		if department.Valid {
@@ -72,8 +71,8 @@ func getIngredientsByRecipeID(id int, db *sql.DB) ([]common.Ingredient, error) {
 }
 
 // GetRecipeBySlug fetches a recipe from the database by Slug
-func GetRecipeBySlug(slug string, userID string, db *sql.DB) (*common.Recipe, error) {
-	accountID, err := GetAccountID(db, userID)
+func GetRecipeBySlug(ctx context.Context, slug string, userID string, db *sql.DB) (*common.Recipe, error) {
+	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -84,11 +83,10 @@ func GetRecipeBySlug(slug string, userID string, db *sql.DB) (*common.Recipe, er
 			LEFT JOIN recipe_tag on recipe.id = recipe_tag.recipe_id
 			WHERE slug = ? AND account_id = ?;`
 
-	results, err := db.Query(query, slug, accountID)
+	results, err := db.QueryContext(ctx, query, slug, accountID)
 
 	if err != nil {
-		log.Println("Error querying recipe")
-		return nil, err
+		return nil, fmt.Errorf("querying recipe: %w", err)
 	}
 	defer results.Close()
 	for results.Next() {
@@ -127,11 +125,10 @@ func GetRecipeBySlug(slug string, userID string, db *sql.DB) (*common.Recipe, er
 			recipe.Tags = []string{tag.String}
 		}
 
-		ingredients, err := getIngredientsByRecipeID(recipe.ID, db)
+		ingredients, err := getIngredientsByRecipeID(ctx, recipe.ID, db)
 
 		if err != nil {
-			log.Println(err)
-			return nil, err
+			return nil, fmt.Errorf("loading ingredients: %w", err)
 		}
 
 		recipe.Ingredients = ingredients
@@ -143,11 +140,10 @@ func GetRecipeBySlug(slug string, userID string, db *sql.DB) (*common.Recipe, er
 }
 
 // GetRecipeByID fetches a recipe from the database by ID
-func GetRecipeByID(id int, userID string, db *sql.DB) (*common.Recipe, error) {
-	accountID, err := GetAccountID(db, userID)
+func GetRecipeByID(ctx context.Context, id int, userID string, db *sql.DB) (*common.Recipe, error) {
+	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
-		log.Println(err)
-		return nil, err
+		return nil, fmt.Errorf("resolving account: %w", err)
 	}
 	recipe := &common.Recipe{Ingredients: []common.Ingredient{}, Tags: []string{}}
 	query := `
@@ -156,11 +152,10 @@ func GetRecipeByID(id int, userID string, db *sql.DB) (*common.Recipe, error) {
 			LEFT JOIN recipe_tag on recipe.id = recipe_tag.recipe_id
 			WHERE recipe.id = ? AND account_id = ?;`
 
-	results, err := db.Query(query, id, accountID)
+	results, err := db.QueryContext(ctx, query, id, accountID)
 
 	if err != nil {
-		log.Println("Error querying recipe")
-		return nil, err
+		return nil, fmt.Errorf("querying recipe: %w", err)
 	}
 	defer results.Close()
 
@@ -200,11 +195,10 @@ func GetRecipeByID(id int, userID string, db *sql.DB) (*common.Recipe, error) {
 			recipe.Tags = []string{tag.String}
 		}
 
-		ingredients, err := getIngredientsByRecipeID(id, db)
+		ingredients, err := getIngredientsByRecipeID(ctx, id, db)
 
 		if err != nil {
-			log.Println(err)
-			return nil, err
+			return nil, fmt.Errorf("loading ingredients: %w", err)
 		}
 
 		recipe.Ingredients = ingredients
@@ -220,25 +214,24 @@ func GetRecipeByID(id int, userID string, db *sql.DB) (*common.Recipe, error) {
 // through (e.g. a bad unit) doesn't leave an orphaned recipe with no Ingredient Lines.
 // Returns the new recipe's ID so the caller can hand it back to the client
 // (e.g. for a post-create redirect) without a follow-up lookup.
-func AddRecipe(recipe common.Recipe, userID string, db *sql.DB) (int, error) {
+func AddRecipe(ctx context.Context, recipe common.Recipe, userID string, db *sql.DB) (int, error) {
 	recipe = withCanonicalUnits(recipe)
 
-	accountID, err := GetAccountID(db, userID)
+	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
 		return 0, err
 	}
 
-	tx, err := db.Begin()
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
 	defer tx.Rollback()
 
 	query := "INSERT INTO recipe (name, slug, remote_url, notes, method, account_id) VALUES (?, ?, ?, ?, ?, ?);"
-	res, err := tx.Exec(query, recipe.Name, common.Slugify(recipe.Name), recipe.RemoteURL, recipe.Notes, recipe.Method, accountID)
+	res, err := tx.ExecContext(ctx, query, recipe.Name, common.Slugify(recipe.Name), recipe.RemoteURL, recipe.Notes, recipe.Method, accountID)
 	if err != nil {
-		fmt.Println("could not insert recipe")
-		return 0, err
+		return 0, fmt.Errorf("insert recipe: %w", err)
 	}
 
 	id, err := res.LastInsertId()
@@ -247,17 +240,17 @@ func AddRecipe(recipe common.Recipe, userID string, db *sql.DB) (int, error) {
 	}
 	recipe.ID = int(id)
 
-	if err = insertIngredients(recipe, tx); err != nil {
+	if err = insertIngredients(ctx, recipe, tx); err != nil {
 		return 0, err
 	}
-	if err = insertUnits(recipe, tx); err != nil {
+	if err = insertUnits(ctx, recipe, tx); err != nil {
 		return 0, err
 	}
-	classifyNewIngredients(recipe, tx)
-	if err = insertParts(recipe, tx); err != nil {
+	classifyNewIngredients(ctx, recipe, tx)
+	if err = insertParts(ctx, recipe, tx); err != nil {
 		return 0, err
 	}
-	if err = insertTags(recipe, tx); err != nil {
+	if err = insertTags(ctx, recipe, tx); err != nil {
 		return 0, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -271,89 +264,88 @@ func AddRecipe(recipe common.Recipe, userID string, db *sql.DB) (int, error) {
 // writes then happen in one transaction, so a failure partway through (e.g. between
 // deleting and reinserting the recipe's Ingredient Lines) doesn't leave the recipe with
 // no Ingredient Lines.
-func EditRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
+func EditRecipe(ctx context.Context, recipe common.Recipe, userID string, db *sql.DB) error {
 	recipe = withCanonicalUnits(recipe)
 
-	accountID, err := GetAccountID(db, userID)
+	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolving account: %w", err)
 	}
 	var id string
 	// Checking to see if this recipe exists for this user
-	if err := db.QueryRow("SELECT id FROM recipe WHERE id=? AND account_id = ?;", recipe.ID, accountID).Scan(&id); err == sql.ErrNoRows {
-		fmt.Println("no results")
+	if err := db.QueryRowContext(ctx, "SELECT id FROM recipe WHERE id=? AND account_id = ?;", recipe.ID, accountID).Scan(&id); err == sql.ErrNoRows {
+		// Returned unwrapped: it is a sentinel, and its identity is the whole
+		// message. Wrapping it would add "no results:" to an error that already
+		// says exactly that, and break any caller comparing against it.
 		return err
 	} else if err != nil {
-		return err
+		return fmt.Errorf("checking the recipe exists: %w", err)
 	}
 
-	tx, err := db.Begin()
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("starting transaction: %w", err)
 	}
 	defer tx.Rollback()
 
 	updateQuery := "UPDATE recipe SET name=?, remote_url=?, notes=?, method=? WHERE id=? AND account_id=?"
-	if _, err := tx.Exec(updateQuery, recipe.Name, recipe.RemoteURL, recipe.Notes, recipe.Method, recipe.ID, accountID); err != nil {
-		log.Println(err)
-		return err
+	if _, err := tx.ExecContext(ctx, updateQuery, recipe.Name, recipe.RemoteURL, recipe.Notes, recipe.Method, recipe.ID, accountID); err != nil {
+		return fmt.Errorf("updating recipe %d: %w", recipe.ID, err)
 	}
 
-	if err := insertIngredients(recipe, tx); err != nil {
-		log.Println(err)
-		return err
+	if err := insertIngredients(ctx, recipe, tx); err != nil {
+		return fmt.Errorf("inserting ingredients: %w", err)
 	}
 
-	if err := insertUnits(recipe, tx); err != nil {
-		log.Println(err)
-		return err
+	if err := insertUnits(ctx, recipe, tx); err != nil {
+		return fmt.Errorf("inserting units: %w", err)
 	}
-	classifyNewIngredients(recipe, tx)
+	classifyNewIngredients(ctx, recipe, tx)
 
 	// Delete the existing relationships between recipe & ingredients
-	if _, err := tx.Exec("DELETE FROM part WHERE recipe_id=?", recipe.ID); err != nil {
-		log.Println(err)
-		return err
+	if _, err := tx.ExecContext(ctx, "DELETE FROM part WHERE recipe_id=?", recipe.ID); err != nil {
+		return fmt.Errorf("clearing recipe %d's ingredient links: %w", recipe.ID, err)
 	}
 
-	if err := insertParts(recipe, tx); err != nil {
-		log.Println(err)
-		return err
+	if err := insertParts(ctx, recipe, tx); err != nil {
+		return fmt.Errorf("inserting ingredient links: %w", err)
 	}
 
-	if err = insertTags(recipe, tx); err != nil {
-		return err
+	if err = insertTags(ctx, recipe, tx); err != nil {
+		return fmt.Errorf("inserting tags: %w", err)
 	}
 	return tx.Commit()
 }
 
 // DeleteRecipe removes a recipe from the db
-func DeleteRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
-	accountID, err := GetAccountID(db, userID)
+func DeleteRecipe(ctx context.Context, recipe common.Recipe, userID string, db *sql.DB) error {
+	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolving account: %w", err)
 	}
 	var id string
 	// Checking to see if this recipe exists for this user
-	if err := db.QueryRow("SELECT id FROM recipe WHERE id=? AND account_id = ?;", recipe.ID, accountID).Scan(&id); err == sql.ErrNoRows {
-		fmt.Println("no results")
+	if err := db.QueryRowContext(ctx, "SELECT id FROM recipe WHERE id=? AND account_id = ?;", recipe.ID, accountID).Scan(&id); err == sql.ErrNoRows {
+		// Returned unwrapped: it is a sentinel, and its identity is the whole
+		// message. Wrapping it would add "no results:" to an error that already
+		// says exactly that, and break any caller comparing against it.
 		return err
 	} else if err != nil {
 		return err
 	}
 
 	// Delete the existing relationships between recipe & ingredients
-	if _, err := db.Exec("DELETE FROM part WHERE recipe_id=?;", recipe.ID); err != nil {
+	if _, err := db.ExecContext(ctx, "DELETE FROM part WHERE recipe_id=?;", recipe.ID); err != nil {
 		return err
 	}
 
 	// Delete the existing relationships between recipe & tags
-	if _, err := db.Exec("DELETE FROM recipe_tag WHERE recipe_id=?;", recipe.ID); err != nil {
+	if _, err := db.ExecContext(ctx, "DELETE FROM recipe_tag WHERE recipe_id=?;", recipe.ID); err != nil {
 		return err
 	}
 
 	// Delete the recipe items from the shopping list
-	if _, err := db.Exec("DELETE FROM list WHERE recipe_id=? and account_id=?;", recipe.ID, accountID); err != nil {
+	if _, err := db.ExecContext(ctx, "DELETE FROM list WHERE recipe_id=? and account_id=?;", recipe.ID, accountID); err != nil {
 		return err
 	}
 
@@ -367,18 +359,18 @@ func DeleteRecipe(recipe common.Recipe, userID string, db *sql.DB) error {
 	// `recipe_id IS NOT NULL`, and a Recipe that no longer exists cannot be
 	// suggested - so a nulled row would be dead weight. It also matches what
 	// this function already does with the Recipe's parts, tags and list items.
-	if _, err := db.Exec("DELETE FROM shopping_list_event WHERE recipe_id=? AND account_id=?;", recipe.ID, accountID); err != nil {
+	if _, err := db.ExecContext(ctx, "DELETE FROM shopping_list_event WHERE recipe_id=? AND account_id=?;", recipe.ID, accountID); err != nil {
 		return err
 	}
 
-	if _, err := db.Exec("DELETE FROM recipe WHERE id=? and account_id = ?;", recipe.ID, accountID); err != nil {
+	if _, err := db.ExecContext(ctx, "DELETE FROM recipe WHERE id=? and account_id = ?;", recipe.ID, accountID); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func insertIngredients(recipe common.Recipe, db execer) error {
+func insertIngredients(ctx context.Context, recipe common.Recipe, db execer) error {
 	if len(recipe.Ingredients) == 0 {
 		return nil
 	}
@@ -390,9 +382,8 @@ func insertIngredients(recipe common.Recipe, db execer) error {
 	}
 	query := fmt.Sprintf("INSERT INTO ingredient (name) VALUES %s ON DUPLICATE KEY UPDATE id=id;", strings.Join(placeholders, ","))
 
-	if _, err := db.Exec(query, placeholderValues...); err != nil {
-		fmt.Println("could not insert ingredients")
-		return err
+	if _, err := db.ExecContext(ctx, query, placeholderValues...); err != nil {
+		return fmt.Errorf("insert ingredients: %w", err)
 	}
 	return nil
 }
@@ -401,7 +392,7 @@ func insertIngredients(recipe common.Recipe, db execer) error {
 // ("no unit, just a count") entry where needed, mirroring insertIngredients. Without this, a
 // unit that doesn't already exist (e.g. "bunch") leaves part.unit_id with nothing to reference,
 // which fails the recipe save outright since that column is NOT NULL.
-func insertUnits(recipe common.Recipe, db execer) error {
+func insertUnits(ctx context.Context, recipe common.Recipe, db execer) error {
 	if len(recipe.Ingredients) == 0 {
 		return nil
 	}
@@ -413,14 +404,13 @@ func insertUnits(recipe common.Recipe, db execer) error {
 	}
 	query := fmt.Sprintf("INSERT INTO unit (name) VALUES %s ON DUPLICATE KEY UPDATE id=id;", strings.Join(placeholders, ","))
 
-	if _, err := db.Exec(query, placeholderValues...); err != nil {
-		fmt.Println("could not insert units")
-		return err
+	if _, err := db.ExecContext(ctx, query, placeholderValues...); err != nil {
+		return fmt.Errorf("insert units: %w", err)
 	}
 	return nil
 }
 
-func insertParts(recipe common.Recipe, db execer) error {
+func insertParts(ctx context.Context, recipe common.Recipe, db execer) error {
 	if len(recipe.Ingredients) == 0 {
 		return nil
 	}
@@ -432,20 +422,18 @@ func insertParts(recipe common.Recipe, db execer) error {
 	}
 	query := fmt.Sprintf("INSERT INTO part (recipe_id, ingredient_id, unit_id, quantity) VALUES %s;", strings.Join(placeholders, ","))
 
-	if _, err := db.Exec(query, placeholderValues...); err != nil {
-		fmt.Println("could not insert part")
-		return err
+	if _, err := db.ExecContext(ctx, query, placeholderValues...); err != nil {
+		return fmt.Errorf("insert part: %w", err)
 	}
 
 	return nil
 }
 
-func insertTags(recipe common.Recipe, db execer) error {
+func insertTags(ctx context.Context, recipe common.Recipe, db execer) error {
 	removeQuery := "DELETE FROM recipe_tag WHERE recipe_id = ?;"
-	_, err := db.Exec(removeQuery, recipe.ID)
+	_, err := db.ExecContext(ctx, removeQuery, recipe.ID)
 	if err != nil {
-		fmt.Println("could not remove tags")
-		return err
+		return fmt.Errorf("remove tags: %w", err)
 	}
 
 	placeholders := []string{}
@@ -460,11 +448,9 @@ func insertTags(recipe common.Recipe, db execer) error {
 		placeholders = append(placeholders, "(?,?)")
 		placeholderValues = append(placeholderValues, recipe.ID, tag)
 	}
-	_, err = db.Exec(fmt.Sprintf(addQuery, strings.Join(placeholders, ",")), placeholderValues...)
+	_, err = db.ExecContext(ctx, fmt.Sprintf(addQuery, strings.Join(placeholders, ",")), placeholderValues...)
 	if err != nil {
-		fmt.Println("could not add tags")
-		fmt.Println(err)
-		return err
+		return fmt.Errorf("add tags: %w", err)
 	}
 
 	return nil
@@ -503,16 +489,16 @@ func insertTags(recipe common.Recipe, db execer) error {
 // that structural rather than a rule each caller has to remember. A failed
 // statement does not abort a MySQL transaction, so the surrounding save is
 // unaffected.
-func classifyNewIngredients(recipe common.Recipe, db execer) {
+func classifyNewIngredients(ctx context.Context, recipe common.Recipe, db execer) {
 	for _, ingredient := range recipe.Ingredients {
 		if ingredient.BaseUnit != "" {
-			setIngredientUnitColumn(db, "base_unit_id", ingredient.BaseUnit, ingredient.Name)
+			setIngredientUnitColumn(ctx, db, "base_unit_id", ingredient.BaseUnit, ingredient.Name)
 		}
 		if ingredient.DisplayUnit != nil {
-			setIngredientUnitColumn(db, "display_unit_id", *ingredient.DisplayUnit, ingredient.Name)
+			setIngredientUnitColumn(ctx, db, "display_unit_id", *ingredient.DisplayUnit, ingredient.Name)
 		}
 		if ingredient.PantryStaple {
-			setPantryStaple(db, ingredient.Name)
+			setPantryStaple(ctx, db, ingredient.Name)
 		}
 
 		for unit, size := range ingredient.UnitSizes {
@@ -527,8 +513,8 @@ func classifyNewIngredients(recipe common.Recipe, db execer) {
 				SELECT i.id, u.id, ? FROM ingredient i, unit u
 				WHERE i.name = ? AND u.name = ? AND NOT i.curated
 				ON DUPLICATE KEY UPDATE ingredient_unit_size.ingredient_id = ingredient_unit_size.ingredient_id;`
-			if _, err := db.Exec(query, size, ingredient.Name, unit); err != nil {
-				log.Printf("could not set unit size %q for %q: %v", unit, ingredient.Name, err)
+			if _, err := db.ExecContext(ctx, query, size, ingredient.Name, unit); err != nil {
+				telemetry.RecordWarning(ctx, "set ingredient unit size", err)
 			}
 		}
 	}
@@ -545,12 +531,12 @@ func classifyNewIngredients(recipe common.Recipe, db execer) {
 // not exist, so an invented Base Unit is inert rather than corrupting the
 // catalog. And `NOT curated` keeps it away from values a person chose - see
 // classifyNewIngredients for why "is the column still unset" is not sufficient.
-func setIngredientUnitColumn(db execer, column, unitName, ingredientName string) {
+func setIngredientUnitColumn(ctx context.Context, db execer, column, unitName, ingredientName string) {
 	query := fmt.Sprintf(`
 		UPDATE ingredient SET %s = (SELECT id FROM unit WHERE name = ?)
 		WHERE name = ? AND %s IS NULL AND NOT curated;`, column, column)
-	if _, err := db.Exec(query, unitName, ingredientName); err != nil {
-		log.Printf("could not set %s for %q: %v", column, ingredientName, err)
+	if _, err := db.ExecContext(ctx, query, unitName, ingredientName); err != nil {
+		telemetry.RecordWarning(ctx, "set ingredient "+column, err)
 	}
 }
 
@@ -565,10 +551,10 @@ func setIngredientUnitColumn(db execer, column, unitName, ingredientName string)
 //
 // `NOT curated` still applies, so anyone who deliberately un-flags an Ingredient
 // by hand can mark it curated and have that stick.
-func setPantryStaple(db execer, ingredientName string) {
+func setPantryStaple(ctx context.Context, db execer, ingredientName string) {
 	query := `UPDATE ingredient SET pantry_staple = TRUE WHERE name = ? AND NOT curated;`
-	if _, err := db.Exec(query, ingredientName); err != nil {
-		log.Printf("could not set pantry_staple for %q: %v", ingredientName, err)
+	if _, err := db.ExecContext(ctx, query, ingredientName); err != nil {
+		telemetry.RecordWarning(ctx, "set ingredient pantry_staple", err)
 	}
 }
 

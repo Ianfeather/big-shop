@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"recipes/internal/pkg/common"
@@ -28,23 +27,20 @@ func (a *App) addUser(ctx context.Context, input *UserInput) (*UserOutput, error
 	user := input.Body
 	user.ID = ctx.Value(contextKey("userID")).(string)
 
-	if err := service.AddUser(a.db, user); err != nil {
-		log.Println("Error: could not add new user")
-		return nil, huma.Error500InternalServerError("could not add new user")
+	if err := service.AddUser(ctx, a.db, user); err != nil {
+		return nil, fail(ctx, huma.Error500InternalServerError("could not add new user"), err)
 	}
 
-	if err := service.CreateAccount(a.db, user); err != nil {
-		log.Println("Error creating account for user")
-		return nil, huma.Error500InternalServerError("Error creating account for user")
+	if err := service.CreateAccount(ctx, a.db, user); err != nil {
+		return nil, fail(ctx, huma.Error500InternalServerError("Error creating account for user"), err)
 	}
 
 	// Re-fetch rather than echoing the input body: `onboarded` is server-managed
 	// (untouched by the upsert in AddUser for existing rows), so the caller needs
 	// the DB's current value to know whether to show the onboarding screen.
-	saved, err := service.GetUser(a.db, user.ID)
+	saved, err := service.GetUser(ctx, a.db, user.ID)
 	if err != nil {
-		log.Println("Error fetching saved user")
-		return nil, huma.Error500InternalServerError("Error fetching saved user")
+		return nil, fail(ctx, huma.Error500InternalServerError("Error fetching saved user"), err)
 	}
 
 	return &UserOutput{Body: *saved}, nil
@@ -67,13 +63,12 @@ type PreferencesInput struct {
 func (a *App) getUser(ctx context.Context, _ *struct{}) (*UserOutput, error) {
 	userID := ctx.Value(contextKey("userID")).(string)
 
-	user, err := service.GetUser(a.db, userID)
+	user, err := service.GetUser(ctx, a.db, userID)
 	if err != nil {
 		// Also the no-rows case: someone who reached an inner page before POST
 		// /user ever ran for them. Not a server fault, and the client treats it
 		// as "no preferences recorded yet" rather than as an error.
-		log.Println("Error fetching user")
-		return nil, huma.Error404NotFound("user not found")
+		return nil, fail(ctx, huma.Error404NotFound("user not found"), err)
 	}
 
 	return &UserOutput{Body: *user}, nil
@@ -82,15 +77,13 @@ func (a *App) getUser(ctx context.Context, _ *struct{}) (*UserOutput, error) {
 func (a *App) setPreferences(ctx context.Context, input *PreferencesInput) (*UserOutput, error) {
 	userID := ctx.Value(contextKey("userID")).(string)
 
-	if err := service.SetShowPantryStaples(a.db, userID, input.Body.ShowPantryStaples); err != nil {
-		log.Println("Error saving preferences")
-		return nil, huma.Error500InternalServerError("could not save preferences")
+	if err := service.SetShowPantryStaples(ctx, a.db, userID, input.Body.ShowPantryStaples); err != nil {
+		return nil, fail(ctx, huma.Error500InternalServerError("could not save preferences"), err)
 	}
 
-	saved, err := service.GetUser(a.db, userID)
+	saved, err := service.GetUser(ctx, a.db, userID)
 	if err != nil {
-		log.Println("Error fetching saved user")
-		return nil, huma.Error500InternalServerError("Error fetching saved user")
+		return nil, fail(ctx, huma.Error500InternalServerError("Error fetching saved user"), err)
 	}
 
 	return &UserOutput{Body: *saved}, nil
@@ -99,15 +92,13 @@ func (a *App) setPreferences(ctx context.Context, input *PreferencesInput) (*Use
 func (a *App) completeOnboarding(ctx context.Context, _ *struct{}) (*UserOutput, error) {
 	userID := ctx.Value(contextKey("userID")).(string)
 
-	if err := service.SetOnboarded(a.db, userID); err != nil {
-		log.Println("Error completing onboarding")
-		return nil, huma.Error500InternalServerError("could not complete onboarding")
+	if err := service.SetOnboarded(ctx, a.db, userID); err != nil {
+		return nil, fail(ctx, huma.Error500InternalServerError("could not complete onboarding"), err)
 	}
 
-	saved, err := service.GetUser(a.db, userID)
+	saved, err := service.GetUser(ctx, a.db, userID)
 	if err != nil {
-		log.Println("Error fetching saved user")
-		return nil, huma.Error500InternalServerError("Error fetching saved user")
+		return nil, fail(ctx, huma.Error500InternalServerError("Error fetching saved user"), err)
 	}
 
 	return &UserOutput{Body: *saved}, nil
@@ -117,23 +108,20 @@ func (a *App) inviteUser(ctx context.Context, input *UserInput) (*struct{}, erro
 	currentUserID := ctx.Value(contextKey("userID")).(string)
 	userToInvite := input.Body
 
-	currentUser, err := service.GetUser(a.db, currentUserID)
+	currentUser, err := service.GetUser(ctx, a.db, currentUserID)
 	if err != nil {
-		log.Println("Error finding current user")
-		return nil, huma.Error400BadRequest("Error finding current user")
+		return nil, fail(ctx, huma.Error400BadRequest("Error finding current user"), err)
 	}
 
-	account, err := service.GetAccount(a.db, currentUserID)
+	account, err := service.GetAccount(ctx, a.db, currentUserID)
 	if err != nil {
-		log.Println("Error finding account for current user")
-		return nil, huma.Error400BadRequest("Error finding account for current user")
+		return nil, fail(ctx, huma.Error400BadRequest("Error finding account for current user"), err)
 	}
 
 	// Generate a token and write it to the invites table
 	token, _ := common.RandToken(32)
-	if err := service.CreateInvite(a.db, token, account.ID, userToInvite.Email, currentUserID); err != nil {
-		log.Println("Error creating Invite")
-		return nil, huma.Error500InternalServerError("Error creating Invite")
+	if err := service.CreateInvite(ctx, a.db, token, account.ID, userToInvite.Email, currentUserID); err != nil {
+		return nil, fail(ctx, huma.Error500InternalServerError("Error creating Invite"), err)
 	}
 
 	// Send the email
@@ -148,15 +136,14 @@ func (a *App) inviteUser(ctx context.Context, input *UserInput) (*struct{}, erro
 	message := mail.NewSingleEmail(from, subject, to, "", fmt.Sprintf(htmlContent, currentUser.Name, token))
 	client := sendgrid.NewSendClient(os.Getenv("SENDGRID_API_KEY"))
 	if _, err := client.Send(message); err != nil {
-		log.Println(err)
-		return nil, huma.Error400BadRequest("Error sending email")
+		return nil, fail(ctx, huma.Error400BadRequest("Error sending email"), err)
 	}
 
 	return nil, nil
 }
 
 func (a *App) registerUserRoutes(api huma.API) {
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "add-user",
 		Method:      http.MethodPost,
 		Path:        "/user",
@@ -164,7 +151,7 @@ func (a *App) registerUserRoutes(api huma.API) {
 		Tags:        []string{"Users"},
 	}, a.addUser)
 
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "get-user",
 		Method:      http.MethodGet,
 		Path:        "/user",
@@ -172,7 +159,7 @@ func (a *App) registerUserRoutes(api huma.API) {
 		Tags:        []string{"Users"},
 	}, a.getUser)
 
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "set-preferences",
 		Method:      http.MethodPatch,
 		Path:        "/user/preferences",
@@ -180,7 +167,7 @@ func (a *App) registerUserRoutes(api huma.API) {
 		Tags:        []string{"Users"},
 	}, a.setPreferences)
 
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "complete-onboarding",
 		Method:      http.MethodPatch,
 		Path:        "/user/onboarding",
@@ -188,7 +175,7 @@ func (a *App) registerUserRoutes(api huma.API) {
 		Tags:        []string{"Users"},
 	}, a.completeOnboarding)
 
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "invite-user",
 		Method:      http.MethodPost,
 		Path:        "/invite",

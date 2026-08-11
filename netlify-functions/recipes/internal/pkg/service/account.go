@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
-	"log"
+	"fmt"
 	"recipes/internal/pkg/common"
 )
 
@@ -14,14 +14,18 @@ func CreateAccount(ctx context.Context, db *sql.DB, user common.User) error {
 	err := db.QueryRowContext(ctx, accountQuery, user.ID).Scan(accountID)
 	if err != nil && err == sql.ErrNoRows {
 		// create a new account
-		res, _ := db.ExecContext(ctx, `INSERT INTO account (id) VALUES (null)`)
-		id, _ := res.LastInsertId()
+		res, err := db.ExecContext(ctx, `INSERT INTO account (id) VALUES (null)`)
+		if err != nil {
+			return fmt.Errorf("creating account: %w", err)
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			return fmt.Errorf("reading new account id: %w", err)
+		}
 		accountID = int(id)
 		accountUserQuery := `INSERT INTO account_user (user_id, account_id) VALUES (?, ?)`
-		_, err = db.ExecContext(ctx, accountUserQuery, user.ID, accountID)
-		if err != nil {
-			log.Println("Error creating new account")
-			return err
+		if _, err := db.ExecContext(ctx, accountUserQuery, user.ID, accountID); err != nil {
+			return fmt.Errorf("linking user to new account: %w", err)
 		}
 	}
 	return nil
@@ -42,8 +46,7 @@ func GetAccount(ctx context.Context, db *sql.DB, userID string) (a *common.Accou
 	accountID, err := GetAccountID(ctx, db, userID)
 
 	if err != nil {
-		log.Println("Error querying account table")
-		return nil, err
+		return nil, fmt.Errorf("resolving account: %w", err)
 	}
 
 	accountQuery := `
@@ -54,8 +57,7 @@ func GetAccount(ctx context.Context, db *sql.DB, userID string) (a *common.Accou
 	results, err := db.QueryContext(ctx, accountQuery, accountID)
 
 	if err != nil {
-		log.Println("Error querying account table")
-		return nil, err
+		return nil, fmt.Errorf("querying the account's users: %w", err)
 	}
 	defer results.Close()
 
@@ -83,17 +85,13 @@ func AddUserToAccount(ctx context.Context, db *sql.DB, accountID int, user commo
 	// to it. The first one's error was also being discarded entirely.
 	userQuery := `INSERT INTO user (id, name) VALUES (?,?) ON DUPLICATE KEY UPDATE id=id;`
 	if _, err := db.ExecContext(ctx, userQuery, user.ID, user.Name); err != nil {
-		log.Println("Error adding user")
-		log.Println(err)
-		return err
+		return fmt.Errorf("adding user: %w", err)
 	}
 
 	accountQuery := `INSERT INTO account_user (user_id, account_id) VALUES (?,?);`
 	_, err := db.ExecContext(ctx, accountQuery, user.ID, accountID)
 	if err != nil {
-		log.Println("Error adding user to account")
-		log.Println(err)
-		return err
+		return fmt.Errorf("adding user to account: %w", err)
 	}
 	return nil
 }
@@ -102,9 +100,7 @@ func DisableUserAccount(ctx context.Context, db *sql.DB, user common.User) error
 	query := `UPDATE account_user SET enabled = false WHERE user_id = ?`
 	_, err := db.ExecContext(ctx, query, user.ID)
 	if err != nil {
-		log.Println("Error disable user account")
-		log.Println(err)
-		return err
+		return fmt.Errorf("disabling user account: %w", err)
 	}
 	return nil
 }
@@ -113,8 +109,7 @@ func RemoveUserFromAccount(ctx context.Context, db *sql.DB, accountID int, user 
 	accountQuery := `DELETE FROM account_user WHERE user_id = ? AND account_id = ?;`
 	_, err := db.ExecContext(ctx, accountQuery, user.ID, accountID)
 	if err != nil {
-		log.Println("Error removing user from account")
-		return err
+		return fmt.Errorf("removing user from account: %w", err)
 	}
 	return nil
 }

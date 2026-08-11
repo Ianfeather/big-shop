@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"math"
 	"recipes/internal/pkg/common"
+	"recipes/internal/pkg/telemetry"
 	"sort"
 	"strconv"
 
@@ -559,7 +559,7 @@ func GenerateShoppingList(ctx context.Context, recipeIDs []string, userID string
 	// logging failure shouldn't fail the whole generate operation.
 	if intRecipeIDs, err := GetRecipeIDsFromStrings(recipeIDs); err == nil {
 		if logErr := LogShoppingListEvent(ctx, userID, "add_recipe", intRecipeIDs, db); logErr != nil {
-			log.Printf("Failed to log shopping list history: %v", logErr)
+			telemetry.RecordWarning(ctx, "log shopping list history", logErr)
 		}
 	}
 
@@ -570,20 +570,17 @@ func GenerateShoppingList(ctx context.Context, recipeIDs []string, userID string
 func GetShoppingList(ctx context.Context, userID string, db *sql.DB) (*common.ShoppingList, error) {
 	recipes, err := GetRecipesFromList(ctx, userID, db)
 	if err != nil {
-		fmt.Println("could not get recipes from list")
-		return nil, err
+		return nil, fmt.Errorf("get recipes from list: %w", err)
 	}
 
 	ingredients, err := GetIngredientListItems(ctx, userID, db)
 	if err != nil {
-		fmt.Println("could not get ingredients from list")
-		return nil, err
+		return nil, fmt.Errorf("get ingredients from list: %w", err)
 	}
 
 	extras, err := GetExtraListItems(ctx, userID, db)
 	if err != nil {
-		fmt.Println("could not get extra list items")
-		return nil, err
+		return nil, fmt.Errorf("get extra list items: %w", err)
 	}
 
 	// Display Units are applied here rather than when the list is generated, so
@@ -618,12 +615,10 @@ func GetShoppingList(ctx context.Context, userID string, db *sql.DB) (*common.Sh
 func RemoveAllListItems(ctx context.Context, userID string, db *sql.DB) error {
 	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
-		fmt.Println("could not delete ingredients")
-		return err
+		return fmt.Errorf("delete ingredients: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, "DELETE FROM list WHERE account_id = ?;", accountID); err != nil {
-		fmt.Println("could not delete ingredients")
-		return err
+		return fmt.Errorf("delete ingredients: %w", err)
 	}
 	return nil
 }
@@ -632,12 +627,10 @@ func RemoveAllListItems(ctx context.Context, userID string, db *sql.DB) error {
 func RemoveIngredientListItems(ctx context.Context, userID string, db dbConn) error {
 	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
-		fmt.Println("could not delete ingredients")
-		return err
+		return fmt.Errorf("delete ingredients: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, "DELETE FROM list WHERE account_id = ? AND type = 'ingredient';", accountID); err != nil {
-		fmt.Println("could not delete ingredients")
-		return err
+		return fmt.Errorf("delete ingredients: %w", err)
 	}
 	return nil
 }
@@ -646,8 +639,7 @@ func RemoveIngredientListItems(ctx context.Context, userID string, db dbConn) er
 func AddIngredientListItems(ctx context.Context, userID string, ingredients map[string]*common.ListIngredient, db dbConn) error {
 	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
-		fmt.Println("could not add ingredients to shopping list")
-		return err
+		return fmt.Errorf("add ingredients to shopping list: %w", err)
 	}
 
 	sqlStr := "INSERT INTO list(account_id, name, type, quantity, department, is_bought, recipe_id, unit_id) VALUES "
@@ -672,9 +664,7 @@ func AddIngredientListItems(ctx context.Context, userID string, ingredients map[
 
 	sqlStr = sqlStr[0 : len(sqlStr)-1]
 	if _, err := db.ExecContext(ctx, sqlStr, vals...); err != nil {
-		fmt.Println(err)
-		fmt.Println("could not add ingredients to shopping list")
-		return err
+		return fmt.Errorf("add ingredients to shopping list: %w", err)
 	}
 	return nil
 }

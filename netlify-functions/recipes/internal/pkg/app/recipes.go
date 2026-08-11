@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"log"
 	"net/http"
 
 	"recipes/internal/pkg/service"
@@ -26,8 +25,7 @@ func (a *App) getRecipes(ctx context.Context, _ *struct{}) (*RecipesOutput, erro
 	recipes, err := service.GetAllRecipes(ctx, a.db, userID)
 
 	if err != nil {
-		log.Println(err)
-		return nil, huma.Error500InternalServerError("Failed to get recipes from db")
+		return nil, fail(ctx, huma.Error500InternalServerError("Failed to get recipes from db"), err)
 	}
 
 	summaries := make([]RecipeSummary, len(recipes))

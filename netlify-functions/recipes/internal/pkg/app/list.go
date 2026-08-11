@@ -2,10 +2,10 @@ package app
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"recipes/internal/pkg/common"
 	"recipes/internal/pkg/service"
+	"recipes/internal/pkg/telemetry"
 
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -60,8 +60,7 @@ func (a *App) createList(ctx context.Context, input *CreateListInput) (*Shopping
 		if err == service.ErrInvalidRecipeID {
 			return nil, huma.Error400BadRequest("Cannot parse recipe id")
 		}
-		log.Println("Cannot generate shopping list")
-		return nil, huma.Error500InternalServerError("Cannot generate shopping list")
+		return nil, fail(ctx, huma.Error500InternalServerError("Cannot generate shopping list"), err)
 	}
 
 	return &ShoppingListOutput{Body: *list}, nil
@@ -111,8 +110,10 @@ func (a *App) clearList(ctx context.Context, _ *struct{}) (*ShoppingListOutput, 
 
 	// Log clear event for meal planning intelligence
 	if logErr := service.LogShoppingListClearEvent(ctx, userID, a.db); logErr != nil {
-		// Log error but don't fail the main operation
-		log.Printf("Failed to log shopping list clear: %v", logErr)
+		// Recorded, not returned: clearing the list succeeded, and failing the
+		// request because its history row did not get written would be worse
+		// than losing the row.
+		telemetry.RecordWarning(ctx, "log shopping list clear", logErr)
 	}
 
 	return &ShoppingListOutput{Body: common.ShoppingList{}}, nil
@@ -123,14 +124,12 @@ func (a *App) getShoppingListHistory(ctx context.Context, _ *struct{}) (*Shoppin
 
 	recentRecipes, err := service.GetRecentRecipeUsage(ctx, userID, 30, 10, a.db)
 	if err != nil {
-		log.Printf("Error getting recent recipes: %v", err)
-		return nil, huma.Error500InternalServerError("Error getting recent recipes")
+		return nil, fail(ctx, huma.Error500InternalServerError("Error getting recent recipes"), err)
 	}
 
 	favoriteRecipes, err := service.GetFavoriteRecipes(ctx, userID, 10, a.db)
 	if err != nil {
-		log.Printf("Error getting favorite recipes: %v", err)
-		return nil, huma.Error500InternalServerError("Error getting favorite recipes")
+		return nil, fail(ctx, huma.Error500InternalServerError("Error getting favorite recipes"), err)
 	}
 
 	resp := &ShoppingListHistoryOutput{}

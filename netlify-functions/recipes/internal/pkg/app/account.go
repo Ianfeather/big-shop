@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"recipes/internal/pkg/common"
 	"recipes/internal/pkg/service"
@@ -25,8 +24,7 @@ func (a *App) getAccount(ctx context.Context, _ *struct{}) (*AccountOutput, erro
 	account, err := service.GetAccount(ctx, a.db, userID)
 
 	if err != nil {
-		log.Println(err)
-		return nil, huma.Error500InternalServerError("Failed to get Account from db")
+		return nil, fail(ctx, huma.Error500InternalServerError("Failed to get Account from db"), err)
 	}
 
 	return &AccountOutput{Body: *account}, nil
@@ -40,9 +38,9 @@ func (a *App) addUserToAccount(ctx context.Context, input *AccountUserInput) (*A
 	if err != nil {
 		// Was: log the guess "current user is not associated with an account"
 		// and discard err - so a TiDB outage was reported, to the logs and to
-		// the user, as a membership problem. serverError puts the real cause on
-		// the span and keeps the client's message opaque.
-		return nil, serverError(ctx, "Could not resolve the current user's account", err)
+		// the user, as a membership problem. fail() puts the real cause on the
+		// span and keeps the client's message opaque.
+		return nil, fail(ctx, huma.Error500InternalServerError("Could not resolve the current user's account"), err)
 	}
 
 	// TODO: Fetch the user ID associated with the email from Auth0
@@ -51,8 +49,7 @@ func (a *App) addUserToAccount(ctx context.Context, input *AccountUserInput) (*A
 
 	// TODO: if the user doesn't exist, we should be able to invite them
 	if err := service.AddUserToAccount(ctx, a.db, accountID, newUser); err != nil {
-		log.Println("failed to add user to account")
-		return nil, huma.Error500InternalServerError("Failed to add user to account")
+		return nil, fail(ctx, huma.Error500InternalServerError("Failed to add user to account"), err)
 	}
 
 	account, err := service.GetAccount(ctx, a.db, userID)
@@ -71,15 +68,14 @@ func (a *App) removeUserFromAccount(ctx context.Context, input *AccountUserInput
 	if err != nil {
 		// Was: log the guess "current user is not associated with an account"
 		// and discard err - so a TiDB outage was reported, to the logs and to
-		// the user, as a membership problem. serverError puts the real cause on
-		// the span and keeps the client's message opaque.
-		return nil, serverError(ctx, "Could not resolve the current user's account", err)
+		// the user, as a membership problem. fail() puts the real cause on the
+		// span and keeps the client's message opaque.
+		return nil, fail(ctx, huma.Error500InternalServerError("Could not resolve the current user's account"), err)
 	}
 
 	// TODO: create the concept of admins
 	if err := service.RemoveUserFromAccount(ctx, a.db, accountID, outgoingUser); err != nil {
-		log.Println("failed to remove user frorm account")
-		return nil, huma.Error500InternalServerError("Failed to remove user frorm account")
+		return nil, fail(ctx, huma.Error500InternalServerError("Failed to remove user from account"), err)
 	}
 
 	account, err := service.GetAccount(ctx, a.db, userID)

@@ -206,3 +206,32 @@ func RecordHandlerError(ctx context.Context, err error, status int) {
 		span.SetStatus(codes.Error, err.Error())
 	}
 }
+
+// RecordWarning notes a non-fatal problem on the request's span.
+//
+// For the failures a caller deliberately ignores - best-effort catalog
+// enrichment, a shopping-list history row that did not get written - where
+// there is no error to return and wrapping is therefore not available. A span
+// event keeps the service layer free of logging (ADR-0008 §3) while leaving the
+// fact somewhere it can be found, attached to the request that caused it.
+//
+// `what` names the operation and is expected to be a short fixed string, not a
+// formatted detail: the lines this replaced named the ingredient ("could not
+// set unit size %q for %q"), and ingredient text is what ADR-0008 §1 says
+// telemetry does not carry. That is a real loss of resolution, and it is the
+// trade the ADR already makes explicit - the identifiers narrow it to one
+// request and one Account, and the rest is reproducible locally.
+//
+// It is a convention rather than a guarantee, and worth being honest about:
+// err.Error() is passed through, and some driver errors embed the offending
+// value (MySQL 1062 reads `Duplicate entry 'chicken thighs' for key ...`). The
+// same is true of any error reaching a span through fail(). Sanitising driver
+// text was considered and rejected as the kind of filter that is wrong in both
+// directions; the containment is that these are Grafana Cloud, not a public
+// surface.
+func RecordWarning(ctx context.Context, what string, err error) {
+	trace.SpanFromContext(ctx).AddEvent("warning", trace.WithAttributes(
+		attribute.String("warning.operation", what),
+		attribute.String("warning.error", err.Error()),
+	))
+}

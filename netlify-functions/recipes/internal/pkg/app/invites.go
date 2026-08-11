@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"recipes/internal/pkg/common"
 	"recipes/internal/pkg/service"
@@ -25,14 +24,12 @@ type InvitesOutput struct {
 func (a *App) acceptInvite(ctx context.Context, input *InviteTokenInput) (*struct{}, error) {
 	currentUser, err := service.GetUser(ctx, a.db, ctx.Value(contextKey("userID")).(string))
 	if err != nil {
-		log.Println("Error finding current user")
-		return nil, huma.Error400BadRequest("Error finding current user")
+		return nil, fail(ctx, huma.Error400BadRequest("Error finding current user"), err)
 	}
 
 	accountID, err := service.GetInvite(ctx, a.db, input.Body.Token, currentUser.Email)
 	if err != nil {
-		log.Println("Error finding invite")
-		return nil, huma.Error400BadRequest("Error finding invite")
+		return nil, fail(ctx, huma.Error400BadRequest("Error finding invite"), err)
 	}
 
 	// Disable old user account
@@ -56,14 +53,12 @@ func (a *App) acceptInvite(ctx context.Context, input *InviteTokenInput) (*struc
 func (a *App) getInvites(ctx context.Context, _ *struct{}) (*InvitesOutput, error) {
 	user, err := service.GetUser(ctx, a.db, ctx.Value(contextKey("userID")).(string))
 	if err != nil {
-		log.Println("Error finding current user")
-		return nil, huma.Error500InternalServerError("Error finding current user")
+		return nil, fail(ctx, huma.Error500InternalServerError("Error finding current user"), err)
 	}
 
 	invites, err := service.GetInvites(ctx, a.db, user.Email)
 	if err != nil {
-		log.Println("Error finding invites")
-		return nil, huma.Error404NotFound("Error finding invites")
+		return nil, fail(ctx, huma.Error404NotFound("Error finding invites"), err)
 	}
 
 	return &InvitesOutput{Body: invites}, nil

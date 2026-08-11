@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"log"
 	"net/http"
 
 	"recipes/internal/pkg/service"
@@ -60,8 +59,7 @@ func (a *App) getUnits(ctx context.Context, _ *struct{}) (*UnitsOutput, error) {
 	units, err := service.GetAllUnits(ctx, a.db)
 
 	if err != nil {
-		log.Println(err)
-		return nil, huma.Error500InternalServerError("Failed to get units from db")
+		return nil, fail(ctx, huma.Error500InternalServerError("Failed to get units from db"), err)
 	}
 
 	// Success path only - Huma writes an output struct's headers only when it

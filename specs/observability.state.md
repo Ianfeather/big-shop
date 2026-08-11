@@ -285,9 +285,40 @@ unregistered paths), and `huma.Error500InternalServerError(msg, err)` serialisin
 the client while *not* recording it on the span. Also fixed: three comments that had become
 false, `db.Begin` → `BeginTx`, and a bare `500`.
 
+### Correction 8 — where the removed logging actually went
+
+The spec says "Convert only those carrying genuine extra context to `slog`". Nothing was
+converted to slog. Two substitutions were made instead:
+
+- **Span events, not slog, for the four best-effort failures** (catalog enrichment, shopping-
+  list history). Their callers deliberately ignore the error, so there is nothing to wrap and
+  return; `telemetry.RecordWarning` attaches the fact to the request's span. This keeps the
+  service layer free of logging entirely, which ADR-0008 §3 asks for and slog would not have.
+- **`main.go` and `internal/pkg/purge/purge.go` keep stdlib `log`** — 11 lines. Startup and
+  fatal messages happen before any request exists, and the purger is a detached fire-and-forget
+  goroutine with no request context, so in both cases there is no span to attach to and no
+  trace_id to correlate by. The consequence, worth stating: those lines reach Fly's log stream
+  and never Loki. A purge that silently stops working is therefore still invisible in Grafana —
+  a real gap, and a candidate for `follow-ups.md` rather than for widening this session.
+
+### Correction 9 — the spec's log counts were measured with the wrong instrument
+
+The spec says "70 `log.*` calls ... 26 of them a bare `log.Println(err)`", and earlier notes
+here corrected that to 87/27. All three counts only ever matched `log.*`. The service layer
+also had **21 `fmt.Print*` calls**, including — on the invite path —
+
+```go
+fmt.Println(email)
+fmt.Println(token)
+```
+
+An email address is named in ADR-0008 §1 as excluded by rule, and an invite token is a bearer
+credential; both were being written to stdout, which on Fly is the log stream. Found by review,
+not by the counting. Session 4 removes all 21.
+
 ## Session 4: Phase 3b — the log cleanup
-Status: pending
-Scope: delete the 27 bare `log.Println(err)` calls and everything else the span makes redundant;
+Status: done
+Scope: delete the bare `log.Println(err)` calls and everything else the span makes redundant;
 service layer stops logging and wraps errors per ADR-0008 §3; convert only genuinely-extra-
 context lines to `slog`. Net fewer lines than we started with.
 Depends on: Session 3

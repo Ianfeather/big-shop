@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"net/http"
 	"recipes/internal/pkg/common"
 	"recipes/internal/pkg/service"
@@ -62,7 +63,10 @@ func (a *App) getRecipe(ctx context.Context, input *RecipeByIDInput) (*RecipeOut
 	}
 
 	if err != nil {
-		if err == sql.ErrNoRows {
+		// errors.Is, not ==: the service layer wraps its errors now, and a
+		// sentinel compared by identity stops matching the moment anything in
+		// the call chain adds context to it.
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, huma.Error404NotFound("Recipe not found")
 		}
 		return nil, huma.Error500InternalServerError("Failed to parse recipe from db")

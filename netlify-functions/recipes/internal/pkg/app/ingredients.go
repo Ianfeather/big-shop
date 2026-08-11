@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"log"
 	"net/http"
 
 	"recipes/internal/pkg/service"
@@ -53,8 +52,7 @@ func (a *App) getIngredients(ctx context.Context, _ *struct{}) (*IngredientsOutp
 	ingredients, err := service.GetAllIngredients(ctx, a.db)
 
 	if err != nil {
-		log.Println(err)
-		return nil, huma.Error500InternalServerError("Failed to get ingredients from db")
+		return nil, fail(ctx, huma.Error500InternalServerError("Failed to get ingredients from db"), err)
 	}
 
 	names := make([]IngredientName, len(ingredients))

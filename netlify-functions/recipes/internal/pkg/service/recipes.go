@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
-	"log"
+	"fmt"
 
 	"recipes/internal/pkg/telemetry"
 )
@@ -25,8 +25,7 @@ func GetAllRecipes(ctx context.Context, db *sql.DB, userID string) ([]Recipe, er
 	accountID, err := GetAccountID(ctx, db, userID)
 
 	if err != nil {
-		log.Println("Error getting account ID")
-		return nil, err
+		return nil, fmt.Errorf("getting account ID: %w", err)
 	}
 
 	// Recorded here because here is where it becomes known - the handler is
@@ -43,8 +42,7 @@ func GetAllRecipes(ctx context.Context, db *sql.DB, userID string) ([]Recipe, er
 	results, err := db.QueryContext(ctx, recipesQuery, accountID)
 
 	if err != nil {
-		log.Println("Error querying recipes")
-		return nil, err
+		return nil, fmt.Errorf("querying recipes: %w", err)
 	}
 	defer results.Close()
 

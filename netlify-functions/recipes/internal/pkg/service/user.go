@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
-	"log"
+	"fmt"
 	"recipes/internal/pkg/common"
 )
 
@@ -20,9 +20,7 @@ func AddUser(ctx context.Context, db *sql.DB, user common.User) error {
 	`
 	_, err := db.ExecContext(ctx, userQuery, user.ID, user.Name, user.Email, user.Name, user.Email)
 	if err != nil {
-		log.Println("Error adding user")
-		log.Println(err)
-		return err
+		return fmt.Errorf("adding user: %w", err)
 	}
 	return nil
 }
@@ -52,9 +50,7 @@ func SetShowPantryStaples(ctx context.Context, db *sql.DB, userID string, show b
 	query := `UPDATE user SET show_pantry_staples = ? WHERE id = ?`
 	_, err := db.ExecContext(ctx, query, show, userID)
 	if err != nil {
-		log.Println("Error setting user show_pantry_staples")
-		log.Println(err)
-		return err
+		return fmt.Errorf("setting user show_pantry_staples: %w", err)
 	}
 	return nil
 }
@@ -64,9 +60,7 @@ func SetOnboarded(ctx context.Context, db *sql.DB, userID string) error {
 	query := `UPDATE user SET onboarded = true WHERE id = ?`
 	_, err := db.ExecContext(ctx, query, userID)
 	if err != nil {
-		log.Println("Error setting user onboarded")
-		log.Println(err)
-		return err
+		return fmt.Errorf("setting user onboarded: %w", err)
 	}
 	return nil
 }

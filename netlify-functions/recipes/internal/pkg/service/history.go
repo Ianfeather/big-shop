@@ -10,7 +10,7 @@ import (
 func LogShoppingListEvent(ctx context.Context, userID string, eventType string, recipeIDs []int, db *sql.DB) error {
 	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
-		return fmt.Errorf("could not get account ID: %v", err)
+		return fmt.Errorf("could not get account ID: %w", err)
 	}
 
 	// Log each recipe as a separate event
@@ -21,7 +21,7 @@ func LogShoppingListEvent(ctx context.Context, userID string, eventType string, 
 			VALUES (?, ?, ?)
 		`
 		if _, err := db.ExecContext(ctx, query, accountID, eventType, recipeID); err != nil {
-			return fmt.Errorf("could not log shopping list event: %v", err)
+			return fmt.Errorf("could not log shopping list event: %w", err)
 		}
 	}
 	return nil
@@ -31,7 +31,7 @@ func LogShoppingListEvent(ctx context.Context, userID string, eventType string, 
 func LogShoppingListClearEvent(ctx context.Context, userID string, db *sql.DB) error {
 	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
-		return fmt.Errorf("could not get account ID: %v", err)
+		return fmt.Errorf("could not get account ID: %w", err)
 	}
 
 	query := `
@@ -40,7 +40,7 @@ func LogShoppingListClearEvent(ctx context.Context, userID string, db *sql.DB) e
 		VALUES (?, 'clear_list')
 	`
 	if _, err := db.ExecContext(ctx, query, accountID); err != nil {
-		return fmt.Errorf("could not log clear event: %v", err)
+		return fmt.Errorf("could not log clear event: %w", err)
 	}
 	return nil
 }
@@ -50,7 +50,7 @@ func LogShoppingListClearEvent(ctx context.Context, userID string, db *sql.DB) e
 func GetRecentRecipeUsage(ctx context.Context, userID string, daysBack int, limit int, db *sql.DB) ([]int, error) {
 	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
-		return nil, fmt.Errorf("could not get account ID: %v", err)
+		return nil, fmt.Errorf("could not get account ID: %w", err)
 	}
 
 	query := `
@@ -71,7 +71,7 @@ func GetRecentRecipeUsage(ctx context.Context, userID string, daysBack int, limi
 
 	rows, err := db.QueryContext(ctx, query, accountID, daysBack, limit)
 	if err != nil {
-		return nil, fmt.Errorf("could not query recent usage: %v", err)
+		return nil, fmt.Errorf("could not query recent usage: %w", err)
 	}
 	defer rows.Close()
 
@@ -80,7 +80,7 @@ func GetRecentRecipeUsage(ctx context.Context, userID string, daysBack int, limi
 		var recipeID int
 		var lastUsed string // We don't need the date, just the ID
 		if err := rows.Scan(&recipeID, &lastUsed); err != nil {
-			return nil, fmt.Errorf("could not scan recipe usage: %v", err)
+			return nil, fmt.Errorf("could not scan recipe usage: %w", err)
 		}
 		recentRecipeIDs = append(recentRecipeIDs, recipeID)
 	}
@@ -93,7 +93,7 @@ func GetRecentRecipeUsage(ctx context.Context, userID string, daysBack int, limi
 func GetFavoriteRecipes(ctx context.Context, userID string, limit int, db *sql.DB) ([]int, error) {
 	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
-		return nil, fmt.Errorf("could not get account ID: %v", err)
+		return nil, fmt.Errorf("could not get account ID: %w", err)
 	}
 
 	query := `
@@ -114,7 +114,7 @@ func GetFavoriteRecipes(ctx context.Context, userID string, limit int, db *sql.D
 
 	rows, err := db.QueryContext(ctx, query, accountID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("could not query favorites: %v", err)
+		return nil, fmt.Errorf("could not query favorites: %w", err)
 	}
 	defer rows.Close()
 
@@ -123,7 +123,7 @@ func GetFavoriteRecipes(ctx context.Context, userID string, limit int, db *sql.D
 		var recipeID int
 		var usageCount int
 		if err := rows.Scan(&recipeID, &usageCount); err != nil {
-			return nil, fmt.Errorf("could not scan favorite recipes: %v", err)
+			return nil, fmt.Errorf("could not scan favorite recipes: %w", err)
 		}
 		favoriteRecipeIDs = append(favoriteRecipeIDs, recipeID)
 	}

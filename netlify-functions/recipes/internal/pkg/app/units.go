@@ -57,7 +57,7 @@ func (o *UnitsOutput) withCachePolicy() *UnitsOutput {
 }
 
 func (a *App) getUnits(ctx context.Context, _ *struct{}) (*UnitsOutput, error) {
-	units, err := service.GetAllUnits(a.db)
+	units, err := service.GetAllUnits(ctx, a.db)
 
 	if err != nil {
 		log.Println(err)
@@ -71,7 +71,7 @@ func (a *App) getUnits(ctx context.Context, _ *struct{}) (*UnitsOutput, error) {
 }
 
 func (a *App) registerUnitsRoutes(api huma.API) {
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "list-units",
 		Method:      http.MethodGet,
 		Path:        "/units",

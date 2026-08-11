@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -8,14 +9,14 @@ import (
 	"time"
 )
 
-func CreateInvite(db *sql.DB, token string, accountID int, email string, userID string) error {
+func CreateInvite(ctx context.Context, db *sql.DB, token string, accountID int, email string, userID string) error {
 	inviteQuery := `
 		INSERT INTO invite (token, account, email, admin_id, expires)
 			VALUES (?, ?, ?, ?, ?)
 			ON DUPLICATE KEY UPDATE email=email;
 	`
 
-	_, err := db.Exec(inviteQuery, token, accountID, email, userID, time.Now().AddDate(0, 0, 30))
+	_, err := db.ExecContext(ctx, inviteQuery, token, accountID, email, userID, time.Now().AddDate(0, 0, 30))
 	if err != nil {
 		log.Println("Error adding invite")
 		log.Println(err)
@@ -24,14 +25,14 @@ func CreateInvite(db *sql.DB, token string, accountID int, email string, userID 
 	return nil
 }
 
-func GetInvites(db *sql.DB, email string) (i []common.Invite, e error) {
+func GetInvites(ctx context.Context, db *sql.DB, email string) (i []common.Invite, e error) {
 	query := `
 		SELECT token, name
 			FROM invite
 			LEFT JOIN user on user.id = invite.admin_id
 			WHERE invite.email = ? AND invite.expires > ?;`
 
-	results, err := db.Query(query, email, time.Now())
+	results, err := db.QueryContext(ctx, query, email, time.Now())
 
 	if err != nil {
 		log.Println("Error querying invites")
@@ -57,12 +58,12 @@ func GetInvites(db *sql.DB, email string) (i []common.Invite, e error) {
 
 }
 
-func GetInvite(db *sql.DB, token string, email string) (a *int, e error) {
+func GetInvite(ctx context.Context, db *sql.DB, token string, email string) (a *int, e error) {
 	var accountID int
 	fmt.Println(email)
 	fmt.Println(token)
 	inviteQuery := `SELECT account from invite WHERE email = ? and token = ?;`
-	if err := db.QueryRow(inviteQuery, email, token).Scan(&accountID); err != nil {
+	if err := db.QueryRowContext(ctx, inviteQuery, email, token).Scan(&accountID); err != nil {
 		log.Println("Error querying invite")
 		log.Println(err)
 		return nil, err
@@ -70,9 +71,9 @@ func GetInvite(db *sql.DB, token string, email string) (a *int, e error) {
 	return &accountID, nil
 }
 
-func DeleteInvite(db *sql.DB, accountID int, email string) error {
+func DeleteInvite(ctx context.Context, db *sql.DB, accountID int, email string) error {
 	inviteQuery := `DELETE from invite WHERE account = ? and email = ?;`
-	_, err := db.Exec(inviteQuery, accountID, email)
+	_, err := db.ExecContext(ctx, inviteQuery, accountID, email)
 	if err != nil {
 		log.Println("Error deleting invite")
 		log.Println(err)
@@ -81,9 +82,9 @@ func DeleteInvite(db *sql.DB, accountID int, email string) error {
 	return nil
 }
 
-func DeleteInviteByToken(db *sql.DB, token string) error {
+func DeleteInviteByToken(ctx context.Context, db *sql.DB, token string) error {
 	inviteQuery := `DELETE from invite WHERE token = ?;`
-	_, err := db.Exec(inviteQuery, token)
+	_, err := db.ExecContext(ctx, inviteQuery, token)
 	if err != nil {
 		log.Println("Error deleting invite")
 		log.Println(err)

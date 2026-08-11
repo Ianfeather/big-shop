@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"database/sql"
 )
 
@@ -79,8 +80,8 @@ func (c UnitCatalog) Get(name string) UnitInfo {
 // GetUnitCatalog loads every Unit's measurement metadata in one query, for
 // passing into CombineIngredients. The aggregation itself stays pure - it takes
 // this as an argument and never queries.
-func GetUnitCatalog(db *sql.DB) (UnitCatalog, error) {
-	results, err := db.Query("SELECT name, kind, factor, default_size FROM unit;")
+func GetUnitCatalog(ctx context.Context, db *sql.DB) (UnitCatalog, error) {
+	results, err := db.QueryContext(ctx, "SELECT name, kind, factor, default_size FROM unit;")
 	if err != nil {
 		return nil, err
 	}
@@ -117,8 +118,8 @@ func GetUnitCatalog(db *sql.DB) (UnitCatalog, error) {
 }
 
 // GetAllUnits returns all unit types
-func GetAllUnits(db *sql.DB) ([]Unit, error) {
-	results, err := db.Query("SELECT id, name FROM unit order by lower(name);")
+func GetAllUnits(ctx context.Context, db *sql.DB) ([]Unit, error) {
+	results, err := db.QueryContext(ctx, "SELECT id, name FROM unit order by lower(name);")
 
 	if err != nil {
 		return nil, err

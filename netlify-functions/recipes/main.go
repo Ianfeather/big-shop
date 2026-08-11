@@ -35,6 +35,11 @@ var openapiAPI huma.API
 // the App actually built, not a second guess at it.
 var purgeConfigured bool
 
+// routeTemplates is the set of path templates the router registered, used to
+// keep span names and metric labels bounded. Captured at startup because it is
+// fixed for the life of the process.
+var routeTemplates []string
+
 // shutdownTelemetry flushes the three OTel providers at exit. Replaced by
 // init() with the real one; telemetry.Setup always returns a callable shutdown
 // even when telemetry is disabled or setup failed.
@@ -138,17 +143,17 @@ func init() {
 		otelsql.WithAttributes(semconv.DBSystemNameMySQL),
 		otelsql.WithSpanOptions(otelsql.SpanOptions{
 			// Emit a query span only when the caller passed a context that
-			// already carries one. Almost all of the service layer still calls
-			// db.Query/Exec/QueryRow rather than the *Context variants - 57 such
-			// call sites against a single Context one, the GetAllRecipes query
-			// this session threaded - and those resolve to context.Background(),
-			// which otelsql would otherwise turn into a *root* span, flooding
-			// Tempo with rootless single-span traces that mean nothing.
+			// already carries one.
 			//
-			// This makes the incremental rollout self-managing rather than
-			// hazardous: a query lights up the moment its route is threaded
-			// with a context, and stays silent until then, with no further
-			// configuration. Session 3 threads the rest.
+			// Session 3 threaded ctx through the whole service layer, so there
+			// are now no context-free DB calls left and this filter rejects
+			// nothing in normal operation. It stays as a guard rather than
+			// housekeeping: any future query written with db.Query instead of
+			// db.QueryContext - or any code path reaching the database outside
+			// a request, such as a future migration or cron - would otherwise
+			// produce a *root* span, and Tempo would fill with rootless
+			// single-span traces that mean nothing. Cheap insurance against a
+			// mistake that is silent in every other way.
 			SpanFilter: func(ctx context.Context, _ otelsql.Method, _ string, _ []driver.NamedValue) bool {
 				return trace.SpanContextFromContext(ctx).IsValid()
 			},
@@ -188,11 +193,14 @@ func init() {
 	}
 	purgeConfigured = application.PurgeConfigured()
 
-	router, _, err = application.GetRouter(routerBasePath())
+	var api huma.API
+	router, api, err = application.GetRouter(routerBasePath())
 	if err != nil {
 		fmt.Println("Failed to get application router")
 		fmt.Println(err)
 	}
+
+	routeTemplates = app.RouteTemplates(api)
 
 	negroniLambda = negroniadapter.New(router)
 }
@@ -245,7 +253,7 @@ func main() {
 			// wrapped: the Lambda below is the rollback target from ADR-0006 and
 			// is left exactly as it was, which is also why it needs no telemetry
 			// of its own - it serves no traffic unless the migration is undone.
-			Handler: telemetry.Handler(router, basePath),
+			Handler: telemetry.Handler(router, basePath, routeTemplates),
 		}
 		// Fatal rather than ignored: a bind failure used to exit 0 silently,
 		// which on Fly would be a restart loop with no reason recorded.

@@ -10,8 +10,8 @@ and [ADR-0008](../docs/adr/0008-what-telemetry-does-not-carry.md). Sessions 1–
 spec's Phases 1–6, with Phase 3 split across two Sessions and a preparatory Session 0 the spec
 does not contain.
 
-Four corrections to the spec, agreed at planning time and applied by the Sessions below rather
-than by editing the spec:
+Corrections to the spec, applied by the Sessions below rather than by editing the spec. The
+first four were agreed at planning time; the rest were forced by what the work turned up.
 
 1. `go.opentelemetry.io/otel` v1.45.0 declares `go 1.25.0`; the module is on `go 1.23.0`. Hence
    Session 0. (User chose the bump over pinning otel to a ~18-month-old v1.35.x.)
@@ -229,11 +229,46 @@ Researched while blocked:
 - **`DEPLOY_ENV=production`** needs setting in `fly.toml`'s `[env]`, or production telemetry
   arrives labelled `development` and is indistinguishable from a laptop's in the same Tempo.
 
+### Correction 6 — `/health` stays as it is
+
+The spec's Phase 3 says **"Fix `/health` to `SELECT 1`"**, and its "Current state" calls the
+present check "a health check that checks nothing". Ian decided against it on 2026-08-11:
+`/health` should answer only "is this machine up and the Go process serving", and database
+connectivity should be observed through telemetry rather than through a health check.
+
+**Why this is the better answer, now:** `/health` backs a *Fly health check*. Making it depend
+on TiDB means a database outage causes Fly to fail health checks and start cycling machines
+that are themselves perfectly healthy — turning a degraded dependency into a restart storm, and
+removing the one thing still able to serve cached or non-DB responses. The spec's complaint was
+that a warm container with a dead database looks fine; the answer to that is a metric and an
+alert, which is what the rest of this spec builds.
+
+Also worth recording, because it makes the check less empty than the spec implies: `main.go`
+`log.Fatalf`s on a failed DB ping during init, so a process that is serving at all did reach
+the database at startup. What is missing is only the *continuous* signal — and that is
+telemetry's job.
+
+### Correction 7 — two carve-outs in Session 3, both deliberate
+
+- **`/health` is not traced.** The spec says "instrument every route via middleware". Every
+  route is, bar this one: Fly polls it every 30s per machine and Session 7 adds a Grafana
+  synthetic check at ~1/min, so tracing it would add thousands of identical spans a day and
+  drag the duration histogram's p99 towards the cost of a health check rather than of a
+  request.
+- **`span.SetStatus` fires only on 5xx**, though `span.RecordError` fires on every returned
+  error. The spec says "`span.RecordError` + `span.SetStatus` on any returned error". A 404 for
+  a Recipe that does not exist is the API working; marking those spans failed would make "show
+  me the errors" mean "show me the traffic". The cause is still recorded and readable — only
+  the red flag is withheld.
+
 ## Session 3: Phase 3a — widen the Go API
-Status: pending
+Status: done
 Scope: every route instrumented via middleware rather than per-handler code; error-recording
-middleware at the Huma boundary (`span.RecordError` + `span.SetStatus`); `/health` becomes a
-real `SELECT 1`; `internal/pkg/app/account.go:41` stops discarding the real error.
+middleware at the Huma boundary (`span.RecordError` + `span.SetStatus`);
+`internal/pkg/app/account.go` stops discarding the real error at **both** sites (`:41` and
+`:69` — the spec names only one); and `ctx` threaded through the service layer so `otelsql`
+spans every query rather than only `/recipes`. **`/health` is deliberately not changed** — see
+correction 6.
 Depends on: Session 2
 Commit:
 Notes:

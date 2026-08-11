@@ -1,13 +1,14 @@
 package service
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 )
 
 // LogShoppingListEvent logs shopping list changes for meal planning intelligence
-func LogShoppingListEvent(userID string, eventType string, recipeIDs []int, db *sql.DB) error {
-	accountID, err := GetAccountID(db, userID)
+func LogShoppingListEvent(ctx context.Context, userID string, eventType string, recipeIDs []int, db *sql.DB) error {
+	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
 		return fmt.Errorf("could not get account ID: %v", err)
 	}
@@ -19,7 +20,7 @@ func LogShoppingListEvent(userID string, eventType string, recipeIDs []int, db *
 			(account_id, event_type, recipe_id)
 			VALUES (?, ?, ?)
 		`
-		if _, err := db.Exec(query, accountID, eventType, recipeID); err != nil {
+		if _, err := db.ExecContext(ctx, query, accountID, eventType, recipeID); err != nil {
 			return fmt.Errorf("could not log shopping list event: %v", err)
 		}
 	}
@@ -27,8 +28,8 @@ func LogShoppingListEvent(userID string, eventType string, recipeIDs []int, db *
 }
 
 // LogShoppingListClearEvent logs when user clears the shopping list
-func LogShoppingListClearEvent(userID string, db *sql.DB) error {
-	accountID, err := GetAccountID(db, userID)
+func LogShoppingListClearEvent(ctx context.Context, userID string, db *sql.DB) error {
+	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
 		return fmt.Errorf("could not get account ID: %v", err)
 	}
@@ -38,7 +39,7 @@ func LogShoppingListClearEvent(userID string, db *sql.DB) error {
 		(account_id, event_type)
 		VALUES (?, 'clear_list')
 	`
-	if _, err := db.Exec(query, accountID); err != nil {
+	if _, err := db.ExecContext(ctx, query, accountID); err != nil {
 		return fmt.Errorf("could not log clear event: %v", err)
 	}
 	return nil
@@ -46,8 +47,8 @@ func LogShoppingListClearEvent(userID string, db *sql.DB) error {
 
 // GetRecentRecipeUsage returns recently used recipes for meal planning
 // Groups by date to avoid counting bulk shopping list updates as multiple uses
-func GetRecentRecipeUsage(userID string, daysBack int, limit int, db *sql.DB) ([]int, error) {
-	accountID, err := GetAccountID(db, userID)
+func GetRecentRecipeUsage(ctx context.Context, userID string, daysBack int, limit int, db *sql.DB) ([]int, error) {
+	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
 		return nil, fmt.Errorf("could not get account ID: %v", err)
 	}
@@ -68,7 +69,7 @@ func GetRecentRecipeUsage(userID string, daysBack int, limit int, db *sql.DB) ([
 		LIMIT ?
 	`
 
-	rows, err := db.Query(query, accountID, daysBack, limit)
+	rows, err := db.QueryContext(ctx, query, accountID, daysBack, limit)
 	if err != nil {
 		return nil, fmt.Errorf("could not query recent usage: %v", err)
 	}
@@ -89,8 +90,8 @@ func GetRecentRecipeUsage(userID string, daysBack int, limit int, db *sql.DB) ([
 
 // GetFavoriteRecipes returns most frequently used recipes
 // Groups by date to avoid counting bulk shopping list updates as multiple uses
-func GetFavoriteRecipes(userID string, limit int, db *sql.DB) ([]int, error) {
-	accountID, err := GetAccountID(db, userID)
+func GetFavoriteRecipes(ctx context.Context, userID string, limit int, db *sql.DB) ([]int, error) {
+	accountID, err := GetAccountID(ctx, db, userID)
 	if err != nil {
 		return nil, fmt.Errorf("could not get account ID: %v", err)
 	}
@@ -111,7 +112,7 @@ func GetFavoriteRecipes(userID string, limit int, db *sql.DB) ([]int, error) {
 		LIMIT ?
 	`
 
-	rows, err := db.Query(query, accountID, limit)
+	rows, err := db.QueryContext(ctx, query, accountID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("could not query favorites: %v", err)
 	}

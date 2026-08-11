@@ -22,7 +22,7 @@ type AccountUserInput struct {
 
 func (a *App) getAccount(ctx context.Context, _ *struct{}) (*AccountOutput, error) {
 	userID := ctx.Value(contextKey("userID")).(string)
-	account, err := service.GetAccount(a.db, userID)
+	account, err := service.GetAccount(ctx, a.db, userID)
 
 	if err != nil {
 		log.Println(err)
@@ -36,10 +36,13 @@ func (a *App) addUserToAccount(ctx context.Context, input *AccountUserInput) (*A
 	userID := ctx.Value(contextKey("userID")).(string)
 	newUser := input.Body
 
-	accountID, err := service.GetAccountID(a.db, userID)
+	accountID, err := service.GetAccountID(ctx, a.db, userID)
 	if err != nil {
-		log.Println("Error: current user is not associated with an account")
-		return nil, huma.Error500InternalServerError("Current user is not associated with an account")
+		// Was: log the guess "current user is not associated with an account"
+		// and discard err - so a TiDB outage was reported, to the logs and to
+		// the user, as a membership problem. serverError puts the real cause on
+		// the span and keeps the client's message opaque.
+		return nil, serverError(ctx, "Could not resolve the current user's account", err)
 	}
 
 	// TODO: Fetch the user ID associated with the email from Auth0
@@ -47,12 +50,12 @@ func (a *App) addUserToAccount(ctx context.Context, input *AccountUserInput) (*A
 	newUser.Name = "Anna Feather"
 
 	// TODO: if the user doesn't exist, we should be able to invite them
-	if err := service.AddUserToAccount(a.db, accountID, newUser); err != nil {
+	if err := service.AddUserToAccount(ctx, a.db, accountID, newUser); err != nil {
 		log.Println("failed to add user to account")
 		return nil, huma.Error500InternalServerError("Failed to add user to account")
 	}
 
-	account, err := service.GetAccount(a.db, userID)
+	account, err := service.GetAccount(ctx, a.db, userID)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("Failed to get Account from db")
 	}
@@ -64,19 +67,22 @@ func (a *App) removeUserFromAccount(ctx context.Context, input *AccountUserInput
 	userID := ctx.Value(contextKey("userID")).(string)
 	outgoingUser := input.Body
 
-	accountID, err := service.GetAccountID(a.db, userID)
+	accountID, err := service.GetAccountID(ctx, a.db, userID)
 	if err != nil {
-		log.Println("Error: current user is not associated with an account")
-		return nil, huma.Error500InternalServerError("Current user is not associated with an account")
+		// Was: log the guess "current user is not associated with an account"
+		// and discard err - so a TiDB outage was reported, to the logs and to
+		// the user, as a membership problem. serverError puts the real cause on
+		// the span and keeps the client's message opaque.
+		return nil, serverError(ctx, "Could not resolve the current user's account", err)
 	}
 
 	// TODO: create the concept of admins
-	if err := service.RemoveUserFromAccount(a.db, accountID, outgoingUser); err != nil {
+	if err := service.RemoveUserFromAccount(ctx, a.db, accountID, outgoingUser); err != nil {
 		log.Println("failed to remove user frorm account")
 		return nil, huma.Error500InternalServerError("Failed to remove user frorm account")
 	}
 
-	account, err := service.GetAccount(a.db, userID)
+	account, err := service.GetAccount(ctx, a.db, userID)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("Failed to get Account from db")
 	}
@@ -85,7 +91,7 @@ func (a *App) removeUserFromAccount(ctx context.Context, input *AccountUserInput
 }
 
 func (a *App) registerAccountRoutes(api huma.API) {
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "get-account",
 		Method:      http.MethodGet,
 		Path:        "/account",
@@ -93,7 +99,7 @@ func (a *App) registerAccountRoutes(api huma.API) {
 		Tags:        []string{"Account"},
 	}, a.getAccount)
 
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "add-user-to-account",
 		Method:      http.MethodPost,
 		Path:        "/account/add",
@@ -101,7 +107,7 @@ func (a *App) registerAccountRoutes(api huma.API) {
 		Tags:        []string{"Account"},
 	}, a.addUserToAccount)
 
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "remove-user-from-account",
 		Method:      http.MethodDelete,
 		Path:        "/account/remove",

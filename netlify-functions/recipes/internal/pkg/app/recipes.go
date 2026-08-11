@@ -48,7 +48,7 @@ func (a *App) getRecipes(ctx context.Context, _ *struct{}) (*RecipesOutput, erro
 }
 
 func (a *App) registerRecipesRoutes(api huma.API) {
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "list-recipes",
 		Method:      http.MethodGet,
 		Path:        "/recipes",

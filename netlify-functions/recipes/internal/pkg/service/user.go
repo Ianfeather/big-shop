@@ -1,12 +1,13 @@
 package service
 
 import (
+	"context"
 	"database/sql"
 	"log"
 	"recipes/internal/pkg/common"
 )
 
-func AddUser(db *sql.DB, user common.User) error {
+func AddUser(ctx context.Context, db *sql.DB, user common.User) error {
 	userQuery := `
 		INSERT INTO user (id, name, email)
 			VALUES (?, ?, ?)
@@ -17,7 +18,7 @@ func AddUser(db *sql.DB, user common.User) error {
 				last_logged_in_at=CURRENT_TIMESTAMP
 			;
 	`
-	_, err := db.Exec(userQuery, user.ID, user.Name, user.Email, user.Name, user.Email)
+	_, err := db.ExecContext(ctx, userQuery, user.ID, user.Name, user.Email, user.Name, user.Email)
 	if err != nil {
 		log.Println("Error adding user")
 		log.Println(err)
@@ -26,7 +27,7 @@ func AddUser(db *sql.DB, user common.User) error {
 	return nil
 }
 
-func GetUser(db *sql.DB, userID string) (u *common.User, e error) {
+func GetUser(ctx context.Context, db *sql.DB, userID string) (u *common.User, e error) {
 	userQuery := `SELECT id, name, email, onboarded, show_pantry_staples FROM user WHERE id = ?`
 	user := &common.User{}
 
@@ -34,7 +35,7 @@ func GetUser(db *sql.DB, userID string) (u *common.User, e error) {
 	// on the way out - a read of this User always states the preference,
 	// including when it is false. See the field's comment in common/types.go.
 	var showPantryStaples bool
-	if err := db.QueryRow(userQuery, userID).Scan(&user.ID, &user.Name, &user.Email, &user.Onboarded, &showPantryStaples); err != nil {
+	if err := db.QueryRowContext(ctx, userQuery, userID).Scan(&user.ID, &user.Name, &user.Email, &user.Onboarded, &showPantryStaples); err != nil {
 		return nil, err
 	}
 	user.ShowPantryStaples = &showPantryStaples
@@ -47,9 +48,9 @@ func GetUser(db *sql.DB, userID string) (u *common.User, e error) {
 // Takes the value rather than only ever setting true, unlike SetOnboarded above:
 // onboarding happens once and never un-happens, while this is a preference the
 // same person flips back and forth.
-func SetShowPantryStaples(db *sql.DB, userID string, show bool) error {
+func SetShowPantryStaples(ctx context.Context, db *sql.DB, userID string, show bool) error {
 	query := `UPDATE user SET show_pantry_staples = ? WHERE id = ?`
-	_, err := db.Exec(query, show, userID)
+	_, err := db.ExecContext(ctx, query, show, userID)
 	if err != nil {
 		log.Println("Error setting user show_pantry_staples")
 		log.Println(err)
@@ -59,9 +60,9 @@ func SetShowPantryStaples(db *sql.DB, userID string, show bool) error {
 }
 
 // SetOnboarded marks a user as having completed the onboarding screen.
-func SetOnboarded(db *sql.DB, userID string) error {
+func SetOnboarded(ctx context.Context, db *sql.DB, userID string) error {
 	query := `UPDATE user SET onboarded = true WHERE id = ?`
-	_, err := db.Exec(query, userID)
+	_, err := db.ExecContext(ctx, query, userID)
 	if err != nil {
 		log.Println("Error setting user onboarded")
 		log.Println(err)

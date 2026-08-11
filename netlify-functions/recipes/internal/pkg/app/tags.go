@@ -45,7 +45,7 @@ func (o *TagsOutput) withCachePolicy() *TagsOutput {
 }
 
 func (a *App) getTags(ctx context.Context, _ *struct{}) (*TagsOutput, error) {
-	tags, err := service.GetAllTags(a.db)
+	tags, err := service.GetAllTags(ctx, a.db)
 
 	if err != nil {
 		log.Println(err)
@@ -58,7 +58,7 @@ func (a *App) getTags(ctx context.Context, _ *struct{}) (*TagsOutput, error) {
 }
 
 func (a *App) registerTagsRoutes(api huma.API) {
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "list-tags",
 		Method:      http.MethodGet,
 		Path:        "/tags",

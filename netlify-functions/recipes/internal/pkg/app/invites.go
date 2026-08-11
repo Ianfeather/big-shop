@@ -23,30 +23,30 @@ type InvitesOutput struct {
 }
 
 func (a *App) acceptInvite(ctx context.Context, input *InviteTokenInput) (*struct{}, error) {
-	currentUser, err := service.GetUser(a.db, ctx.Value(contextKey("userID")).(string))
+	currentUser, err := service.GetUser(ctx, a.db, ctx.Value(contextKey("userID")).(string))
 	if err != nil {
 		log.Println("Error finding current user")
 		return nil, huma.Error400BadRequest("Error finding current user")
 	}
 
-	accountID, err := service.GetInvite(a.db, input.Body.Token, currentUser.Email)
+	accountID, err := service.GetInvite(ctx, a.db, input.Body.Token, currentUser.Email)
 	if err != nil {
 		log.Println("Error finding invite")
 		return nil, huma.Error400BadRequest("Error finding invite")
 	}
 
 	// Disable old user account
-	if err := service.DisableUserAccount(a.db, *currentUser); err != nil {
+	if err := service.DisableUserAccount(ctx, a.db, *currentUser); err != nil {
 		return nil, huma.Error500InternalServerError("Error disabling user account")
 	}
 
 	// Add user to the account
-	if err := service.AddUserToAccount(a.db, *accountID, *currentUser); err != nil {
+	if err := service.AddUserToAccount(ctx, a.db, *accountID, *currentUser); err != nil {
 		return nil, huma.Error500InternalServerError("Error adding user to the account")
 	}
 
 	// remove the invite
-	if err := service.DeleteInvite(a.db, *accountID, currentUser.Email); err != nil {
+	if err := service.DeleteInvite(ctx, a.db, *accountID, currentUser.Email); err != nil {
 		return nil, huma.Error500InternalServerError("Error deleting invite")
 	}
 
@@ -54,13 +54,13 @@ func (a *App) acceptInvite(ctx context.Context, input *InviteTokenInput) (*struc
 }
 
 func (a *App) getInvites(ctx context.Context, _ *struct{}) (*InvitesOutput, error) {
-	user, err := service.GetUser(a.db, ctx.Value(contextKey("userID")).(string))
+	user, err := service.GetUser(ctx, a.db, ctx.Value(contextKey("userID")).(string))
 	if err != nil {
 		log.Println("Error finding current user")
 		return nil, huma.Error500InternalServerError("Error finding current user")
 	}
 
-	invites, err := service.GetInvites(a.db, user.Email)
+	invites, err := service.GetInvites(ctx, a.db, user.Email)
 	if err != nil {
 		log.Println("Error finding invites")
 		return nil, huma.Error404NotFound("Error finding invites")
@@ -70,7 +70,7 @@ func (a *App) getInvites(ctx context.Context, _ *struct{}) (*InvitesOutput, erro
 }
 
 func (a *App) rejectInvite(ctx context.Context, input *InviteTokenInput) (*struct{}, error) {
-	if err := service.DeleteInviteByToken(a.db, input.Body.Token); err != nil {
+	if err := service.DeleteInviteByToken(ctx, a.db, input.Body.Token); err != nil {
 		return nil, huma.Error500InternalServerError("Error deleting invite")
 	}
 
@@ -78,7 +78,7 @@ func (a *App) rejectInvite(ctx context.Context, input *InviteTokenInput) (*struc
 }
 
 func (a *App) registerInviteRoutes(api huma.API) {
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "accept-invite",
 		Method:      http.MethodPost,
 		Path:        "/invite/accept",
@@ -86,7 +86,7 @@ func (a *App) registerInviteRoutes(api huma.API) {
 		Tags:        []string{"Invites"},
 	}, a.acceptInvite)
 
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "list-invites",
 		Method:      http.MethodGet,
 		Path:        "/invites",
@@ -94,7 +94,7 @@ func (a *App) registerInviteRoutes(api huma.API) {
 		Tags:        []string{"Invites"},
 	}, a.getInvites)
 
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "reject-invite",
 		Method:      http.MethodPost,
 		Path:        "/invite/reject",

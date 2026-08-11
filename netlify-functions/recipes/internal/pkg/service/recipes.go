@@ -19,11 +19,10 @@ type Recipe struct {
 //
 // Takes a context so its query can be attributed to the request that caused it:
 // otelsql emits a span only for a call whose context already carries one (see
-// main.go's SpanFilter), which is what stops the still-uninstrumented routes
-// from producing rootless spans. The rest of the service layer keeps the
-// context-free signature until Session 3 threads it through.
+// main.go's SpanFilter). Every function in this package now does the same; this
+// one was simply first.
 func GetAllRecipes(ctx context.Context, db *sql.DB, userID string) ([]Recipe, error) {
-	accountID, err := GetAccountID(db, userID)
+	accountID, err := GetAccountID(ctx, db, userID)
 
 	if err != nil {
 		log.Println("Error getting account ID")

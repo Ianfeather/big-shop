@@ -42,7 +42,7 @@ type ShoppingListHistoryOutput struct {
 func (a *App) getList(ctx context.Context, _ *struct{}) (*ShoppingListOutput, error) {
 	userID := ctx.Value(contextKey("userID")).(string)
 
-	list, err := service.GetShoppingList(userID, a.db)
+	list, err := service.GetShoppingList(ctx, userID, a.db)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("Error Fetching Shopping List")
 	}
@@ -54,7 +54,7 @@ func (a *App) createList(ctx context.Context, input *CreateListInput) (*Shopping
 	userID := ctx.Value(contextKey("userID")).(string)
 	recipeIDs := input.Body
 
-	list, err := service.GenerateShoppingList(recipeIDs, userID, a.db)
+	list, err := service.GenerateShoppingList(ctx, recipeIDs, userID, a.db)
 
 	if err != nil {
 		if err == service.ErrInvalidRecipeID {
@@ -75,7 +75,7 @@ func (a *App) addExtraListItem(ctx context.Context, input *ListItemInput) (*Stat
 		return nil, huma.Error400BadRequest("Missing item name")
 	}
 
-	if err := service.AddExtraListItem(userID, extraItem.Name, extraItem.IsBought, a.db); err != nil {
+	if err := service.AddExtraListItem(ctx, userID, extraItem.Name, extraItem.IsBought, a.db); err != nil {
 		return nil, huma.Error500InternalServerError("Cannot add list items")
 	}
 
@@ -90,11 +90,11 @@ func (a *App) buyListItem(ctx context.Context, input *ListItemInput) (*ShoppingL
 		return nil, huma.Error400BadRequest("Missing item name")
 	}
 
-	if err := service.BuyListItem(userID, listItem.Name, listItem.IsBought, a.db); err != nil {
+	if err := service.BuyListItem(ctx, userID, listItem.Name, listItem.IsBought, a.db); err != nil {
 		return nil, huma.Error500InternalServerError("Error marking item as bought")
 	}
 
-	list, err := service.GetShoppingList(userID, a.db)
+	list, err := service.GetShoppingList(ctx, userID, a.db)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("Error getting shopping list")
 	}
@@ -105,12 +105,12 @@ func (a *App) buyListItem(ctx context.Context, input *ListItemInput) (*ShoppingL
 func (a *App) clearList(ctx context.Context, _ *struct{}) (*ShoppingListOutput, error) {
 	userID := ctx.Value(contextKey("userID")).(string)
 
-	if err := service.RemoveAllListItems(userID, a.db); err != nil {
+	if err := service.RemoveAllListItems(ctx, userID, a.db); err != nil {
 		return nil, huma.Error500InternalServerError("Error removing list items")
 	}
 
 	// Log clear event for meal planning intelligence
-	if logErr := service.LogShoppingListClearEvent(userID, a.db); logErr != nil {
+	if logErr := service.LogShoppingListClearEvent(ctx, userID, a.db); logErr != nil {
 		// Log error but don't fail the main operation
 		log.Printf("Failed to log shopping list clear: %v", logErr)
 	}
@@ -121,13 +121,13 @@ func (a *App) clearList(ctx context.Context, _ *struct{}) (*ShoppingListOutput, 
 func (a *App) getShoppingListHistory(ctx context.Context, _ *struct{}) (*ShoppingListHistoryOutput, error) {
 	userID := ctx.Value(contextKey("userID")).(string)
 
-	recentRecipes, err := service.GetRecentRecipeUsage(userID, 30, 10, a.db)
+	recentRecipes, err := service.GetRecentRecipeUsage(ctx, userID, 30, 10, a.db)
 	if err != nil {
 		log.Printf("Error getting recent recipes: %v", err)
 		return nil, huma.Error500InternalServerError("Error getting recent recipes")
 	}
 
-	favoriteRecipes, err := service.GetFavoriteRecipes(userID, 10, a.db)
+	favoriteRecipes, err := service.GetFavoriteRecipes(ctx, userID, 10, a.db)
 	if err != nil {
 		log.Printf("Error getting favorite recipes: %v", err)
 		return nil, huma.Error500InternalServerError("Error getting favorite recipes")
@@ -140,7 +140,7 @@ func (a *App) getShoppingListHistory(ctx context.Context, _ *struct{}) (*Shoppin
 }
 
 func (a *App) registerListRoutes(api huma.API) {
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "get-shopping-list",
 		Method:      http.MethodGet,
 		Path:        "/shopping-list",
@@ -148,7 +148,7 @@ func (a *App) registerListRoutes(api huma.API) {
 		Tags:        []string{"Shopping List"},
 	}, a.getList)
 
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "create-shopping-list",
 		Method:      http.MethodPost,
 		Path:        "/shopping-list",
@@ -157,7 +157,7 @@ func (a *App) registerListRoutes(api huma.API) {
 		Tags:        []string{"Shopping List"},
 	}, a.createList)
 
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "buy-shopping-list-item",
 		Method:      http.MethodPatch,
 		Path:        "/shopping-list/buy",
@@ -165,7 +165,7 @@ func (a *App) registerListRoutes(api huma.API) {
 		Tags:        []string{"Shopping List"},
 	}, a.buyListItem)
 
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "add-extra-list-item",
 		Method:      http.MethodPost,
 		Path:        "/shopping-list/extra",
@@ -173,7 +173,7 @@ func (a *App) registerListRoutes(api huma.API) {
 		Tags:        []string{"Shopping List"},
 	}, a.addExtraListItem)
 
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "clear-shopping-list",
 		Method:      http.MethodDelete,
 		Path:        "/shopping-list/clear",
@@ -181,7 +181,7 @@ func (a *App) registerListRoutes(api huma.API) {
 		Tags:        []string{"Shopping List"},
 	}, a.clearList)
 
-	huma.Register(api, huma.Operation{
+	register(api, huma.Operation{
 		OperationID: "get-shopping-list-history",
 		Method:      http.MethodGet,
 		Path:        "/shopping-list/history",

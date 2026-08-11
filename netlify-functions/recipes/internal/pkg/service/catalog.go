@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"database/sql"
 )
 
@@ -79,10 +80,10 @@ func (i IngredientInfo) UnitSize(unit string, units UnitCatalog) (float64, bool)
 // Only Ingredients with something curated appear; IngredientCatalog.Get
 // supplies the default for everything else, so this doesn't need a row per
 // Ingredient just to say "nothing set".
-func GetIngredientCatalog(db *sql.DB, units UnitCatalog) (IngredientCatalog, error) {
+func GetIngredientCatalog(ctx context.Context, db *sql.DB, units UnitCatalog) (IngredientCatalog, error) {
 	catalog := make(IngredientCatalog)
 
-	baseUnits, err := db.Query(`
+	baseUnits, err := db.QueryContext(ctx, `
 		SELECT ingredient.name, base.name, display.name, ingredient.pantry_staple
 		FROM ingredient
 		LEFT JOIN unit AS base ON base.id = ingredient.base_unit_id
@@ -125,7 +126,7 @@ func GetIngredientCatalog(db *sql.DB, units UnitCatalog) (IngredientCatalog, err
 		return nil, err
 	}
 
-	sizes, err := db.Query(`
+	sizes, err := db.QueryContext(ctx, `
 		SELECT ingredient.name, unit.name, ingredient_unit_size.size
 		FROM ingredient_unit_size
 		INNER JOIN ingredient ON ingredient.id = ingredient_unit_size.ingredient_id

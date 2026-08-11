@@ -113,14 +113,35 @@ present and is wrong:
   declared in the telemetry package, and Go compares context keys by type as well as value.
 
 ## Session 2: Phase 2 — production, and the checkpoint
-Status: in-progress
+Status: in-progress (deployed; exit criteria not yet met)
 Scope: OTel Collector as a sidecar in the Fly app; Go exports to `localhost:4318`; Grafana
 credentials in collector config only. The three exit criteria: production trace + correlated
 logs + metric; latency statistically unchanged; blackhole failure injection proving a dead
 collector is a silent drop.
 Depends on: Session 1
-Commit:
-Notes: **BLOCKED on the user.** Needs, before any of this session can run:
+Commit: 5f94c8f (PR #93)
+
+**Deployed 2026-08-11. Not verified.** Both machines run `['api', 'otelcol']`, 1/1, health
+200; the collector started cleanly on both with no export errors (a bad credential would show
+as a 401/403, and the config logs at `warn`, so failures are not being swallowed). The stray
+probe container from the investigation is gone — this deploy cleared it by declaring
+`containers` explicitly, which is the only thing that can.
+
+**The three exit criteria remain open, and one cannot be checked from here:**
+1. *Trace in Tempo + logs in Loki + metric in Mimir.* Requires querying Grafana Cloud, whose
+   credentials are Fly secrets scoped to the collector container and deliberately never seen by
+   anyone working on the Go side. Needs a human with Grafana access, and an **authenticated**
+   `GET /recipes` — unauthenticated 401s do produce spans (otelhttp wraps outside the auth
+   middleware) but carry no `account.id`/`user.sub`, so they prove the pipeline and not the
+   attributes. **Check `service.version` first**: a 7-char sha means the `--build-arg` wiring
+   works, `unknown` means it silently didn't.
+2. *Latency unchanged.* Preliminary only: `/recipes` 401s at 48–89ms against `/health` at
+   44–60ms, both dominated by the network hop to Frankfurt. No new per-request cost visible,
+   but this is weak evidence, not a measurement.
+3. *Blackhole failure injection.* **Not done.** Proven locally; the spec asks for it in
+   production, which means deliberately misconfiguring a working export and a deploy cycle.
+
+Original blocking notes, kept for the record: **BLOCKED on the user.** Needs, before any of this session can run:
 1. A Grafana Cloud Free stack (region is permanent — ADR-0007 picks eu-central-1/Frankfurt).
 2. Its OTLP endpoint, instance ID and token, to be set with `fly secrets set` — never committed.
    **Use the names Grafana's own OpenTelemetry tile emits**, so its snippets and docs line up

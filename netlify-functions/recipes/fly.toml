@@ -18,22 +18,24 @@ app = "big-shop-api"
 # accepted in ADR-0006; it is still ~90ms better than us-east-2.
 primary_region = "fra"
 
-# Single container, deliberately - see compose.fly.yml, which is written and
-# validated but NOT wired up here.
+# Single container for now - the collector sidecar is coming, but via
+# `[experimental] machine_config`, not `[build.compose]`.
 #
-# It was, briefly, and the deploy failed: under `[build.compose]`, `fly secrets`
-# reached neither container. The collector exited with "Configuration references
-# unset environment variable GRAFANA_CLOUD_OTLP_ENDPOINT", and the API - which
-# has read DSN from a secret since it moved to Fly - fell back to an empty DSN
-# and died on `dial tcp 127.0.0.1:3306: connect: connection refused`. Both
-# containers hit their restart limits and the machine stopped. Fly's docs say
-# "Secrets set with fly secrets are available to every container in the
-# Machine"; that did not hold here, and the likeliest reason is that a compose
-# service's `environment:` block replaces the injected environment rather than
-# merging with it.
+# A `[build.compose]` deploy was tried and failed: no `fly secrets` reached
+# either container, so the API fell back to an empty DSN and died on
+# `dial tcp 127.0.0.1:3306: connect: connection refused` before it could serve
+# anything. The cause is **not** a platform bug, and not the
+# compose-`environment:` interaction first suspected: in a multi-container
+# Machine each container must *declare* which secrets it receives, and the
+# compose path provides no way to say so. Proved by probe, three times over -
+# see specs/observability.state.md.
 #
-# Restored to the single-container build until that is understood and proved.
-# The Go instrumentation stays shipped and is simply dormant: with no
+# The mechanism that does work is a machine_config JSON naming, per container,
+# a `secrets: [{"env_var": "DSN"}]` array. That is strictly better than compose
+# here: it also carries per-container `files`, so the collector's config can be
+# a real file rather than smuggled through an environment variable.
+#
+# Until that lands, the Go instrumentation stays shipped and dormant: with no
 # OTEL_EXPORTER_OTLP_ENDPOINT set, telemetry.Setup is a no-op and the process
 # behaves exactly as it did before any of this.
 [build]
@@ -58,11 +60,14 @@ primary_region = "fra"
 # The fifth, DISABLE_AUTH, must never be set here. It is a local-development
 # switch that makes the API resolve every request to DEV_USER_ID without
 # validating a token; docker-compose.yml is the only place it belongs.
-# Note these reach *every* container in the Machine, the collector included -
-# as do `fly secrets`, which cannot be scoped to one service. That is worth
-# knowing when reading ADR-0007's "credentials live in collector config, not
-# application code": true of the source, which names no Grafana credential, but
-# not of the process environment, where the API can see them too.
+# These reach *every* container in the Machine. `fly secrets` do not: under
+# machine_config each container receives only the secrets it names, which was
+# measured, not assumed - a probe container declaring only
+# GRAFANA_CLOUD_OTLP_ENDPOINT saw that and could not see DSN.
+#
+# So ADR-0007's "credentials live in collector config, not application code"
+# holds more strongly than it reads: the API container need never be given a
+# Grafana credential at all, and the collector need never be given DSN.
 [env]
   AUTH0_DOMAIN = "dev-x-n37k6b.eu.auth0.com"
   AUTH0_AUDIENCE = "https://big-shop-api"

@@ -152,49 +152,36 @@ was deployed and did not work. Read this before trying again:
   refused` — which is what `sql.Open("mysql", "")` defaults to. All four secrets existed and
   read `Deployed` throughout. Fly documents secrets as reaching every container in a Machine;
   it did not happen.
-- **The cause is now established, and it is not what was first assumed.** The hypothesis was
-  that a compose service's `environment:` block *replaces* the injected environment. That is
-  **wrong**. A probe deployed on 2026-08-10 (canary strategy, so it never touched a serving
-  machine; user gave one-off permission to test against production because the experiment needs
-  the real secrets, which cannot be copied to a throwaway app without exposing them) ran a
-  sidecar printing its environment variable *names* — never values — alongside an `api` service
-  declaring **no** `environment:` block at all. Result:
+- **The cause is now established, and it is a configuration requirement, not a platform bug.**
+  Ian pushed back on the "Fly bug" conclusion - correctly, on the grounds that a fault this
+  severe would have been hit and fixed by many customers - and pointed at
+  https://community.fly.io/t/secrets-not-injecting-as-env-vars-for-multi-container-machine-config-setup/28066
+  **In a multi-container Machine, each container receives only the secrets it explicitly
+  declares.** There is no automatic injection, and `[build.compose]` offers no way to declare
+  them - which is why every secret was missing under compose.
 
-  ```
-  PROBE_SEES_NAMES: AUTH0_AUDIENCE AUTH0_DOMAIN DEPLOY_ENV FLY_ALLOC_ID FLY_APP_NAME
-                    FLY_IMAGE_REF FLY_MACHINE_ID FLY_MACHINE_VERSION FLY_PRIVATE_IP
-                    FLY_PROCESS_GROUP FLY_REGION FLY_VM_MEMORY_MB HOME PATH PRIMARY_REGION
-                    PWD SHLVL
-  PROBE_DSN_PRESENT: no
-  PROBE_GRAFANA_ENDPOINT_PRESENT: no
+  The mechanism that works is `[experimental] machine_config` in fly.toml pointing at a JSON
+  file whose containers each carry a `secrets` array:
+
+  ```json
+  { "name": "api", "secrets": [{ "env_var": "DSN" }] }
   ```
 
-  So under `[build.compose]`: **`fly.toml`'s `[env]` values DO reach containers; `fly secrets`
-  do NOT reach them at all.** Not a compose-`environment:` interaction — secrets simply are not
-  injected into containers in a multi-container Machine. The `api` container died on the same
-  empty-DSN ping as before despite declaring no `environment:`.
+  Proved by a third canary probe, which **succeeded** where the compose ones failed: the API
+  booted (so `DSN` arrived), and a probe container declaring only
+  `GRAFANA_CLOUD_OTLP_ENDPOINT` reported `GRAFANA_ENDPOINT present` / `DSN absent`.
 
-  **That first probe was flawed and was re-run.** It checked presence with `$DSN` inside the
-  command string, and Docker Compose interpolates `$VAR` at parse time from the *deploy-time*
-  environment — so those checks were substituted to empty before the container started and
-  proved nothing. Separately, `DSN` turned out to be `Staged` rather than `Deployed` at the
-  time, which would have explained the `api` failure on its own. Both faults were corrected: a
-  second canary probe ran with `DSN` confirmed `Deployed`, and with a command containing no `$`
-  at all (every check done by `grep` against `env` inside the container). Same answer:
+  Two consequences, both good:
+  - **Secrets can be scoped per container.** Fly's compose docs say the opposite ("you can't
+    scope a secret to a single service") and an earlier version of these notes repeated it.
+    ADR-0007's "credentials live in collector config, not application code" therefore holds
+    *more* strongly than written: the API container need never be handed a Grafana credential,
+    nor the collector `DSN`.
+  - **machine_config also supports per-container `files`** (`guest_path` + `local_path`), so
+    the collector config becomes a real file instead of being smuggled through
+    `--config=env:`. `compose.fly.yml` and its env-var config hack should be deleted, not
+    fixed.
 
-  ```
-  PROBERESULT DSN absent
-  PROBERESULT GRAFANA_ENDPOINT absent
-  PROBERESULT total_vars 17
-  ```
-
-  Seventeen variables: the three from `[env]`, nine `FLY_*`, and `HOME`/`PATH`/`PRIMARY_REGION`/
-  `PWD`/`SHLVL`. No secret of any kind. The finding is now clean.
-
-  This is a platform behaviour that contradicts Fly's documentation, and it blocks the sidecar
-  outright: the API needs `DSN` from a secret, so the moment the Machine becomes
-  multi-container the application cannot start. Putting `DSN` in `[env]` is not a workaround —
-  that is a database credential in version control.
 - **Two operational lessons, both of which cost time here:**
   - `flyctl deploy` **skips stopped machines**. A green deploy does not mean the fleet is
     consistent; the failed machine sat on the broken config through two subsequent successful

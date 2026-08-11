@@ -322,8 +322,24 @@ Scope: delete the bare `log.Println(err)` calls and everything else the span mak
 service layer stops logging and wraps errors per ADR-0008 §3; convert only genuinely-extra-
 context lines to `slog`. Net fewer lines than we started with.
 Depends on: Session 3
-Commit:
-Notes: Split from Session 3 on purpose — 17 files, far easier to review once the spans that
+Commit: 89cbb1c
+Notes: Verified end to end against local LGTM by stopping the database and reading the trace
+back: root `GET /recipes` with `STATUS_CODE_ERROR` and two exception events — the wrapped cause
+(`getting account ID: dial tcp: lookup db ... no such host`) and what the client was told
+(`Failed to get recipes from db`) — while the HTTP body carried only the opaque message.
+
+Final state: 0 log/print calls in `internal/pkg/service`, 0 `fmt.Print*` anywhere in
+`internal/`, 11 stdlib `log` calls left in `main.go` and `purge.go` (correction 8). Net −31
+lines across the session.
+
+Test gate: `scripts/build-local.sh` green; `npm run test:e2e` 27/27.
+Review gate: both axes blocked on the same finding — 21 `fmt.Print*` calls the `log.*` count
+could not see, two of them writing an invite email and token to stdout (correction 9). Also
+fixed: `fail()` classifying span errors by client status rather than cause, a wrapped
+`sql.ErrNoRows` plus the `==` comparison that would have broken on it, four wrap-text defects,
+and ten `%v` formats in `history.go` that never wrapped.
+
+Split from Session 3 on purpose — 17 files, far easier to review once the spans that
 justify each deletion already exist. Spec's counts (70/26) were stale; actual is 87/27.
 
 ## Session 5: Phase 4 — Next.js functions and propagation

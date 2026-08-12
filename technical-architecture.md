@@ -248,6 +248,43 @@ NEXT_PUBLIC_HOST=https://www.bigshop.life
 Netlify UI wins over this file. That is what makes the UI the control surface and this the
 default — and why rolling the API cutover back means changing the UI values, not this file.
 
+### Telemetry variables, and which of them are secret
+
+Set in the Netlify UI, not committed. Three runtimes, three different shapes,
+because the trust boundary is different in each.
+
+| Variable | Read by | Secret? |
+|---|---|---|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | the OTel SDK in the **Netlify functions** (`lib/telemetry/setup.ts`) | no, but pointless alone |
+| `OTEL_EXPORTER_OTLP_HEADERS` | the same SDK — `Authorization=Basic <base64 of instanceID:token>` | **yes** |
+| `NEXT_PUBLIC_FARO_COLLECTOR_URL` | Faro, in the **browser** (`lib/telemetry/faro.ts`) | no — see below |
+| `FARO_APP_ID`, `FARO_STACK_ID` | `scripts/upload-sourcemaps.sh`, at **build time** | no |
+| `FARO_API_KEY` | the same script | **yes** |
+
+Two things worth stating plainly.
+
+**The Faro collector URL is public by construction**, and its `NEXT_PUBLIC_`
+prefix is correct rather than an oversight: every visitor's browser posts to it,
+so it is in the bundle whatever we do. It embeds an app key, which is an
+ingestion identifier and not a credential — it grants writing telemetry to one
+Faro app and nothing else.
+
+**`OTEL_EXPORTER_OTLP_HEADERS` and `FARO_API_KEY` must never gain a
+`NEXT_PUBLIC_` prefix.** Next inlines every such variable into the client
+bundle, so prefixing either would publish a Grafana Cloud credential to every
+visitor. This is the same trap `lib/api-host.ts` documents for
+`API_HOST_INTERNAL`, with a worse payoff.
+
+**Setting any of them requires a rebuild to take effect.** Netlify resolves
+environment variables into the function bundle and the client bundle at *deploy*
+time, so an existing deploy never picks up a variable added afterwards. This is
+not obvious and has already cost one confused debugging session — see the Phase 4
+notes in `specs/observability.state.md`.
+
+The Go API's telemetry is configured separately, as Fly secrets on the collector
+sidecar rather than on the app — `docs/adr/0007-observability-otel-grafana-cloud.md`
+and the Session 2 notes in the same state file.
+
 ### `NEXT_PUBLIC_HOST` is a fallback, not the app's origin
 
 Every `NEXT_PUBLIC_*` value is inlined into the bundle at build time, so this one

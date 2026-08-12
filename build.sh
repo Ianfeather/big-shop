@@ -14,3 +14,10 @@
 set -e
 
 npm run package
+
+# After the build, because it uploads what the build produced. Never fails the
+# deploy: the script exits 0 when the Grafana credentials are absent, which is
+# every build made from a fork, by hand, or before Phase 5 was configured.
+# Source maps are what make a Faro stack trace readable; they are not what makes
+# the site work.
+./scripts/upload-sourcemaps.sh

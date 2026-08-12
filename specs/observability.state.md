@@ -539,12 +539,71 @@ resolves to, and the answer is an id. Adding the subject would mean decoding a J
 deliberately does not validate.
 
 ## Session 6: Phase 5 — browser
-Status: pending
+Status: in-progress
 Scope: Grafana Faro for errors, logs and web vitals. No browser spans, no client propagation.
 Private source map upload wired into the Netlify build, not just configured in Grafana.
 Depends on: Session 5
 Commit:
-Notes: Evidence is browser-side — a thrown error in Faro with a de-minified stack.
+Notes: Evidence is browser-side — a thrown error in Faro with a de-minified stack. **Code is
+written and locally verified; the de-minified stack is not yet demonstrated**, because it needs
+credentials only Ian has and a deployed build to attach them to.
+
+Verified locally: the collector URL and `service.version` are inlined into the client bundle,
+33 source maps are emitted, and `faro-cli inject-bundle-id` matches all 50 Turbopack chunks.
+
+### Correction 19 — the webpack plugin cannot be used, because there is no webpack
+
+Grafana's documented route for source maps is `@grafana/faro-webpack-plugin`, and the spec's
+"things to get right" assumes something of that shape ("Faro's source map upload needs wiring
+into the Netlify build"). **Next.js 16 builds with Turbopack** — `next build` prints "▲ Next.js
+16.2.12 (Turbopack)" — so there is no webpack config to hook into.
+
+`@grafana/faro-cli` covers exactly this case: its `inject-bundle-id` command is documented as
+being for "JavaScript files that do not use Webpack or Rollup". `scripts/upload-sourcemaps.sh`
+does the plugin's two jobs explicitly — inject the bundle id into the built chunks, then upload
+the maps under that same id — and runs from `build.sh` after `npm run package`.
+
+The failure mode to know about: if the injected id and the uploaded id disagree, **everything
+still appears to work**. The upload succeeds, errors arrive, and every stack stays minified. So
+the app name and bundle id come from single sources, and `faro.test.ts` asserts that the shell
+script's `APP_NAME` matches `lib/telemetry/faro.ts`'s constant, since a script cannot import a
+TypeScript value.
+
+### Correction 20 — Grafana's onboarding snippet contradicts the spec, in three places
+
+Worth recording because the snippet is what the Frontend Observability plugin hands you, it
+looks authoritative, and pasting it would quietly reverse a decision the spec marks as grilled.
+
+1. **It includes `TracingInstrumentation` from `@grafana/faro-web-tracing`.** The spec: "No
+   browser spans and no propagation from the client — the backend hop is where the causality
+   lives; browser tracing is where the time goes." Omitted here. `faro.test.ts` fails the build
+   if that package ever appears in `package.json`, because a comment cannot stop a paste.
+2. **It configures `ReactIntegration` with `createReactRouterV6DataOptions` from
+   `react-router-dom`.** This app is Next.js pages router; `react-router-dom` is not a
+   dependency and should not become one. View names come from `router.route` instead — the
+   template, never the resolved path, since `/recipes/[id]` resolved would be content and an
+   unbounded label (ADR-0008 §1 and §2).
+3. **It hard-codes `version: '1.0.0'` and `environment: 'production'`.** Both are now derived —
+   the sha from Netlify's `COMMIT_REF`, the environment from `CONTEXT` — so a deploy preview's
+   errors do not arrive labelled as production, and an error spike can be read against a build.
+
+Also: the snippet names the app `bigshop`, and this uses **`bigshop-browser`**, per ADR-0007's
+`bigshop-api` / `bigshop-web` / `bigshop-browser` naming. Renaming the app in Grafana to match
+would be tidier; nothing breaks if it is not, since the app is identified by the key in the
+collector URL rather than by this name.
+
+### Correction 21 — console capture is left on, and that is a decision
+
+Faro captures `console.warn` and `console.error` by default, and not `console.log`/`debug`/
+`trace`. Left alone rather than disabled: the five `console.error` call sites in this frontend
+are all reporting failures, which is exactly what the spec's current-state survey complains is
+invisible ("15 `console.*` calls in the frontend, and no client error reporting of any kind").
+
+The cost is that an error message can quote an API response. A `beforeSend` hook handles the one
+case where that is systematic — a `SyntaxError` from `JSON.parse`, which embeds a slice of what
+it parsed — replacing the message and **keeping the stack**, since the frames are what the
+source map upload exists to make readable. Same rule and same shape as `safeError` on the
+server (Phase 4), arriving by a different route.
 
 ## Session 7: Phase 6 — dashboards and the uptime check
 Status: pending

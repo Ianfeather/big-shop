@@ -421,6 +421,15 @@ false and the SDK never starts — which is the designed behaviour, not a failur
 `deployment.environment.name` for free, and distinguishes a deploy preview from production
 rather than folding both into one label.
 
+**Setting the variables is not enough on its own — the site has to be rebuilt afterwards.**
+Netlify resolves environment variables into the function bundle at *deploy* time, so a deploy
+that already exists never picks up a variable added after it. This cost a confused half hour on
+2026-08-12: the variables were set, the PR's deploy preview was driven, and nothing arrived —
+which looked like the instrumentation not working and was actually a preview built the previous
+day, before the variables existed. The control that settled it was an unauthenticated request to
+the production Go API, which 401s but still produces a span: `bigshop-api` appeared in Tempo and
+`bigshop-web` did not, proving the pipeline healthy and narrowing the fault to this side.
+
 **Once set, the check worth making first** is the same one Session 2 recommends: filter
 `service.name=bigshop-web` in Tempo and confirm a Dave turn and an import each arrive as one
 trace rather than several, and that `service.version` is a real sha rather than `dev`.

@@ -143,6 +143,15 @@ and the root ends last, so children reach the index in an earlier batch than the
 resolves itself. Single-span traces (e.g. a 401 that never touches the DB) never show it, which
 makes it look like a pattern with meaning when it has none.
 
+**Amended 2026-08-12, after Session 5 reached production: "it resolves itself" is true here and
+false on the Netlify side.** This process is long-lived, so its batch timer always fires and the
+root follows within seconds. A Netlify function freezes when the handler returns, and Next.js's
+root span ends *after* that — see correction 12 — so it leaves on a later invocation's flush, or
+not at all. Observed on the `bigshop-web` traces an hour after the fact: the list still read
+`<root span not yet received>` while the opened trace showed the root present and every span in
+place. Tempo stamps that column at ingest and does not revise it when a late root arrives, so on
+this side it is a permanent cosmetic wart on the trace list rather than a transient one.
+
 **Original notes, kept because they explain the shape of the work:**
 1. *Trace in Tempo + logs in Loki + metric in Mimir.* Requires querying Grafana Cloud, whose
    credentials are Fly secrets scoped to the collector container and deliberately never seen by

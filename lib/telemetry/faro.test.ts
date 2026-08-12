@@ -88,11 +88,41 @@ describe('scrub', () => {
   });
 });
 
+// The defect this guards against did not look like a defect. With
+// `faro-cli inject-bundle-id` in the build, the smoke test thrown from
+// pages/index.tsx arrived in Grafana attributed to hooks/use-login.ts - a real
+// file, a plausible line, and completely wrong, because 263 injected characters
+// had shifted every column on Turbopack's single-line output.
+//
+// Nothing in a normal test run can see that. What *can* be asserted is the
+// decision that prevents it: the build must not rewrite the files the source
+// maps describe.
+describe('the source maps must describe the files that ship', () => {
+  it('does not inject the bundle id into built chunks', async () => {
+    const { readFile } = await import('node:fs/promises');
+    const script = await readFile('scripts/upload-sourcemaps.sh', 'utf8');
+
+    // Comments explaining why it is absent are fine; a command is not.
+    const commands = script
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('#'))
+      .join('\n');
+
+    expect(commands).not.toContain('inject-bundle-id');
+  });
+
+  it('sets the bundle id from application code instead', async () => {
+    const { readFile } = await import('node:fs/promises');
+    const source = await readFile('lib/telemetry/faro.ts', 'utf8');
+
+    expect(source).toContain('__faroBundleId_${APP_NAME}');
+  });
+});
+
 describe('APP_NAME', () => {
-  // Three things must agree on this string or stack traces stay minified with
-  // nothing reporting a problem: the runtime config, the bundle id injected
-  // into the built chunks, and the upload. The shell script cannot import this
-  // constant, so the agreement is asserted here instead.
+  // The runtime and the upload must agree on this string or stack traces stay
+  // minified with nothing reporting a problem. The shell script cannot import a
+  // TypeScript constant, so the agreement is asserted here instead.
   it('matches the app name scripts/upload-sourcemaps.sh uses', async () => {
     const { readFile } = await import('node:fs/promises');
     // From cwd rather than import.meta.url: these tests run under jsdom, where

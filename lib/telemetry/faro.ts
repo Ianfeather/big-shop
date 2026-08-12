@@ -33,6 +33,13 @@ export function enabled(): boolean {
 
 let faro: Faro | undefined;
 
+// The deployed sha. Doubles as the source map bundle id, so the two can never
+// disagree - scripts/upload-sourcemaps.sh derives its `--bundle-id` from the
+// same Netlify variable this is built from.
+function version(): string {
+  return process.env.NEXT_PUBLIC_SERVICE_VERSION || 'dev';
+}
+
 // Whether this build is the real thing, as opposed to a deploy preview, a
 // branch deploy or a laptop. Read from the same value that labels the telemetry,
 // so the two can never disagree about which is which.
@@ -53,6 +60,30 @@ export function setupFaro(): void {
   if (faro || !enabled()) return;
 
   try {
+    // Tells Faro which build this is, so a minified stack frame can be matched
+    // to the source maps uploaded for the same build.
+    //
+    // **Set here rather than by rewriting the built files, and that is the whole
+    // point.** Grafana's tooling injects this with `faro-cli inject-bundle-id`,
+    // which prepends a 263-character IIFE to each chunk *after* the bundler has
+    // written its source maps. Turbopack emits one enormous line, so those 263
+    // characters shift every column on line 1 - and the map then resolves each
+    // frame to whatever happened to sit 263 characters earlier. The result is
+    // not a broken stack trace, which would be obvious. It is a *confident and
+    // wrong* one: this app's smoke test, thrown from pages/index.tsx, resolved
+    // to hooks/use-login.ts. Worse than staying minified, because it looks like
+    // it worked.
+    //
+    // Assigning the global from application code adds no bytes to any built
+    // file, so the maps stay byte-accurate. @grafana/faro-core's getBundleId()
+    // reads exactly this key and cannot tell the difference.
+    //
+    // It has to be the global rather than `app.bundleId` in the config below:
+    // registerInitialMetas does `{ ...config.app, ...initial.app }`, and
+    // `initial.app.bundleId` comes from this global - so it spreads last and
+    // overwrites anything passed in config, with `undefined` if unset.
+    (globalThis as Record<string, unknown>)[`__faroBundleId_${APP_NAME}`] = version();
+
     faro = initializeFaro({
       url: process.env.NEXT_PUBLIC_FARO_COLLECTOR_URL,
       app: {
@@ -61,7 +92,7 @@ export function setupFaro(): void {
         // build is this?". Bridged into the client bundle by next.config.js,
         // because Netlify's COMMIT_REF is a server-side variable and Next only
         // inlines NEXT_PUBLIC_* ones.
-        version: process.env.NEXT_PUBLIC_SERVICE_VERSION || 'dev',
+        version: version(),
         // Keeps a deploy preview's errors out of production's numbers, exactly
         // as `deployment.environment.name` does on the other two runtimes.
         environment: process.env.NEXT_PUBLIC_DEPLOY_ENV || 'development',

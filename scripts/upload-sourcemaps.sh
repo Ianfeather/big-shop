@@ -11,28 +11,38 @@
 # Grafana's documented route is @grafana/faro-webpack-plugin. **Next.js 16 builds
 # with Turbopack, not webpack** (`next build` prints "▲ Next.js 16.2.12
 # (Turbopack)"), so there is no webpack config for that plugin to hook into and
-# no supported way to get one back. @grafana/faro-cli exists for exactly this
-# case - its `inject-bundle-id` command is documented as being for "JavaScript
-# files that do not use Webpack or Rollup" - so the two steps the plugin would
-# have done are done here explicitly instead.
+# no supported way to get one back. @grafana/faro-cli covers the upload half, and
+# the other half - telling the runtime which build it is - is done from
+# application code rather than by the CLI's `inject-bundle-id`, for the reason
+# in the next section.
 #
-# ## The two steps, and why the order matters
+# ## This uploads, and deliberately does not inject
 #
-# 1. `inject-bundle-id` prepends `globalThis["__faroBundleId_bigshop-browser"]`
-#    to every built chunk. At runtime @grafana/faro-core reads that same key and
-#    stamps it on every error.
-# 2. `upload` sends the .map files, filed under that same bundle id.
+# The CLI also offers `inject-bundle-id`, which the bundler plugins run as a
+# first step, and **using it here corrupts every stack trace**. It prepends a
+# 263-character IIFE to each built chunk *after* the bundler has written its
+# source maps. Turbopack emits one enormous line, so those characters shift
+# every column on line 1, and each frame then resolves to whatever sat 263
+# characters earlier in the file.
 #
-# The id is what ties a minified frame reported by a browser to the map that can
-# resolve it. **If the two steps disagree about the id, or about the app name,
-# everything still "works" - the upload succeeds, errors arrive, and every stack
-# stays minified.** That is the failure mode to expect, so both values come from
-# one place here rather than being typed twice.
+# That was not a theory: with injection in place, this app's smoke test - thrown
+# from `pages/index.tsx` - arrived in Grafana attributed to `hooks/use-login.ts`.
+# A *confidently wrong* stack trace, which is worse than a minified one, because
+# a minified one at least announces itself.
 #
-# The bundle id is the deploy's git sha. It has to change whenever the bundle
-# changes, or a new build's frames resolve against an old build's maps and the
-# line numbers are quietly wrong - worse than no source maps at all, because it
-# looks like it worked.
+# `lib/telemetry/faro.ts` sets `globalThis["__faroBundleId_bigshop-browser"]`
+# from application code instead. Same global, same value, read the same way by
+# @grafana/faro-core - and no bytes added to any built file, so the maps stay
+# byte-accurate.
+#
+# What is left is this: upload the .map files under the bundle id the runtime
+# will report. **If the two disagree, everything still "works"** - the upload
+# succeeds, errors arrive, and every stack stays minified - so both derive from
+# the same Netlify variable rather than being typed twice.
+#
+# The bundle id is the deploy's git sha, so it changes whenever the bundle does.
+# A fixed id would resolve a new build's frames against an old build's maps,
+# which is the same confidently-wrong failure by a different route.
 
 set -euo pipefail
 
@@ -85,15 +95,6 @@ ENDPOINT="${FARO_SOURCEMAP_API:-https://faro-api-prod-eu-west-2.grafana.net/faro
 # The cost of failing soft is a build whose stack traces stay minified, which is
 # visible in Grafana the moment anyone looks at an error, and recoverable by
 # redeploying.
-
-echo "Injecting Faro bundle id ${BUNDLE_ID} into ${OUTPUT_PATH}..."
-npx --yes faro-cli inject-bundle-id \
-  --bundle-id "$BUNDLE_ID" \
-  --app-name "$APP_NAME" \
-  --files "${OUTPUT_PATH}/**/*.js" || {
-  echo "Faro bundle id injection failed - continuing without source maps." >&2
-  exit 0
-}
 
 # --keep-sourcemaps is deliberately not passed, and its default of false is
 # load-bearing: the CLI deletes each .map after uploading it, so the maps reach

@@ -2,6 +2,9 @@ import OpenAI from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { availableTools, executeToolCall } from '../../../lib/dave/tools';
+import { withTelemetry } from '../../../lib/telemetry/api-route';
+import { recordError, recordWarning } from '../../../lib/telemetry/span';
+import { recordTokenUsage } from '../../../lib/telemetry/metrics';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -41,7 +44,12 @@ When presenting recipe lists to users:
 - When users refer to recipes by position ("add the first one", "the third recipe"), use the internal ID from that position
 - Format lists with proper line breaks for readability`;
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+// Named once, so the label on the token counter and the model actually called
+// cannot drift apart. It is a literal rather than anything derived from the
+// request, which is what makes it safe as a metric label at all - ADR-0008 §2.
+const CHAT_MODEL = 'gpt-3.5-turbo';
+
+async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -75,13 +83,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       iteration++;
 
       const completion = await openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: CHAT_MODEL,
         messages: toolMessages,
         tools: availableTools,
         tool_choice: 'auto',
         temperature: 0.7,
         max_tokens: 1000,
       });
+
+      // Counted per iteration, not per turn. A turn that loops five times costs
+      // five model calls, and the whole reason this metric is worth having is
+      // that the loop is where the cost of Dave actually is.
+      recordTokenUsage(CHAT_MODEL, completion.usage);
 
       const assistantMessage = completion.choices[0].message;
 
@@ -130,7 +143,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           totalToolsUsed++;
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          console.error(`Tool ${toolCall.function.name} failed:`, message);
+          // A warning rather than an error: the failure is handed back to the
+          // model as a tool result and the turn carries on, so the request is
+          // not failing. The tool's own span (lib/telemetry/tool-span.ts) is
+          // where the failure is marked; this records that Dave was told about
+          // it. The tool name is safe on a span - it is one of four literals in
+          // availableTools - where the arguments would be the user's message
+          // reworded (ADR-0008 §1).
+          recordWarning(`tool ${toolCall.function.name} failed`, message);
 
           toolMessages.push({
             role: 'tool',
@@ -151,7 +171,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // If we hit max iterations, return what we have
-    console.warn('Max tool calling iterations reached');
+    recordWarning('max tool calling iterations reached');
 
     return res.status(200).json({
       message: {
@@ -169,7 +189,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
   } catch (error) {
-    console.error('Dave chat error:', error);
+    recordError(error);
 
     if ((error as { code?: string })?.code === 'insufficient_quota') {
       return res.status(400).json({
@@ -182,3 +202,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 }
+
+export default withTelemetry('/api/dave/chat', handler);

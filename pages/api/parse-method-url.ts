@@ -2,6 +2,9 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { extractMethod } from '../../lib/recipe-import/extract';
 import { htmlToInput } from '../../lib/recipe-import/url';
 import { authenticateAccount } from '../../lib/authenticate';
+import { withTelemetry } from '../../lib/telemetry/api-route';
+import { recordAccount, recordError } from '../../lib/telemetry/span';
+import { recordImportOutcome } from '../../lib/telemetry/metrics';
 
 // Method Import from a link: an existing Recipe with an empty Method, filled in
 // from the page it came from.
@@ -15,7 +18,7 @@ import { authenticateAccount } from '../../lib/authenticate';
 // It does authenticate, which /api/parse-recipe-url still does not. Nothing but
 // a token stands between an anonymous request and an OpenAI call on this app's
 // quota, and there is no reason for a new route to inherit that.
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -24,6 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!auth.ok) {
     return res.status(auth.status).json({ error: auth.error });
   }
+  recordAccount(auth.account.id);
 
   const { url } = req.body;
 
@@ -46,14 +50,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // failed to read one. The cook is one keystroke from typing it themselves,
     // so say which it was.
     if (!method?.trim()) {
+      recordImportOutcome('method-url', 'empty');
       return res.status(422).json({
         error: 'No method could be read from that page. Try another link, a photo, or type it in below.',
       });
     }
 
+    recordImportOutcome('method-url', 'success');
     res.status(200).json({ method });
   } catch (e) {
-    console.error(e);
+    recordImportOutcome('method-url', 'error');
+    recordError(e);
     res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
   }
 }
+
+export default withTelemetry('/api/parse-method-url', handler);

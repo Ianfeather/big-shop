@@ -104,6 +104,22 @@ fi
 
 export NEXT_PUBLIC_HOST="http://localhost:${WEB_PORT}"
 
+# Where the *web* runtime exports its telemetry.
+#
+# The API container gets this from docker-compose.yml as `lgtm:4318`, over the
+# compose network. Next.js runs natively on the host here (that is what keeps
+# fast refresh), so it needs the published port instead - which is why this is
+# set here rather than there, and why it uses OTLP_HTTP_PORT rather than a
+# literal 4318: the port auto-increments on collision, and a second worktree
+# would otherwise silently export into the first one's Tempo.
+#
+# Left alone when START_LGTM is false, so the e2e suite's empty value survives
+# and lib/telemetry/setup.ts's `enabled()` turns the SDK off in Next.js exactly
+# as it does in the API.
+if [ "$START_LGTM" = "true" ]; then
+  export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:${OTLP_HTTP_PORT}"
+fi
+
 # Not waited on, deliberately. LGTM takes appreciably longer to come up than the
 # API, and nothing should be blocked on telemetry being ready - the API is
 # already serving, and a trace emitted before the collector is listening is

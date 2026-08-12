@@ -3,6 +3,9 @@
 import type OpenAI from 'openai';
 import type { Recipe, RecipeSummary } from '../../types/models';
 import { serverApiHost } from '../api-host';
+import { withTraceHeaders } from '../telemetry/propagate';
+import { toolSpan } from '../telemetry/tool-span';
+import { safeErrorMessage } from '../telemetry/span';
 
 // Where these tools reach the Go API.
 //
@@ -32,7 +35,7 @@ export async function searchRecipes({ query = '', tags = '' }: { query?: string;
       headers['Authorization'] = `Bearer ${authToken}`;
     }
 
-    const response = await fetch(`${apiHost}/recipes`, { headers });
+    const response = await fetch(`${apiHost}/recipes`, { headers: withTraceHeaders(headers) });
 
     if (!response.ok) {
       throw new Error(`API request failed: ${response.status}`);
@@ -83,7 +86,7 @@ export async function searchRecipes({ query = '', tags = '' }: { query?: string;
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: safeErrorMessage(error),
       message: 'Failed to search recipes'
     };
   }
@@ -102,7 +105,7 @@ export async function getRecipeDetails({ recipeId }: { recipeId: string }, authT
       headers['Authorization'] = `Bearer ${authToken}`;
     }
 
-    const response = await fetch(`${apiHost}/recipe/${recipeId}`, { headers });
+    const response = await fetch(`${apiHost}/recipe/${recipeId}`, { headers: withTraceHeaders(headers) });
 
     if (!response.ok) {
       throw new Error(`API request failed: ${response.status}`);
@@ -117,7 +120,7 @@ export async function getRecipeDetails({ recipeId }: { recipeId: string }, authT
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: safeErrorMessage(error),
       message: 'Failed to get recipe details'
     };
   }
@@ -135,7 +138,7 @@ export async function getShoppingHistory(args: unknown, authToken: string, useMo
       headers['Authorization'] = `Bearer ${authToken}`;
     }
 
-    const response = await fetch(`${apiHost}/shopping-list/history`, { headers });
+    const response = await fetch(`${apiHost}/shopping-list/history`, { headers: withTraceHeaders(headers) });
 
     if (!response.ok) {
       throw new Error(`API request failed: ${response.status}`);
@@ -151,7 +154,7 @@ export async function getShoppingHistory(args: unknown, authToken: string, useMo
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: safeErrorMessage(error),
       message: 'Failed to get shopping history'
     };
   }
@@ -171,7 +174,7 @@ export async function createShoppingList({ recipeIds }: { recipeIds: string[] },
       headers['Authorization'] = `Bearer ${authToken}`;
     }
 
-    const existingResponse = await fetch(`${apiHost}/shopping-list`, { headers });
+    const existingResponse = await fetch(`${apiHost}/shopping-list`, { headers: withTraceHeaders(headers) });
 
     let existingRecipeIds = [];
     if (existingResponse.ok) {
@@ -190,7 +193,7 @@ export async function createShoppingList({ recipeIds }: { recipeIds: string[] },
 
     const response = await fetch(`${apiHost}/shopping-list`, {
       method: 'POST',
-      headers: postHeaders,
+      headers: withTraceHeaders(postHeaders),
       body: JSON.stringify(combinedRecipeIds)
     });
 
@@ -211,7 +214,7 @@ export async function createShoppingList({ recipeIds }: { recipeIds: string[] },
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: safeErrorMessage(error),
       message: 'Failed to update shopping list'
     };
   }
@@ -301,16 +304,28 @@ export const availableTools: OpenAI.ChatCompletionTool[] = [
 ];
 
 // Execute tool calls
+//
+// The span is taken here rather than inside each of the four tools for the same
+// reason toolApiHost is extracted above: this is the one place every tool call
+// passes through, so it is one place to change and one place to test. Each
+// tool's own fetch then runs inside that span, which is what gives the
+// traceparent injected above something to name - and what makes the Go API's
+// server span, and the `otelsql` query spans beneath it, hang off the tool that
+// caused them instead of floating in a trace of their own.
+//
+// An unknown tool throws before a span is started. It is a programming error in
+// availableTools rather than something that happened to a request, and there is
+// nothing about it worth a trace.
 export async function executeToolCall(toolName: string, args: any, authToken: string, useMockApi = false) {
   switch (toolName) {
     case 'search_recipes':
-      return await searchRecipes(args, authToken, useMockApi);
+      return await toolSpan(toolName, () => searchRecipes(args, authToken, useMockApi));
     case 'get_recipe_details':
-      return await getRecipeDetails(args, authToken, useMockApi);
+      return await toolSpan(toolName, () => getRecipeDetails(args, authToken, useMockApi));
     case 'get_shopping_history':
-      return await getShoppingHistory(args, authToken, useMockApi);
+      return await toolSpan(toolName, () => getShoppingHistory(args, authToken, useMockApi));
     case 'create_shopping_list':
-      return await createShoppingList(args, authToken, useMockApi);
+      return await toolSpan(toolName, () => createShoppingList(args, authToken, useMockApi));
     default:
       throw new Error(`Unknown tool: ${toolName}`);
   }

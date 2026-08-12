@@ -1,8 +1,8 @@
 ---
 spec: specs/observability.md
 status: in-progress
-branch: observability
-pr:
+branch: observability-phase4
+pr: https://github.com/Ianfeather/big-shop/pull/95
 ---
 
 Decisions and rationale live in [ADR-0007](../docs/adr/0007-observability-otel-grafana-cloud.md)
@@ -143,6 +143,15 @@ and the root ends last, so children reach the index in an earlier batch than the
 resolves itself. Single-span traces (e.g. a 401 that never touches the DB) never show it, which
 makes it look like a pattern with meaning when it has none.
 
+**Amended 2026-08-12, after Session 5 reached production: "it resolves itself" is true here and
+false on the Netlify side.** This process is long-lived, so its batch timer always fires and the
+root follows within seconds. A Netlify function freezes when the handler returns, and Next.js's
+root span ends *after* that — see correction 12 — so it leaves on a later invocation's flush, or
+not at all. Observed on the `bigshop-web` traces an hour after the fact: the list still read
+`<root span not yet received>` while the opened trace showed the root present and every span in
+place. Tempo stamps that column at ingest and does not revise it when a late root arrives, so on
+this side it is a permanent cosmetic wart on the trace list rather than a transient one.
+
 **Original notes, kept because they explain the shape of the work:**
 1. *Trace in Tempo + logs in Loki + metric in Mimir.* Requires querying Grafana Cloud, whose
    credentials are Fly secrets scoped to the collector container and deliberately never seen by
@@ -270,7 +279,7 @@ middleware at the Huma boundary (`span.RecordError` + `span.SetStatus`);
 spans every query rather than only `/recipes`. **`/health` is deliberately not changed** — see
 correction 6.
 Depends on: Session 2
-Commit: ce2549e
+Commit: ce2549e (squashed into b98f16b, PR #94)
 Notes: Verified against local LGTM by reading traces back, not by assuming export worked.
 Every route now carries DB child spans where before only `/recipes` did, and only one of its
 two queries: `/shopping-list` 30 sql spans, `/recipe/{id}` 12, `/account` 8, `/user` 4,
@@ -322,7 +331,7 @@ Scope: delete the bare `log.Println(err)` calls and everything else the span mak
 service layer stops logging and wraps errors per ADR-0008 §3; convert only genuinely-extra-
 context lines to `slog`. Net fewer lines than we started with.
 Depends on: Session 3
-Commit: 89cbb1c
+Commit: 89cbb1c (squashed into b98f16b, PR #94)
 Notes: Verified end to end against local LGTM by stopping the database and reading the trace
 back: root `GET /recipes` with `STATUS_CODE_ERROR` and two exception events — the wrapped cause
 (`getting account ID: dial tcp: lookup db ... no such host`) and what the client was told
@@ -343,15 +352,191 @@ Split from Session 3 on purpose — 17 files, far easier to review once the span
 justify each deletion already exist. Spec's counts (70/26) were stale; actual is 87/27.
 
 ## Session 5: Phase 4 — Next.js functions and propagation
-Status: pending
+Status: done
 Scope: `instrumentation.ts` for SSR and all five API routes; `traceparent` propagated from
 `pages/api/dave/chat.ts` through `lib/dave/tools.ts` into the Go API. Retries disabled, ~250ms
 exporter timeout, bounded context on every `ForceFlush`, three providers flushed concurrently,
 package-level circuit breaker, delta temporality. Plus the two relocated metrics: import-outcome
 (source × result) and LLM tokens (model × direction).
 Depends on: Session 4
-Commit:
-Notes:
+Commit: 26ce489 + 596b03d (PR #95)
+Notes: Verified against local LGTM by reading all three signals back, not by observing that
+export succeeded. A Dave turn is **one** trace across both runtimes — Next's server span ->
+`POST /api/dave/chat` -> `dave.tool search_recipes` -> `bigshop-api GET /recipes` (with
+`account.id`) -> four `otelsql` spans, 13 spans in one trace id. An import is likewise one
+trace: route span -> `GET /ingredients` and `GET /units` on the Go API with their SQL beneath
+-> `openai extract_recipe`. Both counters arrived with exactly their designed label sets
+(`source`×`result`, `model`×`direction`, no `account.id`), and a log line reached Loki carrying
+the `trace_id` and `span_id` of the request that wrote it, resolving to that request's span in
+Tempo.
+
+Test gate: `npm run test` 220/220 (22 of them new, covering the flush and breaker, the metric
+label discipline, and the route wrapper); `npm run typecheck`, `npm run lint`, `npm run build`;
+`scripts/build-local.sh` green; `npm run test:e2e` 27/27.
+
+Review gate: **four real defects, three of them in code that was already verified working
+against LGTM** — a reminder that "the trace looked right" and "the code is right" are different
+claims.
+
+1. **The flush could reject into a request handler.** The three `forceFlush()` calls were
+   evaluated one line above the `try`, so a provider throwing *synchronously* escaped
+   `flushTelemetry()` — and `api-route.ts` awaits it in a `finally`, where a rejection replaces
+   the handler's outcome. A telemetry fault would have turned a perfectly good 200 into a 500,
+   which is the precise failure ADR-0007's first rule exists to prevent. `Promise.allSettled`
+   is no help: the throw happens while its argument array is still being built. The existing
+   test missed it by using an `async` function, which converts a throw into a rejection.
+2. **`JSON.parse` puts the content it was parsing into its error message**, and that message
+   reached `recordException`. On these paths the parsed content is model output or a Go API
+   response body, so a failed extraction would have written recipe text onto a span — reversing
+   ADR-0008 §1 on the exact failure §1 is written about ("the response body *is* the evidence,
+   and it will not be in the trace"). Demonstrated rather than assumed: `JSON.parse('{"name":
+   Sunday Roast Potatoes}')` gives `Unexpected token 'S', "{"name": Sunday Roa"...`. Now
+   scrubbed in `span.ts`'s `safeError`, at the one boundary where an error becomes telemetry,
+   rather than at each `JSON.parse` — a rule that must be remembered at every future parse is a
+   rule that will be broken at one of them.
+3. **`x-nf-request-id` was missing**, though the spec names it under "things to get right" and
+   the Go middleware already sets it. These five routes *are* the Netlify functions, so it
+   matters here at least as much. Added as `netlify.request_id`, spelled to match
+   `telemetry/http.go:106` — two spellings would be two perfectly good attributes and one
+   unwritable query.
+4. **`recipe-image.ts` counted user-input 400s as errors.** Its outer `catch` recorded
+   `'error'` and reddened the span before branching to "no image provided" / "not an image" /
+   "over 5MB" — undoing, one file away, the discipline `api-route.ts` sets out in its own
+   header comment. `ImportResult` gains a fourth value, `rejected`, so those stay countable
+   without polluting the error rate.
+
+Also fixed: an unterminated detached promise chain in `recipe-image.ts` (a rejection in the
+background job's `.catch` would have been an unhandled rejection, which kills the Node process);
+a `FLUSH_TIMEOUT_MS` comment that said "much smaller than three" exporter timeouts directly
+above `3 * EXPORT_TIMEOUT_MS`; the `error instanceof Error ? … : new Error(String(…))` dance
+repeated at six sites, now `safeError`; and `LoggerName` in PascalCase among a file of
+SCREAMING_SNAKE constants.
+
+Correction 11 was **rewritten** rather than defended: review was right that its second clause
+("buys Next.js's own spans for free") contradicted correction 12 in the next breath.
+
+**Production is wired in code but not in configuration — and this needs Ian.** Unlike the Go
+API, these functions have no collector sidecar to hold credentials: ADR-0007 has them exporting
+OTLP straight to Grafana Cloud. So nothing leaves Netlify until two variables are set in the
+Netlify UI (site configuration → environment variables), and until they are, `enabled()` returns
+false and the SDK never starts — which is the designed behaviour, not a failure:
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT` — the Grafana Cloud OTLP endpoint (`.../otlp`), the same one
+  behind `GRAFANA_CLOUD_OTLP_ENDPOINT` on Fly.
+- `OTEL_EXPORTER_OTLP_HEADERS` — `Authorization=Basic <base64 of instanceID:token>`. Read by the
+  SDK itself, so no Go or TypeScript references it.
+
+`service.version` needs nothing: it falls back to Netlify's own `COMMIT_REF`. `CONTEXT` gives
+`deployment.environment.name` for free, and distinguishes a deploy preview from production
+rather than folding both into one label.
+
+**Setting the variables is not enough on its own — the site has to be rebuilt afterwards.**
+Netlify resolves environment variables into the function bundle at *deploy* time, so a deploy
+that already exists never picks up a variable added after it. This cost a confused half hour on
+2026-08-12: the variables were set, the PR's deploy preview was driven, and nothing arrived —
+which looked like the instrumentation not working and was actually a preview built the previous
+day, before the variables existed. The control that settled it was an unauthenticated request to
+the production Go API, which 401s but still produces a span: `bigshop-api` appeared in Tempo and
+`bigshop-web` did not, proving the pipeline healthy and narrowing the fault to this side.
+
+**Once set, the check worth making first** is the same one Session 2 recommends: filter
+`service.name=bigshop-web` in Tempo and confirm a Dave turn and an import each arrive as one
+trace rather than several, and that `service.version` is a real sha rather than `dev`.
+
+### Correction 10 — retries cannot be disabled in this SDK, and do not need to be
+
+ADR-0007 requires `WithRetry(RetryConfig{Enabled: false})` on the Netlify exporters, because
+the process is about to freeze and there is no second attempt to be alive for. That is the Go
+exporter's API. **The JS OTLP exporter's retry policy is mandatory and has no off switch** — 5
+attempts, 1s initial backoff, 1.5x multiplier — but it is explicitly bounded by
+`timeoutMillis`. So `EXPORT_TIMEOUT_MS` caps total time spent whether the SDK retries or not,
+which is the property the ADR actually wanted. One number, doing the job of two.
+
+### Correction 11 — there is no production SSR to instrument
+
+The spec says "instrument SSR and the four API routes". The only `getServerSideProps` in the
+whole app are in `pages/dev/api-docs.tsx` and `pages/dev/design-system.tsx`, both of which
+`notFound` outside development; everything else is client-rendered through TanStack Query.
+**Nothing was skipped because there is nothing there** — that reason, on its own, is what
+settles this one.
+
+An earlier draft of this correction added that registering a provider "buys Next.js's own
+render and route-dispatch spans for free". Review caught that as an overclaim, and it is:
+correction 12 says in the next breath that nothing outside `withTelemetry` flushes, so on a
+frozen Lambda those spans are buffered and lost. Free to *emit*, not free to *deliver*. If SSR
+data fetching ever arrives in this app it will need a flush of its own, and that is a Session
+of its own rather than something this one quietly covered.
+
+(Also: five routes, not four. That was already correction 3.)
+
+### Correction 12 — Next.js's own root span is not in the flush
+
+Registering a provider means Next emits its own spans, and its outermost one
+(`BaseServer.handleRequest`) is the trace's *root*. It ends strictly **after** the handler
+returns, so it is not in the `ForceFlush` the handler performs. Locally this is invisible —
+the dev server keeps running and the batch processor's timer fires — but on a frozen Lambda
+that root will lag until the next invocation on the same container, or be lost with it.
+
+Left as is rather than worked around, because the span that carries the load is ours: route,
+status, `account.id`, the recorded cause, and the whole subtree of tool/LLM/Go-API spans hang
+off it, and it *is* flushed. A missing root costs the trace list a tidy title, not its content.
+Worth knowing before reading a production trace and concluding something is broken.
+
+### Correction 13 — propagation goes further than the spec names
+
+Phase 4 names `lib/dave/tools.ts`. Reading the first traces back showed why that is not
+enough: `lib/recipe-import/known-names.ts` and `lib/authenticate.ts` also call the Go API from
+these functions, so **every import produced two orphan `bigshop-api` traces** (`GET
+/ingredients`, `GET /units`) and every authenticated route one more (`GET /account`), while the
+import's own trace had a hole where the catalog lookup should be. All three now propagate; the
+import trace above is what that fixed. `lib/api-host.ts` already names exactly these three as
+the server-side callers, which is a good sign the set is complete.
+
+### Correction 14 — local LGTM silently drops the delta metrics
+
+ADR-0008 §2 requires delta temporality from this runtime. **The `grafana/otel-lgtm` image's
+Prometheus rejects delta points and logs nothing about it**, so both new counters were absent
+locally while the Go API's cumulative metrics arrived perfectly — a convincing impression of an
+instrumentation bug, and one that cost real time here. `docker-compose.yml` now passes
+`PROMETHEUS_EXTRA_ARGS=--enable-feature=otlp-deltatocumulative`. Grafana Cloud accepts delta,
+so this is a local-stand-in gap rather than anything about production.
+
+### Correction 15 — the logs signal was installed and unused, so it was made real
+
+`setup.ts` installs a LoggerProvider and `flush.ts` flushes it, but nothing on this side writes
+through the OTel logs API: the routes put failures on the span, per ADR-0008 §3. That would
+have shipped a third of ADR-0007's "all three signals" as scaffolding.
+
+`lib/telemetry/log.ts` bridges the six remaining server-side `console.error` calls in `lib/`.
+They are the right ones to keep as logs rather than fold into spans: each says a *deployment*
+is misconfigured (`API_HOST_INTERNAL` unset, the catalog lookup unreachable), which is not a
+fact about the request that happened to trip over it. They still write to the console too, so a
+misconfiguration message does not vanish when the misconfigured thing is telemetry.
+
+### Correction 16 — the circuit breaker has a sharp edge in local development
+
+The breaker stops flushing after three consecutive failures for the rest of the container's
+life, and relies on **container churn** as its reset — which is correct on Lambda and wrong for
+`next dev`, a process that lives for hours. Restarting the LGTM container mid-session opened
+the breaker permanently and produced exactly the symptom being debugged at the time: traces
+already exported, no new telemetry, nothing logged. Found the hard way. Not worth a cooldown
+timer for production's sake; worth knowing that **restarting LGTM means restarting `next dev`**.
+
+### Correction 17 — Photo Import's background work, and what it means for its telemetry
+
+`pages/api/recipe-image.ts` answers 202 and extracts in a detached promise, so its outcome
+counter and token count are recorded and flushed *after* the request's own flush, in that same
+promise. Whether any of it runs on a frozen Lambda is a property of Netlify's function wrapper
+that this session did not establish. Instrumented as well as it can be — its own
+`flushTelemetry()` in a `.finally` — and filed as `follow-ups.md` #55 rather than fixed, since
+making the extraction reliable changes how Photo Import works rather than how it is observed.
+
+### Correction 18 — no `user.sub` on this runtime's spans
+
+The Go API's spans carry `account.id` and `user.sub`. These routes carry only `account.id`:
+`lib/authenticate.ts` establishes who the caller is by asking the Go API which Account the token
+resolves to, and the answer is an id. Adding the subject would mean decoding a JWT this runtime
+deliberately does not validate.
 
 ## Session 6: Phase 5 — browser
 Status: pending

@@ -489,3 +489,26 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     which is where the implementation detail lives — including the one constraint that
     decides the approach: `go-jwt-middleware` **v2.3.0** is the last release declaring
     `go 1.23.0`, and this repo pins Go 1.23 in four places.
+
+55. **Photo Import's extraction runs after the response, and nothing establishes that a
+    Netlify function stays alive to finish it.** `pages/api/recipe-image.ts` answers `202`
+    with a job id and leaves `processImage`/`processMethodImage` running in a detached
+    promise; the client then polls `GET /api/recipe-image?jobId=`. A Lambda's execution
+    environment freezes when the handler returns, so whether that promise ever resolves
+    depends on whether the platform's wrapper waits for the event loop to drain first —
+    which is a property of `@netlify/plugin-nextjs`, not of this code, and was not
+    established either way while instrumenting it in Phase 4 of
+    [`specs/observability.md`](./specs/observability.md).
+
+    Two further consequences if it does *not* wait, beyond the import silently never
+    completing: the poll can land on a different container from the one holding the work,
+    and the outcome telemetry added in Phase 4 (`bigshop.import.outcome` for the `photo`
+    and `method-photo` Sources, and the token counter for the extraction call) is recorded
+    and flushed in that same detached promise, so it shares the fate of the work it
+    measures.
+
+    Not fixed there deliberately: making the extraction reliable is a change to how Photo
+    Import works — most likely a real queue, or doing the extraction inline and holding the
+    request — not a change to how it is observed. **The counter going flat while Photo
+    Import appears to work is the signal to come back here**, which is a better position
+    than the one before Phase 4, where there was no signal at all.

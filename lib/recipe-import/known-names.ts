@@ -1,5 +1,7 @@
 import type { NextApiRequest } from 'next';
+import { withTraceHeaders } from '../telemetry/propagate';
 import { serverApiHost } from '../api-host';
+import { logError } from '../telemetry/log';
 
 export type KnownNames = { knownIngredients: string[]; knownUnits: string[] };
 
@@ -28,7 +30,7 @@ export async function fetchKnownNames(req: NextApiRequest): Promise<KnownNames> 
   // lib/api-host.ts.
   const host = serverApiHost();
   if (!host) {
-    console.error('No API host configured (API_HOST_INTERNAL, or NEXT_PUBLIC_API_HOST locally) - importing without canonical names');
+    logError('No API host configured (API_HOST_INTERNAL, or NEXT_PUBLIC_API_HOST locally) - importing without canonical names');
     return EMPTY;
   }
 
@@ -39,10 +41,15 @@ export async function fetchKnownNames(req: NextApiRequest): Promise<KnownNames> 
   // (see below), and any route that needs the caller authenticated says so
   // separately.
   const authorization = req.headers.authorization;
-  const headers = authorization ? { Authorization: authorization } : undefined;
+  const headers: Record<string, string> = authorization ? { Authorization: authorization } : {};
 
   const getNames = async (path: string): Promise<string[]> => {
-    const res = await fetch(`${host}${path}`, { headers });
+    // Propagated for the same reason lib/dave/tools.ts propagates: without it
+    // these two calls are traces of their own, and an import's trace has a hole
+    // in it where the canonical-name lookup should be. The spec's Phase 4 names
+    // only the Dave hop, but it is the same hop - a Netlify function calling
+    // the Go API - and leaving it out would mean two orphan traces per import.
+    const res = await fetch(`${host}${path}`, { headers: withTraceHeaders(headers) });
     if (!res.ok) {
       throw new Error(`GET ${path} failed with status ${res.status}`);
     }
@@ -61,7 +68,7 @@ export async function fetchKnownNames(req: NextApiRequest): Promise<KnownNames> 
     ]);
     return { knownIngredients, knownUnits };
   } catch (e) {
-    console.error('Could not load canonical Ingredient/Unit names - importing without them', e);
+    logError('Could not load canonical Ingredient/Unit names - importing without them', e);
     return EMPTY;
   }
 }

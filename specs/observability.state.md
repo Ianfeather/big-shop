@@ -539,7 +539,7 @@ resolves to, and the answer is an id. Adding the subject would mean decoding a J
 deliberately does not validate.
 
 ## Session 6: Phase 5 — browser
-Status: in-progress
+Status: done
 Scope: Grafana Faro for errors, logs and web vitals. No browser spans, no client propagation.
 Private source map upload wired into the Netlify build, not just configured in Grafana.
 Depends on: Session 5
@@ -551,7 +551,7 @@ credentials only Ian has and a deployed build to attach them to.
 Verified locally: the collector URL and `service.version` are inlined into the client bundle,
 33 source maps are emitted, and `faro-cli inject-bundle-id` matches all 50 Turbopack chunks.
 
-Verified on the deploy preview, by driving a real browser at it:
+Verified on a real deployed build, by driving a real browser at it:
 
 - Faro initialises and posts to the collector on page load, unprompted — no error needed, since
   session, view and web-vitals events go on their own.
@@ -565,6 +565,17 @@ Verified on the deploy preview, by driving a real browser at it:
   would silently undo.
 - The page is completely unaffected while Faro fails (see correction 22) — ADR-0007's
   "Faro cannot affect page behaviour", demonstrated rather than asserted.
+- **The de-minified stack trace, which is the evidence this phase owes.** A throw from real
+  application code inside a minified chunk arrived in Grafana as
+  `turbopack:///[project]/pages/index.tsx:161:18` — which is exactly
+  `throw new Error('Faro source map smoke test')`, with the column landing on the `Error(`
+  constructor. Byte-accurate, not approximately right. Correction 24 is the story of getting
+  there.
+
+The smoke test lived on a throwaway `preview` branch and never on this PR or on master. A
+synthetic error thrown from the devtools console would have proved nothing: its stack points at
+an eval context no source map covers, which is a trap worth knowing about before repeating this
+check.
 
 ### Correction 19 — the webpack plugin cannot be used, because there is no webpack
 
@@ -607,6 +618,54 @@ Also: the snippet names the app `bigshop`, and this uses **`bigshop-browser`**, 
 would be tidier; nothing breaks if it is not, since the app is identified by the key in the
 collector URL rather than by this name.
 
+### Correction 24 — injecting the bundle id corrupts every stack trace, silently
+
+**The most valuable failure in this whole spec, because it passed every check devised for it.**
+
+`scripts/upload-sourcemaps.sh` originally ran `faro-cli inject-bundle-id` before uploading, as
+the bundler plugins do. That command prepends a **263-character IIFE** to each built chunk —
+*after* the bundler has written its source maps. Turbopack emits one enormous line, so those 263
+characters shift every column on line 1, and each frame then resolves to whatever sat 263
+characters earlier in the file.
+
+The smoke test, thrown from `pages/index.tsx`, arrived in Grafana as:
+
+```
+Error: Faro source map smoke test
+  at ? (turbopack:///[project]/hooks/use-login.ts:14:20)
+```
+
+A real file. A plausible line. Completely wrong. **Worse than a minified stack**, which at least
+announces that something is missing — this one sends you to read a file with no connection to the
+bug, and it looks like the feature working.
+
+Every signal said success: the upload succeeded, the bundle ids matched, the payload was
+delivered, and the stack de-minified. Only the answer was wrong.
+
+The fix removes the class rather than the instance: **nothing rewrites built files after the
+bundler has described them**, so there is no offset to get wrong. `lib/telemetry/faro.ts` assigns
+`globalThis["__faroBundleId_bigshop-browser"]` from application code, which
+`@grafana/faro-core`'s `getBundleId()` reads identically and which adds no bytes to any chunk.
+
+It has to be the global rather than `app.bundleId` in the Faro config, which looks like the
+supported route and is not: `registerInitialMetas` does `{ ...config.app, ...initial.app }`, and
+`initial.app.bundleId` is derived from the global — so it spreads *last* and overwrites a
+configured value, with `undefined` when the global is unset.
+
+`faro.test.ts` fails the build if `inject-bundle-id` returns to the script, because nothing else
+in any test suite can see this failure.
+
+**Confirmed by arithmetic, then by Grafana.** Before the fix the frame was reported at column
+14857; after it, 14594 — a difference of exactly 263. And the stack now reads:
+
+```
+Error: Faro source map smoke test
+  at ? (turbopack:///[project]/pages/index.tsx:161:18)
+```
+
+`pages/index.tsx:161:18` is exactly `throw new Error('Faro source map smoke test')`, with column
+18 landing on the `Error(` constructor.
+
 ### Correction 22 — the Faro app rejects unknown origins, and previews are unknown by default
 
 Found by driving a real browser at the deploy preview rather than by assuming the SDK worked:
@@ -618,7 +677,16 @@ from origin 'https://deploy-preview-96--big-shop.netlify.app' has been blocked b
 CORS policy: No 'Access-Control-Allow-Origin' header is present
 ```
 
-This is a setting on the Faro app in Grafana (allowed origins), not anything in this repo. Worth
+This is a setting on the Faro app in Grafana (allowed origins), not anything in this repo.
+Resolved by allow-listing two fixed origins — `https://www.bigshop.life` and
+`https://preview--big-shop.netlify.app` — rather than a wildcard, and verifying against a fixed
+`preview` **branch deploy** instead of per-PR deploy previews, whose origins change every time.
+
+**The collector answers `204 No Content` to a rejected preflight exactly as it does to an
+accepted one**; the only difference is whether an `Access-Control-Allow-Origin` header comes
+back. So "the endpoint responded" proves nothing, and the diagnosis needed a three-way
+comparison — production, the preview, and a deliberately bogus origin — to show that the
+allow-list worked and the preview entry simply was not in it. Worth
 recording for two reasons. First, **a deploy preview's origin is different on every pull
 request** (`deploy-preview-<n>--big-shop.netlify.app`), so unless a wildcard is allowed, previews
 will never report and every future attempt to verify this on a preview will look like broken

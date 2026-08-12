@@ -539,12 +539,190 @@ resolves to, and the answer is an id. Adding the subject would mean decoding a J
 deliberately does not validate.
 
 ## Session 6: Phase 5 — browser
-Status: pending
+Status: done
 Scope: Grafana Faro for errors, logs and web vitals. No browser spans, no client propagation.
 Private source map upload wired into the Netlify build, not just configured in Grafana.
 Depends on: Session 5
 Commit:
-Notes: Evidence is browser-side — a thrown error in Faro with a de-minified stack.
+Notes: Evidence is browser-side — a thrown error in Faro with a de-minified stack. **Code is
+written and locally verified; the de-minified stack is not yet demonstrated**, because it needs
+credentials only Ian has and a deployed build to attach them to.
+
+Verified locally: the collector URL and `service.version` are inlined into the client bundle,
+33 source maps are emitted, and `faro-cli inject-bundle-id` matches all 50 Turbopack chunks.
+
+Verified on a real deployed build, by driving a real browser at it:
+
+- Faro initialises and posts to the collector on page load, unprompted — no error needed, since
+  session, view and web-vitals events go on their own.
+- **The bundle id chain holds end to end.** `globalThis["__faroBundleId_bigshop-browser"]` is
+  present in the deployed bundle and reads `cb1a9308…`, the deploy's sha. That is the link that
+  fails silently if the injection and the upload disagree, so seeing the injected side in a real
+  browser is worth more than any local check.
+- **The source map upload is genuinely private.** Every `.map` URL 404s on the deployed site
+  while the maps themselves reached Grafana — `faro-cli` deletes each one after uploading it,
+  which is what the spec means by "private source map upload" and what passing `--keep-sourcemaps`
+  would silently undo.
+- The page is completely unaffected while Faro fails (see correction 22) — ADR-0007's
+  "Faro cannot affect page behaviour", demonstrated rather than asserted.
+- **The de-minified stack trace, which is the evidence this phase owes.** A throw from real
+  application code inside a minified chunk arrived in Grafana as
+  `turbopack:///[project]/pages/index.tsx:161:18` — which is exactly
+  `throw new Error('Faro source map smoke test')`, with the column landing on the `Error(`
+  constructor. Byte-accurate, not approximately right. Correction 24 is the story of getting
+  there.
+
+The smoke test lived on a throwaway `preview` branch and never on this PR or on master. A
+synthetic error thrown from the devtools console would have proved nothing: its stack points at
+an eval context no source map covers, which is a trap worth knowing about before repeating this
+check.
+
+### Correction 19 — the webpack plugin cannot be used, because there is no webpack
+
+Grafana's documented route for source maps is `@grafana/faro-webpack-plugin`, and the spec's
+"things to get right" assumes something of that shape ("Faro's source map upload needs wiring
+into the Netlify build"). **Next.js 16 builds with Turbopack** — `next build` prints "▲ Next.js
+16.2.12 (Turbopack)" — so there is no webpack config to hook into.
+
+`@grafana/faro-cli` covers exactly this case: its `inject-bundle-id` command is documented as
+being for "JavaScript files that do not use Webpack or Rollup". `scripts/upload-sourcemaps.sh`
+does the plugin's two jobs explicitly — inject the bundle id into the built chunks, then upload
+the maps under that same id — and runs from `build.sh` after `npm run package`.
+
+The failure mode to know about: if the injected id and the uploaded id disagree, **everything
+still appears to work**. The upload succeeds, errors arrive, and every stack stays minified. So
+the app name and bundle id come from single sources, and `faro.test.ts` asserts that the shell
+script's `APP_NAME` matches `lib/telemetry/faro.ts`'s constant, since a script cannot import a
+TypeScript value.
+
+### Correction 20 — Grafana's onboarding snippet contradicts the spec, in three places
+
+Worth recording because the snippet is what the Frontend Observability plugin hands you, it
+looks authoritative, and pasting it would quietly reverse a decision the spec marks as grilled.
+
+1. **It includes `TracingInstrumentation` from `@grafana/faro-web-tracing`.** The spec: "No
+   browser spans and no propagation from the client — the backend hop is where the causality
+   lives; browser tracing is where the time goes." Omitted here. `faro.test.ts` fails the build
+   if that package ever appears in `package.json`, because a comment cannot stop a paste.
+2. **It configures `ReactIntegration` with `createReactRouterV6DataOptions` from
+   `react-router-dom`.** This app is Next.js pages router; `react-router-dom` is not a
+   dependency and should not become one. View names come from `router.route` instead — the
+   template, never the resolved path, since `/recipes/[id]` resolved would be content and an
+   unbounded label (ADR-0008 §1 and §2).
+3. **It hard-codes `version: '1.0.0'` and `environment: 'production'`.** Both are now derived —
+   the sha from Netlify's `COMMIT_REF`, the environment from `CONTEXT` — so a deploy preview's
+   errors do not arrive labelled as production, and an error spike can be read against a build.
+
+Also: the snippet names the app `bigshop`, and this uses **`bigshop-browser`**, per ADR-0007's
+`bigshop-api` / `bigshop-web` / `bigshop-browser` naming. Renaming the app in Grafana to match
+would be tidier; nothing breaks if it is not, since the app is identified by the key in the
+collector URL rather than by this name.
+
+### Correction 24 — injecting the bundle id corrupts every stack trace, silently
+
+**The most valuable failure in this whole spec, because it passed every check devised for it.**
+
+`scripts/upload-sourcemaps.sh` originally ran `faro-cli inject-bundle-id` before uploading, as
+the bundler plugins do. That command prepends a **263-character IIFE** to each built chunk —
+*after* the bundler has written its source maps. Turbopack emits one enormous line, so those 263
+characters shift every column on line 1, and each frame then resolves to whatever sat 263
+characters earlier in the file.
+
+The smoke test, thrown from `pages/index.tsx`, arrived in Grafana as:
+
+```
+Error: Faro source map smoke test
+  at ? (turbopack:///[project]/hooks/use-login.ts:14:20)
+```
+
+A real file. A plausible line. Completely wrong. **Worse than a minified stack**, which at least
+announces that something is missing — this one sends you to read a file with no connection to the
+bug, and it looks like the feature working.
+
+Every signal said success: the upload succeeded, the bundle ids matched, the payload was
+delivered, and the stack de-minified. Only the answer was wrong.
+
+The fix removes the class rather than the instance: **nothing rewrites built files after the
+bundler has described them**, so there is no offset to get wrong. `lib/telemetry/faro.ts` assigns
+`globalThis["__faroBundleId_bigshop-browser"]` from application code, which
+`@grafana/faro-core`'s `getBundleId()` reads identically and which adds no bytes to any chunk.
+
+It has to be the global rather than `app.bundleId` in the Faro config, which looks like the
+supported route and is not: `registerInitialMetas` does `{ ...config.app, ...initial.app }`, and
+`initial.app.bundleId` is derived from the global — so it spreads *last* and overwrites a
+configured value, with `undefined` when the global is unset.
+
+`faro.test.ts` fails the build if `inject-bundle-id` returns to the script, because nothing else
+in any test suite can see this failure.
+
+**Confirmed by arithmetic, then by Grafana.** Before the fix the frame was reported at column
+14857; after it, 14594 — a difference of exactly 263. And the stack now reads:
+
+```
+Error: Faro source map smoke test
+  at ? (turbopack:///[project]/pages/index.tsx:161:18)
+```
+
+`pages/index.tsx:161:18` is exactly `throw new Error('Faro source map smoke test')`, with column
+18 landing on the `Error(` constructor.
+
+### Correction 22 — the Faro app rejects unknown origins, and previews are unknown by default
+
+Found by driving a real browser at the deploy preview rather than by assuming the SDK worked:
+Faro initialised, posted, and **every request failed CORS**.
+
+```
+Access to fetch at 'https://faro-collector-prod-eu-west-2.grafana.net/collect/...'
+from origin 'https://deploy-preview-96--big-shop.netlify.app' has been blocked by
+CORS policy: No 'Access-Control-Allow-Origin' header is present
+```
+
+This is a setting on the Faro app in Grafana (allowed origins), not anything in this repo.
+Resolved by allow-listing two fixed origins — `https://www.bigshop.life` and
+`https://preview--big-shop.netlify.app` — rather than a wildcard, and verifying against a fixed
+`preview` **branch deploy** instead of per-PR deploy previews, whose origins change every time.
+
+**The collector answers `204 No Content` to a rejected preflight exactly as it does to an
+accepted one**; the only difference is whether an `Access-Control-Allow-Origin` header comes
+back. So "the endpoint responded" proves nothing, and the diagnosis needed a three-way
+comparison — production, the preview, and a deliberately bogus origin — to show that the
+allow-list worked and the preview entry simply was not in it. Worth
+recording for two reasons. First, **a deploy preview's origin is different on every pull
+request** (`deploy-preview-<n>--big-shop.netlify.app`), so unless a wildcard is allowed, previews
+will never report and every future attempt to verify this on a preview will look like broken
+instrumentation. Second, the failure is entirely silent from the user's side — the page worked
+perfectly throughout, which is ADR-0007's "Faro cannot affect page behaviour" holding up under a
+real failure rather than a hypothetical one.
+
+### Correction 23 — two defects the same browser session exposed
+
+Both were in code that had passed every local gate.
+
+**Faro's internal logger writes to the console on every failed flush.** With the collector
+unreachable that is one `console.error` per flush, forever, in every visitor's devtools — the
+browser twin of the log flood ADR-0007 tells us to silence on the server. Now `OFF` in
+production. Deliberately **not** off everywhere: this project's own CORS problem was diagnosed
+from exactly that console error, so the channel stays open outside production. Faro logs through
+an unpatched console, so none of it feeds back into its own console capture.
+
+**A failed source map upload would have taken the site's deploy down.** `upload-sourcemaps.sh`
+relied on `set -e`, and `build.sh` calls it under `set -e` too, so a Grafana outage or an expired
+token during upload would fail the Netlify build. That contradicts the sentence the script opens
+with. Each step now fails soft. The deploy that revealed this is also what proves the upload runs
+at all: the build succeeded, and `set -e` means it could not have if the CLI had failed.
+
+### Correction 21 — console capture is left on, and that is a decision
+
+Faro captures `console.warn` and `console.error` by default, and not `console.log`/`debug`/
+`trace`. Left alone rather than disabled: the five `console.error` call sites in this frontend
+are all reporting failures, which is exactly what the spec's current-state survey complains is
+invisible ("15 `console.*` calls in the frontend, and no client error reporting of any kind").
+
+The cost is that an error message can quote an API response. A `beforeSend` hook handles the one
+case where that is systematic — a `SyntaxError` from `JSON.parse`, which embeds a slice of what
+it parsed — replacing the message and **keeping the stack**, since the frames are what the
+source map upload exists to make readable. Same rule and same shape as `safeError` on the
+server (Phase 4), arriving by a different route.
 
 ## Session 7: Phase 6 — dashboards and the uptime check
 Status: pending

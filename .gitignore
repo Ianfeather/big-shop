@@ -17,3 +17,7 @@ netlify-functions/recipes/tmp/
 docker/prod-dumps/
 test-results/
 playwright-report/
+
+# Scratch output from the Playwright MCP server (page snapshots, console logs),
+# written into the repo root when driving a browser by hand.
+.playwright-mcp/

@@ -8,9 +8,23 @@ import { useEffect, useState } from 'react';
 import useAuth0, { authDisabled } from '@hooks/use-auth';
 import { requireEnv } from '../lib/env';
 import { appOrigin } from '../lib/app-origin';
+import { identifyUser, setupFaro, setView } from '../lib/telemetry/faro';
+
+// Started here rather than at module scope so it runs in the browser only, and
+// once. _app.tsx is also rendered on the server, where there is no window for
+// Faro's instrumentations to attach to.
+//
+// Deliberately *not* inside a component's effect: an effect runs after the
+// first paint, and reactStrictMode double-invokes it in development, so errors
+// thrown during initial render - the ones most worth catching - would happen
+// before Faro was listening. This runs as soon as the module is evaluated on
+// the client, which is the earliest point available in the pages router.
+if (typeof window !== 'undefined') {
+  setupFaro();
+}
 
 const InnerApp = ({ Component, pageProps }: Pick<AppProps, 'Component' | 'pageProps'>) => {
-  const { isAuthenticated, isLoading } = useAuth0();
+  const { isAuthenticated, isLoading, user } = useAuth0();
   const router = useRouter();
 
   useEffect(() => {
@@ -18,6 +32,14 @@ const InnerApp = ({ Component, pageProps }: Pick<AppProps, 'Component' | 'pagePr
       router.push('/');
     }
   }, [isAuthenticated, router, isLoading]);
+
+  // The join ADR-0007 picks Faro for: this is the same Auth0 subject the Go API
+  // puts on its spans as `user.sub`, so a browser session and the backend work
+  // it caused are findable from each other. Set once the user resolves, since
+  // before that there is nobody to name.
+  useEffect(() => {
+    identifyUser(user?.sub);
+  }, [user?.sub]);
 
   if (isLoading || !isAuthenticated) {
     return false;
@@ -27,6 +49,13 @@ const InnerApp = ({ Component, pageProps }: Pick<AppProps, 'Component' | 'pagePr
 }
 
 export default function App({ Component, pageProps, router }: AppProps) {
+  // The route *template*, so errors group by page rather than scattering across
+  // one view per recipe id - see setView's note on why the resolved path would
+  // be both content and an unbounded label.
+  useEffect(() => {
+    setView(router.route);
+  }, [router.route]);
+
   // '/' is the only route a logged-out visitor may see - it's the marketing
   // homepage. Everything else renders through InnerApp, which bounces them
   // back to it.

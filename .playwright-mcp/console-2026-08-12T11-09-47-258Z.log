@@ -1,0 +1,22 @@
+[    1096ms] [ERROR] Access to fetch at 'https://faro-collector-prod-eu-west-2.grafana.net/collect/08e4b4a4e28970d5fdc39d2df6d5130f' from origin 'https://deploy-preview-96--big-shop.netlify.app' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ https://deploy-preview-96--big-shop.netlify.app/:0
+[    1097ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://faro-collector-prod-eu-west-2.grafana.net/collect/08e4b4a4e28970d5fdc39d2df6d5130f:0
+[    1117ms] [ERROR] Access to fetch at 'https://faro-collector-prod-eu-west-2.grafana.net/collect/08e4b4a4e28970d5fdc39d2df6d5130f' from origin 'https://deploy-preview-96--big-shop.netlify.app' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ https://deploy-preview-96--big-shop.netlify.app/:0
+[    1117ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://faro-collector-prod-eu-west-2.grafana.net/collect/08e4b4a4e28970d5fdc39d2df6d5130f:0
+[    1117ms] [ERROR] Faro
+ @grafana/faro-web-sdk:transport-fetch
+ Failed sending payload to the receiver
+ {meta: Object, events: Array(2), measurements: Array(1)} TypeError: Failed to fetch
+    at iW.<anonymous> (https://deploy-preview-96--big-shop.netlify.app/_next/static/chunks/0-_jjruz00lvt.js:9:6445)
+    at Generator.throw (<anonymous>)
+    at o (https://deploy-preview-96--big-shop.netlify.app/_next/static/chunks/0-_jjruz00lvt.js:9:2169) @ https://deploy-preview-96--big-shop.netlify.app/_next/static/chunks/0-_jjruz00lvt.js:4
+[    1306ms] [ERROR] Access to fetch at 'https://faro-collector-prod-eu-west-2.grafana.net/collect/08e4b4a4e28970d5fdc39d2df6d5130f' from origin 'https://deploy-preview-96--big-shop.netlify.app' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ https://deploy-preview-96--big-shop.netlify.app/:0
+[    1306ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://faro-collector-prod-eu-west-2.grafana.net/collect/08e4b4a4e28970d5fdc39d2df6d5130f:0
+[    1326ms] [ERROR] Access to fetch at 'https://faro-collector-prod-eu-west-2.grafana.net/collect/08e4b4a4e28970d5fdc39d2df6d5130f' from origin 'https://deploy-preview-96--big-shop.netlify.app' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ https://deploy-preview-96--big-shop.netlify.app/:0
+[    1326ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://faro-collector-prod-eu-west-2.grafana.net/collect/08e4b4a4e28970d5fdc39d2df6d5130f:0
+[    1326ms] [ERROR] Faro
+ @grafana/faro-web-sdk:transport-fetch
+ Failed sending payload to the receiver
+ {meta: Object, events: Array(1), measurements: Array(1)} TypeError: Failed to fetch
+    at iW.<anonymous> (https://deploy-preview-96--big-shop.netlify.app/_next/static/chunks/0-_jjruz00lvt.js:9:6445)
+    at Generator.throw (<anonymous>)
+    at o (https://deploy-preview-96--big-shop.netlify.app/_next/static/chunks/0-_jjruz00lvt.js:9:2169) @ https://deploy-preview-96--big-shop.netlify.app/_next/static/chunks/0-_jjruz00lvt.js:4

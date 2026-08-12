@@ -71,12 +71,36 @@ BUNDLE_ID="${SERVICE_VERSION:-${COMMIT_REF:-$(git rev-parse --short HEAD 2>/dev/
 # reason every other endpoint here is: the region is a property of the stack.
 ENDPOINT="${FARO_SOURCEMAP_API:-https://faro-api-prod-eu-west-2.grafana.net/faro/api/v1}"
 
+# Everything below is best-effort, and the `|| { ...; exit 0; }` on each step is
+# the whole point rather than sloppiness.
+#
+# An earlier version of this script relied on `set -e` alone, which meant a
+# Grafana outage, an expired token or a transient 500 during upload would fail
+# the script, fail build.sh, and **take the whole site's deploy down**. That
+# directly contradicts the sentence this file opens with: source maps make a
+# stack trace readable, they are not what makes the site work. Verified against
+# a real deploy, where the build's success is what proves the upload ran - so
+# the coupling was real, not theoretical.
+#
+# The cost of failing soft is a build whose stack traces stay minified, which is
+# visible in Grafana the moment anyone looks at an error, and recoverable by
+# redeploying.
+
 echo "Injecting Faro bundle id ${BUNDLE_ID} into ${OUTPUT_PATH}..."
 npx --yes faro-cli inject-bundle-id \
   --bundle-id "$BUNDLE_ID" \
   --app-name "$APP_NAME" \
-  --files "${OUTPUT_PATH}/**/*.js"
+  --files "${OUTPUT_PATH}/**/*.js" || {
+  echo "Faro bundle id injection failed - continuing without source maps." >&2
+  exit 0
+}
 
+# --keep-sourcemaps is deliberately not passed, and its default of false is
+# load-bearing: the CLI deletes each .map after uploading it, so the maps reach
+# Grafana and are *not* left sitting in .next/static/chunks/ to be served to
+# anyone who asks. That is what makes this a "**private** source map upload", in
+# the spec's words, rather than publishing this app's entire source. Confirmed
+# on a real deploy - the .map URLs 404 while stack traces still resolve.
 echo "Uploading source maps to Faro..."
 npx --yes faro-cli upload \
   --endpoint "$ENDPOINT" \
@@ -87,6 +111,9 @@ npx --yes faro-cli upload \
   --app-name "$APP_NAME" \
   --output-path "$OUTPUT_PATH" \
   --gzip-payload \
-  --verbose
+  --verbose || {
+  echo "Faro source map upload failed - continuing; stack traces will stay minified." >&2
+  exit 0
+}
 
 echo "Faro source maps uploaded for bundle ${BUNDLE_ID}."

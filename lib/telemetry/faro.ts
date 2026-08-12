@@ -10,7 +10,7 @@
 // most likely thing here to be "fixed" by someone following Grafana's own
 // onboarding snippet, which includes it by default. See below.
 
-import { getWebInstrumentations, initializeFaro } from '@grafana/faro-web-sdk';
+import { InternalLoggerLevel, getWebInstrumentations, initializeFaro } from '@grafana/faro-web-sdk';
 import type { APIEvent, ExceptionEvent, Faro, TransportItem } from '@grafana/faro-web-sdk';
 
 // service.name for this runtime. The third of the three names ADR-0007 lists,
@@ -32,6 +32,13 @@ export function enabled(): boolean {
 }
 
 let faro: Faro | undefined;
+
+// Whether this build is the real thing, as opposed to a deploy preview, a
+// branch deploy or a laptop. Read from the same value that labels the telemetry,
+// so the two can never disagree about which is which.
+function isProduction(): boolean {
+  return process.env.NEXT_PUBLIC_DEPLOY_ENV === 'production';
+}
 
 // Starts Faro. Safe to call more than once; only the first call does anything.
 //
@@ -83,6 +90,24 @@ export function setupFaro(): void {
       // here: the five `console.error` call sites in this frontend are all
       // reporting failures, and `console.log` noise is not worth shipping.
       instrumentations: getWebInstrumentations(),
+
+      // Faro writes its own failures to the console, and a collector it cannot
+      // reach means one `console.error` per flush, forever, in every visitor's
+      // devtools. That is the browser twin of the log flood ADR-0007 tells us to
+      // silence on the server ("the SDK's default `ErrorHandler` is replaced so
+      // it does not spam logs"), and the same argument applies: a telemetry
+      // backend being down should be invisible to the person using the app.
+      //
+      // **Off in production only, deliberately.** Silencing it everywhere was
+      // the first instinct and would have been a mistake: this project's Faro
+      // app initially rejected every request on CORS, and that console error is
+      // exactly how it was found. Keeping the channel open outside production
+      // preserves the diagnosis; closing it in production keeps a stranger's
+      // console clean. Faro logs through an unpatched console, so none of this
+      // feeds back into its own console capture.
+      internalLoggerLevel: isProduction()
+        ? InternalLoggerLevel.OFF
+        : InternalLoggerLevel.ERROR,
 
       // Content, not identifiers, is what ADR-0008 §1 excludes - and a browser
       // is the easiest place in this system to send content by accident, since

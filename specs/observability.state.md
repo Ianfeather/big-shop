@@ -551,6 +551,21 @@ credentials only Ian has and a deployed build to attach them to.
 Verified locally: the collector URL and `service.version` are inlined into the client bundle,
 33 source maps are emitted, and `faro-cli inject-bundle-id` matches all 50 Turbopack chunks.
 
+Verified on the deploy preview, by driving a real browser at it:
+
+- Faro initialises and posts to the collector on page load, unprompted — no error needed, since
+  session, view and web-vitals events go on their own.
+- **The bundle id chain holds end to end.** `globalThis["__faroBundleId_bigshop-browser"]` is
+  present in the deployed bundle and reads `cb1a9308…`, the deploy's sha. That is the link that
+  fails silently if the injection and the upload disagree, so seeing the injected side in a real
+  browser is worth more than any local check.
+- **The source map upload is genuinely private.** Every `.map` URL 404s on the deployed site
+  while the maps themselves reached Grafana — `faro-cli` deletes each one after uploading it,
+  which is what the spec means by "private source map upload" and what passing `--keep-sourcemaps`
+  would silently undo.
+- The page is completely unaffected while Faro fails (see correction 22) — ADR-0007's
+  "Faro cannot affect page behaviour", demonstrated rather than asserted.
+
 ### Correction 19 — the webpack plugin cannot be used, because there is no webpack
 
 Grafana's documented route for source maps is `@grafana/faro-webpack-plugin`, and the spec's
@@ -591,6 +606,42 @@ Also: the snippet names the app `bigshop`, and this uses **`bigshop-browser`**, 
 `bigshop-api` / `bigshop-web` / `bigshop-browser` naming. Renaming the app in Grafana to match
 would be tidier; nothing breaks if it is not, since the app is identified by the key in the
 collector URL rather than by this name.
+
+### Correction 22 — the Faro app rejects unknown origins, and previews are unknown by default
+
+Found by driving a real browser at the deploy preview rather than by assuming the SDK worked:
+Faro initialised, posted, and **every request failed CORS**.
+
+```
+Access to fetch at 'https://faro-collector-prod-eu-west-2.grafana.net/collect/...'
+from origin 'https://deploy-preview-96--big-shop.netlify.app' has been blocked by
+CORS policy: No 'Access-Control-Allow-Origin' header is present
+```
+
+This is a setting on the Faro app in Grafana (allowed origins), not anything in this repo. Worth
+recording for two reasons. First, **a deploy preview's origin is different on every pull
+request** (`deploy-preview-<n>--big-shop.netlify.app`), so unless a wildcard is allowed, previews
+will never report and every future attempt to verify this on a preview will look like broken
+instrumentation. Second, the failure is entirely silent from the user's side — the page worked
+perfectly throughout, which is ADR-0007's "Faro cannot affect page behaviour" holding up under a
+real failure rather than a hypothetical one.
+
+### Correction 23 — two defects the same browser session exposed
+
+Both were in code that had passed every local gate.
+
+**Faro's internal logger writes to the console on every failed flush.** With the collector
+unreachable that is one `console.error` per flush, forever, in every visitor's devtools — the
+browser twin of the log flood ADR-0007 tells us to silence on the server. Now `OFF` in
+production. Deliberately **not** off everywhere: this project's own CORS problem was diagnosed
+from exactly that console error, so the channel stays open outside production. Faro logs through
+an unpatched console, so none of it feeds back into its own console capture.
+
+**A failed source map upload would have taken the site's deploy down.** `upload-sourcemaps.sh`
+relied on `set -e`, and `build.sh` calls it under `set -e` too, so a Grafana outage or an expired
+token during upload would fail the Netlify build. That contradicts the sentence the script opens
+with. Each step now fails soft. The deploy that revealed this is also what proves the upload runs
+at all: the build succeeded, and `set -e` means it could not have if the CLI had failed.
 
 ### Correction 21 — console capture is left on, and that is a decision
 

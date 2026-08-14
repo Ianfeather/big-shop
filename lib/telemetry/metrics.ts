@@ -59,6 +59,25 @@ function buildInstruments() {
       description: 'OpenAI tokens consumed, by model and direction',
       unit: '{token}',
     }),
+    // The RED backbone for this runtime, and the reason a `bigshop-web`
+    // dashboard can exist at all.
+    //
+    // Phase 4 shipped without it: the two counters above measure what the
+    // routes *do*, and traces measure individual requests, but nothing measured
+    // the requests in aggregate. Phase 6 needed "how many failed today" and
+    // "which route is slow", and neither is answerable from a trace store where
+    // everything ages out after 14 days.
+    //
+    // Named and labelled to mirror the Go API's otelhttp histogram
+    // (`http.server.request.duration`, by route and status) rather than
+    // inventing a second shape, so one dashboard row can query both runtimes
+    // with the same expression and the same axis. Seconds, matching the OTel
+    // semantic convention - not milliseconds, which is the easy mistake and
+    // silently makes every latency panel wrong by a factor of a thousand.
+    requestDuration: meter.createHistogram('bigshop.web.request.duration', {
+      description: 'Duration of a Next.js API route request',
+      unit: 's',
+    }),
   };
 }
 
@@ -115,5 +134,30 @@ export function recordTokenUsage(model: string, usage: TokenUsage | null | undef
     if (typeof output === 'number') llmTokens.add(output, { model, direction: 'output' });
   } catch {
     // As above.
+  }
+}
+
+// Records how long one API route request took.
+//
+// Called from withTelemetry's `finally`, so it counts the failed and thrown
+// paths as well as the returned one - an endpoint that is slow only when it
+// errors is a real and easily-missed shape.
+//
+// The label set is closed and small: five route templates by a handful of
+// status codes. `account.id` is on the span and must never be here (ADR-0008
+// §2), which is the rule most likely to be "corrected" by someone noticing the
+// asymmetry.
+export function recordRequestDuration(
+  route: string,
+  statusCode: number,
+  durationSeconds: number
+): void {
+  try {
+    instruments().requestDuration.record(durationSeconds, {
+      'http.route': route,
+      'http.response.status_code': statusCode,
+    });
+  } catch {
+    // Telemetry must never affect the application (ADR-0007).
   }
 }

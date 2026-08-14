@@ -1,0 +1,599 @@
+{
+  "title": "Big Shop \u2014 functions (Next.js, Netlify)",
+  "uid": "bigshop-web",
+  "tags": [
+    "bigshop",
+    "observability"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "editable": true,
+  "graphTooltip": 1,
+  "description": "The five LLM-backed API routes: Recipe Import's three Sources, Method Import, and Dave.\n\nLatency here is dominated by OpenAI and measured in seconds, which is why the synchronous 250ms telemetry flush these routes pay is proportionally noise (ADR-0007).",
+  "links": [
+    {
+      "title": "Other Big Shop dashboards",
+      "type": "dashboards",
+      "tags": [
+        "bigshop"
+      ],
+      "asDropdown": true,
+      "icon": "external link"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "prom",
+        "label": "Metrics",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "loki",
+        "label": "Logs",
+        "type": "datasource",
+        "query": "loki",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "tempo",
+        "label": "Traces",
+        "type": "datasource",
+        "query": "tempo",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "env",
+        "label": "Environment",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prom}"
+        },
+        "query": "label_values(deployment_environment_name)",
+        "refresh": 1,
+        "current": {
+          "text": "production",
+          "value": "production"
+        },
+        "includeAll": false,
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Traffic and errors",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "type": "bargauge",
+      "title": "Requests by route",
+      "description": "Which endpoints are used. Read this before anything below: a route with no traffic has no latency and no errors, and an empty panel usually means nobody called it rather than that it is healthy.\n\n_Counted with `last_over_time`, not `increase()`. At this traffic a status often has a single sample in the window, and `increase()` silently **drops** single-sample series while extrapolating the rest - measured here turning one 400 into five and one 500 into nothing at all. A health panel that answers \"0 errors\" when the answer is 1 is worse than no panel. The cost is that this is a running total rather than a windowed one; with 14-day retention that is close enough, and the graphs below show when it moved._\n\n_An **instant** query rendered as a bar gauge, not a time series. These are totals per category; asked as a range query they come back as one bar per scrape interval, which looks like a trend and is really the same number drawn forty times._",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prom}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 5,
+            "showPoints": "auto",
+            "spanNulls": true
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prom}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (http_route) (last_over_time(bigshop_web_request_duration_seconds_count{service_name=\"bigshop-web\", deployment_environment_name=\"$env\"}[$__range]))",
+          "legendFormat": "{{http_route}}",
+          "range": false,
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "auto",
+        "sizing": "auto",
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "maxVizHeight": 300
+      }
+    },
+    {
+      "id": 3,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "type": "table",
+      "title": "Non-2xx responses by route and status",
+      "description": "4xx and 5xx together, and they are very different things: a 400 or a 422 is the service working correctly and saying no, a 5xx is a fault. The same distinction `span.setStatus` follows (Phase 3, correction 7), so the dashboard and the traces agree on what counts as an error.\n\n_Counted with `last_over_time`, not `increase()`. At this traffic a status often has a single sample in the window, and `increase()` silently **drops** single-sample series while extrapolating the rest - measured here turning one 400 into five and one 500 into nothing at all. A health panel that answers \"0 errors\" when the answer is 1 is worse than no panel. The cost is that this is a running total rather than a windowed one; with 14-day retention that is close enough, and the graphs below show when it moved._",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prom}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prom}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (http_route, http_response_status_code) (last_over_time(bigshop_web_request_duration_seconds_count{service_name=\"bigshop-web\", deployment_environment_name=\"$env\", http_response_status_code!~\"2..\"}[$__range]))",
+          "legendFormat": "",
+          "range": false,
+          "refId": "A",
+          "instant": true,
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "row",
+      "title": "Latency",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "panels": []
+    },
+    {
+      "id": 5,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
+      "type": "timeseries",
+      "title": "p50, p95 and p99",
+      "description": "Read the three together. p50 rising means everything got slower; p99 rising alone means a few requests are pathological - usually a query without an index, or a loop over rows.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prom}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 5,
+            "showPoints": "auto",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prom}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(bigshop_web_request_duration_seconds_bucket{service_name=\"bigshop-web\", deployment_environment_name=\"$env\"}[$__rate_interval])))",
+          "legendFormat": "p50",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prom}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(bigshop_web_request_duration_seconds_bucket{service_name=\"bigshop-web\", deployment_environment_name=\"$env\"}[$__rate_interval])))",
+          "legendFormat": "p95",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prom}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(bigshop_web_request_duration_seconds_bucket{service_name=\"bigshop-web\", deployment_environment_name=\"$env\"}[$__rate_interval])))",
+          "legendFormat": "p99",
+          "range": true,
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Recipe and Method Import",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "panels": []
+    },
+    {
+      "id": 7,
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 19
+      },
+      "type": "bargauge",
+      "title": "Import outcomes by Source",
+      "description": "Four outcomes, and only one is a fault:\n\n- **success** - a recipe or method came back\n- **empty** - the extraction ran and the page had nothing on it. The commonest Import complaint (follow-ups.md #40), deliberately not an error\n- **rejected** - upload refused: no file, not an image, over 5MB\n- **error** - this app or OpenAI failed\n\nA Source whose `empty` count climbs is an extraction-quality problem, not an outage.\n\n_Counted with `last_over_time`, not `increase()`. At this traffic a status often has a single sample in the window, and `increase()` silently **drops** single-sample series while extrapolating the rest - measured here turning one 400 into five and one 500 into nothing at all. A health panel that answers \"0 errors\" when the answer is 1 is worse than no panel. The cost is that this is a running total rather than a windowed one; with 14-day retention that is close enough, and the graphs below show when it moved._\n\n_An **instant** query rendered as a bar gauge, not a time series. These are totals per category; asked as a range query they come back as one bar per scrape interval, which looks like a trend and is really the same number drawn forty times._",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prom}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 5,
+            "showPoints": "auto",
+            "spanNulls": true
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prom}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (source, result) (last_over_time(bigshop_import_outcome_total{service_name=\"bigshop-web\", deployment_environment_name=\"$env\"}[$__range]))",
+          "legendFormat": "{{source}} \u2014 {{result}}",
+          "range": false,
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "auto",
+        "sizing": "auto",
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "maxVizHeight": 300
+      }
+    },
+    {
+      "id": 8,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 19
+      },
+      "type": "timeseries",
+      "title": "Photo Import completions",
+      "description": "Photo Import answers 202 and extracts in a detached promise, and **nothing establishes that a Netlify function stays alive to finish it** (follow-ups.md #55). Its outcome is recorded in that same promise, so this counter shares the fate of the work it measures.\n\n**This going flat while Photo Import appears to work is the signal to go and read that follow-up.**",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prom}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 5,
+            "showPoints": "auto",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prom}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (result) (increase(bigshop_import_outcome_total{service_name=\"bigshop-web\", deployment_environment_name=\"$env\", source=~\"(method-)?photo\"}[$__rate_interval]))",
+          "legendFormat": "{{result}}",
+          "range": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "What the AI costs",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      },
+      "panels": []
+    },
+    {
+      "id": 10,
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "type": "bargauge",
+      "title": "Tokens by model and direction",
+      "description": "Input and output tokens are priced differently, which is why direction is a label rather than a sum. Two models: the extraction model used by every Import Source, and Dave's chat model.\n\nDave counts tokens **per iteration, not per turn** - one turn can loop five times through the tool-calling cycle, and that loop is where the cost is.\n\n_Counted with `last_over_time`, not `increase()`. At this traffic a status often has a single sample in the window, and `increase()` silently **drops** single-sample series while extrapolating the rest - measured here turning one 400 into five and one 500 into nothing at all. A health panel that answers \"0 errors\" when the answer is 1 is worse than no panel. The cost is that this is a running total rather than a windowed one; with 14-day retention that is close enough, and the graphs below show when it moved._\n\n_An **instant** query rendered as a bar gauge, not a time series. These are totals per category; asked as a range query they come back as one bar per scrape interval, which looks like a trend and is really the same number drawn forty times._",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prom}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 5,
+            "showPoints": "auto",
+            "spanNulls": true
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prom}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (model, direction) (last_over_time(bigshop_llm_tokens_total{service_name=\"bigshop-web\", deployment_environment_name=\"$env\"}[$__range]))",
+          "legendFormat": "{{model}} \u2014 {{direction}}",
+          "range": false,
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "auto",
+        "sizing": "auto",
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "maxVizHeight": 300
+      }
+    },
+    {
+      "id": 11,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "type": "timeseries",
+      "title": "Token burn over time",
+      "description": "Rate of token consumption. A step change without a matching step in imports or Dave turns means a prompt got longer, not that usage grew.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prom}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 5,
+            "showPoints": "auto",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prom}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (model) (rate(bigshop_llm_tokens_total{service_name=\"bigshop-web\", deployment_environment_name=\"$env\"}[$__rate_interval]))",
+          "legendFormat": "{{model}}",
+          "range": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "row",
+      "title": "Dave",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "panels": []
+    },
+    {
+      "id": 13,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 37
+      },
+      "type": "table",
+      "title": "Dave turns, end to end",
+      "description": "One trace per turn, spanning both runtimes and every tool call: the route span, an `openai` span per model call, a `dave.tool` span per tool, and beneath those the Go API's server span with its queries.\n\nThis is what the `traceparent` propagation in Phase 4 bought. \"Why did that take eleven seconds\" is answerable only because these are one trace rather than several.",
+      "datasource": {
+        "type": "tempo",
+        "uid": "${tempo}"
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "nested": true
+            }
+          }
+        }
+      ],
+      "targets": [
+        {
+          "datasource": {
+            "type": "tempo",
+            "uid": "${tempo}"
+          },
+          "queryType": "traceql",
+          "query": "{ name = \"POST /api/dave/chat\" }",
+          "refId": "A",
+          "limit": 20
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "row",
+      "title": "Logs",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 45
+      },
+      "panels": []
+    },
+    {
+      "id": 15,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 46
+      },
+      "type": "logs",
+      "title": "Error log lines (expected to be sparse)",
+      "description": "The service layer does not log (ADR-0008 section 3) - causes of failed requests are on the spans. What appears here says a deployment is misconfigured. Correlated by `trace_id`.",
+      "datasource": {
+        "type": "loki",
+        "uid": "${loki}"
+      },
+      "options": {
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${loki}"
+          },
+          "refId": "A",
+          "queryType": "range",
+          "expr": "{service_name=\"bigshop-web\"} | severity_text=\"ERROR\""
+        }
+      ]
+    }
+  ]
+}

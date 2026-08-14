@@ -725,10 +725,89 @@ source map upload exists to make readable. Same rule and same shape as `safeErro
 server (Phase 4), arriving by a different route.
 
 ## Session 7: Phase 6 — dashboards and the uptime check
-Status: pending
+Status: done
 Scope: a service dashboard per runtime plus a Faro frontend view; Grafana synthetic check on
 `/health` at ~1/min with one contact point.
 Depends on: Session 6
 Commit:
 Notes: No threshold alert rules — `follow-ups.md` #37, triggered by ~two weeks of production
 data rather than by a date.
+
+Three dashboards in `grafana/dashboards/`, committed as JSON rather than built by clicking, so
+they are reviewable, restorable, and carry their own reasoning in every panel description.
+Shape agreed with Ian before any were written: **triage first** ("is it broken right now" at the
+top, trends below), **absolute counts over long windows** rather than rates, and a panel that
+makes the `/shopping-list` N+1 visible.
+
+Built and verified against local LGTM, not written blind: every one of the 20 PromQL expressions
+executed against real data, all three dashboards imported into a real Grafana, and each rendered
+in a browser and read back. Screenshots in `specs/evidence/observability/phase6-*.png`.
+
+### Correction 25 — Phase 6 needed a metric Phase 4 never shipped
+
+The spec asks for "a service dashboard per runtime". `bigshop-web` had no request duration or
+count metric at all — Phase 4 shipped the two business counters and traces, and nothing measuring
+requests in aggregate. Neither "how many failed today" nor "which route is slow" is answerable
+from a trace store where everything ages out at 14 days.
+
+`bigshop.web.request.duration` was added here, deliberately mirroring the Go API's otelhttp
+histogram (`http.route`, `http.response.status_code`, seconds) rather than inventing a second
+shape — which is what lets one dashboard row query both runtimes with the same expression and
+plot them on one axis.
+
+### Correction 26 — `increase()` is the wrong function at this traffic, and fails silently
+
+The most consequential finding of this session, caught by reading the rendered numbers rather
+than trusting the queries.
+
+Driving 12 requests through the functions - ten 200s, one 400, one 500 - the dashboard reported
+**4 requests, 0 errors**. The raw counters were right; `increase()` was wrong twice over:
+
+```
+raw counter          200=10   400=1   500=1
+increase(...[24h])   200=10   400=5   500=<missing>
+```
+
+`increase()` needs two samples in the window: it **drops single-sample series entirely** and
+extrapolates the rest. So the 500 - the only thing on that dashboard anyone actually cares about -
+vanished, and the 400 was inflated fivefold.
+
+Every count panel now uses `last_over_time`, which returns exactly 10/1/1. The trade is that
+these are running totals rather than windowed ones. That is the right trade for a health
+dashboard: undercounting after a process restart is a shortfall, while reporting zero errors when
+there was one is a lie.
+
+### Correction 27 — three more things that only rendering could have found
+
+None of these are visible in a query result, a JSON schema check, or a test.
+
+- **TraceQL metrics queries fail over long ranges.** Tempo rejected the 24h range the dashboard
+  defaults to (succeeding at 6h), so the database panel errored on every load. Fixed with a
+  panel-level 3-hour override.
+- **TraceQL metrics frames are all named `rate`**, so a two-query panel produced a legend reading
+  "rate, rate". `legendFormat` is not honoured by the Tempo datasource and a `byFrameRefID`
+  override does not match its frames - both tried. Grouping with `by (name)` makes each series
+  label itself, and shows *which* routes and *which* database operations rather than two flat
+  totals.
+- **"Totals by category" asked as a range query draws the same number forty times.** Requests by
+  route, import outcomes and token counts are now instant queries rendered as bar gauges. Their
+  threshold colouring was also removed: a token count is not a severity, and the default palette
+  painted 11k tokens red.
+
+### Correction 28 — the Faro dashboard is Grafana's, not ours
+
+The spec asks for "a Faro frontend view". Grafana Cloud's Frontend Observability app already is
+one - errors, web vitals, sessions, source-mapped stack traces - and anything hand-assembled here
+would be a worse version of it maintained by us. The health dashboard links to it instead.
+
+### Correction 29 — the synthetic check cannot be committed, and is documented instead
+
+It lives in Grafana Synthetic Monitoring, behind its own API and token, and its contact point is a
+decision about where alerts go rather than a value that belongs in this repo. `grafana/README.md`
+carries the exact settings, including the one that is easy to get wrong: **point it at the Fly
+origin, not `www.bigshop.life/api/bigshop/health`**, or a Netlify outage looks identical to an API
+outage and the check cannot tell you which failed.
+
+Worth restating there, because a green check is easy to over-read: `/health` returns `ok` without
+touching the database (Phase 3, correction 6), so it proves the machine is up and the process is
+serving - not that the app works.

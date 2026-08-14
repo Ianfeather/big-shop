@@ -21,6 +21,7 @@
 import { SpanStatusCode, context, trace } from '@opentelemetry/api';
 import type { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
 import { flushTelemetry } from './flush';
+import { recordRequestDuration } from './metrics';
 import { tracer } from './setup';
 import { safeError } from './span';
 
@@ -42,6 +43,12 @@ export type Route =
 // which is the failure ADR-0007's Netlify half is written to prevent.
 export function withTelemetry(route: Route, handler: NextApiHandler): NextApiHandler {
   return async function instrumented(req: NextApiRequest, res: NextApiResponse) {
+    // performance.now(), not Date.now(): a monotonic clock cannot be dragged
+    // backwards by an NTP correction mid-request, which is how a latency
+    // histogram acquires negative observations that no amount of staring at the
+    // dashboard explains.
+    const startedAt = performance.now();
+
     const span = tracer().startSpan(`${req.method} ${route}`, {
       attributes: {
         'http.request.method': req.method ?? 'UNKNOWN',
@@ -97,6 +104,19 @@ export function withTelemetry(route: Route, handler: NextApiHandler): NextApiHan
           span.setStatus({ code: SpanStatusCode.ERROR });
         }
       }
+
+      // Recorded before the flush, which is the whole reason it is here rather
+      // than anywhere else: metrics only leave a Lambda on ForceFlush, so a
+      // measurement taken afterwards would sit in the reader until the *next*
+      // request on the same container, and be lost with the container if there
+      // isn't one. Divided by 1000 because the histogram is in seconds, per the
+      // OTel convention the Go side's otelhttp metric also follows.
+      recordRequestDuration(
+        route,
+        typeof res.statusCode === 'number' ? res.statusCode : 0,
+        (performance.now() - startedAt) / 1000
+      );
+
       span.end();
       await flushTelemetry();
     }

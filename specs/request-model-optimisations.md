@@ -76,6 +76,23 @@ bumping Go everywhere first — which is a reasonable thing to want (it would al
 Huma from v2.35.0, pinned for the same reason) but it is a different piece of work and
 must not be smuggled in here.
 
+> **This constraint is gone, and the pins came off with it.** The observability work (#91)
+> moved the repo to **Go 1.25** while this spec was being implemented, which unstuck three
+> pinned dependencies at once. All three were taken:
+>
+> | | was | now |
+> | --- | --- | --- |
+> | `go-jwt-middleware` | v2.3.0 | **v2.3.1** (newest v2) |
+> | `go-sql-driver/mysql` | v1.9.3 | **v1.10.0** (Phase 2, amendment 3) |
+> | `danielgtaylor/huma` | v2.35.0 | **v2.39.1** — no OpenAPI drift, so no `api.d.ts` churn |
+>
+> **`go-jwt-middleware` v3 is deliberately not taken here** — it is a major version and a
+> rewrite of the wiring (options-based constructors returning errors, `go-jose` swapped for
+> `jwx`, claims moved out of `ContextKey{}`), not a version bump. It is **follow-up #57**,
+> which also records the two properties any v3 migration has to re-establish rather than
+> inherit. The original point stands in that direction too: a major upgrade should not ride
+> along inside something else.
+
 The upgrade also retires two unmaintained dependencies: `go-jwt-middleware` v1.0.0 and
 `form3tech-oss/jwt-go` (a fork of the abandoned `dgrijalva/jwt-go`).
 
@@ -150,12 +167,11 @@ before Auth0 signs with it, and the exposure is theoretical rather than a live r
 **Decision required from Ian before this is implemented.** Setting `interpolateParams=true`
 on the DSN makes `go-sql-driver` interpolate arguments client-side instead of preparing
 server-side. **Measured: `GET /shopping-list` 15.2 → 9.2 round trips**, and the same ~40%
-comes off every route in the baseline table. One DSN parameter, no code.
+comes off every route in the baseline table. No application code — two DSN parameters and a
+driver bump, for reasons the security review below sets out.
 
-The trade-off is that parameter escaping moves from TiDB into the driver. The driver's
-interpolation is conservative — it refuses on invalid UTF-8 and will not interpolate at all
-under `multiStatements` — but "the database escapes our parameters" is a property to give
-up knowingly or not at all.
+The trade-off is that parameter escaping moves from TiDB into the driver, and
+"the database escapes our parameters" is a property to give up knowingly or not at all.
 
 **If that is not acceptable**, the alternative that keeps server-side prepares is to hold
 `*sql.Stmt` values on the `App` and reuse them, paying the `PREPARE` once per connection
@@ -163,21 +179,125 @@ instead of once per query. Same win, materially more code, and it interacts with
 pool settings because `database/sql` re-prepares a cached `Stmt` on each new connection.
 Ship one or the other, not both.
 
+**Recommendation: take `interpolateParams`.** The escaping is sound for the shape of SQL
+this codebase actually writes (audited below), and the `*sql.Stmt` alternative is a lot of
+code to keep a property most of the MySQL ecosystem already delegates to its driver. But
+take it with the four amendments in the next section, not on the strength of the sentence
+above.
+
+### The security review, done properly
+
+Audited 2026-08-10 against the pinned driver, **`go-sql-driver/mysql v1.5.0`**
+(`netlify-functions/recipes/go.mod:13`), reading that tag's source rather than the current
+docs. An earlier draft of this spec justified the trade-off with two claims about the driver
+that are **false for the version we run**, and they are recorded here so nobody re-derives
+the reassurance from them:
+
+- *"It refuses on invalid UTF-8."* It does not. There is no UTF-8 validation anywhere in
+  v1.5.0's interpolation path; `escapeStringBackslash` iterates bytes.
+- *"It will not interpolate at all under `multiStatements`."* There is no such guard.
+  `Config.normalize()` (`dsn.go:99`) checks unsafe collations and nothing else.
+
+**What actually protects us is the charset guard, and it holds.** `dsn.go:99` refuses to
+build the config when `interpolateParams` is combined with a collation from the
+multibyte-escape-bypass family (`gbk`, `big5`, `sjis`, `cp932`, `gb2312`, `gb18030`). Our
+DSN sets no `collation=`, so v1.5.0 defaults to `utf8mb4_general_ci`, which is safe. The
+failure mode is fail-closed: `sql.Open` errors and the process does not start. Escaping
+covers `\x00 \n \r \x1a ' " \` and switches to quote-doubling when the server advertises
+`NO_BACKSLASH_ESCAPES`.
+
+**The call sites are clean.** Every user value in `internal/pkg/service` is a real
+placeholder. The five `fmt.Sprintf` sites in `recipe.go` (`:391`, `:414`, `:433`, `:463`,
+`:549`) build `(?,?)` lists, not values; the one interpolated *identifier*
+(`setIngredientUnitColumn`, `recipe.go:549`) is a column name chosen from two Go literals
+and is unaffected either way. No `LIKE`/`REGEXP` over user-supplied patterns, no `[]byte`
+arguments, and no static query containing a literal `?` — which matters because the driver
+decides whether to interpolate by counting `?` textually (`strings.Count`), so a `?` inside
+a quoted literal in a query would be substituted into if the arg count happened to match.
+
+So: **no injection exposure.** The four amendments below are what the trade-off actually
+costs.
+
+#### 1. Two DSN parameters must never appear, and only one is enforced
+
+`collation=` set to one of the unsafe six is refused by the driver. `multiStatements` is
+**not** — and it is the parameter that would turn any future escaping defect into stacked
+statements. Neither is in the DSN today. Treat both as invariants of this repo, recorded in
+`technical-architecture.md`'s environment table alongside `interpolateParams` itself.
+
+#### 2. User data and bearer secrets move into query text, which is logged
+
+This is the real consequence and the previous draft did not mention it. Parameterised, an
+invite is sent as `INSERT INTO invite (token, account, email, ...) VALUES (?, ?, ?, ?, ?)`
+with the values on a separate wire path. Interpolated, the literal token and email address
+are *in the statement* (`internal/pkg/service/invite.go:18`, `:64`) — and therefore in
+MySQL's general log, the slow-query log, TiDB Cloud's slow-query UI, and any driver error
+text that reaches our own 25-odd `log.Printf` sites in the service layer. **An invite token
+is a bearer capability**: whoever reads a slow-query log can join an account. Recipe content
+and user emails take the same path.
+
+Accepted, not ignored: TiDB only captures statements past the slow-query threshold, so this
+is an exposure of the slow tail rather than of every request. Note it, and do not add
+statement-level logging to the API without revisiting it.
+
+#### 3. Bump the driver as part of this phase — and pin the collation when you do
+
+v1.5.0 is from January 2020. Interpolation moves security-critical code out of TiDB and into
+that pinned dependency, which changes what keeping it patched is worth. **Go to `v1.9.3`.**
+The same Go-version trap as Phase 1's `go-jwt-middleware` pin applies and has been checked:
+`v1.9.3` declares `go 1.21.0` and is fine against this repo's Go 1.23, while **`v1.10.0`
+declares `go 1.24.0`** and would drag the Go bump into this work.
+
+One catch that makes the bump load-bearing rather than hygienic: from v1.8 the driver's
+`Collation` **defaults to empty** and the guard became
+`cfg.InterpolateParams && cfg.Collation != "" && unsafeCollations[cfg.Collation]`
+(`dsn.go:174` in v1.9.3). With no collation in the DSN the guard is a no-op and the
+connection charset comes from the server default. So the bump must add
+`&collation=utf8mb4_general_ci` to the DSN explicitly — otherwise upgrading *removes* the
+protection described above without any visible change.
+
+#### 4. A footgun for later: `[]byte` arguments
+
+A `[]byte` argument interpolates as `_binary'…'`, which forces a binary comparison — so
+`WHERE name = ?` would become case-**sensitive** and quietly break the case-insensitive
+matching that `migrations/032_pantry_staple.sql:33` and `recipe.go:602` depend on. There are
+no `[]byte` arguments today. There must not be one added without knowing this.
+
 ### Actions
 
-1. Add `&interpolateParams=true` to the DSN in `docker-compose.yml:39` (covers local dev
-   *and* e2e).
-2. Update the production DSN: `fly secrets set DSN='...&interpolateParams=true' -a big-shop-api`.
+1. `go get github.com/go-sql-driver/mysql@v1.9.3` — **before** turning interpolation on, so
+   the two changes are separable if the bump misbehaves. Not `v1.10.0` (see amendment 3).
+2. Add `&interpolateParams=true&collation=utf8mb4_general_ci` to the DSN in
+   `docker-compose.yml:39` (covers local dev *and* e2e). **Both parameters, together** —
+   amendment 3 explains why the collation is not optional once the driver is bumped.
+3. Update the production DSN:
+   `fly secrets set DSN='...&interpolateParams=true&collation=utf8mb4_general_ci' -a big-shop-api`.
    That is the **only** other place it is set — there is no `.env` copy of it by design
    (`docker/README.md`).
-3. Note it in `technical-architecture.md`'s environment table, with a one-line reason, so
-   the next person to rewrite the DSN does not drop it silently.
+4. Note all of it in `technical-architecture.md`'s environment table: what
+   `interpolateParams` buys, why `collation` is pinned next to it, and that
+   **`multiStatements` must never be added** (amendment 1) — so the next person to rewrite
+   the DSN does not drop half of it silently.
 
 ### Verify
 
 Run the rig (appendix) before and after. Expect the `GET /shopping-list` slope to fall from
 ~15.2 to ~9.2. Run `npm run test:e2e` — a mis-escaped parameter would show up as a wrong or
 empty Shopping List, which those specs assert on.
+
+Then check the two properties the security review depends on, because both fail silently:
+
+- **The guard is armed.** Temporarily set `collation=gbk_chinese_ci` in the local DSN and
+  confirm the API refuses to start with `invalid DSN: interpolateParams can not be used
+  with unsafe collations`. If it starts, the collation is not reaching the driver and
+  amendment 3 has bitten.
+- **Round trips actually fell.** The driver falls back to a server-side prepare
+  (`driver.ErrSkip`) for any argument type it cannot interpolate and for statements over
+  `maxAllowedPacket`, so the win is not uniform by construction. The slope is the check.
+
+Non-ASCII is worth one deliberate pass by hand — save a Recipe with an ingredient name
+carrying quotes, a backslash and a multi-byte character (`Crème "brûlée" \ 50%`) and read it
+back — since e2e fixtures are all ASCII and would not notice an escaping regression.
 
 ---
 

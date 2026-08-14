@@ -22,7 +22,7 @@ type InvitesOutput struct {
 }
 
 func (a *App) acceptInvite(ctx context.Context, input *InviteTokenInput) (*struct{}, error) {
-	currentUser, err := service.GetUser(ctx, a.db, ctx.Value(contextKey("userID")).(string))
+	currentUser, err := service.GetUser(ctx, a.db, callerFrom(ctx).UserID)
 	if err != nil {
 		return nil, fail(ctx, huma.Error400BadRequest("Error finding current user"), err)
 	}
@@ -51,7 +51,7 @@ func (a *App) acceptInvite(ctx context.Context, input *InviteTokenInput) (*struc
 }
 
 func (a *App) getInvites(ctx context.Context, _ *struct{}) (*InvitesOutput, error) {
-	user, err := service.GetUser(ctx, a.db, ctx.Value(contextKey("userID")).(string))
+	user, err := service.GetUser(ctx, a.db, callerFrom(ctx).UserID)
 	if err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("Error finding current user"), err)
 	}

@@ -25,7 +25,7 @@ type UserOutput struct {
 
 func (a *App) addUser(ctx context.Context, input *UserInput) (*UserOutput, error) {
 	user := input.Body
-	user.ID = ctx.Value(contextKey("userID")).(string)
+	user.ID = callerFrom(ctx).UserID
 
 	if err := service.AddUser(ctx, a.db, user); err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("could not add new user"), err)
@@ -61,9 +61,9 @@ type PreferencesInput struct {
 // /user on the landing page, which left no way for any other page to read user
 // state at all.
 func (a *App) getUser(ctx context.Context, _ *struct{}) (*UserOutput, error) {
-	userID := ctx.Value(contextKey("userID")).(string)
+	caller := callerFrom(ctx)
 
-	user, err := service.GetUser(ctx, a.db, userID)
+	user, err := service.GetUser(ctx, a.db, caller.UserID)
 	if err != nil {
 		// Also the no-rows case: someone who reached an inner page before POST
 		// /user ever ran for them. Not a server fault, and the client treats it
@@ -75,13 +75,13 @@ func (a *App) getUser(ctx context.Context, _ *struct{}) (*UserOutput, error) {
 }
 
 func (a *App) setPreferences(ctx context.Context, input *PreferencesInput) (*UserOutput, error) {
-	userID := ctx.Value(contextKey("userID")).(string)
+	caller := callerFrom(ctx)
 
-	if err := service.SetShowPantryStaples(ctx, a.db, userID, input.Body.ShowPantryStaples); err != nil {
+	if err := service.SetShowPantryStaples(ctx, a.db, caller.UserID, input.Body.ShowPantryStaples); err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("could not save preferences"), err)
 	}
 
-	saved, err := service.GetUser(ctx, a.db, userID)
+	saved, err := service.GetUser(ctx, a.db, caller.UserID)
 	if err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("Error fetching saved user"), err)
 	}
@@ -90,13 +90,13 @@ func (a *App) setPreferences(ctx context.Context, input *PreferencesInput) (*Use
 }
 
 func (a *App) completeOnboarding(ctx context.Context, _ *struct{}) (*UserOutput, error) {
-	userID := ctx.Value(contextKey("userID")).(string)
+	caller := callerFrom(ctx)
 
-	if err := service.SetOnboarded(ctx, a.db, userID); err != nil {
+	if err := service.SetOnboarded(ctx, a.db, caller.UserID); err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("could not complete onboarding"), err)
 	}
 
-	saved, err := service.GetUser(ctx, a.db, userID)
+	saved, err := service.GetUser(ctx, a.db, caller.UserID)
 	if err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("Error fetching saved user"), err)
 	}
@@ -105,22 +105,22 @@ func (a *App) completeOnboarding(ctx context.Context, _ *struct{}) (*UserOutput,
 }
 
 func (a *App) inviteUser(ctx context.Context, input *UserInput) (*struct{}, error) {
-	currentUserID := ctx.Value(contextKey("userID")).(string)
+	caller := callerFrom(ctx)
 	userToInvite := input.Body
 
-	currentUser, err := service.GetUser(ctx, a.db, currentUserID)
+	currentUser, err := service.GetUser(ctx, a.db, caller.UserID)
 	if err != nil {
 		return nil, fail(ctx, huma.Error400BadRequest("Error finding current user"), err)
 	}
 
-	account, err := service.GetAccount(ctx, a.db, currentUserID)
+	account, err := service.GetAccount(ctx, a.db, caller)
 	if err != nil {
 		return nil, fail(ctx, huma.Error400BadRequest("Error finding account for current user"), err)
 	}
 
 	// Generate a token and write it to the invites table
 	token, _ := common.RandToken(32)
-	if err := service.CreateInvite(ctx, a.db, token, account.ID, userToInvite.Email, currentUserID); err != nil {
+	if err := service.CreateInvite(ctx, a.db, token, account.ID, userToInvite.Email, caller.UserID); err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("Error creating Invite"), err)
 	}
 

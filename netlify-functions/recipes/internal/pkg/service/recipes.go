@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"recipes/internal/pkg/common"
 	"recipes/internal/pkg/telemetry"
 )
 
@@ -21,8 +22,12 @@ type Recipe struct {
 // otelsql emits a span only for a call whose context already carries one (see
 // main.go's SpanFilter). Every function in this package now does the same; this
 // one was simply first.
-func GetAllRecipes(ctx context.Context, db *sql.DB, userID string) ([]Recipe, error) {
-	accountID, err := GetAccountID(ctx, db, userID)
+//
+// The Account behind caller.AccountID() is resolved at most once per request,
+// against the request's own context - so it still raises a span, but one per
+// request rather than one per service call, which is the point.
+func GetAllRecipes(ctx context.Context, db *sql.DB, caller *common.Caller) ([]Recipe, error) {
+	accountID, err := caller.AccountID()
 
 	if err != nil {
 		return nil, fmt.Errorf("getting account ID: %w", err)

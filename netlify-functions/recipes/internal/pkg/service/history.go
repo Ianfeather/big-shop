@@ -4,11 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
+	"recipes/internal/pkg/common"
 )
 
 // LogShoppingListEvent logs shopping list changes for meal planning intelligence
-func LogShoppingListEvent(ctx context.Context, userID string, eventType string, recipeIDs []int, db *sql.DB) error {
-	accountID, err := GetAccountID(ctx, db, userID)
+func LogShoppingListEvent(ctx context.Context, caller *common.Caller, eventType string, recipeIDs []int, db *sql.DB) error {
+	accountID, err := caller.AccountID()
 	if err != nil {
 		return fmt.Errorf("could not get account ID: %w", err)
 	}
@@ -28,8 +30,8 @@ func LogShoppingListEvent(ctx context.Context, userID string, eventType string, 
 }
 
 // LogShoppingListClearEvent logs when user clears the shopping list
-func LogShoppingListClearEvent(ctx context.Context, userID string, db *sql.DB) error {
-	accountID, err := GetAccountID(ctx, db, userID)
+func LogShoppingListClearEvent(ctx context.Context, caller *common.Caller, db *sql.DB) error {
+	accountID, err := caller.AccountID()
 	if err != nil {
 		return fmt.Errorf("could not get account ID: %w", err)
 	}
@@ -47,8 +49,8 @@ func LogShoppingListClearEvent(ctx context.Context, userID string, db *sql.DB) e
 
 // GetRecentRecipeUsage returns recently used recipes for meal planning
 // Groups by date to avoid counting bulk shopping list updates as multiple uses
-func GetRecentRecipeUsage(ctx context.Context, userID string, daysBack int, limit int, db *sql.DB) ([]int, error) {
-	accountID, err := GetAccountID(ctx, db, userID)
+func GetRecentRecipeUsage(ctx context.Context, caller *common.Caller, daysBack int, limit int, db *sql.DB) ([]int, error) {
+	accountID, err := caller.AccountID()
 	if err != nil {
 		return nil, fmt.Errorf("could not get account ID: %w", err)
 	}
@@ -90,8 +92,8 @@ func GetRecentRecipeUsage(ctx context.Context, userID string, daysBack int, limi
 
 // GetFavoriteRecipes returns most frequently used recipes
 // Groups by date to avoid counting bulk shopping list updates as multiple uses
-func GetFavoriteRecipes(ctx context.Context, userID string, limit int, db *sql.DB) ([]int, error) {
-	accountID, err := GetAccountID(ctx, db, userID)
+func GetFavoriteRecipes(ctx context.Context, caller *common.Caller, limit int, db *sql.DB) ([]int, error) {
+	accountID, err := caller.AccountID()
 	if err != nil {
 		return nil, fmt.Errorf("could not get account ID: %w", err)
 	}

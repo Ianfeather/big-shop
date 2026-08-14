@@ -62,7 +62,10 @@ Your row's `account_id` is the value to enter when the script prompts for it.
   variables UI (see the Netlify Dashboard link in `CLAUDE.md`) rather than
   anywhere in this repo. The `DSN` format is
   `user:password@tcp(host:port)/bigshop?...` (see `main.go`'s
-  `sql.Open("mysql", os.Getenv("DSN"))`).
+  `sql.Open("mysql", os.Getenv("DSN"))`). The query parameters after the `?`
+  are load-bearing rather than incidental - see
+  [technical-architecture.md](../technical-architecture.md#the-dsns-query-parameters)
+  before rewriting one.
 - Port - defaults to `4000`, TiDB Cloud's protocol port (not MySQL's usual
   `3306`). Only enter a different one if yours differs.
 - Password - never passed as an argument or stored anywhere by the script.

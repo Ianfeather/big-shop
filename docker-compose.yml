@@ -76,7 +76,15 @@ services:
       db:
         condition: service_healthy
     environment:
-      DSN: "root:root@tcp(db:3306)/bigshop?parseTime=true"
+      # interpolateParams=true makes the driver interpolate arguments
+      # client-side instead of preparing server-side, which halves the blocking
+      # round trips of every parameterised query (measured: GET /shopping-list
+      # 15.2 -> 9.1). collation is pinned *because of* it, not incidentally:
+      # the driver's guard against the multibyte escape-bypass charsets is
+      # `Collation != "" && unsafeCollations[Collation]`, so leaving the
+      # collation unset disarms it. Keep them together, and never add
+      # multiStatements - see specs/request-model-optimisations.md.
+      DSN: "root:root@tcp(db:3306)/bigshop?parseTime=true&interpolateParams=true&collation=utf8mb4_general_ci"
       DISABLE_AUTH: "true"
       DEV_USER_ID: "local-dev-user"
       # Read by the OTel SDK's own env handling (telemetry.Setup passes no

@@ -14,110 +14,60 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/form3tech-oss/jwt-go"
+	jose "gopkg.in/go-jose/go-jose.v2"
+	josejwt "gopkg.in/go-jose/go-jose.v2/jwt"
 )
 
-const (
-	testAudience = "https://api.bigshop.test"
-	testIssuer   = "https://tenant.eu.auth0.com/"
-)
+const testAudience = "https://api.bigshop.test"
 
-func TestNormalizeAudience(t *testing.T) {
-	t.Run("converts the []interface{} a JSON array decodes to", func(t *testing.T) {
-		claims := jwt.MapClaims{"aud": []interface{}{testAudience, testIssuer + "userinfo"}}
+// A refused request answers 401, whichever way it was refused.
+//
+// This is a guard against a regression the go-jwt-middleware v2 upgrade would
+// otherwise have shipped silently. v1 answered 401 for a missing token; v2's
+// DefaultErrorHandler answers *400* for one, reserving 401 for a token that is
+// present but invalid. Every unauthenticated request to this API would have
+// changed status code, which is a contract change nothing asked for - so
+// app.go passes WithErrorHandler(authErrorHandler) to keep 401.
+//
+// Both cases matter: the missing-token one is what the override exists for, and
+// the unconfigured one is the fail-closed path for a deploy with no Auth0
+// environment, which `go run . openapi` also travels.
+func TestRefusalsAnswer401(t *testing.T) {
+	t.Run("when the token is missing", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		newRouter(t, "").ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testBase+"/shopping-list", nil))
 
-		if err := normalizeAudience(claims); err != nil {
-			t.Fatalf("normalizeAudience() error = %v", err)
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("status = %d, want 401 (v2's default for a missing token is 400)", rec.Code)
 		}
-
-		got, ok := claims["aud"].([]string)
-		if !ok {
-			t.Fatalf("aud is %T, want []string", claims["aud"])
-		}
-		if len(got) != 2 || got[0] != testAudience {
-			t.Errorf("aud = %v", got)
-		}
-	})
-
-	t.Run("leaves a bare string audience alone", func(t *testing.T) {
-		claims := jwt.MapClaims{"aud": testAudience}
-
-		if err := normalizeAudience(claims); err != nil {
-			t.Fatalf("normalizeAudience() error = %v", err)
-		}
-		if claims["aud"] != testAudience {
-			t.Errorf("aud = %v, want it untouched", claims["aud"])
+		// Only the status is overridden, not the diagnosis - a caller who sent
+		// no token should not be told their token is invalid.
+		if got := rec.Body.String(); !strings.Contains(got, "JWT is missing") {
+			t.Errorf("body = %q, want it to say the JWT is missing", got)
 		}
 	})
 
-	// Both of these panicked before, taking the request down with no response
-	// rather than refusing it - there is no Recovery middleware in the stack.
-	t.Run("rejects a token carrying no audience", func(t *testing.T) {
-		if err := normalizeAudience(jwt.MapClaims{"iss": testIssuer}); err == nil {
-			t.Error("normalizeAudience() = nil, want an error")
+	t.Run("when auth is not configured at all", func(t *testing.T) {
+		t.Setenv("DISABLE_AUTH", "")
+		t.Setenv("AUTH0_DOMAIN", "")
+		t.Setenv("AUTH0_AUDIENCE", "")
+
+		application, err := NewApp(&common.Env{})
+		if err != nil {
+			t.Fatalf("NewApp() error = %v", err)
 		}
-	})
-
-	t.Run("rejects a non-string value in the audience array", func(t *testing.T) {
-		claims := jwt.MapClaims{"aud": []interface{}{testAudience, 42}}
-
-		if err := normalizeAudience(claims); err == nil {
-			t.Error("normalizeAudience() = nil, want an error")
-		}
-	})
-}
-
-// Guards the `true` (required) argument in GetRouter's VerifyAudience and
-// VerifyIssuer calls. Every case here verified successfully under the `false`
-// this replaced, which meant any token the Auth0 tenant's key had signed was
-// accepted regardless of what it was minted for.
-func TestRequiredClaims(t *testing.T) {
-	t.Run("an empty audience array does not satisfy the audience", func(t *testing.T) {
-		claims := jwt.MapClaims{"aud": []interface{}{}, "iss": testIssuer}
-		if err := normalizeAudience(claims); err != nil {
-			t.Fatalf("normalizeAudience() error = %v", err)
+		// Must still build - `go run . openapi` builds this router with no
+		// Auth0 environment, and a CI job diffs its output.
+		router, _, err := application.GetRouter(testBase)
+		if err != nil {
+			t.Fatalf("GetRouter() error = %v", err)
 		}
 
-		if claims.VerifyAudience(testAudience, true) {
-			t.Error("VerifyAudience() = true for an empty aud")
-		}
-	})
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testBase+"/shopping-list", nil))
 
-	t.Run("a token minted for another audience does not verify", func(t *testing.T) {
-		claims := jwt.MapClaims{"aud": []interface{}{"https://other-api.test"}, "iss": testIssuer}
-		if err := normalizeAudience(claims); err != nil {
-			t.Fatalf("normalizeAudience() error = %v", err)
-		}
-
-		if claims.VerifyAudience(testAudience, true) {
-			t.Error("VerifyAudience() = true for another audience")
-		}
-	})
-
-	t.Run("a token carrying no issuer does not verify", func(t *testing.T) {
-		claims := jwt.MapClaims{"aud": []string{testAudience}}
-
-		if claims.VerifyIssuer(testIssuer, true) {
-			t.Error("VerifyIssuer() = true for a missing iss")
-		}
-	})
-
-	// The shape Auth0 actually issues: an array holding this API's audience
-	// alongside the tenant's /userinfo endpoint.
-	t.Run("a genuine access token still verifies", func(t *testing.T) {
-		claims := jwt.MapClaims{
-			"aud": []interface{}{testAudience, testIssuer + "userinfo"},
-			"iss": testIssuer,
-		}
-		if err := normalizeAudience(claims); err != nil {
-			t.Fatalf("normalizeAudience() error = %v", err)
-		}
-
-		if !claims.VerifyAudience(testAudience, true) {
-			t.Error("VerifyAudience() = false for a genuine token")
-		}
-		if !claims.VerifyIssuer(testIssuer, true) {
-			t.Error("VerifyIssuer() = false for a genuine token")
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("status = %d, want 401 - an unconfigured API must refuse, not serve", rec.Code)
 		}
 	})
 }
@@ -134,6 +84,13 @@ const testBase = "/api/bigshop"
 func newRouter(t *testing.T, disableAuth string) http.Handler {
 	t.Helper()
 	t.Setenv("DISABLE_AUTH", disableAuth)
+	// Both are required for the JWT middleware to be built at all - without
+	// them GetRouter installs the refuse-everything handler instead, and a test
+	// asserting a 401 would pass without the middleware under test ever
+	// running. The domain cannot resolve, which is fine: every assertion here
+	// is about a request that is refused before any key lookup happens.
+	t.Setenv("AUTH0_DOMAIN", "tenant.invalid")
+	t.Setenv("AUTH0_AUDIENCE", testAudience)
 	application, err := NewApp(&common.Env{})
 	if err != nil {
 		t.Fatalf("NewApp() error = %v", err)
@@ -439,20 +396,32 @@ func TestKeyLookupFailureIsRefusedNotPanicked(t *testing.T) {
 	// Signed with a throwaway key, so the signature is valid RS256 and parsing
 	// gets as far as the key lookup. Which key signed it is irrelevant - the
 	// lookup fails before anything is verified against it.
+	//
+	// Minted with go-jose because that is what go-jwt-middleware v2 brings;
+	// this was form3tech-oss/jwt-go until that dependency was retired with v1.
+	// Only the construction changed - every assertion below is the original.
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("GenerateKey() error = %v", err)
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
-		"iss": "https://tenant.invalid/",
-		"aud": []string{testAudience},
-		"sub": "auth0|unknown-kid",
-		"exp": time.Now().Add(time.Hour).Unix(),
-	})
-	token.Header["kid"] = "no-such-key"
-	signed, err := token.SignedString(key)
+	// The `kid` rides on the signing key rather than being set as a raw header,
+	// which is what puts "no-such-key" in the JOSE header and so is the whole
+	// point of the fixture.
+	signer, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.RS256, Key: jose.JSONWebKey{Key: key, KeyID: "no-such-key"}},
+		(&jose.SignerOptions{}).WithType("JWT"),
+	)
 	if err != nil {
-		t.Fatalf("SignedString() error = %v", err)
+		t.Fatalf("NewSigner() error = %v", err)
+	}
+	signed, err := josejwt.Signed(signer).Claims(josejwt.Claims{
+		Issuer:   "https://tenant.invalid/",
+		Audience: josejwt.Audience{testAudience},
+		Subject:  "auth0|unknown-kid",
+		Expiry:   josejwt.NewNumericDate(time.Now().Add(time.Hour)),
+	}).CompactSerialize()
+	if err != nil {
+		t.Fatalf("CompactSerialize() error = %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/bigshop/shopping-list", nil)

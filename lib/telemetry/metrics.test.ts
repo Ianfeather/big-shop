@@ -7,7 +7,12 @@ import {
   type DataPoint,
 } from '@opentelemetry/sdk-metrics';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { recordImportOutcome, recordTokenUsage, resetInstruments } from './metrics';
+import {
+  recordImportOutcome,
+  recordRequestDuration,
+  recordTokenUsage,
+  resetInstruments,
+} from './metrics';
 
 let reader: PeriodicExportingMetricReader;
 let provider: MeterProvider;
@@ -116,5 +121,45 @@ describe('recordTokenUsage', () => {
 
     expect(points).toHaveLength(1);
     expect(points[0].attributes).toEqual({ model: 'gpt-3.5-turbo', direction: 'input' });
+  });
+});
+
+describe('recordRequestDuration', () => {
+  it('records in seconds, matching the Go API histogram it shares a dashboard with', async () => {
+    // A histogram declared in seconds and fed milliseconds is wrong by a factor
+    // of a thousand and looks entirely plausible on a graph, so the unit is
+    // worth an assertion rather than a comment.
+    recordRequestDuration('/api/dave/chat', 200, 1.5);
+
+    const points = await pointsFor('bigshop.web.request.duration');
+
+    expect(points).toHaveLength(1);
+    const point = points[0] as unknown as { value: { sum: number; count: number } };
+    expect(point.value.sum).toBeCloseTo(1.5);
+    expect(point.value.count).toBe(1);
+  });
+
+  it('labels by route and status, and by nothing else', async () => {
+    // ADR-0008 §2 again: this is the runtime whose spans carry account.id, and
+    // the histogram is the most tempting place to add it "for consistency".
+    recordRequestDuration('/api/parse-recipe-url', 422, 0.2);
+
+    const [point] = await pointsFor('bigshop.web.request.duration');
+
+    expect(point.attributes).toEqual({
+      'http.route': '/api/parse-recipe-url',
+      'http.response.status_code': 422,
+    });
+  });
+
+  it('keeps failures separate from successes on the same route', async () => {
+    // An endpoint that is slow only when it errors is a real shape, and one that
+    // a histogram aggregated across statuses hides completely.
+    recordRequestDuration('/api/dave/chat', 200, 0.1);
+    recordRequestDuration('/api/dave/chat', 500, 9.0);
+
+    const points = await pointsFor('bigshop.web.request.duration');
+
+    expect(points).toHaveLength(2);
   });
 });

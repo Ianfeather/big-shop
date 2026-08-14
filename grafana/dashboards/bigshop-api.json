@@ -1,0 +1,411 @@
+{
+  "title": "Big Shop \u2014 API (Go, Fly.io)",
+  "uid": "bigshop-api",
+  "tags": [
+    "bigshop",
+    "observability"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "editable": true,
+  "graphTooltip": 1,
+  "description": "The Go API: every route, its latency, and the database work underneath it.\n\nInstrumented by middleware rather than per-handler code, so `http.route` is always a registered template and never a path - a recipe slug reaching a metric label would be both content and unbounded cardinality (ADR-0008 sections 1 and 2).",
+  "links": [
+    {
+      "title": "Other Big Shop dashboards",
+      "type": "dashboards",
+      "tags": [
+        "bigshop"
+      ],
+      "asDropdown": true,
+      "icon": "external link"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "prom",
+        "label": "Metrics",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "loki",
+        "label": "Logs",
+        "type": "datasource",
+        "query": "loki",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "tempo",
+        "label": "Traces",
+        "type": "datasource",
+        "query": "tempo",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "env",
+        "label": "Environment",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prom}"
+        },
+        "query": "label_values(deployment_environment_name)",
+        "refresh": 1,
+        "current": {
+          "text": "production",
+          "value": "production"
+        },
+        "includeAll": false,
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Traffic and errors",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "type": "bargauge",
+      "title": "Requests by route",
+      "description": "Which endpoints are used. Read this before anything below: a route with no traffic has no latency and no errors, and an empty panel usually means nobody called it rather than that it is healthy.\n\n_Counted with `last_over_time`, not `increase()`. At this traffic a status often has a single sample in the window, and `increase()` silently **drops** single-sample series while extrapolating the rest - measured here turning one 400 into five and one 500 into nothing at all. A health panel that answers \"0 errors\" when the answer is 1 is worse than no panel. The cost is that this is a running total rather than a windowed one; with 14-day retention that is close enough, and the graphs below show when it moved._\n\n_An **instant** query rendered as a bar gauge, not a time series. These are totals per category; asked as a range query they come back as one bar per scrape interval, which looks like a trend and is really the same number drawn forty times._",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prom}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 5,
+            "showPoints": "auto",
+            "spanNulls": true
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prom}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (http_route) (last_over_time(http_server_request_duration_seconds_count{service_name=\"bigshop-api\", deployment_environment_name=\"$env\"}[$__range]))",
+          "legendFormat": "{{http_route}}",
+          "range": false,
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "auto",
+        "sizing": "auto",
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "maxVizHeight": 300
+      }
+    },
+    {
+      "id": 3,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "type": "table",
+      "title": "Non-2xx responses by route and status",
+      "description": "4xx and 5xx together, and they are very different things: a 400 or a 422 is the service working correctly and saying no, a 5xx is a fault. The same distinction `span.setStatus` follows (Phase 3, correction 7), so the dashboard and the traces agree on what counts as an error.\n\n_Counted with `last_over_time`, not `increase()`. At this traffic a status often has a single sample in the window, and `increase()` silently **drops** single-sample series while extrapolating the rest - measured here turning one 400 into five and one 500 into nothing at all. A health panel that answers \"0 errors\" when the answer is 1 is worse than no panel. The cost is that this is a running total rather than a windowed one; with 14-day retention that is close enough, and the graphs below show when it moved._",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prom}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prom}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (http_route, http_response_status_code) (last_over_time(http_server_request_duration_seconds_count{service_name=\"bigshop-api\", deployment_environment_name=\"$env\", http_response_status_code!~\"2..\"}[$__range]))",
+          "legendFormat": "",
+          "range": false,
+          "refId": "A",
+          "instant": true,
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "row",
+      "title": "Latency",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "panels": []
+    },
+    {
+      "id": 5,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
+      "type": "timeseries",
+      "title": "p50, p95 and p99",
+      "description": "Read the three together. p50 rising means everything got slower; p99 rising alone means a few requests are pathological - usually a query without an index, or a loop over rows.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prom}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 5,
+            "showPoints": "auto",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prom}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(http_server_request_duration_seconds_bucket{service_name=\"bigshop-api\", deployment_environment_name=\"$env\"}[$__rate_interval])))",
+          "legendFormat": "p50",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prom}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{service_name=\"bigshop-api\", deployment_environment_name=\"$env\"}[$__rate_interval])))",
+          "legendFormat": "p95",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prom}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_request_duration_seconds_bucket{service_name=\"bigshop-api\", deployment_environment_name=\"$env\"}[$__rate_interval])))",
+          "legendFormat": "p99",
+          "range": true,
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Database",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "panels": []
+    },
+    {
+      "id": 7,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 19
+      },
+      "type": "timeseries",
+      "title": "Requests and database operations",
+      "description": "The N+1 detector. **`GET /shopping-list` issues around 30 database operations per request** - found in Phase 3 and the clearest example of what this spec exists to surface. A widening gap means a route grew a loop.\n\n_Pinned to a 3-hour window with a panel-level time override, independent of the dashboard's range. Tempo rejects TraceQL metrics queries over long ranges - measured here failing at 24h and succeeding at 6h - so without this the panel errors on every load of a dashboard that defaults to 24 hours._\n\n_Grouped with `by (name)` rather than plain `rate()`. TraceQL metrics frames are all named `rate`, and neither `legendFormat` nor a `byFrameRefID` override renames them - both were tried - so two ungrouped queries produce a legend reading \"rate, rate\". Grouping by span name makes each series label itself, and shows *which* routes and *which* database operations rather than two flat totals._",
+      "datasource": {
+        "type": "tempo",
+        "uid": "${tempo}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 5,
+            "showPoints": "auto",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "tempo",
+            "uid": "${tempo}"
+          },
+          "queryType": "traceql",
+          "query": "{ resource.service.name = \"bigshop-api\" && kind = server } | rate() by (name)",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "tempo",
+            "uid": "${tempo}"
+          },
+          "queryType": "traceql",
+          "query": "{ resource.service.name = \"bigshop-api\" && name =~ \"sql.*\" } | rate() by (name)",
+          "refId": "B"
+        }
+      ],
+      "timeFrom": "3h"
+    },
+    {
+      "id": 8,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 19
+      },
+      "type": "table",
+      "title": "Recent traces",
+      "description": "Open one and the `otelsql` child spans show every query the request made, with `account.id` and `user.sub` on the server span to make it findable months later.",
+      "datasource": {
+        "type": "tempo",
+        "uid": "${tempo}"
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "nested": true
+            }
+          }
+        }
+      ],
+      "targets": [
+        {
+          "datasource": {
+            "type": "tempo",
+            "uid": "${tempo}"
+          },
+          "queryType": "traceql",
+          "query": "{ resource.service.name = \"bigshop-api\" && kind = server }",
+          "refId": "A",
+          "limit": 20
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "Logs",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      },
+      "panels": []
+    },
+    {
+      "id": 10,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 28
+      },
+      "type": "logs",
+      "title": "Error log lines (expected to be sparse)",
+      "description": "The service layer does not log (ADR-0008 section 3) - causes of failed requests are on the spans. What appears here says a deployment is misconfigured. Correlated by `trace_id`.",
+      "datasource": {
+        "type": "loki",
+        "uid": "${loki}"
+      },
+      "options": {
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${loki}"
+          },
+          "refId": "A",
+          "queryType": "range",
+          "expr": "{service_name=\"bigshop-api\"} | severity_text=\"ERROR\""
+        }
+      ]
+    }
+  ]
+}

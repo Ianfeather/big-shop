@@ -511,6 +511,9 @@ paths:
             Cache-Control:
               schema:
                 type: string
+            Netlify-Cache-Tag:
+              schema:
+                type: string
         default:
           content:
             application/problem+json:

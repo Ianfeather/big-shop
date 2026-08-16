@@ -724,6 +724,7 @@ export interface operations {
             200: {
                 headers: {
                     "Cache-Control"?: string;
+                    "Netlify-Cache-Tag"?: string;
                     [name: string]: unknown;
                 };
                 content: {

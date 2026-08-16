@@ -1,7 +1,9 @@
-import type { NextApiRequest } from 'next';
+import { SpanStatusCode } from '@opentelemetry/api';
+import { edgeApiHost, serverApiHost } from '../api-host';
 import { withTraceHeaders } from '../telemetry/propagate';
-import { serverApiHost } from '../api-host';
+import { safeError } from '../telemetry/span';
 import { logError } from '../telemetry/log';
+import { tracer } from '../telemetry/setup';
 
 export type KnownNames = { knownIngredients: string[]; knownUnits: string[] };
 
@@ -24,32 +26,72 @@ const EMPTY: KnownNames = { knownIngredients: [], knownUnits: [] };
 // losing the import costs the user their recipe. `extract.js` degrades
 // honestly on an empty list - buildInstructions simply omits the reuse
 // instruction rather than referring to a list that isn't there.
-export async function fetchKnownNames(req: NextApiRequest): Promise<KnownNames> {
-  // API_HOST_INTERNAL, not NEXT_PUBLIC_API_HOST - this runs in a Netlify
-  // function, where the latter's production value is a relative path. See
-  // lib/api-host.ts.
-  const host = serverApiHost();
+export async function fetchKnownNames(): Promise<KnownNames> {
+  // Netlify's edge in front of the API, falling back to the API directly.
+  //
+  // Both catalogs answer `public` with an `s-maxage` and are exempt from the
+  // API's auth gate, so this crosses the edge and a hit is served from a PoP
+  // near this function rather than from Frankfurt - which is the whole of
+  // follow-ups.md #51. Locally there is no edge, edgeApiHost returns undefined,
+  // and this goes direct exactly as it always did.
+  const host = edgeApiHost() ?? serverApiHost();
   if (!host) {
     logError('No API host configured (API_HOST_INTERNAL, or NEXT_PUBLIC_API_HOST locally) - importing without canonical names');
     return EMPTY;
   }
 
-  // Forwarded straight through from the browser. No route here validates a
-  // token itself; the Go API is the thing that decides whether it is good -
-  // which is also how lib/authenticate.ts authenticates a caller, by asking it.
-  // This call is not that check: a missing or bad token costs canonical names
-  // (see below), and any route that needs the caller authenticated says so
-  // separately.
-  const authorization = req.headers.authorization;
-  const headers: Record<string, string> = authorization ? { Authorization: authorization } : {};
+  // One span around both calls, for the same reason lib/telemetry/tool-span.ts
+  // wraps each Dave tool call: this is the identical hop - a Netlify function
+  // in us-east-2 reaching the Go API - and from the outside an import is a
+  // single slow request in which this cost is invisible.
+  //
+  // It has to be a span here rather than read off the Go API's own server span,
+  // which does hang under this trace via the traceparent below. That span
+  // measures Go's handling and nothing else; the crossing, the TLS handshake on
+  // a cold container, and now the edge lookup all happen outside it, and they
+  // are the cost #51 is about. Comparing the two spans' timestamps instead
+  // would be measuring clock skew between Netlify and Fly as much as latency.
+  //
+  // Nothing about the *contents* is recorded - names are catalog data and
+  // ADR-0008 §1 keeps content out of telemetry - only how many came back, which
+  // is the other half of #51: `GetAllIngredients` is unpaginated and grows
+  // monotonically, and this is what makes that growth visible before it matters.
+  return tracer().startActiveSpan('bigshop.known_names', async (span) => {
+    try {
+      const names = await load(host);
+      span.setAttribute('bigshop.known_names.ingredients', names.knownIngredients.length);
+      span.setAttribute('bigshop.known_names.units', names.knownUnits.length);
+      span.setAttribute('bigshop.known_names.via_edge', edgeApiHost() !== undefined);
+      return names;
+    } catch (e) {
+      // Recorded, then swallowed - this function's contract is that it never
+      // fails an import. The span is what makes "imports have been losing
+      // canonical names for a week" something anyone can find out, which was
+      // previously visible only as a log line nobody reads.
+      span.recordException(safeError(e));
+      span.setStatus({ code: SpanStatusCode.ERROR });
+      logError('Could not load canonical Ingredient/Unit names - importing without them', e);
+      return EMPTY;
+    } finally {
+      span.end();
+    }
+  });
+}
 
+async function load(host: string): Promise<KnownNames> {
   const getNames = async (path: string): Promise<string[]> => {
+    // No Authorization header, deliberately, and it is load-bearing rather than
+    // an omission. These two routes are exempt from the API's auth gate (see
+    // GetRouter), and a shared CDN will not reliably store a response to a
+    // request carrying Authorization - so sending one would quietly turn the
+    // `s-maxage` on both routes into decoration and leave every import paying
+    // for the crossing anyway. This used to forward the browser's token; no
+    // route here ever validated it, and the Go API no longer asks for one.
+    //
     // Propagated for the same reason lib/dave/tools.ts propagates: without it
     // these two calls are traces of their own, and an import's trace has a hole
-    // in it where the canonical-name lookup should be. The spec's Phase 4 names
-    // only the Dave hop, but it is the same hop - a Netlify function calling
-    // the Go API - and leaving it out would mean two orphan traces per import.
-    const res = await fetch(`${host}${path}`, { headers: withTraceHeaders(headers) });
+    // in it where the canonical-name lookup should be.
+    const res = await fetch(`${host}${path}`, { headers: withTraceHeaders({}) });
     if (!res.ok) {
       throw new Error(`GET ${path} failed with status ${res.status}`);
     }
@@ -61,14 +103,9 @@ export async function fetchKnownNames(req: NextApiRequest): Promise<KnownNames> 
     return rows.map((row) => row.name).filter(Boolean);
   };
 
-  try {
-    const [knownIngredients, knownUnits] = await Promise.all([
-      getNames('/ingredients'),
-      getNames('/units'),
-    ]);
-    return { knownIngredients, knownUnits };
-  } catch (e) {
-    logError('Could not load canonical Ingredient/Unit names - importing without them', e);
-    return EMPTY;
-  }
+  const [knownIngredients, knownUnits] = await Promise.all([
+    getNames('/ingredients'),
+    getNames('/units'),
+  ]);
+  return { knownIngredients, knownUnits };
 }

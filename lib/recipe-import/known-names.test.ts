@@ -1,18 +1,15 @@
-import type { NextApiRequest } from 'next';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fetchKnownNames } from './known-names';
-
-const req = (headers: Record<string, string> = {}) => ({ headers }) as unknown as NextApiRequest;
 
 const ok = (rows: { name: string }[]) => ({ ok: true, json: async () => rows });
 
 beforeEach(() => {
-  // API_HOST_INTERNAL is what this reads in production - see lib/api-host.ts.
-  // NEXT_PUBLIC_API_HOST is stubbed to a relative path alongside it, matching
-  // the production shape, so a regression that reads the wrong one produces a
-  // relative URL rather than quietly passing.
+  // The direct path: an absolute NEXT_PUBLIC_API_HOST is what dev-full.sh sets
+  // and is the signal that there is no Netlify edge in front (lib/api-host.ts),
+  // so edgeApiHost declines and serverApiHost answers. The edge path has its own
+  // group below.
   vi.stubEnv('API_HOST_INTERNAL', 'http://api.test');
-  vi.stubEnv('NEXT_PUBLIC_API_HOST', '/api/bigshop');
+  vi.stubEnv('NEXT_PUBLIC_API_HOST', 'http://api.test');
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
@@ -28,30 +25,34 @@ describe('fetchKnownNames', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(fetchKnownNames(req())).resolves.toEqual({
+    await expect(fetchKnownNames()).resolves.toEqual({
       knownIngredients: ['egg', 'thyme'],
       knownUnits: ['gram']
     });
 
-    // Asserted as whole URLs, not suffixes. The host half is the point: this
-    // runs server-side, so reading NEXT_PUBLIC_API_HOST instead of
-    // API_HOST_INTERNAL would build a relative URL here. A suffix assertion
-    // (which is what this test used to make) is satisfied by both and so
-    // cannot tell the regression apart from correct behaviour.
+    // Asserted as whole URLs, not suffixes. The host half is the point: a
+    // regression that picked the wrong host would build a different URL here,
+    // and a suffix assertion is satisfied by both.
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       'http://api.test/ingredients',
       'http://api.test/units'
     ]);
   });
 
-  it('forwards the caller Authorization header to the Go API', async () => {
+  // Was "forwards the caller Authorization header", and the reversal is the
+  // point of follow-ups.md #51 rather than a loosening. Both routes are now
+  // exempt from the API's auth gate, and a shared CDN will not reliably store a
+  // response to a request carrying Authorization - so a token here would turn
+  // the s-maxage on both routes into decoration and leave every import paying
+  // for the Atlantic crossing.
+  it('sends no Authorization header, so the response stays cacheable', async () => {
     const fetchMock = vi.fn(async () => ok([]));
     vi.stubGlobal('fetch', fetchMock);
 
-    await fetchKnownNames(req({ authorization: 'Bearer abc123' }));
+    await fetchKnownNames();
 
     for (const [, init] of fetchMock.mock.calls as unknown as [string, RequestInit][]) {
-      expect(init.headers).toEqual({ Authorization: 'Bearer abc123' });
+      expect(init.headers).not.toHaveProperty('Authorization');
     }
   });
 
@@ -62,7 +63,7 @@ describe('fetchKnownNames', () => {
       url.endsWith('/units') ? ok([{ name: '' }, { name: 'gram' }]) : ok([{ name: 'egg' }])
     ));
 
-    const { knownUnits } = await fetchKnownNames(req());
+    const { knownUnits } = await fetchKnownNames();
     expect(knownUnits).toEqual(['gram']);
   });
 
@@ -72,13 +73,13 @@ describe('fetchKnownNames', () => {
   it('returns empty lists rather than throwing when the API errors', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) })));
 
-    await expect(fetchKnownNames(req())).resolves.toEqual({ knownIngredients: [], knownUnits: [] });
+    await expect(fetchKnownNames()).resolves.toEqual({ knownIngredients: [], knownUnits: [] });
   });
 
   it('returns empty lists rather than throwing when the API is unreachable', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED'); }));
 
-    await expect(fetchKnownNames(req())).resolves.toEqual({ knownIngredients: [], knownUnits: [] });
+    await expect(fetchKnownNames()).resolves.toEqual({ knownIngredients: [], knownUnits: [] });
   });
 
   it('returns empty lists when no API host is configured', async () => {
@@ -87,7 +88,68 @@ describe('fetchKnownNames', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(fetchKnownNames(req())).resolves.toEqual({ knownIngredients: [], knownUnits: [] });
+    await expect(fetchKnownNames()).resolves.toEqual({ knownIngredients: [], knownUnits: [] });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// The production shape, and the whole of the change: a relative
+// NEXT_PUBLIC_API_HOST means Netlify is in front, so the call goes to the
+// site's own hostname and meets a PoP near the function instead of crossing to
+// Frankfurt.
+describe('fetchKnownNames through the edge', () => {
+  it('calls the site hostname rather than the Fly origin', async () => {
+    vi.stubEnv('NEXT_PUBLIC_API_HOST', '/api/bigshop');
+    vi.stubEnv('API_HOST_INTERNAL', 'https://big-shop-api.fly.dev/api/bigshop');
+    vi.stubEnv('URL', 'https://www.bigshop.life');
+    const fetchMock = vi.fn(async (_url: string) => ok([]));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchKnownNames();
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      'https://www.bigshop.life/api/bigshop/ingredients',
+      'https://www.bigshop.life/api/bigshop/units'
+    ]);
+  });
+
+  // A deploy preview must read its own edge, not production's. NEXT_PUBLIC_HOST
+  // is inlined at build time and says www.bigshop.life on every deploy - the
+  // same trap docs/deploy-previews.md describes for Auth0 redirects - so a
+  // preview would otherwise verify nothing about itself.
+  it('prefers the deploy URL, so a preview reads its own edge', async () => {
+    vi.stubEnv('NEXT_PUBLIC_API_HOST', '/api/bigshop');
+    vi.stubEnv('URL', 'https://www.bigshop.life');
+    vi.stubEnv('DEPLOY_URL', 'https://deploy-preview-102--big-shop.netlify.app');
+    const fetchMock = vi.fn(async (_url: string) => ok([]));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchKnownNames();
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      'https://deploy-preview-102--big-shop.netlify.app/api/bigshop/ingredients',
+      'https://deploy-preview-102--big-shop.netlify.app/api/bigshop/units'
+    ]);
+  });
+
+  // The one misconfiguration that would be silent: no Netlify runtime variable
+  // set, a relative path, and nothing to make it absolute. Falling through to
+  // serverApiHost keeps the import working on the direct origin rather than
+  // fetching a relative URL, which throws in Node.
+  it('falls back to the direct origin when there is no site origin to use', async () => {
+    vi.stubEnv('NEXT_PUBLIC_API_HOST', '/api/bigshop');
+    vi.stubEnv('API_HOST_INTERNAL', 'https://big-shop-api.fly.dev/api/bigshop');
+    vi.stubEnv('URL', '');
+    vi.stubEnv('DEPLOY_URL', '');
+    vi.stubEnv('NEXT_PUBLIC_HOST', '');
+    const fetchMock = vi.fn(async (_url: string) => ok([]));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchKnownNames();
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      'https://big-shop-api.fly.dev/api/bigshop/ingredients',
+      'https://big-shop-api.fly.dev/api/bigshop/units'
+    ]);
   });
 });

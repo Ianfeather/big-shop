@@ -294,8 +294,19 @@ func (s *spyPurger) Purge(tag string) {
 // which cannot be reached without a database. What that leaves untested is the
 // call site itself; the e2e suite covers it by saving real Recipes, and a
 // missing call would show up there as a stale unit list rather than an error.
+//
+// purgeUnitsCache also clears the API's own in-process copy of the catalogs,
+// which this cannot see - Catalogs deliberately exposes no "is it loaded". That
+// half is covered by service's catalog_cache_test.go, and the reason the two
+// live in one method rather than two call sites is written up there and on
+// purgeUnitsCache itself. The interesting failure is clearing one and not the
+// other: the client would see a new Unit immediately while the Shopping List
+// went on combining without it, which reads as a combining bug.
 func TestRecipeWritesPurgeTheUnitsCache(t *testing.T) {
 	spy := &spyPurger{}
+	// catalogs is left nil on purpose: a nil *service.Catalogs invalidates
+	// harmlessly, which is the property that lets a test assemble an App from
+	// only the fields it cares about.
 	application := &App{purger: spy}
 
 	application.purgeUnitsCache()

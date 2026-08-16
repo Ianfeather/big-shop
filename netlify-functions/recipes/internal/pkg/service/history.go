@@ -4,27 +4,47 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"recipes/internal/pkg/common"
 )
 
-// LogShoppingListEvent logs shopping list changes for meal planning intelligence
+// LogShoppingListEvent logs shopping list changes for meal planning
+// intelligence - one row per Recipe, written in one statement.
+//
+// It was one INSERT per Recipe, which is the second of the two loops that made
+// POST /shopping-list cost more the more Recipes you put on the list. One
+// multi-row INSERT is the shape AddIngredientListItems already uses, so the
+// route's cost stops growing with the Recipe count on this path too.
+//
+// Still all-or-nothing on failure, as it was: a single statement either writes
+// every row or none, where the loop could leave a partial history behind. The
+// caller treats the whole thing as best-effort either way.
 func LogShoppingListEvent(ctx context.Context, caller *common.Caller, eventType string, recipeIDs []int, db *sql.DB) error {
+	if len(recipeIDs) == 0 {
+		return nil
+	}
+
 	accountID, err := caller.AccountID()
 	if err != nil {
 		return fmt.Errorf("could not get account ID: %w", err)
 	}
 
-	// Log each recipe as a separate event
+	placeholders := make([]string, 0, len(recipeIDs))
+	args := make([]interface{}, 0, len(recipeIDs)*3)
 	for _, recipeID := range recipeIDs {
-		query := `
-			INSERT INTO shopping_list_event
-			(account_id, event_type, recipe_id)
-			VALUES (?, ?, ?)
-		`
-		if _, err := db.ExecContext(ctx, query, accountID, eventType, recipeID); err != nil {
-			return fmt.Errorf("could not log shopping list event: %w", err)
-		}
+		placeholders = append(placeholders, "(?, ?, ?)")
+		args = append(args, accountID, eventType, recipeID)
+	}
+
+	query := fmt.Sprintf(`
+		INSERT INTO shopping_list_event
+		(account_id, event_type, recipe_id)
+		VALUES %s
+	`, strings.Join(placeholders, ","))
+
+	if _, err := db.ExecContext(ctx, query, args...); err != nil {
+		return fmt.Errorf("could not log shopping list event: %w", err)
 	}
 	return nil
 }
@@ -131,21 +151,4 @@ func GetFavoriteRecipes(ctx context.Context, caller *common.Caller, limit int, d
 	}
 
 	return favoriteRecipeIDs, nil
-}
-
-// GetRecipeIDsFromStrings converts string slice to int slice for logging
-func GetRecipeIDsFromStrings(recipeIDs []string) ([]int, error) {
-	var intIDs []int
-	for _, idStr := range recipeIDs {
-		if idStr == "" {
-			continue
-		}
-		// Parse string to int, handling potential errors
-		var id int
-		if _, err := fmt.Sscanf(idStr, "%d", &id); err != nil {
-			return nil, fmt.Errorf("invalid recipe ID: %s", idStr)
-		}
-		intIDs = append(intIDs, id)
-	}
-	return intIDs, nil
 }

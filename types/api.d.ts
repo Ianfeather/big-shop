@@ -1104,7 +1104,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ShoppingList"];
+                    "application/json": components["schemas"]["SimpleResponse"];
                 };
             };
             /** @description Error */

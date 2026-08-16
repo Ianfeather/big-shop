@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"database/sql"
 	"database/sql/driver"
 	"fmt"
 	"log"
@@ -179,8 +180,25 @@ func init() {
 		panic(err.Error())
 	}
 
+	configurePool(db)
+
 	if err := db.Ping(); err != nil {
 		log.Fatalf("failed to ping: %v", err)
+	}
+
+	// db.Stats() as OTel metrics, so the numbers chosen in configurePool can be
+	// checked rather than assumed - specifically whether OpenConnections ever
+	// approaches maxOpenConns and whether WaitCount is anything but zero. Both
+	// are the difference between "the pool is sized right" and "the pool is
+	// sized as if it were right", and there was previously no way to tell.
+	//
+	// Registered after telemetry.Setup, which is what makes the global meter
+	// provider real rather than the default no-op - the same ordering trap the
+	// tracer provider has above, and silent in exactly the same way. The error
+	// is logged and not fatal: ADR-0007's rule is that telemetry never affects
+	// the application.
+	if _, err := otelsql.RegisterDBStatsMetrics(db, otelsql.WithAttributes(semconv.DBSystemNameMySQL)); err != nil {
+		log.Printf("could not register DB pool metrics: %v", err)
 	}
 
 	env := &common.Env{DB: db}
@@ -203,6 +221,71 @@ func init() {
 	routeTemplates = app.RouteTemplates(api)
 
 	negroniLambda = negroniadapter.New(router)
+}
+
+// Pool limits. `database/sql` applies its own defaults when nothing is set, and
+// what was set was nothing - so the pool this API ran on was the zero-decision
+// one: unlimited open connections and, the number that actually bit,
+// **MaxIdleConns of 2**. Defensible while every container was a short-lived
+// Lambda. Since ADR-0006 it is one long-lived server, and #49 measured a TLS
+// MySQL connection at ~5.0 round trips to establish (plain TCP: ~3.0), so any
+// request that wanted a third connection paid a full handshake for it and then
+// threw the connection away on the way out.
+//
+// That is not hypothetical here: GenerateShoppingList now runs three reads
+// concurrently, so a single POST /shopping-list wants three connections. Under
+// the old defaults, one of those three was a fresh handshake every time - which
+// would have made running them in parallel *slower* than running them in
+// series. Hence this before that, and hence maxIdleConns comfortably above the
+// per-request fan-out rather than merely equal to it.
+const (
+	// maxOpenConns is a ceiling on this process, not on the database.
+	//
+	// The real number it is chosen against: a TiDB Cloud Starter (Serverless)
+	// cluster allows **400 concurrent connections** across everything that
+	// connects to it, rising to 5,000 only with a spending limit set - which
+	// this project does not have. That 400 is shared with the TiDB console, the
+	// SQL editor, and scripts/sync-from-prod.sh. One always-on shared-cpu-1x
+	// Fly machine (fly.toml) taking 20 of it leaves 95% for everything else,
+	// while still allowing six concurrent shopping-list generations at three
+	// connections each.
+	//
+	// Unlimited would be the alternative, and is worse in the one case that
+	// matters: a slow query under load, where an unbounded pool answers by
+	// opening connections until the cluster refuses them - and a refused
+	// connection is an error for every caller, not just the one that caused it.
+	// A bounded pool queues instead, which is visible in WaitCount.
+	maxOpenConns = 20
+	// maxIdleConns is deliberately not the default 2 and not equal to
+	// maxOpenConns. Above the three-connection fan-out of the widest request so
+	// concurrency does not churn connections, and below the open ceiling so a
+	// burst does not leave twenty sockets parked against the cluster for the
+	// rest of the day.
+	maxIdleConns = 8
+	// connMaxLifetime recycles a connection rather than trusting it forever.
+	//
+	// TiDB Cloud Serverless is reached through a gateway that can drop an idle
+	// connection without the client noticing, and a pooled connection that the
+	// far end has already closed fails the *next* request to be handed it - an
+	// error that looks like a database problem and is really a bookkeeping one.
+	// Capping the lifetime bounds how long such a connection can sit in the
+	// pool. Five minutes costs one handshake per connection per five minutes at
+	// this traffic level, which is not a cost worth optimising against
+	// correctness.
+	connMaxLifetime = 5 * time.Minute
+)
+
+// configurePool sets the connection pool limits deliberately. See the constants
+// above for what each is chosen against.
+//
+// ConnMaxIdleTime is deliberately left unset. It would close connections that
+// have been idle "too long", and holding a warm connection through a quiet
+// period is precisely what this API wants - ConnMaxLifetime already bounds how
+// stale one can get.
+func configurePool(db *sql.DB) {
+	db.SetMaxOpenConns(maxOpenConns)
+	db.SetMaxIdleConns(maxIdleConns)
+	db.SetConnMaxLifetime(connMaxLifetime)
 }
 
 func handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {

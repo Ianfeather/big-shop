@@ -11,17 +11,9 @@ import (
 	"strconv"
 
 	"database/sql"
-)
 
-// ListItem is used to interface with the DB. One row of `list`, which is one
-// Amount - an Ingredient Item with two Amounts is two rows sharing a name.
-type ListItem struct {
-	Name       string
-	Unit       string
-	Quantity   string
-	Department string
-	IsBought   bool
-}
+	"golang.org/x/sync/errgroup"
+)
 
 // ErrInvalidRecipeID is returned by GenerateShoppingList when a recipe id can't be
 // parsed - a client error, distinct from the server errors everything else in this
@@ -501,47 +493,70 @@ func roundToSignificantFigures(v float64, digits int) float64 {
 // are untouched either way (see CONTEXT.md's "Generate Shopping List"). An Ingredient
 // Item already marked bought carries that state forward if it's still present in the
 // recomputed set, so regenerating the list doesn't silently un-buy things.
-func GenerateShoppingList(ctx context.Context, recipeIDs []string, caller *common.Caller, db *sql.DB) (*common.ShoppingList, error) {
-	recipes := make([]common.Recipe, 0)
+func GenerateShoppingList(ctx context.Context, recipeIDs []string, caller *common.Caller, catalogs *Catalogs, db *sql.DB) (*common.ShoppingList, error) {
+	// Parsed once, here, and reused for the history log below - it used to be
+	// done twice, the second time by GetRecipeIDsFromStrings, against the same
+	// input for the same answer.
+	ids := make([]int, 0, len(recipeIDs))
 	for _, idStr := range recipeIDs {
 		id, err := strconv.Atoi(idStr)
 		if err != nil {
 			return nil, ErrInvalidRecipeID
 		}
-		recipe, err := GetRecipeByID(ctx, id, caller, db)
-		if err != nil {
-			return nil, err
-		}
-		recipes = append(recipes, *recipe)
+		ids = append(ids, id)
 	}
 
-	previousIngredients, err := GetIngredientListItems(ctx, caller, db)
-	if err != nil {
-		return nil, err
-	}
-
-	// Loaded here and passed in, so CombineIngredients stays a pure function.
-	units, err := GetUnitCatalog(ctx, db)
-	if err != nil {
-		return nil, err
-	}
-	ingredientCatalog, err := GetIngredientCatalog(ctx, db, units)
-	if err != nil {
+	// Three reads that have nothing to say to each other: the Recipes being put
+	// on the list, what is on it now, and the global catalogs. Run together, the
+	// depth of this part of the request is the slowest one rather than the sum
+	// of all three.
+	//
+	// `previous` is wanted only for its Ingredients - which Items were already
+	// ticked, so regenerating does not silently un-buy them - but the Extras and
+	// Recipes come with it for free, since it is one query either way.
+	//
+	// The catalogs are loaded and passed in rather than queried for, which is
+	// what keeps CombineIngredients a pure function.
+	var (
+		recipes           []common.Recipe
+		previous          *StoredList
+		units             UnitCatalog
+		ingredientCatalog IngredientCatalog
+	)
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		// One query for the whole set, rather than GetRecipeByID per Recipe: see
+		// GetRecipeIngredientsByIDs for what that loop cost and why only the
+		// Ingredient Lines are needed here.
+		var err error
+		recipes, err = GetRecipeIngredientsByIDs(gctx, ids, caller, db)
+		return err
+	})
+	g.Go(func() error {
+		var err error
+		previous, err = GetStoredList(gctx, caller, db)
+		return err
+	})
+	g.Go(func() error {
+		var err error
+		units, ingredientCatalog, err = catalogs.Get(gctx, db)
+		return err
+	})
+	if err := g.Wait(); err != nil {
 		return nil, err
 	}
 
 	combinedIngredients := CombineIngredients(recipes, units, ingredientCatalog)
 	for name, ingredient := range combinedIngredients {
-		if previous, ok := previousIngredients[name]; ok && previous.IsBought {
+		if was, ok := previous.Ingredients[name]; ok && was.IsBought {
 			ingredient.IsBought = true
 		}
 	}
 
-	// The Caller is already resolved by this point - GetRecipeByID and
-	// GetIngredientListItems above both asked for the Account - so the calls
-	// inside the transaction read a memoised value and issue no query at all.
-	// That is better than it was, where each one re-resolved the Account on the
-	// transaction's own connection.
+	// The Caller is already resolved by this point - the reads above asked for
+	// the Account - so the calls inside the transaction read a memoised value
+	// and issue no query at all. That is better than it was, where each one
+	// re-resolved the Account on the transaction's own connection.
 	//
 	// Worth keeping that way. The Caller resolves against the pool, not this
 	// tx, so a reordering that made the transaction the *first* thing to ask
@@ -568,43 +583,52 @@ func GenerateShoppingList(ctx context.Context, recipeIDs []string, caller *commo
 
 	// Log shopping list history for meal planning intelligence, best-effort - a
 	// logging failure shouldn't fail the whole generate operation.
-	if intRecipeIDs, err := GetRecipeIDsFromStrings(recipeIDs); err == nil {
-		if logErr := LogShoppingListEvent(ctx, caller, "add_recipe", intRecipeIDs, db); logErr != nil {
-			telemetry.RecordWarning(ctx, "log shopping list history", logErr)
-		}
+	if logErr := LogShoppingListEvent(ctx, caller, "add_recipe", ids, db); logErr != nil {
+		telemetry.RecordWarning(ctx, "log shopping list history", logErr)
 	}
 
-	return GetShoppingList(ctx, caller, db)
+	return GetShoppingList(ctx, caller, catalogs, db)
 }
 
-// GetShoppingList returns the full shopping list for a user
-func GetShoppingList(ctx context.Context, caller *common.Caller, db *sql.DB) (*common.ShoppingList, error) {
-	recipes, err := GetRecipesFromList(ctx, caller, db)
-	if err != nil {
-		return nil, fmt.Errorf("get recipes from list: %w", err)
+// GetShoppingList returns the full shopping list for a user.
+func GetShoppingList(ctx context.Context, caller *common.Caller, catalogs *Catalogs, db *sql.DB) (*common.ShoppingList, error) {
+	// The stored list and the two global catalogs are independent reads - the
+	// catalogs are global, so they neither depend on the Account nor on what is
+	// on its list - and they run together rather than one after the other.
+	//
+	// Worth much less than it looks, and deliberately so. With the catalogs
+	// served from process memory this saves nothing at all on the common path;
+	// it earns its keep on the first request after a Recipe save, when the
+	// catalog load would otherwise be three round trips stacked in front of the
+	// list read. Parallelising four round trips saves less than not making
+	// eleven of them, which is why the phases that removed them came first.
+	var (
+		stored            *StoredList
+		units             UnitCatalog
+		ingredientCatalog IngredientCatalog
+	)
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		var err error
+		stored, err = GetStoredList(gctx, caller, db)
+		if err != nil {
+			return fmt.Errorf("get shopping list items: %w", err)
+		}
+		return nil
+	})
+	g.Go(func() error {
+		var err error
+		units, ingredientCatalog, err = catalogs.Get(gctx, db)
+		return err
+	})
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
-
-	ingredients, err := GetIngredientListItems(ctx, caller, db)
-	if err != nil {
-		return nil, fmt.Errorf("get ingredients from list: %w", err)
-	}
-
-	extras, err := GetExtraListItems(ctx, caller, db)
-	if err != nil {
-		return nil, fmt.Errorf("get extra list items: %w", err)
-	}
+	recipes, ingredients, extras := stored.Recipes, stored.Ingredients, stored.Extras
 
 	// Display Units are applied here rather than when the list is generated, so
 	// correcting a Unit Size or Display Unit improves a Shopping List that's
 	// already been generated. Extras carry no Amounts, so they're untouched.
-	units, err := GetUnitCatalog(ctx, db)
-	if err != nil {
-		return nil, err
-	}
-	ingredientCatalog, err := GetIngredientCatalog(ctx, db, units)
-	if err != nil {
-		return nil, err
-	}
 	ApplyDisplayUnits(ingredients, units, ingredientCatalog)
 	// Touches no Amounts, so its position relative to the two either side of it
 	// doesn't matter - it sits here because it reads the same catalog.
@@ -697,116 +721,112 @@ func AddExtraListItem(ctx context.Context, caller *common.Caller, name string, i
 	return nil
 }
 
-// GetRecipesFromList returns recipes used to create the shopping list
-func GetRecipesFromList(ctx context.Context, caller *common.Caller, db *sql.DB) ([]string, error) {
-	accountID, err := caller.AccountID()
-	if err != nil {
-		return nil, err
-	}
-
-	query := "SELECT DISTINCT recipe_id FROM list WHERE account_id = ? and type = 'ingredient';"
-	results, err := db.QueryContext(ctx, query, accountID)
-
-	if err != nil {
-		return nil, err
-	}
-	defer results.Close()
-
-	recipes := make([]string, 0)
-	for results.Next() {
-		var recipe string
-		err = results.Scan(&recipe)
-		if err != nil {
-			return nil, err
-		}
-		recipes = append(recipes, recipe)
-	}
-	return recipes, nil
+// StoredList is everything the `list` table holds for one Account, split the
+// three ways the Shopping List is actually read.
+type StoredList struct {
+	// Recipes is the distinct set of Recipe IDs contributing Ingredient Items,
+	// as strings, because that is what the client sends back to regenerate.
+	Recipes []string
+	// Ingredients is one entry per Ingredient Item; several rows sharing a name
+	// are its several Amounts.
+	Ingredients map[string]*common.ListIngredient
+	// Extras is one entry per Extra Item, which carries no Amounts at all.
+	Extras map[string]*common.ListIngredient
 }
 
-// GetIngredientListItems returns items of type 'ingredient'
-func GetIngredientListItems(ctx context.Context, caller *common.Caller, db *sql.DB) (map[string]*common.ListIngredient, error) {
+// GetStoredList reads the whole of an Account's `list` in one query.
+//
+// It replaces GetRecipesFromList, GetIngredientListItems and GetExtraListItems,
+// which asked the same table for the same Account three times over, differing
+// only in a `type` filter and a projection - three round trips where the data
+// arrives in one. The Extras/Ingredients split already happened in Go one layer
+// up, so partitioning here is not new work in a new place; it is the same work
+// moved next to the read that feeds it.
+//
+// ORDER BY list.id is load-bearing and not tidiness: an Ingredient Item's
+// Amounts must come back in the order they were written, or "50 g + 2 tbsp"
+// renders either way round between requests. It now also fixes the order of
+// Recipes, which the old DISTINCT query left to the storage engine.
+//
+// LEFT JOIN on `unit` rather than INNER: an Extra Item's unit_id is a
+// placeholder AddExtraListItem writes and nothing reads, and the old Extras
+// query did not join at all. A LEFT JOIN keeps a row that somehow has no Unit
+// visible on the list instead of dropping it silently, which for an Ingredient
+// Item is the difference between a missing shopping item and a blank one.
+func GetStoredList(ctx context.Context, caller *common.Caller, db *sql.DB) (*StoredList, error) {
 	accountID, err := caller.AccountID()
 	if err != nil {
 		return nil, err
 	}
 
-	// ORDER BY list.id so an Ingredient Item's Amounts come back in the order
-	// they were written, rather than whatever order the storage engine feels
-	// like - otherwise "50 g + 2 tbsp" could render either way round between
-	// requests.
-	query := "SELECT list.name as name, unit.name as unit, quantity, department, is_bought as isBought FROM list INNER JOIN unit on unit_id = unit.id WHERE account_id = ? and type = 'ingredient' ORDER BY list.id;"
+	query := `
+		SELECT list.type, list.name, unit.name, list.quantity, list.department,
+		       list.is_bought, list.recipe_id
+		FROM list
+			LEFT JOIN unit on list.unit_id = unit.id
+		WHERE list.account_id = ?
+		ORDER BY list.id;
+	`
 	results, err := db.QueryContext(ctx, query, accountID)
-
 	if err != nil {
 		return nil, err
 	}
 	defer results.Close()
 
-	// Several rows can share a name - one per Amount - and collapse back into
-	// one Ingredient Item here.
-	ingredientList := make(map[string]*common.ListIngredient)
+	stored := &StoredList{
+		Recipes:     make([]string, 0),
+		Ingredients: make(map[string]*common.ListIngredient),
+		Extras:      make(map[string]*common.ListIngredient),
+	}
+	seenRecipe := make(map[int64]bool)
+
 	for results.Next() {
-		item := ListItem{}
-		err = results.Scan(&item.Name, &item.Unit, &item.Quantity, &item.Department, &item.IsBought)
-		if err != nil {
+		var itemType, name string
+		var quantity string
+		var unit, department sql.NullString
+		var isBought bool
+		var recipeID sql.NullInt64
+		if err := results.Scan(&itemType, &name, &unit, &quantity, &department, &isBought, &recipeID); err != nil {
 			return nil, err
 		}
-		existing, ok := ingredientList[item.Name]
+
+		if itemType == "extra" {
+			// An Extra Item is a plain checklist entry - a name and a bought
+			// state. Its row carries placeholder quantity/unit values which have
+			// never meant anything, so they are not read back.
+			stored.Extras[name] = &common.ListIngredient{
+				Amounts:  make([]common.Amount, 0),
+				IsBought: isBought,
+			}
+			continue
+		}
+
+		if recipeID.Valid && !seenRecipe[recipeID.Int64] {
+			seenRecipe[recipeID.Int64] = true
+			stored.Recipes = append(stored.Recipes, strconv.FormatInt(recipeID.Int64, 10))
+		}
+
+		// Several rows can share a name - one per Amount - and collapse back
+		// into one Ingredient Item here.
+		existing, ok := stored.Ingredients[name]
 		if !ok {
 			existing = &common.ListIngredient{
 				Amounts:    make([]common.Amount, 0, 1),
-				Department: item.Department,
-				IsBought:   item.IsBought,
+				Department: department.String,
+				IsBought:   isBought,
 			}
-			ingredientList[item.Name] = existing
+			stored.Ingredients[name] = existing
 		}
 		existing.Amounts = append(existing.Amounts, common.Amount{
-			Quantity: item.Quantity,
-			Unit:     item.Unit,
+			Quantity: quantity,
+			Unit:     unit.String,
 		})
 	}
 	if err := results.Err(); err != nil {
 		return nil, err
 	}
 
-	return ingredientList, nil
-}
-
-// GetExtraListItems returns items of type 'extra'
-func GetExtraListItems(ctx context.Context, caller *common.Caller, db *sql.DB) (map[string]*common.ListIngredient, error) {
-	accountID, err := caller.AccountID()
-	if err != nil {
-		return nil, err
-	}
-	query := "SELECT list.name as name, is_bought as isBought FROM list WHERE account_id = ? and type = 'extra' ORDER BY list.id;"
-	results, err := db.QueryContext(ctx, query, accountID)
-
-	if err != nil {
-		return nil, err
-	}
-	defer results.Close()
-
-	// An Extra Item is a plain checklist entry - a name and a bought state. Its
-	// row carries placeholder quantity/unit values (AddExtraListItem writes 0
-	// and the blank unit sentinel) which have never meant anything, so they're
-	// not read back and it carries no Amounts at all.
-	extrasList := make(map[string]*common.ListIngredient)
-	for results.Next() {
-		var name string
-		var isBought bool
-		if err := results.Scan(&name, &isBought); err != nil {
-			return nil, err
-		}
-		extrasList[name] = &common.ListIngredient{
-			Amounts:  make([]common.Amount, 0),
-			IsBought: isBought,
-		}
-	}
-	if err := results.Err(); err != nil {
-		return nil, err
-	}
-	return extrasList, nil
+	return stored, nil
 }
 
 // BuyListItem toggles the isBought state of a list item in the db

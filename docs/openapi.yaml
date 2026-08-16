@@ -794,7 +794,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ShoppingList"
+                $ref: "#/components/schemas/SimpleResponse"
           description: OK
         default:
           content:

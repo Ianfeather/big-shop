@@ -32,6 +32,12 @@ type App struct {
 	// have coined a Unit. Never nil: unconfigured, purge.Purger is itself a
 	// no-op, which is what local development, e2e and CI get.
 	purger cachePurger
+	// catalogs holds the global Unit and Ingredient catalogs in process, so a
+	// shopping-list request does not re-read the whole of both tables. Cleared
+	// by the same handler that purges the edge cache - see purgeUnitsCache.
+	// A nil *service.Catalogs is a valid uncached cache, so nothing breaks if
+	// an App is built without one.
+	catalogs *service.Catalogs
 }
 
 // PurgeConfigured reports whether edge cache purging will actually happen, for
@@ -57,8 +63,9 @@ type contextKey string
 // NewApp returns the application itself
 func NewApp(env *common.Env) (*App, error) {
 	app := &App{
-		db:     env.DB,
-		purger: purge.New(),
+		db:       env.DB,
+		purger:   purge.New(),
+		catalogs: service.NewCatalogs(),
 	}
 	return app, nil
 }

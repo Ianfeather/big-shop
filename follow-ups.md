@@ -142,6 +142,16 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     for Grafana and names GA as their home — which is what makes Grafana Cloud Free's
     14-day retention a non-issue rather than a constraint. Nothing has been built.
 
+    **Designed: [`specs/analytics-and-consent.md`](./specs/analytics-and-consent.md)**
+    (2026-08-16). Four phases — policy/store/banner, the consent record, GA4 behind the
+    gate, then the events. Two decisions were taken there rather than left open: the
+    consent UI is **own-built** rather than a hosted CMP or an OSS library, and the
+    consent record is **server-side and append-only** rather than client-only. The spec
+    carries one question for sign-off before its Phase 2, which the notes below did not
+    anticipate: consent is given on `/` while the visitor is anonymous, and the Go API
+    has no unauthenticated write path at all (`/health` is its only carve-out), so
+    whether an anonymous decision gets a server record is a genuine fork.
+
     **Unblocked.** Unlike the observability work, this depends on neither the Fly
     migration nor anything else. It is pure frontend and could ship first.
 

@@ -405,3 +405,70 @@ cross-references between entries (e.g. #9 references #16).
     a 500") rather than a Go one, because reaching the branch needs a real database and #52 is
     still open. Also deleted a stale comment in `shopping-list.spec.ts` claiming those teardown
     deletes silently fail and that `deleteRecipeById` does not assert — both untrue since #24.
+
+58. ~~A logged-in user sees the marketing page flash before the homepage realises who they
+    are.~~ **Resolved** — by removing the redirect rather than hiding it. `/` no longer sends a
+    logged-in visitor to `/list`; it renders for everyone, and the header says where their list
+    is. Three states collapse to one, so there is no marketing → blank → `/list` sequence left
+    to flash.
+
+    **One finding changed the design, and is worth recording because the item argued from the
+    opposite assumption.** `pages/index.tsx` has no `getServerSideProps`, so `/` is statically
+    pre-rendered: the marketing HTML is served from Netlify's CDN and painted long before React
+    hydrates. Direction 1 as filed - a synchronous read of the SDK cache from inside the
+    component - therefore *cannot* remove the flash. It moves the seam from "until `POST /user`
+    returns" to "until hydration completes" and no further. Nothing done inside a component can
+    change what the first paint shows.
+
+    So the choice was really between direction 2 (middleware) and a third option that the item
+    did not list: stop redirecting at all, and let the header carry the logged-in state, which
+    is what most product sites do. Direction 2 was costed and rejected on three counts - it puts
+    a Netlify Edge Function on the highest-stakes public route; the
+    `auth0.<clientId>.is.authenticated` cookie expires after a day, which is shorter than the
+    refresh-token session, so the flash returns for anyone away for two; and a stale cookie
+    loops against `_app.tsx`'s bounce back to `/`, needing a marker param to break. It also
+    means a logged-in user can never see the homepage, which #47 (read the marketing copy by
+    hand) would rather they could.
+
+    **What shipped.** Three parts:
+
+    - **No redirect on an ordinary visit.** `POST /user` still runs unconditionally - it is what
+      creates the User row and its Account on a first login, and `/` is its only caller - but an
+      onboarded user now stays put.
+    - **One redirect survives**, and only for the Auth0 callback. `hooks/use-login.ts` sets
+      `redirect_uri` to the app origin, so clicking Log in returns you *here*; staying put would
+      make the button look broken. `lib/auth-callback.ts` recognises that arrival by the
+      `?code=&state=` Auth0 appends. It is computed at module scope on purpose: `Auth0Provider`
+      strips those params with `history.replaceState` in a mount effect, so anything reading
+      `location.search` from inside a component is racing it.
+    - **A pre-paint hint**, which is the surviving half of direction 1 and the only place it can
+      work - a blocking inline script in a new `pages/_document.tsx`, running before the body is
+      painted. It guesses from Auth0's own storage (the `is.authenticated` cookie, then the
+      `@@auth0spajs@@::<clientId>` cache prefix) and stamps `data-auth` on `<html>`;
+      `index.module.css` decides the header button and both CTAs from it; `index.tsx` overwrites
+      the stamp with the truth once the SDK answers. React sets the attribute and never branches
+      on it, so server and client markup are identical and there is no hydration mismatch.
+
+    A guess is safe here **because of what rides on it**: which of two buttons is visible. Guess
+    wrong and one button settles a moment later - unlike a redirect or a blanked page, which is
+    what made this approach worth taking over hiding the whole page. The unset default is the
+    logged-out page, so a script that throws, a browser with JS off, or a future SDK that moves
+    its storage all degrade to exactly today's behaviour.
+
+    **Two things fell out of it.** The CTAs had to move onto the stamp too: with the page now
+    visible to customers, telling one to "Add your first recipe" under the word "Free" is
+    nonsense. That subsumed the old `status === 'onboarding'` render flag, which reached the same
+    two variants by a narrower route (a first-time user, once); `status` now decides the redirect
+    and nothing about what is rendered. And the returning-from-Auth0 case gets its own stamp
+    value, veiling the page with `visibility` while `/list` is already on its way.
+
+    Not addressed, and the one real cost: a returning user who types the bare domain no longer
+    lands on `/list` in one keystroke. `public/manifest.json`'s `start_url` is already `/list`,
+    so the installed PWA is unaffected, and the header link is one click. Worth watching rather
+    than pre-emptively undoing.
+
+    Covered by `lib/auth-callback.test.ts`: the callback predicate (including that
+    `?promocode=…&estate=…` is *not* one - substring matching would have redirected a first-time
+    visitor into an account they do not have), and the `@@auth0spajs@@` prefix asserted against
+    auth0-spa-js's own public `CacheKey`, so an SDK upgrade that moves the storage fails a test
+    rather than silently turning the hint into a no-op.

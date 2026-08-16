@@ -182,7 +182,7 @@ cross-references between entries (e.g. #9 references #16).
     the broken code it exists to catch. Verified end to end against the live URL with
     a real extraction call, which now returns all six ingredients and the method.
 
-44. ~~Audit `Cache-Control` across the Go API.~~ **Resolved** — see [ADR-0009](./docs/adr/0009-edge-caching-the-global-catalogs.md) and `specs/completed/cache-control-audit.md`. Every response now carries a policy: a `private, no-store` default stamped by middleware in `internal/pkg/app/app.go`, first in the negroni stack so it covers `/health` and the JWT middleware's own 401s, not just handler successes. Three routes override it, each as the audit concluded — `GET /tags` `public, max-age=0, s-maxage=86400` (no purge; `tag` is seeded by migration and never written to), `GET /units` `public, max-age=0, s-maxage=300` plus `Netlify-Cache-Tag: units`, purged on Recipe create/edit, and `GET /ingredients` `no-store` (it is read server-side via `API_HOST_INTERNAL` and never crosses the edge, so caching buys it nothing). The purge lives in a new `internal/pkg/purge` package: asynchronous, best-effort, and coalescing — one call goes immediately and a burst collapses into one trailing call per 5s window, because Netlify 429s a tag purged more than twice in five seconds. It is a no-op with `NETLIFY_PURGE_TOKEN`/`NETLIFY_SITE_ID` unset, which is what local dev, e2e and CI run as; the `s-maxage` is what makes a missed purge self-heal. **One correction to this item as filed:** it counted 22 routes with nineteen account-scoped. There are 25, of which 22 are account-scoped — three were added after it was written. None of its conclusions change; the three unscoped routes are the same three. **A second correction:** this item named an in-process cache in `lib/recipe-import/known-names.ts` as "the real win" for `/ingredients`. That was too quick — tracing the callers afterwards showed the round trip is Ohio to Frankfurt and back, on every import, for an unbounded catalog, and that routing the call through `www.bigshop.life` would make it edge-cacheable after all. Reopened as item 51 in [`follow-ups.md`](./follow-ups.md), which frames the choice rather than presuming it.
+44. ~~Audit `Cache-Control` across the Go API.~~ **Resolved** — see [ADR-0009](./docs/adr/0009-edge-caching-the-global-catalogs.md) and `specs/completed/cache-control-audit.md`. Every response now carries a policy: a `private, no-store` default stamped by middleware in `internal/pkg/app/app.go`, first in the negroni stack so it covers `/health` and the JWT middleware's own 401s, not just handler successes. Three routes override it, each as the audit concluded — `GET /tags` `public, max-age=0, s-maxage=86400` (no purge; `tag` is seeded by migration and never written to), `GET /units` `public, max-age=0, s-maxage=300` plus `Netlify-Cache-Tag: units`, purged on Recipe create/edit, and `GET /ingredients` `no-store` (it is read server-side via `API_HOST_INTERNAL` and never crosses the edge, so caching buys it nothing). The purge lives in a new `internal/pkg/purge` package: asynchronous, best-effort, and coalescing — one call goes immediately and a burst collapses into one trailing call per 5s window, because Netlify 429s a tag purged more than twice in five seconds. It is a no-op with `NETLIFY_PURGE_TOKEN`/`NETLIFY_SITE_ID` unset, which is what local dev, e2e and CI run as; the `s-maxage` is what makes a missed purge self-heal. **One correction to this item as filed:** it counted 22 routes with nineteen account-scoped. There are 25, of which 22 are account-scoped — three were added after it was written. None of its conclusions change; the three unscoped routes are the same three. **A second correction:** this item named an in-process cache in `lib/recipe-import/known-names.ts` as "the real win" for `/ingredients`. That was too quick — tracing the callers afterwards showed the round trip is Ohio to Frankfurt and back, on every import, for an unbounded catalog, and that routing the call through `www.bigshop.life` would make it edge-cacheable after all. Reopened as item 51, which framed the choice rather than presuming it, and is now resolved below — by the first option, not the in-process cache. That also overturns this item's `/ingredients` decision: it is no longer `no-store` but `public, max-age=0, s-maxage=300` with a purged tag, because the premise that its only reader never crosses Netlify's edge stopped being true.
 
 48. ~~You cannot log in on a deploy preview, so branch deploys cannot be tested.~~
     **Resolved** — verified end to end by completing a real login, and a real logout, on a
@@ -472,3 +472,70 @@ cross-references between entries (e.g. #9 references #16).
     visitor into an account they do not have), and the `@@auth0spajs@@` prefix asserted against
     auth0-spa-js's own public `CacheKey`, so an SDK upgrade that moves the storage fails a test
     rather than silently turning the hint into a no-op.
+
+51. ~~Every Recipe Import fetches the whole Ingredient catalog across the Atlantic.~~
+    **Resolved** — by the first of the three options the item frames, with the measurement it
+    asks for built first rather than skipped.
+
+    **Why the measurement did not already exist**, which is the part worth recording: nobody had
+    obeyed "measure before building" because the number was not obtainable.
+    `lib/telemetry/setup.ts` registers manual providers only, with no auto-instrumentation, so an
+    outbound `fetch` produces no client span. The Go API's own server span *does* hang under the
+    import's trace via the propagated `traceparent` — but it measures Go's handling and nothing
+    else. The crossing, the TLS handshake on a cold container and the edge lookup all happen
+    outside it, and they are the cost. Reading it off the gap between the two spans instead would
+    be measuring clock skew between Netlify and Fly as much as latency.
+
+    So `fetchKnownNames` now runs inside a `bigshop.known_names` span, the same way and for the
+    same reason `lib/telemetry/tool-span.ts` wraps the identical Netlify → Fly hop for Dave. It
+    carries the two list lengths — the item's other half, since `GetAllIngredients` is
+    unpaginated and grows monotonically — and whether the edge was used. No names: ADR-0008 §1.
+    The frequency half was already answered by `bigshop.import.outcome`.
+
+    **The fix**: the call goes to the site's own hostname rather than the Fly origin, so it meets
+    a Netlify PoP near the function; `/ingredients` answers `public, max-age=0, s-maxage=300`
+    with a cache tag purged on every Recipe write, the same shape `/units` has had since #44. A
+    miss is marginally *slower* than going direct — the same trip with a PoP in front — while a
+    hit saves the whole crossing, and that asymmetry is what makes it pay at a low hit rate.
+
+    **What the item did not anticipate, and what it cost.** Every route except `/health` sat
+    behind the JWT gate, `/units` and `/tags` included — so ADR-0009's "`public` makes this
+    readable by an unauthenticated caller" described the response's *cacheability*, not the
+    route's *reachability*. A shared CDN will not reliably store a response to a request carrying
+    `Authorization`, and `known-names.ts` forwarded the browser's token, so the cache headers on
+    all three catalogs were decoration. The three are now carved out of the auth middleware the
+    way `/health` is, which makes ADR-0009's position true rather than aspirational: **a gate a
+    CDN is licensed to serve around is not a gate.** What is exposed is exactly what ADR-0001
+    defines as global and non-personal, and `TestGlobalCatalogsAnswerWithoutAToken` pins both
+    halves — the three answer without a token, and `GET /recipes` still does not.
+
+    **The one assumption, and how to close it.** The item flagged "that Netlify's CDN caches a
+    response fetched by one of its own functions" as unverified and the thing to test first. It
+    could not be closed on the deploy preview, because `netlify.toml` rewrites `/api/bigshop/*`
+    to *production's* Fly app and the API deploys only from `master` — so a preview always runs
+    new frontend against old API. What the preview did establish is that Netlify Edge is in the
+    path for that rewrite, evaluates the proxied response, honours its directives (it declined to
+    store a `private, no-store` 401), and reports the outcome in `cache-status`, where a stored
+    response carries an explicit `stored` token. So the remaining step is one command, not an
+    experiment:
+
+    ```bash
+    curl -sI https://www.bigshop.life/api/bigshop/ingredients | grep -i cache-status
+    # want: ...; fwd=miss; fwd-status=200; stored   (first request)
+    # then: ...; hit                                 (second, within 300s)
+    ```
+
+    If it says neither, the change is inert rather than harmful — imports pay one extra hop, the
+    new span shows it, and the revert is the host choice in `known-names.ts`. Also confirmed
+    rather than assumed on the way past: `netlify-vary: query`, so `Authorization` is genuinely
+    not part of Netlify's cache key.
+
+    **Deployment ordering.** The frontend (Netlify) and the API (Fly) deploy independently and
+    nothing sequences them. If the frontend lands first it sends no token to an API that still
+    requires one, and `fetchKnownNames` degrades to empty lists — imports keep working and lose
+    canonicalisation for a few minutes. Graceful, and exactly what that function is written to
+    absorb, but worth knowing rather than discovering.
+
+    Options 2 and 3 are not taken and not queued. The in-process cache is subsumed. Moving Recipe
+    Import extraction into the Go API remains the structurally correct destination, and remains
+    its own spec if it is ever wanted; the span added here is what would justify it.

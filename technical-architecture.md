@@ -388,6 +388,50 @@ a Recipe save**. It also coalesces: Netlify 429s a tag purged more than twice in
 seconds, which a burst of saves or a `scripts/backfill-recipe-method.mjs` re-run would
 otherwise hit. The `s-maxage` is what makes a missed purge self-heal.
 
+### The second catalog cache, in process
+
+`service.Catalogs` (`internal/pkg/service/catalog_cache.go`) holds the Unit and Ingredient
+catalogs in the API's own memory, behind a 5-minute TTL. Both are *global* rather than
+account-scoped and were re-read in full on every shopping-list request — three round trips
+that grew with the size of the catalog rather than with the user's list.
+
+**This is a different cache from the edge one above, over the same data, and the two must
+be invalidated together.** The edge copy serves clients; this one serves the API's own
+combining logic. Clearing one and not the other is the quiet failure: a Unit coined by an
+import would be visible to the client while the Shopping List went on combining without it,
+which reads as a combining bug. So both are cleared from **one** call site,
+`app.purgeUnitsCache()`, called after a Recipe create or edit — the only writes this
+process makes to `unit` and `ingredient`. Delete is deliberately not wired, in both cases.
+
+Caching it in process is only correct because ADR-0006 made this a single long-lived
+server. On Lambda each warm container held its own copy, so an invalidation could only ever
+reach the one that served the write.
+
+The TTL is the backstop for writes that never reach this process at all — a migration, a
+hand-edit in the TiDB console, `scripts/sync-from-prod.sh`. Five minutes matches the
+`s-maxage` on `/units`, so both caches over the same data have the same worst case.
+
+## The database connection pool
+
+`configurePool` in `main.go` sets it deliberately; before, nothing was set and
+`database/sql`'s defaults applied — notably **`MaxIdleConns` of 2**, which was defensible
+while every container was a short-lived Lambda and is not now.
+
+| | Value | Chosen against |
+|---|---|---|
+| `SetMaxOpenConns` | 20 | A TiDB Cloud Starter cluster allows **400 concurrent connections** across everything that connects to it (5,000 only with a spending limit set, which this project has not). One always-on machine taking 20 leaves 95% for the console, the SQL editor and `sync-from-prod.sh` |
+| `SetMaxIdleConns` | 8 | Above the three-connection fan-out of the widest request (`POST /shopping-list` runs three reads concurrently), so concurrency does not churn connections. A TLS MySQL connection costs ~5.0 round trips to establish |
+| `SetConnMaxLifetime` | 5 min | TiDB Serverless is reached through a gateway that can drop an idle connection without the client noticing; a capped lifetime bounds how long such a connection can sit in the pool |
+
+`ConnMaxIdleTime` is deliberately left unset — holding a warm connection through a quiet
+period is the point.
+
+`db.Stats()` is exported as OTel metrics via `otelsql.RegisterDBStatsMetrics`, so those
+numbers can be checked rather than assumed: `OpenConnections` approaching 20, or a
+`WaitCount` above zero, is the signal that the ceiling is too low. Registration happens
+after `telemetry.Setup`, for the same reason `otelsql.Open` does — before it, the global
+meter provider is still the no-op one and the metrics silently go nowhere.
+
 ## Deployment
 
 Two independent pipelines, one per deployable — an accepted consequence of

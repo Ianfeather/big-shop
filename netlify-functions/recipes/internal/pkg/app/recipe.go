@@ -140,7 +140,21 @@ func (a *App) deleteRecipe(ctx context.Context, input *DeleteRecipeInput) (*Stat
 	}
 
 	if err := service.DeleteRecipe(ctx, common.Recipe{ID: input.Body.ID}, caller, a.db); err != nil {
-		return nil, huma.Error500InternalServerError("could not delete recipe")
+		// "There is no such Recipe on this Account" is the API working, not the
+		// API broken, and the two are not interchangeable to a caller: a delete
+		// button that gets a 500 cannot tell "already gone, refresh your list"
+		// from "the server is down", and answers the second. It also made the
+		// e2e suite flaky - teardown deletes by id, and a Recipe can be gone
+		// before its own teardown runs (follow-ups.md #56).
+		//
+		// errors.Is rather than ==, for the reason getRecipe gives above: the
+		// service layer wraps, and DeleteRecipe returns this one unwrapped
+		// precisely so a caller can compare against it - which, until now, no
+		// caller did.
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fail(ctx, huma.Error404NotFound("Recipe not found"), err)
+		}
+		return nil, fail(ctx, huma.Error500InternalServerError("could not delete recipe"), err)
 	}
 
 	return &StatusOutput{Body: common.SimpleResponse{Status: "ok"}}, nil

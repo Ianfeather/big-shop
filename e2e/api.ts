@@ -49,7 +49,16 @@ export async function deleteRecipeById(request: APIRequestContext, id: number): 
   // Asserted, deliberately. This silently swallowed failures for months: every
   // Recipe that reached a Shopping List failed to delete (follow-ups.md #24)
   // and the suite never noticed, because teardown ignored the status.
+  //
+  // 404 is the one exception, and only because the API now distinguishes it.
+  // Teardown deletes by id, spec *files* run in parallel against one shared
+  // Account, and a Recipe can be gone before its own teardown runs - so
+  // "already gone" is a successful teardown, not a failed one. Until the API
+  // grew this branch that case arrived as a 500, indistinguishable from a real
+  // server failure, and it failed tests that had already passed
+  // (follow-ups.md #56). Everything else still throws, so #24 stays caught.
   const res = await request.delete(`${API_HOST}/recipe`, { data: { id } });
+  if (res.status() === 404) return;
   if (!res.ok()) {
     throw new Error(`Failed to delete recipe ${id}: ${res.status()} ${await res.text()}`);
   }

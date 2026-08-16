@@ -2,7 +2,7 @@
 
 Small defects and doc-drift found while building `CONTEXT.md` from the codebase (2026-07-13). Not designed here — just flagged for later action.
 
-Items 1–30, 32, 33, 36, 39, 40, 44, 48 and 49 have all been resolved — see [`follow-ups-resolved.md`](./follow-ups-resolved.md) for the full history (numbering preserved for cross-references between entries).
+Items 1–30, 32, 33, 36, 39, 40, 44, 48, 49, 53 and 56 have all been resolved — see [`follow-ups-resolved.md`](./follow-ups-resolved.md) for the full history (numbering preserved for cross-references between entries).
 
 Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are real but deliberately not being fixed, so they are not queued work.
 
@@ -510,35 +510,6 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     request — not a change to how it is observed. **The counter going flat while Photo
     Import appears to work is the signal to come back here**, which is a better position
     than the one before Phase 4, where there was no signal at all.
-
-56. **Deleting an already-deleted Recipe returns 500, and it makes the e2e suite flaky.**
-    `service.DeleteRecipe` checks the Recipe exists for the Account and returns `sql.ErrNoRows`
-    when it does not. `app/recipe.go:132` turns *any* error from it into
-    `huma.Error500InternalServerError("could not delete recipe")`, so "this Recipe is not there"
-    is reported as "this server is broken".
-
-    The intent to do better is already written down and unfinished: `service/recipe.go:329-332`
-    returns the sentinel deliberately unwrapped, with a comment explaining that wrapping it would
-    "break any caller comparing against it" — and then the only caller does not compare against
-    it. An `errors.Is(err, sql.ErrNoRows)` branch returning 404 is the whole fix.
-
-    **Found while investigating an e2e failure during Phase 6** (`specs/observability.md`), and
-    measured rather than assumed: six runs on `master` produced one failure, five runs on the
-    Phase 6 branch produced three, always the same signature and always in teardown —
-
-    ```
-    Failed to delete recipe 22: 500 {"detail":"could not delete recipe"}
-      at deleteRecipeById (e2e/api.ts:54)
-    ```
-
-    Different test each time, on Go code neither branch had touched. Playwright runs spec *files*
-    in parallel and teardown deletes by id, so a Recipe can be gone before its own teardown runs;
-    the 500 then fails a test that had already passed.
-
-    Two reasons it is worth fixing beyond the flake. A flaky suite is one that gets re-run instead
-    of read, which is exactly what CLAUDE.md's "a flaky-looking e2e failure gets investigated, not
-    re-run-until-green" exists to prevent. And a 500 here is a lie to any client: the browser's
-    delete button cannot tell "already gone, refresh your list" from "the API is down".
 
 57. **Upgrade `go-jwt-middleware` to v3.** Split off while removing the Go 1.23 version
     pins (see #54 and `specs/completed/request-model-optimisations.md`). Once #91 moved the repo to

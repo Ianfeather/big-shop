@@ -172,9 +172,6 @@ test.describe('shopping list unit combining', () => {
 
   test.afterAll(async ({ request }) => {
     await clearShoppingList(request);
-    // Note: these deletes currently fail silently for any recipe that reached
-    // the shopping list - see follow-ups.md #24. Harmless here because the e2e
-    // database is recreated per run, and deleteRecipeById doesn't assert.
     await deleteRecipeById(request, spoonsRecipeId);
     await deleteRecipeById(request, gramsRecipeId);
   });

@@ -1,0 +1,353 @@
+import Head from 'next/head';
+import Link from 'next/link';
+import styles from './privacy.module.css';
+import Logo from '@components/svg/logo';
+import { POLICY_VERSION, policyLastUpdated } from '../lib/consent';
+
+// The privacy policy. A public page, reachable logged-out from the marketing
+// footer, so it is built on the same "Cookbook" furniture as pages/index.tsx -
+// paper, ink, claret headings, the grain overlay - rather than on
+// components/layout, whose Header is app chrome for a signed-in user.
+//
+// Written in the same register as the rest of the app: plain, unexcited,
+// concrete. That is not a style preference here so much as the point. A policy
+// assembled out of template clauses describes a generic web app, and this one
+// has to describe *this* system - an LLM reads the recipes you import, error
+// reporting is deliberately not consent-gated, and the API and database sit in
+// Frankfurt while the import endpoints run in Ohio. None of that survives a
+// generator.
+//
+// **The content is the deliverable, not the layout.** Anything below that
+// stops being true - a processor added or dropped, a new category of data, a
+// new purpose - is a change to make here *and* a reason to bump POLICY_VERSION
+// in lib/consent.ts.
+//
+// That cuts both ways, and it is the trap this page fell into once already: it
+// was first written describing the *finished* feature, so it explained the
+// analytics Big Shop would collect and pointed at a "Cookie settings" control,
+// neither of which existed yet. A privacy policy that describes processing that
+// is not happening, and directs people to a control that is not there, is worse
+// than one that is merely incomplete - it is the page nobody should have to
+// double-check. **Describe what ships with it, not what is planned.**
+
+const CONTACT_EMAIL = 'info@ianfeather.co.uk';
+
+// Who else processes data, why, and where. Assembled by tracing the code
+// rather than from a template: ADR-0006 places the API on Fly in `fra` and
+// records that Netlify's functions default to `cmh` (US East, Ohio) with
+// region selection paywalled, which is why the two rows differ. ADR-0007 puts
+// Grafana Cloud in eu-central-1, and ADR-0008 is the authority on what the
+// telemetry rows do and do not carry.
+const processors = [
+  {
+    name: 'Auth0 (Okta)',
+    purpose: 'Logging you in, and holding your email address and name.',
+    where: 'EU',
+  },
+  {
+    name: 'Netlify',
+    purpose: 'Serving the site, and running the recipe-import and chat endpoints.',
+    where: 'United States',
+  },
+  {
+    name: 'Fly.io',
+    purpose: 'Running the API that reads and writes your recipes and lists.',
+    where: 'Frankfurt',
+  },
+  {
+    name: 'TiDB Cloud',
+    purpose: 'The database everything above is stored in.',
+    where: 'Frankfurt (AWS eu-central-1)',
+  },
+  {
+    name: 'Grafana Cloud',
+    purpose: 'Error reporting and performance monitoring. See “Error reporting” below.',
+    where: 'EU',
+  },
+  {
+    name: 'OpenAI',
+    purpose: 'Reading a recipe you import, and answering when you chat to Dave.',
+    where: 'United States',
+  },
+  {
+    name: 'SendGrid (Twilio)',
+    purpose: 'Sending an invite email when you share your account with someone.',
+    where: 'United States',
+  },
+];
+
+// What is written to your own browser, which is the half of a privacy policy
+// people can actually check. Enumerated from the code and confirmed against the
+// running app rather than assumed - the surface is smaller than a typical app's
+// because _app.tsx configures Auth0 with cacheLocation="localstorage", so the
+// login session is browser storage rather than a cookie.
+//
+// The error-reporting row is the one that would have been missed by describing
+// the app from memory. @grafana/faro-web-sdk writes a session id under
+// `com.grafana.faro.session`, and because its defaultSessionTrackingConfig sets
+// `persistent: false` it goes to sessionStorage via the VolatileSessionManager -
+// so it is gone when the tab closes, and expires after four hours anyway. It is
+// listed because it is real, and because leaving it out of the table while the
+// section above explains that error reporting is not consent-gated would be
+// exactly the kind of quiet omission that section exists to avoid.
+const deviceStorage = [
+  {
+    what: 'Your login session',
+    detail: 'Set by Auth0 so you stay logged in between visits. Cleared when you log out.',
+  },
+  {
+    what: 'Shopping list layout',
+    detail: 'Small display preferences, like whether the store-cupboard group is open.',
+  },
+  {
+    what: 'An unfinished recipe',
+    detail: 'If you start adding a recipe and navigate away, the draft is held so you do not lose it. Cleared once it is used.',
+  },
+  {
+    what: 'An error-reporting session id',
+    detail: 'A random id that ties several errors together into one visit. Kept for the tab only, and gone when you close it.',
+  },
+];
+
+export default function Privacy() {
+  return (
+    <>
+      <Head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta charSet="utf-8" />
+        <meta name="description" content="What Big Shop stores, who else sees it, and how to get it back or get rid of it." />
+        <meta name="theme-color" content="#faf5ee" />
+        <title>Privacy &mdash; Big Shop</title>
+        <link rel="shortcut icon" crossOrigin="" href="/favicon.ico" type="image/x-icon" />
+      </Head>
+
+      <div className={styles.page}>
+        <div className={styles.grain} aria-hidden="true" />
+
+        <header className={styles.header}>
+          <Link className={styles.brand} href="/">
+            <Logo className={styles.mark} />
+            <span className={styles.wordmark}>Big Shop</span>
+          </Link>
+          <Link href="/" className={styles.back}>Back to the homepage</Link>
+        </header>
+
+        <main className={styles.main}>
+          <p className={styles.eyebrow}>Privacy</p>
+          <h1 className={styles.display}>What we store, and who else sees it.</h1>
+          <p className={styles.standfirst}>
+            Big Shop is a recipe and shopping list app run by Ian Feather. This page says what it
+            keeps, where that goes, and how to get it back or get rid of it. It is written to be
+            read rather than to be complied with, so if anything here is unclear that is a fault
+            worth telling us about.
+          </p>
+          <p className={styles.meta}>
+            Last updated {policyLastUpdated()} &middot; version {POLICY_VERSION}
+          </p>
+
+          <section className={styles.section}>
+            <h2 className={styles.heading}>What Big Shop stores</h2>
+            {/*
+              The `{' '}` after each </strong> is load-bearing, not a tic. A JSX
+              text child that both spans several source lines *and* contains an
+              HTML entity loses its leading space in the compiled output, so
+              `<strong>Your recipes.</strong> Names,` renders as
+              "Your recipes.Names,". Only the two items carrying an &mdash; were
+              affected, which is what makes it easy to introduce by editing one
+              bullet and easy to miss in review - the neighbouring bullets look
+              identical and are fine. Written explicitly on every item so the
+              next person to add an em dash doesn't reintroduce it.
+              (follow-ups.md #47 asks for a pass over the marketing page's own
+              &mdash; usage; this is the same class of defect.)
+            */}
+            <ul className={styles.list}>
+              <li>
+                <strong>Your account.</strong>{' '}The email address and name you signed up with, an
+                identifier from our login provider, and when you last logged in.
+              </li>
+              <li>
+                <strong>Your recipes.</strong>{' '}Names, ingredients, methods, notes, tags, and the
+                link a recipe came from. If you import one by photographing it, the photo is sent
+                away to be read and then deleted &mdash; it is never stored.
+              </li>
+              <li>
+                <strong>Your shopping lists.</strong>{' '}What is on them, how much of each, and what
+                you have ticked off &mdash; plus a record of lists you have made before, which is
+                what lets Dave suggest from what you actually cook.
+              </li>
+              <li>
+                <strong>Invites you send.</strong>{' '}The email address of anyone you invite to share
+                your account, until the invite is accepted or rejected.
+              </li>
+              <li>
+                <strong>A few preferences.</strong>{' '}Whether you have been shown the welcome screen,
+                and how you like the shopping list laid out.
+              </li>
+            </ul>
+            <p>
+              There is no advertising here, no profiling, and nothing is sold or shared with anyone
+              beyond the companies listed below that run the thing.
+            </p>
+          </section>
+
+          <section className={styles.section}>
+            <h2 className={styles.heading}>Recipes are shared with your account, not with the world</h2>
+            <p>
+              An account can have more than one person on it &mdash; that is the point of it. Anyone
+              you share an account with can see and change every recipe and list on that account.
+              Ingredient <em>names</em> are the one exception: they are pooled across everybody, so
+              that “tin of chopped tomatoes” means the same thing for everyone. Your recipes are not.
+            </p>
+          </section>
+
+          <section className={styles.section}>
+            <h2 className={styles.heading}>Reading recipes, and Dave</h2>
+            <p>
+              When you import a recipe from a link, a photo, or pasted text, the contents are sent to
+              OpenAI to be turned into ingredients and a method.
+            </p>
+            <p>
+              Dave sends more than you might assume, so it is worth being exact. To answer a
+              question he can look up your recipes, read a whole recipe back &mdash; ingredients and
+              method &mdash; and read the history of lists you have made. Whatever he looks up goes
+              to OpenAI along with your messages. That is the feature working rather than a leak,
+              but it means your recipes leave our systems when you chat to him, not just their names.
+            </p>
+            <p>
+              OpenAI processes it on our behalf and, on the API terms Big Shop uses, does not train
+              on it.
+            </p>
+          </section>
+
+          <section className={styles.section}>
+            <h2 className={styles.heading}>Error reporting</h2>
+            <p>
+              Big Shop reports its own errors and performance to Grafana Cloud, and{' '}
+              <strong>it is not something you are asked to consent to</strong>. We treat it as
+              necessary to keep the service working, since an app that only reports errors for
+              people who opted in is an app that does not know when it is broken. It is a deliberate
+              choice rather than an oversight, and it is a contested one, so it is stated here
+              rather than buried.
+            </p>
+            <p>
+              What it carries is limited on purpose: an account number, a login identifier, page
+              names, timings, and error messages. It does not carry your recipes, your ingredients,
+              your chats with Dave, or your email address. It is deleted after 14 days.
+            </p>
+          </section>
+
+          <section className={styles.section}>
+            <h2 className={styles.heading}>Analytics</h2>
+            <p>
+              Big Shop does not currently use any analytics &mdash; no Google Analytics, no
+              third-party tracking of any kind. The only thing watching the app is the error
+              reporting described above.
+            </p>
+          </section>
+
+          <section className={styles.section}>
+            <h2 className={styles.heading}>What is stored on your device</h2>
+            <div className={styles.tableWrap}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th scope="col">What</th>
+                    <th scope="col">Why</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {deviceStorage.map(row => (
+                    <tr key={row.what}>
+                      <th scope="row">{row.what}</th>
+                      <td>{row.detail}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className={styles.note}>
+              All of it is needed for the site to work or to keep it working, none of it is used to
+              track you anywhere else, and there is nothing here you have to consent to. Clearing
+              your browser data for this site removes the lot.
+            </p>
+          </section>
+
+          <section className={styles.section}>
+            <h2 className={styles.heading}>Who else processes it</h2>
+            <div className={styles.tableWrap}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th scope="col">Who</th>
+                    <th scope="col">What for</th>
+                    <th scope="col">Where</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {processors.map(p => (
+                    <tr key={p.name}>
+                      <th scope="row">{p.name}</th>
+                      <td>{p.purpose}</td>
+                      <td>{p.where}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className={styles.note}>
+              Your recipes and lists live in Frankfurt. The parts that run in the United States are
+              the website itself, the recipe-reading and chat endpoints, and invite emails; those
+              transfers rely on each provider’s standard contractual clauses.
+            </p>
+          </section>
+
+          <section className={styles.section}>
+            <h2 className={styles.heading}>How long it is kept</h2>
+            <p>
+              Your account, recipes and lists are kept until you ask us to delete them. Error and
+              performance data is deleted after 14 days. Invites disappear when accepted or
+              rejected.
+            </p>
+          </section>
+
+          <section className={styles.section}>
+            <h2 className={styles.heading}>Your rights, and how to use them</h2>
+            <p>
+              Under UK data protection law you can ask for a copy of your data, ask for it to be
+              corrected, ask for it to be deleted, or object to how it is used. There is no button
+              for any of that yet &mdash; it is done by hand, by email, and we would rather say so
+              than imply a self-service flow that does not exist.
+            </p>
+            <p>
+              Email <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> and it will be actioned.
+              If you are not happy with the response you can complain to the{' '}
+              <a href="https://ico.org.uk/make-a-complaint/" target="_blank" rel="noreferrer">
+                Information Commissioner’s Office
+              </a>.
+            </p>
+            <p className={styles.note}>
+              One honest complication: an account can be shared. If you are on an account with other
+              people, deleting “your” recipes would delete theirs too, so tell us what you want to
+              happen and we will sort it out with you rather than guess.
+            </p>
+          </section>
+
+          <section className={styles.section}>
+            <h2 className={styles.heading}>Changes to this page</h2>
+            <p>
+              If something material changes &mdash; a new company processing your data, a new
+              purpose &mdash; the version at the top changes, and we will make sure you are told
+              rather than leaving you to notice. Smaller corrections are made quietly, and only the
+              date changes.
+            </p>
+          </section>
+        </main>
+
+        <footer className={styles.footer}>
+          <Logo className={styles.footerMark} />
+          <p>Big Shop &mdash; recipes in, shopping list out.</p>
+        </footer>
+      </div>
+    </>
+  );
+}

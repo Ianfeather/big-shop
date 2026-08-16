@@ -474,6 +474,9 @@ const Index = () => {
         <footer className={styles.footer}>
           <Logo className={styles.footerMark} />
           <p>Big Shop &mdash; recipes in, shopping list out.</p>
+          <nav className={styles.footerLinks}>
+            <Link href="/privacy">Privacy</Link>
+          </nav>
         </footer>
       </div>
     </>

@@ -1,0 +1,79 @@
+---
+spec: specs/analytics-and-consent.md
+status: planned
+branch: implement/analytics-and-consent
+pr:
+---
+
+Sessions map onto the spec's four Phases, with Phase 1 split across Sessions 1 and 2 — the
+privacy policy page is self-contained and user-visible, and lands before the machinery that
+links to it.
+
+Decisions taken at planning time that the spec does not contain:
+
+1. **PR #100 (the spec) was merged first** (`e37a91f`), so this branch is cut from `master`
+   rather than stacked on the design branch. Ian's call, asked at planning time.
+2. **GA4 ships dark.** No GA4 property exists yet, so Session 4 implements the full gated
+   path and verifies it locally against a dummy measurement id. It stays inert in production
+   until `NEXT_PUBLIC_GA_MEASUREMENT_ID` is set in Netlify — which is the Faro precedent
+   (`lib/telemetry/faro.ts`: presence of the endpoint is the switch), not a workaround.
+   Session 4's exit criterion "`account.id` appears as a user property" is therefore
+   verifiable only in structure locally, not against a real property.
+3. **The e2e suite needs the banner pre-dismissed.** `e2e/fixtures.ts` already extends the
+   `page` fixture with an `addInitScript` that neutralises Next's dev-mode `nextjs-portal`
+   overlay, for exactly the reason a consent banner would also break things — an overlay that
+   swallows clicks. Session 2 seeds a consent decision through the same seam, and adds one
+   spec that deliberately does not, so the banner itself is still covered.
+4. **The privacy policy draft is not sign-off.** Written to be accurate about what this system
+   actually does; the wording still wants Ian's read before it is public.
+
+## Session 1: Privacy policy page
+Status: pending
+Scope: Spec Phase 1, first half. `pages/privacy.tsx` + styles, the processor list and storage
+inventory assembled from the code rather than from a template, Faro described plainly per the
+spec's Decided section, footer link from `pages/index.tsx`, and the shared `POLICY_VERSION`
+constant that Session 3 records against.
+Depends on: none
+Commit:
+Notes:
+
+## Session 2: Consent store and banner
+Status: pending
+Scope: Spec Phase 1, second half. `hooks/use-consent.ts` (three states — `unset` is what shows
+the banner and must not collapse into `denied`), `components/consent-banner/`, mounted in
+`_app.tsx` outside `InnerApp` so it never waits on Auth0 (#58). Withdrawal path. e2e fixture
+seed plus `e2e/consent.spec.ts`. Vitest tests for the store.
+Depends on: Session 1 (banner links to the policy)
+Commit:
+Notes:
+
+## Session 3: Consent record
+Status: pending
+Scope: Spec Phase 2. `migrations/034_consent_event.sql`, append-only, no IP and no user agent.
+`service/consent.go`, `app/consent.go` with `POST /consent`. Latest state joins `GET /user` as
+a pointer field matching `ShowPantryStaples`, rather than a new read route (#53). Client sync
+via `use-synced-flag.ts`'s arrangement. Regenerate `openapi.yaml` and `types/api.d.ts` — CI
+gates on drift.
+Depends on: Session 2
+Commit:
+Notes:
+
+## Session 4: GA4 behind the gate
+Status: pending
+Scope: Spec Phase 3. `lib/analytics/ga.ts` shaped like `faro.ts`. No `gtag.js` until granted —
+deliberately contrary to Consent Mode v2's intended design, and the reason goes in the code.
+Ad signals permanently denied. Withdrawal clears `_ga*`. Manual page views on
+`routeChangeComplete`. Static `page_title` lookup with an exhaustiveness test. `account.id` as
+a user property, never `user_id`, never the Auth0 subject. Amend ADR-0008 §1.
+Depends on: Session 2
+Commit:
+Notes:
+
+## Session 5: Events and docs
+Status: pending
+Scope: Spec Phase 4. Four events, no free-text parameters, and the longitudinal-only rule in
+the module comment so the Grafana metrics are not duplicated. Move #43 to
+`follow-ups-resolved.md`; update CLAUDE.md and `technical-architecture.md` env var tables.
+Depends on: Session 4
+Commit:
+Notes:

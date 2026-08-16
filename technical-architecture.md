@@ -347,7 +347,7 @@ One accepted consequence of `interpolateParams`: argument values now travel *ins
 query text, so they appear in MySQL's general and slow-query logs and in TiDB Cloud's
 slow-query UI. That includes invite tokens and email addresses
 (`internal/pkg/service/invite.go`). Don't add statement-level logging to the API without
-revisiting it. The full analysis is in `specs/request-model-optimisations.md`.
+revisiting it. The full analysis is in `specs/completed/request-model-optimisations.md`.
 
 **Fly secrets, read by the Go API only** (`fly secrets set …`, see the
 [runbook](./docs/fly-migration-runbook.md)):

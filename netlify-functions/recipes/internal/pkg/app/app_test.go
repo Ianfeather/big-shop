@@ -454,7 +454,7 @@ func TestKeyLookupFailureIsRefusedNotPanicked(t *testing.T) {
 // It is a regression test for a defect that shipped and went unnoticed for two
 // pull requests. The accessor GetRouter hands telemetry used to be an inline
 // closure reading `contextKey("userID")`; Phase 3 of
-// specs/request-model-optimisations.md replaced that string in the context with
+// specs/completed/request-model-optimisations.md replaced that string in the context with
 // a *common.Caller and did not update it, so it read a key nothing writes and
 // every span went out with no user.sub at all.
 //

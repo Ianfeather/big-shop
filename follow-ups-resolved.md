@@ -324,7 +324,7 @@ cross-references between entries (e.g. #9 references #16).
 
 53. ~~Cut the round trips per request, now that there is a measurement to cut
     against.~~ **Resolved** — all six phases of
-    [`specs/request-model-optimisations.md`](./specs/request-model-optimisations.md)
+    [`specs/completed/request-model-optimisations.md`](./specs/completed/request-model-optimisations.md)
     have shipped. Phases 1-3 landed first (JWKS caching, `interpolateParams`, the lazily
     resolved `Caller`); Phases 4-6 landed together and are what closes this.
 

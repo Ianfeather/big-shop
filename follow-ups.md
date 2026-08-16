@@ -472,7 +472,7 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     `kid` is exactly the case a cache must handle by refreshing and then *failing cleanly*.
 
     **Designed as Phase 1 of
-    [`specs/request-model-optimisations.md`](./specs/request-model-optimisations.md)**,
+    [`specs/completed/request-model-optimisations.md`](./specs/completed/request-model-optimisations.md)**,
     which is where the implementation detail lives. That spec's approach turned on one
     constraint — `go-jwt-middleware` **v2.3.0** was the last release declaring `go 1.23.0`,
     and this repo pinned Go 1.23 in four places. **That constraint is gone**: #91 moved the
@@ -531,7 +531,7 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     delete button cannot tell "already gone, refresh your list" from "the API is down".
 
 57. **Upgrade `go-jwt-middleware` to v3.** Split off while removing the Go 1.23 version
-    pins (see #54 and `specs/request-model-optimisations.md`). Once #91 moved the repo to
+    pins (see #54 and `specs/completed/request-model-optimisations.md`). Once #91 moved the repo to
     Go 1.25, three pinned dependencies came unstuck at once — `go-sql-driver/mysql` and
     Huma were straight version bumps and were taken there and then, but
     `go-jwt-middleware` v2 → v3 is a **major version**, so it is queued here rather than

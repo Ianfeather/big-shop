@@ -258,7 +258,7 @@ func callerFrom(ctx context.Context) *common.Caller {
 //
 // A named function rather than the closure it used to be, so it can be tested.
 // It could not be, and it was wrong: Phase 3 of
-// specs/request-model-optimisations.md replaced the bare `userID` string in the
+// specs/completed/request-model-optimisations.md replaced the bare `userID` string in the
 // context with a *common.Caller and left this reading `contextKey("userID")` -
 // a key nothing writes any more. Every span shipped without a user.sub from
 // then until now, which is precisely the failure telemetry.Middleware's own

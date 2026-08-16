@@ -645,3 +645,116 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     Not urgent — it is cosmetic, and only on a route a logged-in user reaches by typing the
     bare domain. But it reads as broken to the one audience that already trusts the
     product, and the fix is cheap in one of the two directions above.
+
+59. **There is no way to delete an Account, and GDPR requires one.** Raised alongside #43
+    (2026-08-16), which builds the privacy policy that will have to describe this right
+    while nothing implements it. Right of erasure is not optional and there is no partial
+    version: today a user who asks to be deleted can only be served by hand, against
+    production, with no runbook.
+
+    **What exists**, and it is less than it looks:
+
+    - **`service.DisableUserAccount`** (`service/account.go:99`) sets
+      `account_user.enabled = false` for **every** row matching a user — no account
+      scoping — and `GetAccountID`/`GetAccount` both filter on `enabled = true`, so the
+      user is left able to log in and resolve to no Account at all. It is the closest thing
+      to a deactivation that exists.
+    - It has **exactly one caller**, and it is not a user-facing one: `app/invites.go:36`,
+      disabling an invitee's *old* Account when they accept an invite to someone else's.
+      So the one mechanism in the codebase that could deactivate somebody exists as a
+      side effect of the invite flow.
+    - **`service.RemoveUserFromAccount`** deletes an `account_user` row. That is membership,
+      not erasure — every Recipe, list and ingredient stays exactly where it was.
+
+    Nothing deletes a `user` row, a `recipe`, a `list`, or anything in Auth0.
+
+    **The hard part is not the SQL, it is deciding what an Account is when it is shared.**
+    Per CONTEXT.md a Recipe belongs to an *Account*, not a User, and an Account can have
+    several Users — which is the product's reason to exist. So "delete my account" is
+    genuinely ambiguous:
+
+    - The last User of an Account leaving is unambiguous: the Account and everything under
+      it goes.
+    - A User leaving a *shared* Account is not. Their Recipes are the Account's Recipes and
+      the other members are still cooking from them. Deleting them would erase someone
+      else's data; keeping them means the departing user's contributions outlive their
+      account, which they may well have meant to take with them. This wants a product
+      decision before any code.
+
+    **Things that have to be enumerated before this can be specced**, none of which are in
+    the `recipe`/`list` tables everyone thinks of first:
+
+    - **Auth0** holds the identity, and it is a separate deletion in a separate system with
+      its own API. Deleting the DB rows alone leaves a working login for a deleted account.
+    - **The Global Ingredient Catalog is deliberately shared and must not be touched**
+      ([ADR-0001](./docs/adr/0001-global-ingredient-catalog.md)). Ingredient names coined
+      during someone's imports are global; they are not personal data and erasing them would
+      damage every other Account. Worth writing down because a thorough implementer will go
+      looking for "their" ingredients.
+    - **Telemetry.** Grafana holds `user.sub` and `account.id` on spans and Faro sessions
+      (ADR-0008 §1). Retention is 14 days on the free tier, which mostly solves this by
+      expiry rather than by deletion — but "mostly" needs checking against what an erasure
+      request actually obliges, not assumed.
+    - **GA4**, once #43 lands, holds `account.id` as a user property. Google offers a User
+      Deletion API; whether it is reachable for a property keyed on a custom property rather
+      than `user_id` needs verifying rather than hoping.
+    - **`consent_event`**, the append-only table #43's Phase 2 creates, is the awkward one:
+      it exists to *prove* consent, so erasing it destroys the evidence that the processing
+      was lawful. The usual answer is to retain the consent record under the legal-obligation
+      basis while erasing everything it refers to — but that is a decision to take
+      deliberately, not a `DELETE` to forget.
+    - **SendGrid** holds delivered invite emails, and `invite` rows carry email addresses,
+      which ADR-0008 §1 singles out as real personal data.
+
+    Also in scope, and cheaper: **data export**. Right of access is the same underlying
+    question — what belongs to this person — answered in the other direction, so the two
+    are best designed together even if only deletion ships.
+
+60. **Audit for stored XSS, and write down why the safe paths are safe.** Raised while
+    specifying #43 (2026-08-16), whose `page_title` rule turns on a related observation:
+    the codebase is currently safe by *accident* in several places, and an accident holds
+    only until someone reasonable changes something nearby.
+
+    **The initial sweep is largely reassuring**, and this item is written knowing that —
+    it is an audit to confirm and protect an invariant, not a report of a live hole:
+
+    - **No `dangerouslySetInnerHTML` and no `innerHTML` anywhere** in `components/`,
+      `pages/`, `lib/` or `hooks/`. React escapes its children, so every rendered Recipe
+      name, ingredient name, note and Method is inert today.
+    - **No markdown renderer in the dependency tree.** Dave's replies render as
+      `{message.content}`, a plain React child (`components/dave-chat/index.tsx:71`) — so
+      the highest-risk surface in the app is safe for the least durable of reasons, which is
+      that nobody has yet asked for Dave to emit formatted output.
+    - **`RecipeLink`** (`components/recipe/index.tsx:10-16`) is the one place user-supplied
+      data becomes an `href`, and it guards with `link.match(/^http/)`, which does exclude
+      `javascript:`. Note what the guard actually is, though: a prefix test, not a scheme
+      test — worth tightening to `^https?:\/\//` while someone is looking at it.
+
+    **What makes this worth a deliberate pass rather than a shrug** is the shape of the
+    threat model, which is unusual and easy to under-rate:
+
+    - **The stored content is not user-authored.** Recipe names, ingredient text and Method
+      prose arrive from **LLM extraction of arbitrary third-party web pages** — URL Import,
+      Photo Import, paste-a-recipe. So the injection source is not a Big Shop user attacking
+      themselves; it is any page on the internet, laundered through a model that is
+      explicitly trying to reproduce the page's text faithfully. Prompt injection and script
+      injection are the same input here.
+    - **It is shared.** An Account has several Users (that is the product), so content one
+      person imports renders in another person's browser. That is the "stored" half of
+      stored XSS, and it is the half that makes it worth more than a self-inflicted alert.
+    - **`node-html-parser` consumes attacker-controlled HTML server-side** in the extractor.
+      Not a render path, so not XSS — but it is the same untrusted input reaching a parser,
+      and belongs in the same sweep.
+
+    So the deliverables are: confirm the sweep above by hand rather than by grep; tighten
+    `RecipeLink`'s scheme test; and — the durable part — **write the invariant down where
+    it will be read**, i.e. that no rendering path in this app may introduce raw HTML, and
+    that adding a markdown renderer for Dave or for Method is the change that would need
+    sanitisation designed in rather than added after. Method is the likely trigger: #41
+    already notes that 031 wrote 56 methods in "1. … 2. …" shape and sharpened the question
+    of whether steps should be structured data, and a rich-text answer to that question is
+    exactly where this bites.
+
+    Worth checking in the same pass, since it is the same class and nothing covers it: what
+    Photo Import accepts as an upload, and whether an SVG can reach a context that renders
+    it rather than treating it as an image.

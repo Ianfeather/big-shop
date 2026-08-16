@@ -49,34 +49,33 @@ Not greenfield, and load-bearing for the design below:
   live work about cutting round trips, and a new `GET /consent` would push in the other
   direction.
 
-## The one decision this spec asks for before Phase 2
+## The anonymous visitor, and why the record starts at login
 
-Consent is given on `/`, the marketing page, where the visitor is **anonymous**. The API has
-nowhere to put that. Two answers, and they are not close:
+Consent is given on `/`, the marketing page, where the visitor is **anonymous**, and the API
+has nowhere to put that. **Decided (2026-08-16): the server record covers authenticated users
+only.**
 
-- **Recommended: the server record covers authenticated users only.** localStorage is the live
-  decision for everyone from the first click. When a user authenticates, the current state is
-  synced to `POST /consent` and thereafter follows them across devices — exactly
-  `use-synced-flag.ts`'s arrangement. An anonymous visitor's decision is honoured completely
-  and recorded only in their own browser.
+localStorage is the live decision for everyone from the first click, and is honoured
+completely whether or not anyone ever signs in. When a user authenticates, the current state
+is synced to `POST /consent` and thereafter follows them across devices — exactly
+`use-synced-flag.ts`'s arrangement, one layer up.
 
-  The argument is not convenience. To give an anonymous visitor a server-side consent record
-  you must first mint and store an identifier for them — so the mechanism whose purpose is to
-  document lawful processing would begin by creating a tracking identity for someone who may
-  have just declined. Everyone whose data Big Shop actually holds ends up with a record; the
-  people without one are the people there is nothing to demonstrate against.
+The argument is not convenience. To give an anonymous visitor a server-side consent record you
+must first mint and store an identifier for them — so the mechanism whose whole purpose is to
+document lawful processing would begin by creating a tracking identity for someone who may
+have just declined. Everyone whose data Big Shop actually holds ends up with a record; the
+people without one are the people there is nothing to demonstrate against.
 
-  **The accepted gap, stated plainly:** an anonymous visitor who accepts, generates GA4
-  pageviews, and never signs up has no record in Big Shop's database. Their consent state does
-  travel with the GA hits themselves, which is a weaker but non-zero record.
+**The accepted gap, stated plainly:** an anonymous visitor who accepts, generates GA4
+pageviews, and never signs up has no record in Big Shop's database. Their consent state does
+travel with the GA hits themselves, which is a weaker but non-zero record.
 
-- **Alternative: a public `POST /consent`.** Records every decision, anonymous ones keyed by a
-  random client-minted id in localStorage. Costs the API's first unauthenticated write
-  endpoint, which needs rate limiting that does not exist today (`internal/pkg/purge`'s
-  throttle is outbound and not reusable), and creates an unauthenticated append-to-a-table
-  primitive — the same shape #54 objects to on the JWKS path.
-
-Phase 2 is written for the recommended option. Choosing the alternative changes Phase 2 only.
+The rejected alternative, so it is not rediscovered as an oversight: a **public
+`POST /consent`** recording every decision, anonymous ones keyed by a random client-minted id.
+It would cost the API's first unauthenticated write endpoint, needing rate limiting that does
+not exist today (`internal/pkg/purge`'s throttle is outbound and not reusable), and would
+create an unauthenticated append-to-a-table primitive — the same shape #54 objects to on the
+JWKS path.
 
 ## Phase 1 — The policy, the store, the banner
 
@@ -259,6 +258,12 @@ free text; `follow-ups.md` #43 is moved to `follow-ups-resolved.md` and CLAUDE.m
   policy this work exists to write.
 - **The consent record is server-side.** Decided 2026-08-16 over client-only. Phase 2 exists
   because of that choice; the anonymous-visitor gap above is its known edge.
+- **`consent_event` is not deleted on account deletion.** Flagged here because #59 is the item
+  that will have to decide it, and the append-only table this spec creates is the awkward case:
+  the record exists to demonstrate consent, so erasing it on request destroys the evidence that
+  the processing was lawful. The usual resolution is to retain the consent record under the
+  legal-obligation basis while erasing everything it refers to. Do not resolve it by quietly
+  adding a `DELETE` here.
 
 ## Out of scope
 

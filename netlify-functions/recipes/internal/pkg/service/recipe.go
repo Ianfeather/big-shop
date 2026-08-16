@@ -209,6 +209,119 @@ func GetRecipeByID(ctx context.Context, id int, caller *common.Caller, db *sql.D
 	return recipe, nil
 }
 
+// GetRecipeIngredientsByIDs loads just the Ingredient Lines of a whole set of
+// Recipes, in one query, and returns one Recipe per requested id carrying
+// nothing but its ID and its Ingredients.
+//
+// It exists because generating a Shopping List called GetRecipeByID in a loop,
+// six round trips per Recipe - which is why POST /shopping-list cost 42 round
+// trips for one Recipe and 50 for two. The +8 slope was the thing worth
+// killing: a ten-Recipe list was ~114. CombineIngredients reads only ID and
+// Ingredients, so the per-Recipe loop was also fetching name, notes, method and
+// tags and throwing them away.
+//
+// **Not a general-purpose Recipe loader**, and deliberately not named like one:
+// every other field is zero. Use GetRecipeByID when you want a Recipe.
+//
+// Three details are load-bearing:
+//
+//   - The join hangs off `recipe` with a LEFT JOIN to `part`, not off `part`.
+//     That is what lets a Recipe with no Ingredient Lines come back at all, and
+//     so what preserves GetRecipeByID's distinction between "no such Recipe"
+//     (sql.ErrNoRows) and "a Recipe that happens to have no lines" (an empty
+//     slice). Joining from `part` would collapse the two silently.
+//   - One entry per *requested* id, in the requested order, so a duplicate id
+//     still contributes twice exactly as the old loop did. Nothing sends
+//     duplicates today - pages/list.tsx keys its selection by id - but that is
+//     the caller's property, not this function's, and de-duplicating here would
+//     quietly halve a total if it ever changed.
+//   - ORDER BY part.id keeps an Ingredient Line's position stable, which the
+//     old query left to the storage engine.
+func GetRecipeIngredientsByIDs(ctx context.Context, ids []int, caller *common.Caller, db *sql.DB) ([]common.Recipe, error) {
+	if len(ids) == 0 {
+		return []common.Recipe{}, nil
+	}
+
+	accountID, err := caller.AccountID()
+	if err != nil {
+		return nil, fmt.Errorf("resolving account: %w", err)
+	}
+
+	placeholders := make([]string, 0, len(ids))
+	args := make([]interface{}, 0, len(ids)+1)
+	for _, id := range ids {
+		placeholders = append(placeholders, "?")
+		args = append(args, id)
+	}
+	args = append(args, accountID)
+
+	// ingredient_department is UNIQUE (ingredient_id) (migration 013), so the
+	// department joins cannot multiply a Line into several rows.
+	query := fmt.Sprintf(`
+		SELECT
+			recipe.id,
+			ingredient.name,
+			unit.name,
+			part.quantity,
+			department.name
+		FROM
+			recipe
+			LEFT JOIN part on part.recipe_id = recipe.id
+			LEFT JOIN ingredient on part.ingredient_id = ingredient.id
+			LEFT JOIN unit on part.unit_id = unit.id
+			LEFT JOIN ingredient_department on ingredient_department.ingredient_id = ingredient.id
+			LEFT JOIN department on department.id = ingredient_department.department_id
+		WHERE recipe.id IN (%s) AND recipe.account_id = ?
+		ORDER BY part.id;
+	`, strings.Join(placeholders, ","))
+
+	results, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("querying recipe ingredients: %w", err)
+	}
+	defer results.Close()
+
+	byRecipe := make(map[int][]common.Ingredient, len(ids))
+	for results.Next() {
+		var recipeID int
+		var name, unit, quantity, department sql.NullString
+		if err := results.Scan(&recipeID, &name, &unit, &quantity, &department); err != nil {
+			return nil, fmt.Errorf("scanning recipe ingredient row: %w", err)
+		}
+		// The Recipe exists even when the LEFT JOIN found it no Ingredient
+		// Lines; recording the key with a nil slice is what says so.
+		lines := byRecipe[recipeID]
+		if !name.Valid {
+			byRecipe[recipeID] = lines
+			continue
+		}
+		byRecipe[recipeID] = append(lines, common.Ingredient{
+			Name:       name.String,
+			Unit:       unit.String,
+			Quantity:   quantity.String,
+			Department: department.String,
+		})
+	}
+	if err := results.Err(); err != nil {
+		return nil, err
+	}
+
+	recipes := make([]common.Recipe, 0, len(ids))
+	for _, id := range ids {
+		lines, ok := byRecipe[id]
+		if !ok {
+			// Same sentinel the per-Recipe loop raised, for the same two
+			// reasons: the id is nobody's, or it belongs to another Account.
+			return nil, sql.ErrNoRows
+		}
+		if lines == nil {
+			lines = []common.Ingredient{}
+		}
+		recipes = append(recipes, common.Recipe{ID: id, Ingredients: lines})
+	}
+	return recipes, nil
+}
+
 // AddRecipe inserts recipe, ingredients into the DB. The recipe row and all of its
 // ingredient/unit/part/tag rows are written in one transaction, so a failure partway
 // through (e.g. a bad unit) doesn't leave an orphaned recipe with no Ingredient Lines.

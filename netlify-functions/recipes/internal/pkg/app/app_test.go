@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"net/http"
@@ -294,8 +295,19 @@ func (s *spyPurger) Purge(tag string) {
 // which cannot be reached without a database. What that leaves untested is the
 // call site itself; the e2e suite covers it by saving real Recipes, and a
 // missing call would show up there as a stale unit list rather than an error.
+//
+// purgeUnitsCache also clears the API's own in-process copy of the catalogs,
+// which this cannot see - Catalogs deliberately exposes no "is it loaded". That
+// half is covered by service's catalog_cache_test.go, and the reason the two
+// live in one method rather than two call sites is written up there and on
+// purgeUnitsCache itself. The interesting failure is clearing one and not the
+// other: the client would see a new Unit immediately while the Shopping List
+// went on combining without it, which reads as a combining bug.
 func TestRecipeWritesPurgeTheUnitsCache(t *testing.T) {
 	spy := &spyPurger{}
+	// catalogs is left nil on purpose: a nil *service.Catalogs invalidates
+	// harmlessly, which is the property that lets a test assemble an App from
+	// only the fields it cares about.
 	application := &App{purger: spy}
 
 	application.purgeUnitsCache()
@@ -433,5 +445,43 @@ func TestKeyLookupFailureIsRefusedNotPanicked(t *testing.T) {
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Errorf("GET /shopping-list with an unknown kid = %d, want 401", rec.Code)
+	}
+}
+
+// The span's user.sub must come from wherever the middleware actually puts the
+// identity, and this is the only thing that can say so.
+//
+// It is a regression test for a defect that shipped and went unnoticed for two
+// pull requests. The accessor GetRouter hands telemetry used to be an inline
+// closure reading `contextKey("userID")`; Phase 3 of
+// specs/completed/request-model-optimisations.md replaced that string in the context with
+// a *common.Caller and did not update it, so it read a key nothing writes and
+// every span went out with no user.sub at all.
+//
+// Nothing could catch it. An attribute that is absent is indistinguishable from
+// a request that genuinely had no user, so the traces looked plausible, the
+// tests passed, and the only symptom was a dashboard filter that matched
+// nothing. Hence a direct test of the accessor rather than of the span: the
+// coupling between "where the identity is stored" and "where telemetry looks
+// for it" is the thing that broke, and it is invisible from any other angle.
+func TestTheSpanCarriesTheAuthenticatedSubject(t *testing.T) {
+	// A nil DB is fine: withCaller's Account lookup is lazy and nothing here
+	// resolves it.
+	application := &App{}
+	ctx := application.withCaller(context.Background(), "auth0|somebody")
+
+	req := httptest.NewRequest(http.MethodGet, testBase+"/shopping-list", nil).WithContext(ctx)
+	if got := userSub(req); got != "auth0|somebody" {
+		t.Errorf("userSub = %q, want %q", got, "auth0|somebody")
+	}
+}
+
+// Before the auth middlewares there is no Caller, and /health never passes
+// through them at all. Reading the identity must be a no-op there, not a panic:
+// a trace attribute taking down an otherwise fine request is exactly what
+// ADR-0007 forbids.
+func TestTheSpanTolerantlyHasNoSubjectBeforeAuth(t *testing.T) {
+	if got := userSub(httptest.NewRequest(http.MethodGet, testBase+"/health", nil)); got != "" {
+		t.Errorf("userSub with no Caller = %q, want empty", got)
 	}
 }

@@ -483,6 +483,42 @@ goes 50 → ~21 on Phases 2 and 3 alone, with 4b and 5b expected to roughly halv
 an estimate on an estimate, and the route whose cost also grows with list size, so it is
 the one to measure most carefully.
 
+### Measured outcome — all six phases shipped
+
+Run on the rig below, 2026-08-16. The middle column is `master` with Phases 1-3 in; the
+last is with 4-6.
+
+| Route | #49 baseline | after 1-3 | after 4-6 | projected above |
+| --- | --- | --- | --- | --- |
+| `GET /shopping-list` | 15 | 7.03 | **2.08** | 2 |
+| `PATCH /shopping-list/buy` | 19 | 8.09 | **2.02** | ~2 |
+| `POST /shopping-list` (1 Recipe) | 42 | 18.41 | **8.16** | — |
+| `POST /shopping-list` (2 Recipes) | 50 | 21.45 | **8.10** | ~10 |
+| `GET /recipe/{id}` | 6 | 3.05 | 3.04 | — |
+| `GET /shopping-list/history` | 8 | 3.05 | 3.07 | — |
+| `GET /recipes` | 4 | 2.07 | 1.99 | — |
+
+**The slope went flat.** `POST /shopping-list` cost **+3.04 round trips per additional
+Recipe** after Phases 1-3 and now costs **-0.06** — nothing. That was 4b's whole point and
+the thing a single-size measurement cannot see: a ten-Recipe list was ~114 round trips at
+the #49 baseline and is now the same ~8 as a one-Recipe list.
+
+The counted projections held. `GET /shopping-list` landing on 2.08 against a counted 2 is
+worth stating given the caveat directly above it.
+
+Correctness was checked by diffing the full `GET /shopping-list` and `GET /recipe/{id}`
+responses between `master` and the branch against the same database: byte-identical, except
+that `recipes` now comes back in `list.id` order rather than whatever `SELECT DISTINCT`
+felt like. A Recipe carrying `Crème "brûlée" \ 50%` was saved and read back through the new
+batched query, since e2e fixtures are all ASCII.
+
+**Two expectations the measurement corrected.** Phase 6b is worth almost nothing on
+`GET /shopping-list`: with 5b's cache in place there is exactly one read left for it to be
+independent of, so it earns its keep only on the first request after a Recipe save. And the
+last of `GET /shopping-list`'s round trips is the Account lookup, which every other read
+has to wait for — so 2 is the floor without changing what `Caller` does, not a number with
+more to give.
+
 ## Appendix — the measurement rig
 
 Reproduces #49's method. Total request time is linear in injected latency and **the slope

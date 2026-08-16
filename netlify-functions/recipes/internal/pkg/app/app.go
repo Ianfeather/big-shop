@@ -32,6 +32,12 @@ type App struct {
 	// have coined a Unit. Never nil: unconfigured, purge.Purger is itself a
 	// no-op, which is what local development, e2e and CI get.
 	purger cachePurger
+	// catalogs holds the global Unit and Ingredient catalogs in process, so a
+	// shopping-list request does not re-read the whole of both tables. Cleared
+	// by the same handler that purges the edge cache - see purgeUnitsCache.
+	// A nil *service.Catalogs is a valid uncached cache, so nothing breaks if
+	// an App is built without one.
+	catalogs *service.Catalogs
 }
 
 // PurgeConfigured reports whether edge cache purging will actually happen, for
@@ -57,8 +63,9 @@ type contextKey string
 // NewApp returns the application itself
 func NewApp(env *common.Env) (*App, error) {
 	app := &App{
-		db:     env.DB,
-		purger: purge.New(),
+		db:       env.DB,
+		purger:   purge.New(),
+		catalogs: service.NewCatalogs(),
 	}
 	return app, nil
 }
@@ -246,6 +253,30 @@ func callerFrom(ctx context.Context) *common.Caller {
 	return ctx.Value(contextKey("caller")).(*common.Caller)
 }
 
+// userSub is the authenticated subject for the request's telemetry span, or ""
+// when there isn't one.
+//
+// A named function rather than the closure it used to be, so it can be tested.
+// It could not be, and it was wrong: Phase 3 of
+// specs/completed/request-model-optimisations.md replaced the bare `userID` string in the
+// context with a *common.Caller and left this reading `contextKey("userID")` -
+// a key nothing writes any more. Every span shipped without a user.sub from
+// then until now, which is precisely the failure telemetry.Middleware's own
+// comment warns about, arriving from the other direction. Nothing could notice,
+// because an absent attribute looks exactly like a request with no user.
+//
+// Comma-ok rather than callerFrom's deliberate panic. callerFrom is called from
+// handlers, where a missing Caller means the middleware stack is misassembled
+// and should fail loudly. Here it would mean a *trace attribute* taking down a
+// request that was otherwise fine, which ADR-0007 forbids outright.
+func userSub(r *http.Request) string {
+	caller, ok := r.Context().Value(contextKey("caller")).(*common.Caller)
+	if !ok {
+		return ""
+	}
+	return caller.UserID
+}
+
 // unauthorized writes the 401 body shape go-jwt-middleware itself uses, so a
 // refusal looks the same wherever in the auth chain it came from.
 func unauthorized(w http.ResponseWriter, message string) {
@@ -359,10 +390,7 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, huma.API, error) {
 	// The accessor is passed in rather than let telemetry read the context
 	// itself, because contextKey is unexported and Go compares context keys by
 	// type - see telemetry.Middleware's comment.
-	n.Use(negroni.HandlerFunc(telemetry.Middleware(base, RouteTemplates(api), func(r *http.Request) string {
-		sub, _ := r.Context().Value(contextKey("userID")).(string)
-		return sub
-	})))
+	n.Use(negroni.HandlerFunc(telemetry.Middleware(base, RouteTemplates(api), userSub)))
 	n.UseHandler(router)
 
 	return n, api, nil

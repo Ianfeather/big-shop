@@ -83,7 +83,7 @@ services:
       # the driver's guard against the multibyte escape-bypass charsets is
       # `Collation != "" && unsafeCollations[Collation]`, so leaving the
       # collation unset disarms it. Keep them together, and never add
-      # multiStatements - see specs/request-model-optimisations.md.
+      # multiStatements - see specs/completed/request-model-optimisations.md.
       DSN: "root:root@tcp(db:3306)/bigshop?parseTime=true&interpolateParams=true&collation=utf8mb4_general_ci"
       DISABLE_AUTH: "true"
       DEV_USER_ID: "local-dev-user"

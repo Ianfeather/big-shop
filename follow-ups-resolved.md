@@ -321,3 +321,60 @@ cross-references between entries (e.g. #9 references #16).
     (`TestKeyLookupFailureIsRefusedNotPanicked`) that unwinds on the panic; the discarded
     error from `jwt.ParseRSAPublicKeyFromPEM` next to it, which returned a nil key with a
     nil error, is returned too.
+
+53. ~~Cut the round trips per request, now that there is a measurement to cut
+    against.~~ **Resolved** — all six phases of
+    [`specs/completed/request-model-optimisations.md`](./specs/completed/request-model-optimisations.md)
+    have shipped. Phases 1-3 landed first (JWKS caching, `interpolateParams`, the lazily
+    resolved `Caller`); Phases 4-6 landed together and are what closes this.
+
+    Measured on the rig the spec describes — toxiproxy between the API and MySQL, slope of
+    total request time against injected downstream latency, which *is* the blocking
+    round-trip count. Before/after here is against `master` with Phases 1-3 already in, not
+    against the original #49 baseline:
+
+    | Route | #49 baseline | after Phases 1-3 | after 4-6 |
+    | --- | --- | --- | --- |
+    | `GET /shopping-list` | 15 | 7.03 | **2.08** |
+    | `PATCH /shopping-list/buy` | 19 | 8.09 | **2.02** |
+    | `POST /shopping-list` (1 Recipe) | 42 | 18.41 | **8.16** |
+    | `POST /shopping-list` (2 Recipes) | 50 | 21.45 | **8.10** |
+
+    The last row is the one that mattered most and the one a single-size measurement could
+    not have seen: the **slope went flat**. `POST /shopping-list` cost +3.04 round trips per
+    additional Recipe and now costs -0.06 — i.e. nothing. A ten-Recipe list was ~114 round
+    trips at the #49 baseline and is now the same 8 as a one-Recipe list. Two per-Recipe
+    loops caused it, both replaced by one statement: `GetRecipeByID` per Recipe (now
+    `GetRecipeIngredientsByIDs`, one query over the whole set) and `LogShoppingListEvent`'s
+    `INSERT` per Recipe (now one multi-row `INSERT`).
+
+    `GET /shopping-list` landing on 2.08 is exactly what the spec projected for
+    "+ Phase 5b", which is worth saying because the spec was explicit that only the Phase 2
+    figure was measured end to end and "the rest are counted, and counting is exactly what
+    #49 caught being wrong". This time the counting was right.
+
+    Correctness was checked by diffing the full `GET /shopping-list` and `GET /recipe/{id}`
+    responses between `master` and the branch against the same database: byte-identical,
+    except that the `recipes` array now comes back in `list.id` order rather than whatever
+    `SELECT DISTINCT` felt like. Nothing reads that order.
+
+    **What each phase actually did.** 4a: `PATCH /shopping-list/buy` returns
+    `StatusOutput` instead of re-running the whole of `GetShoppingList` to build a body
+    `pages/list.tsx` discards — 15 of its 19 original round trips were dead work end to end.
+    4b: the two per-Recipe loops above. 5a: `GetRecipesFromList`, `GetIngredientListItems`
+    and `GetExtraListItems` collapse into one `GetStoredList`, which reads the `list` table
+    once and partitions in Go. 5b: `service.Catalogs` holds the Unit and Ingredient catalogs
+    in process behind a 5-minute TTL, invalidated from the same call site that purges the
+    `units` edge tag — one place that knows the catalog changed, not two that have to stay
+    in step. 6a: the connection pool is chosen deliberately (20/8/5min) against TiDB Cloud
+    Starter's real 400-connection ceiling, with `db.Stats()` exported as OTel metrics so the
+    choice can be checked; the old `MaxIdleConns` default of 2 would have made 6b *slower*
+    than sequential. 6b: `GET`/`POST /shopping-list` run their independent reads under an
+    `errgroup`.
+
+    Two things the phases were expected to buy and did not, or not much. 6b is worth almost
+    nothing on `GET /shopping-list` now — with the catalogs in memory there is only one
+    read left to be independent of anything, so it earns its keep on the first request after
+    a Recipe save and nowhere else. And 5b's cache is the reason, which is the spec's own
+    point that "parallelising four round trips saves less than not making eleven of them"
+    arriving one phase earlier than expected.

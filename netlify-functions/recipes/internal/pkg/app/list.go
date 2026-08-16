@@ -42,7 +42,7 @@ type ShoppingListHistoryOutput struct {
 func (a *App) getList(ctx context.Context, _ *struct{}) (*ShoppingListOutput, error) {
 	caller := callerFrom(ctx)
 
-	list, err := service.GetShoppingList(ctx, caller, a.db)
+	list, err := service.GetShoppingList(ctx, caller, a.catalogs, a.db)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("Error Fetching Shopping List")
 	}
@@ -54,7 +54,7 @@ func (a *App) createList(ctx context.Context, input *CreateListInput) (*Shopping
 	caller := callerFrom(ctx)
 	recipeIDs := input.Body
 
-	list, err := service.GenerateShoppingList(ctx, recipeIDs, caller, a.db)
+	list, err := service.GenerateShoppingList(ctx, recipeIDs, caller, a.catalogs, a.db)
 
 	if err != nil {
 		if err == service.ErrInvalidRecipeID {
@@ -81,7 +81,21 @@ func (a *App) addExtraListItem(ctx context.Context, input *ListItemInput) (*Stat
 	return &StatusOutput{Body: common.SimpleResponse{Status: "ok"}}, nil
 }
 
-func (a *App) buyListItem(ctx context.Context, input *ListItemInput) (*ShoppingListOutput, error) {
+// buyListItem ticks or un-ticks one item and says nothing more than whether that
+// worked.
+//
+// It used to answer with the whole recomputed Shopping List, which cost fifteen
+// of the route's nineteen round trips: the write is four, and the rest re-ran
+// GetShoppingList in full - both global catalogs, Display Units, pantry marking,
+// rounding - to build a body **nothing reads**. pages/list.tsx discards
+// buyMutation's result and flips the checkbox optimistically in buyIngredient
+// instead, which the comment there records as deliberate. So the work was dead
+// end to end.
+//
+// Returning StatusOutput rather than 204 keeps the response shaped like every
+// other mutation on this API (addExtraListItem, editRecipe, deleteRecipe), and
+// keeps apiPatch's `parseBody` with something to parse.
+func (a *App) buyListItem(ctx context.Context, input *ListItemInput) (*StatusOutput, error) {
 	caller := callerFrom(ctx)
 	listItem := input.Body
 
@@ -93,12 +107,7 @@ func (a *App) buyListItem(ctx context.Context, input *ListItemInput) (*ShoppingL
 		return nil, huma.Error500InternalServerError("Error marking item as bought")
 	}
 
-	list, err := service.GetShoppingList(ctx, caller, a.db)
-	if err != nil {
-		return nil, huma.Error500InternalServerError("Error getting shopping list")
-	}
-
-	return &ShoppingListOutput{Body: *list}, nil
+	return &StatusOutput{Body: common.SimpleResponse{Status: "ok"}}, nil
 }
 
 func (a *App) clearList(ctx context.Context, _ *struct{}) (*ShoppingListOutput, error) {

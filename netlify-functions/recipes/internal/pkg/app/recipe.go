@@ -104,21 +104,32 @@ func (a *App) editRecipe(ctx context.Context, input *RecipeInput) (*StatusOutput
 	return &StatusOutput{Body: common.SimpleResponse{Status: "ok"}}, nil
 }
 
-// purgeUnitsCache invalidates the cached /units response at Netlify's edge.
+// purgeUnitsCache invalidates both caches over the global catalogs: the /units
+// response held at Netlify's edge, and the API's own in-process copy.
 //
-// Called after a Recipe create or edit because both run insertUnits, which
-// upserts every Unit the Recipe's ingredients reference - so either can coin a
-// Unit ("bunch", arriving via an import) that the cached catalog does not have.
-// Delete is deliberately not wired: it removes a Recipe's parts, never a Unit,
-// so there is nothing to invalidate and a purge there would only spend the rate
-// limit.
+// Called after a Recipe create or edit because both run insertUnits and
+// insertIngredients, which upsert every Unit and Ingredient the Recipe's lines
+// reference - so either can coin a Unit ("bunch", arriving via an import) that
+// the cached catalogs do not have - and then classifyNewIngredients, which
+// writes Base Units, Display Units, pantry flags and Unit Sizes. Delete is
+// deliberately not wired: it removes a Recipe's parts, never a Unit or an
+// Ingredient, so there is nothing to invalidate and a purge there would only
+// spend the rate limit.
+//
+// The two caches are cleared from **one** call site rather than two, on
+// purpose. They hold the same data for different readers - the edge serves
+// clients, the in-process copy serves this API's own combining logic - and a
+// save that cleared one but not the other would leave the Shopping List
+// combining against a catalog the client can already see is out of date. One
+// place that knows the catalog changed, not two that have to stay in step.
 //
 // Returns nothing and is called for effect, after the write has already
 // succeeded. It cannot fail the save: Purge dispatches in the background and
-// swallows its own errors, and if it were to do nothing at all the five-minute
-// s-maxage on /units is what makes that self-heal.
+// swallows its own errors, Invalidate cannot fail, and if both did nothing at
+// all the five-minute expiry on each is what makes that self-heal.
 func (a *App) purgeUnitsCache() {
 	a.purger.Purge(UnitsCacheTag)
+	a.catalogs.Invalidate()
 }
 
 func (a *App) deleteRecipe(ctx context.Context, input *DeleteRecipeInput) (*StatusOutput, error) {

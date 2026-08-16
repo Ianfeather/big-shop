@@ -1,6 +1,6 @@
 ---
 spec: specs/analytics-and-consent.md
-status: planned
+status: in-progress
 branch: implement/analytics-and-consent
 pr:
 ---
@@ -28,14 +28,40 @@ Decisions taken at planning time that the spec does not contain:
    actually does; the wording still wants Ian's read before it is public.
 
 ## Session 1: Privacy policy page
-Status: pending
+Status: done
 Scope: Spec Phase 1, first half. `pages/privacy.tsx` + styles, the processor list and storage
 inventory assembled from the code rather than from a template, Faro described plainly per the
 spec's Decided section, footer link from `pages/index.tsx`, and the shared `POLICY_VERSION`
 constant that Session 3 records against.
 Depends on: none
-Commit:
-Notes:
+Commit: 289345e
+Notes: Lint/typecheck/244 Vitest tests green. Both review axes ran; every finding was
+confirmed against the code and fixed rather than deferred. Three are worth carrying forward:
+
+- **`/privacy` was behind the auth gate.** `_app.tsx`'s `behindAuth` was `route !== '/'`, so a
+  logged-out visitor following the footer link was bounced to the homepage. Now a
+  `publicRoutes` list. **This is invisible under `npm run dev:full`** - the auth mock reports
+  `isAuthenticated: true` unconditionally - so any later session touching a logged-out surface
+  must verify with `NEXT_PUBLIC_DISABLE_AUTH=false` against the same containers, and with the
+  browser's real Auth0 session cleared. Session 2's banner is exactly such a surface.
+- **The page first described the finished feature, not what shipped with it** - it claimed GA
+  was in use and pointed at a "Cookie settings" control, neither of which existed. Corrected to
+  describe only what is live. **Session 2 must add the cookie-choice storage row and the
+  Cookie settings pointer; Session 4 must replace the "no analytics" section.** The page carries
+  a comment saying so.
+- **A JSX whitespace trap.** Text that spans several lines *and* contains an HTML entity loses
+  its leading space after a preceding element, so `<strong>x.</strong> Foo` rendered as `x.Foo`.
+  Only the bullets carrying `&mdash;` were hit. Fixed with explicit `{' '}`; the marketing page
+  was scanned and is clean.
+
+Also corrected several factual claims the reviews caught: photos are never stored
+(`recipe-image.ts` unlinks them), Dave sends whole recipes and list history to OpenAI rather
+than just names, and the "four things" list omitted preferences and shopping-list history.
+
+Shared chrome extracted to `pages/public-chrome.module.css`; both public pages compose from it.
+
+Note: `origin/master` moved during this session (#102, request-model-optimisations Phases 4-6).
+No overlap with these files; check mergeability before the PR.
 
 ## Session 2: Consent store and banner
 Status: pending

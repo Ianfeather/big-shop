@@ -7,6 +7,7 @@ Big Shop is a recipe management and meal planning app: a Next.js 16 / React 19 f
 - **What this product is** (Account, Recipe, Shopping List, and the rest of the domain vocabulary) → [CONTEXT.md](./CONTEXT.md)
 - **How it's built** (DB schema, API routes, component structure, hooks, deployment, dependencies) → [technical-architecture.md](./technical-architecture.md)
 - **Known issues we don't plan to fix** (investigated, judged not worth acting on — check here before chasing a surprising error) → [known-issues.md](./known-issues.md)
+- **What's queued, in flight and shipped** (the ticketing system — it is not in this repo) → [the bigshop Notion board](https://app.notion.com/p/87fae8a2ed054f2c874201e827639bd8), and "Tracking work" below
 
 ## How to run and test the app
 
@@ -161,7 +162,7 @@ npm run test         # run once
 npm run test:watch   # watch mode
 ```
 Config is `vitest.config.js`. Components/hooks/tests in this codebase are
-TypeScript (`.tsx`/`.ts`, see `follow-ups.md` #9). Test files live next to
+TypeScript (`.tsx`/`.ts`, see board item #9). Test files live next to
 the file under test (e.g. `components/button/index.test.tsx`,
 `hooks/use-page-visibility.test.ts`) — see those two for the established
 pattern.
@@ -221,7 +222,7 @@ migration and the e2e suite keeps running against the old schema — failing in
 ways that look like application bugs (every shopping-list request 500s on a
 missing column, so the list just renders empty) rather than like a stale
 environment. It also stops fixture recipes accumulating across runs, which they
-did, for months, because teardown deletes fail silently (follow-ups.md #24).
+did, for months, because teardown deletes fail silently (board item #24).
 
 The suite covers the core Recipe CRUD and Shopping List flows (add/edit/delete a
 Recipe; add/remove a Recipe on the list, add an Extra Item, mark/un-mark an item
@@ -246,7 +247,7 @@ nothing stops another file stomping it. `recipe-import.spec.ts` therefore
 asserts on the captured save payload rather than on the rendered list. Run this whenever a change touches
 recipe creation/editing/deletion or shopping-list behavior — Vitest alone
 won't catch a regression that only shows up going through the real API
-(e.g. a mismatched request content-type, as `follow-ups.md` #12 notes was
+(e.g. a mismatched request content-type, as board item #12 notes was
 caught this way).
 
 Also runs in CI via `.github/workflows/e2e.yml` on every pull request
@@ -289,6 +290,54 @@ Evals:
 ```bash
 npm run test:evals   # runs evals/run-evals.sh
 ```
+
+## Tracking work: the Notion board
+
+**The [bigshop Notion board](https://app.notion.com/p/87fae8a2ed054f2c874201e827639bd8)
+is the single source of truth for what is queued, in flight and finished.**
+Reach it through the `notion` MCP server: the database is
+`87fae8a2ed054f2c874201e827639bd8` and its data source (the one to create pages
+under, and to query with SQL) is
+`collection://f5066c26-2463-4017-a02d-c82c02eb23f3`.
+
+Each row has two properties: **Item** (the title) and **State**, one of
+
+| State | Meaning |
+| --- | --- |
+| `backlog` | Filed, not designed. The default for anything newly noticed. |
+| `spec written` | A spec exists under `specs/` and nothing has been built from it yet. |
+| `in development` | Someone is actively building it — a branch or an open PR exists. |
+| `done` | Shipped. |
+
+The row's page body carries the write-up: what the problem is, what was
+investigated, what was deliberately *not* done and why. That prose is the point
+of the board — keep writing it at the length the thing deserves, the way the
+entries migrated from `follow-ups.md` do. A one-line row is nearly worthless
+three months later.
+
+**How to work with it:**
+
+- **Noticing something worth doing → create a row in `backlog`.** Don't add it
+  to a markdown file, and don't leave it in a PR description.
+- **Starting work → move the row to `in development`.** Finishing it → `done`,
+  with the body updated to say what actually shipped, including anything the
+  original framing got wrong. Several migrated entries do exactly this (#44,
+  #49, #58) and they are the most useful ones on the board.
+- **Writing a spec for an item → move it to `spec written`** and link the spec
+  file from the body.
+- **Titles keep the `#N` prefix** for items that came from `follow-ups.md`, so
+  the cross-references in the bodies (and in code comments, migrations and
+  ADRs) still resolve. New items don't need a number.
+
+**`follow-ups.md` and `follow-ups-resolved.md` are a frozen archive.** Every one
+of their entries now lives on the board. They stay in the repo only because
+migrations, ADRs, specs and code comments cite them by path — **do not add to
+them, and do not edit them**. If an old entry needs correcting, correct the
+Notion row.
+
+`known-issues.md` is unaffected and is still the right place for a problem that
+has been investigated and deliberately will not be fixed. That is a different
+thing from a backlog item: nothing in `known-issues.md` is queued work.
 
 ## Shipping work: pull requests
 
@@ -370,6 +419,8 @@ check and delete it explicitly if it lingers.
 
 ## Useful External Links
 
+- [bigshop Notion board](https://app.notion.com/p/87fae8a2ed054f2c874201e827639bd8) —
+  the ticketing system. See "Tracking work: the Notion board" above.
 - [Netlify Dashboard](https://app.netlify.com/sites/big-shop/overview)
 - [Fly.io Dashboard](https://fly.io/apps/big-shop-api) — the Go API. First-time setup,
   cutover and rollback: [fly-migration-runbook.md](./docs/fly-migration-runbook.md)

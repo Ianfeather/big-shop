@@ -367,7 +367,7 @@ that, and so does anything added later.
 
 Three routes override it, each differently — the reasoning is in
 [ADR-0009](./docs/adr/0009-edge-caching-the-global-catalogs.md) and the audit that produced
-it is `follow-ups.md` #44:
+it is board item #44:
 
 | Route | `Cache-Control` | Notes |
 |---|---|---|

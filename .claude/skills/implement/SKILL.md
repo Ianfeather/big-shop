@@ -56,7 +56,7 @@ Any Session still `pending` → back to step 3. Every Session `done` → step 5.
 
 See [EVIDENCE.md](./EVIDENCE.md) for what counts as evidence and how to capture it — the rest of this skill doesn't need that detail, this one step does. **If any Session touched a user-visible surface, screenshots are required, not optional**: capture the golden path the spec describes, in the running app. Only a spec with no visible surface at all ships on metadata alone.
 
-Push the branch, then `gh pr create` with a body containing: a summary of what the spec asked for and what shipped, a Session-by-session checklist, the gathered evidence, and any `follow-ups.md` items opened along the way.
+Push the branch, then `gh pr create` with a body containing: a summary of what the spec asked for and what shipped, a Session-by-session checklist, the gathered evidence, and links to any [Notion board](https://app.notion.com/p/87fae8a2ed054f2c874201e827639bd8) rows opened along the way. Anything noticed but not fixed during the run becomes a `backlog` row on the board — never a note in the PR body alone, and never an addition to the frozen `follow-ups.md`. If the spec itself has a board row, move it to `done` at the same time.
 
 Set the state file's `status: complete` with the PR URL, then move the spec and its state file into `specs/completed/` — matching this repo's existing convention for finished specs.
 

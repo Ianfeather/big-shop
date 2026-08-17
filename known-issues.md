@@ -1,12 +1,19 @@
 # Known issues
 
-Defects that are real, understood, and **deliberately not being fixed**. Unlike
-[`follow-ups.md`](./follow-ups.md), nothing here is queued work — each entry has been
-investigated, judged not worth acting on, and written down so the next person to hit it
-does not re-investigate it. Every item records what would change that judgement.
+Defects that are real, understood, and **deliberately not being fixed**. Unlike the
+[bigshop Notion board](https://app.notion.com/p/87fae8a2ed054f2c874201e827639bd8),
+nothing here is queued work — each entry has been investigated, judged not worth acting
+on, and written down so the next person to hit it does not re-investigate it. Every item
+records what would change that judgement.
 
-Numbering is continuous with `follow-ups.md` (items 34 and 35 originated there), so
-existing cross-references in `specs/` still resolve.
+**This file is still live**; add to it as before. It is the counterpart to the board, not
+part of the archive: something you have decided *not* to do does not belong in a backlog.
+If a judgement here is ever reversed, open a `backlog` row on the board and leave the
+entry here pointing at it.
+
+Numbering is continuous with the board's `#N` item numbers (items 34 and 35 originated in
+the now-frozen [`follow-ups.md`](./follow-ups.md)), so existing cross-references in
+`specs/` still resolve.
 
 34. **`swagger-ui-react` logs a non-fatal TypeError under Turbopack.** Found while
     upgrading to Next.js 16, which makes Turbopack the default bundler. Only affects

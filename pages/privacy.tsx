@@ -3,6 +3,7 @@ import Link from 'next/link';
 import styles from './privacy.module.css';
 import Logo from '@components/svg/logo';
 import { POLICY_VERSION, policyLastUpdated } from '../lib/consent';
+import { useCookieSettings } from '@components/consent-banner';
 
 // The privacy policy. A public page, reachable logged-out from the marketing
 // footer, so it is built on the same "Cookbook" furniture as pages/index.tsx -
@@ -96,6 +97,10 @@ const deviceStorage = [
     detail: 'Set by Auth0 so you stay logged in between visits. Cleared when you log out.',
   },
   {
+    what: 'Your cookie choice',
+    detail: 'Whether you accepted or declined analytics, and which version of this policy you decided against.',
+  },
+  {
     what: 'Shopping list layout',
     detail: 'Small display preferences, like whether the store-cupboard group is open.',
   },
@@ -110,6 +115,8 @@ const deviceStorage = [
 ];
 
 export default function Privacy() {
+  const openCookieSettings = useCookieSettings();
+
   return (
     <>
       <Head>
@@ -239,9 +246,16 @@ export default function Privacy() {
           <section className={styles.section}>
             <h2 className={styles.heading}>Analytics</h2>
             <p>
-              Big Shop does not currently use any analytics &mdash; no Google Analytics, no
-              third-party tracking of any kind. The only thing watching the app is the error
-              reporting described above.
+              <strong>Big Shop runs no analytics today.</strong>{' '}
+              No Google Analytics, no third-party tracking, nothing counting what you do. The only
+              thing watching the app is the error reporting described above.
+            </p>
+            <p>
+              The cookie banner still asks, because that is due to change, and we would rather
+              have your answer before anything starts collecting than after. Whatever you choose
+              now is what will apply: decline and nothing will ever load &mdash; not a reduced
+              version, not a cookieless one. You can change your mind whenever you like, using the
+              Cookie settings link at the bottom of this page.
             </p>
           </section>
 
@@ -346,6 +360,9 @@ export default function Privacy() {
         <footer className={styles.footer}>
           <Logo className={styles.footerMark} />
           <p>Big Shop &mdash; recipes in, shopping list out.</p>
+          <nav className={styles.footerLinks}>
+            <button type="button" onClick={openCookieSettings}>Cookie settings</button>
+          </nav>
         </footer>
       </div>
     </>

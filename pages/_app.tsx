@@ -9,6 +9,7 @@ import useAuth0, { authDisabled } from '@hooks/use-auth';
 import { requireEnv } from '../lib/env';
 import { appOrigin } from '../lib/app-origin';
 import { identifyUser, setupFaro, setView } from '../lib/telemetry/faro';
+import { ConsentProvider } from '@components/consent-banner';
 
 // Started here rather than at module scope so it runs in the browser only, and
 // once. _app.tsx is also rendered on the server, where there is no window for
@@ -89,10 +90,26 @@ export default function App({ Component, pageProps, router }: AppProps) {
     <Component {...pageProps} />
   );
 
+  // ConsentProvider sits *outside* InnerApp and outside Auth0Provider below,
+  // and both of those are the point.
+  //
+  // Outside InnerApp, because InnerApp renders nothing at all until Auth0 has
+  // resolved (`if (isLoading || !isAuthenticated) return false`). A banner
+  // inside it would be invisible on every logged-out page - which is every page
+  // a first-time visitor sees, and the only place the question is ever asked.
+  //
+  // Outside Auth0Provider, because consent is not an authenticated concern: the
+  // decision is taken on the marketing page by someone who has no account and
+  // may never have one, and it is read from synchronous localStorage. Nesting
+  // it inside would tie a banner that needs nothing to a provider that does a
+  // token refresh over the network - the fourth flash follow-ups.md #58 warns
+  // about.
   const wrappedContent = (
-    <QueryClientProvider client={queryClient}>
-      {content}
-    </QueryClientProvider>
+    <ConsentProvider>
+      <QueryClientProvider client={queryClient}>
+        {content}
+      </QueryClientProvider>
+    </ConsentProvider>
   );
 
   // With auth disabled, useAuth0() resolves to a fixed mock user rather than

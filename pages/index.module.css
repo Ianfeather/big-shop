@@ -609,28 +609,8 @@
   width: 40px;
 }
 
-/* Wraps rather than shrinks: the footer centres a row of small type, and on a
-   narrow phone the links belong under the strapline instead of squeezing it. */
 .footerLinks {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.footerLinks a {
-  color: var(--ink-soft);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.footerLinks a:hover {
-  color: var(--ink);
-}
-
-.footerLinks a:focus-visible {
-  outline: 2px solid var(--spot);
-  outline-offset: 3px;
+  composes: footerLinks from './public-chrome.module.css';
 }
 
 /* ---------- responsive ---------- */

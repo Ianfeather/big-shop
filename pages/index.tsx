@@ -7,6 +7,7 @@ import styles from './index.module.css';
 import Logo from '@components/svg/logo';
 import useAuth0 from '@hooks/use-auth';
 import useLogin from '@hooks/use-login';
+import { useCookieSettings } from '@components/consent-banner';
 import { apiPost, apiPatch } from '../lib/api-client';
 import { arrivedFromLogin } from '../lib/auth-callback';
 import type { User } from '../types/models';
@@ -153,6 +154,7 @@ const PreviewItem = ({ name, amount, bought = false }: PreviewItemProps) => (
 const Index = () => {
   const { isAuthenticated, isLoading, user, getAccessTokenSilently } = useAuth0();
   const { logIn, signUp } = useLogin();
+  const openCookieSettings = useCookieSettings();
   const router = useRouter();
   // null until POST /user has come back and said which of the two this is.
   // Neither state hides the page any more - 'onboarding' swaps the CTAs, and
@@ -476,6 +478,7 @@ const Index = () => {
           <p>Big Shop &mdash; recipes in, shopping list out.</p>
           <nav className={styles.footerLinks}>
             <Link href="/privacy">Privacy</Link>
+            <button type="button" onClick={openCookieSettings}>Cookie settings</button>
           </nav>
         </footer>
       </div>

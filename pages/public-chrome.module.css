@@ -128,3 +128,42 @@
   stroke-miterlimit: 10;
   stroke-width: 6px;
 }
+
+/* Small print links beside the strapline. Wraps rather than shrinks: the footer
+   centres a row of small type, and on a narrow phone the links belong under the
+   strapline instead of squeezing it.
+
+   Styles both an <a> and a <button> because the two controls that live here are
+   a Link to /privacy and a button that re-opens the cookie banner - and they
+   have to be visually indistinguishable, since to a reader they are the same
+   kind of thing. */
+.footerLinks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.footerLinks a,
+.footerLinks button {
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--ink-soft);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.footerLinks a:hover,
+.footerLinks button:hover {
+  color: var(--ink);
+}
+
+.footerLinks a:focus-visible,
+.footerLinks button:focus-visible {
+  outline: 2px solid var(--spot);
+  outline-offset: 3px;
+}

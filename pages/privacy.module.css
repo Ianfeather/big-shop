@@ -46,6 +46,10 @@
   width: 28px;
 }
 
+.footerLinks {
+  composes: footerLinks from './public-chrome.module.css';
+}
+
 /* ---------- prose ---------- */
 
 

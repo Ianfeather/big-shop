@@ -1,4 +1,5 @@
 import styles from './account.module.css';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import Invite from '@components/invite';
@@ -8,6 +9,7 @@ import { queryKeys } from '../lib/query-keys';
 import Layout, { MainContent, Sidebar } from '@components/layout'
 import PageHeading from '@components/page-heading';
 import Button from '@components/button';
+import { useCookieSettings } from '@components/consent-banner';
 import type { Invite as InviteModel } from '../types/models';
 
 const List = () => {
@@ -20,6 +22,7 @@ const List = () => {
   let [successMessage, setSuccessMessage] = useState<string | false>(false);
   const { user, getAccessTokenSilently } = useAuth0();
   const queryClient = useQueryClient();
+  const openCookieSettings = useCookieSettings();
 
   const { data: fetchedInvites } = useQuery<InviteModel[]>({
     queryKey: queryKeys.invites,
@@ -131,6 +134,25 @@ const List = () => {
             { successMessage && (
               <h3>{successMessage}</h3>
             )}
+          </div>
+
+          {/* The in-app half of the withdrawal path. The banner asks the
+              question on the marketing page, and both public pages carry a
+              "Cookie settings" control in their footer - but a logged-in user
+              never sees either of those again, and components/layout has no
+              footer to put one in. Without this, consent could be given once
+              and never revisited, which is the thing that makes it not consent.
+              /account is where it belongs rather than the user menu: it is
+              already the page for "things about you", and it is one click from
+              anywhere via that menu. */}
+          <div className={styles.accountModule}>
+            <h3 className={styles.moduleHeading}>Privacy and cookies</h3>
+            <p>
+              What Big Shop stores, and who else sees it, is set out in the{' '}
+              <Link href="/privacy">privacy policy</Link>. Analytics is the one part you choose,
+              and you can change your mind whenever you like.
+            </p>
+            <Button style="primary" onClick={openCookieSettings}>Cookie settings</Button>
           </div>
         </div>
       </MainContent>

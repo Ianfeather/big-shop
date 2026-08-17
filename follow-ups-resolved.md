@@ -509,26 +509,37 @@ cross-references between entries (e.g. #9 references #16).
     defines as global and non-personal, and `TestGlobalCatalogsAnswerWithoutAToken` pins both
     halves — the three answer without a token, and `GET /recipes` still does not.
 
-    **The one assumption, and how to close it.** The item flagged "that Netlify's CDN caches a
-    response fetched by one of its own functions" as unverified and the thing to test first. It
-    could not be closed on the deploy preview, because `netlify.toml` rewrites `/api/bigshop/*`
-    to *production's* Fly app and the API deploys only from `master` — so a preview always runs
-    new frontend against old API. What the preview did establish is that Netlify Edge is in the
-    path for that rewrite, evaluates the proxied response, honours its directives (it declined to
-    store a `private, no-store` 401), and reports the outcome in `cache-status`, where a stored
-    response carries an explicit `stored` token. So the remaining step is one command, not an
-    experiment:
+    **The one assumption, now verified in production.** The item flagged "that Netlify's CDN
+    caches a response fetched by one of its own functions" as unverified and the thing to test
+    first. It could not be closed on a deploy preview, because `netlify.toml` rewrites
+    `/api/bigshop/*` to *production's* Fly app while the API deploys only from `master` — so a
+    preview always runs new frontend against old API. Checked against production once this
+    shipped, and it holds:
 
-    ```bash
-    curl -sI https://www.bigshop.life/api/bigshop/ingredients | grep -i cache-status
-    # want: ...; fwd=miss; fwd-status=200; stored   (first request)
-    # then: ...; hit                                 (second, within 300s)
+    ```
+    GET https://www.bigshop.life/api/bigshop/ingredients
+      1st  cache-control: public,max-age=0,s-maxage=300
+           cache-status: "Netlify Edge"; fwd=miss; fwd-status=200; stored
+      2nd  cache-status: "Netlify Edge"; hit; ttl=291
+    /units behaves identically: stored, then hit; ttl=300.
     ```
 
-    If it says neither, the change is inert rather than harmful — imports pay one extra hop, the
-    new span shows it, and the revert is the host choice in `known-names.ts`. Also confirmed
-    rather than assumed on the way past: `netlify-vary: query`, so `Authorization` is genuinely
-    not part of Netlify's cache key.
+    So the endpoint is genuinely edge-cached and a hit never reaches Frankfurt. Checked at the
+    same time: `/ingredients`, `/units` and `/tags` answer 200 without a token, and `/recipes`,
+    `/shopping-list`, `/account` and `/user` all still answer 401 — the carve-out did not widen.
+    `netlify-vary: query` confirms rather than assumes that `Authorization` is not part of the
+    cache key.
+
+    **The catalog is 439 Ingredients and 10.4 KB today**, with 13 Units. Worth having as the
+    baseline the span's length attribute is there to watch: this is the payload every import used
+    to cross the Atlantic for, and it only grows.
+
+    **What is still not measured is the latency saved**, which needs the `bigshop.known_names`
+    span from a real Netlify function. A `curl` comparison from a laptop cannot stand in for it,
+    and trying it demonstrates why: measured from the UK, going direct to Frankfurt is *faster*
+    than the edge (~62ms vs ~80ms), because the laptop is near the origin and the functions are
+    not. The whole premise is that they run in us-east-2. That is exactly the number the span was
+    added to produce, and it needs production import traffic rather than another experiment.
 
     **Deployment ordering.** The frontend (Netlify) and the API (Fly) deploy independently and
     nothing sequences them. If the frontend lands first it sends no token to an API that still

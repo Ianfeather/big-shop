@@ -82,6 +82,41 @@
   color: var(--paper);
 }
 
+/* ---------- the data-auth stamp ----------
+
+   Whether this page addresses a visitor or a customer - the header button and
+   both calls to action - decided in CSS rather than in React, so the answer is
+   already in the first paint. pages/_document.tsx guesses the stamp from
+   Auth0's own storage before the body renders; pages/index.tsx overwrites it
+   with the truth once the SDK has one. See follow-ups.md #58.
+
+   The default - no stamp at all - is the logged-out page. That is what the
+   statically cached HTML is built as, what every anonymous visitor sees, and
+   what happens if the hint script throws or never runs. Getting the default
+   right is most of why this is safe.
+
+   These two rules only ever *hide*. Neither restores a display value, which is
+   what lets the same pair of classes sit on a flex `.actions` row, an
+   inline-block `.primary` and a block `<p>` without any of them naming its own
+   layout twice. `html:not([data-auth='in'])` is what makes the unset default
+   logged-out. */
+
+:global(html:not([data-auth='in'])) .whenLoggedIn {
+  display: none;
+}
+
+:global(html[data-auth='in']) .whenLoggedOut {
+  display: none;
+}
+
+/* Mid-flight back from Auth0's login page, with /list already on its way.
+   `visibility` rather than `display` so the page keeps its layout and the
+   paper background stays - a blank sheet for a moment, not a white flash and
+   a reflow. */
+:global(html[data-auth='returning']) .page {
+  visibility: hidden;
+}
+
 .logIn:focus-visible,
 .primary:focus-visible {
   outline: 2px solid var(--spot);

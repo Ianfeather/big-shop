@@ -2,7 +2,7 @@
 
 Small defects and doc-drift found while building `CONTEXT.md` from the codebase (2026-07-13). Not designed here — just flagged for later action.
 
-Items 1–30, 32, 33, 36, 39, 40, 44, 48, 49, 53 and 56 have all been resolved — see [`follow-ups-resolved.md`](./follow-ups-resolved.md) for the full history (numbering preserved for cross-references between entries).
+Items 1–30, 32, 33, 36, 39, 40, 44, 48, 49, 53, 56 and 58 have all been resolved — see [`follow-ups-resolved.md`](./follow-ups-resolved.md) for the full history (numbering preserved for cross-references between entries).
 
 Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are real but deliberately not being fixed, so they are not queued work.
 
@@ -549,60 +549,6 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     JWKS, explicitly to prevent SSRF. On v2 a token carrying an attacker-chosen `iss`
     reaches the key fetch first, which is the shape #54 flagged as "unauthenticated work"
     in the first place.
-
-58. **A logged-in user sees the marketing page flash before the homepage realises who they
-    are.** Going to `/` while already logged in renders the full pitch — hero, list preview,
-    the lot — then blanks, then lands on `/list`. Three states where there should be one,
-    and the first of them is the page that exists to sell the product to someone who does
-    not have it.
-
-    The guard is already there and covers the wrong half of the window.
-    `pages/index.tsx:198` reads
-
-    ```ts
-    const resolvingLoggedInUser = isAuthenticated && status !== 'onboarding';
-    ```
-
-    which blanks the page once Auth0 has confirmed a session but the `POST /user` behind
-    `status` has not come back yet. What it does not cover is *before* that: while the SDK
-    is still checking, `isLoading` is true and `isAuthenticated` is **false**, which is
-    indistinguishable from logged-out as far as that line is concerned, so the marketing
-    page renders in full. The comment above it already states the intent ("kept blank
-    rather than flashing the marketing copy at an already-onboarded user") — the condition
-    just does not implement it.
-
-    So the sequence is: marketing page (Auth0 loading) → blank (`isAuthenticated`, awaiting
-    `POST /user`) → `router.replace('/list')` at `pages/index.tsx:180`. The header shows
-    the same seam on its own, without any redirect: `pages/index.tsx:228` swaps "Log in"
-    for "Your shopping list" when `isAuthenticated` flips, so a returning user watches the
-    button change under the cursor.
-
-    **`isLoading || isAuthenticated` is the obvious fix and it is not free**, which is why
-    this is written down rather than done. That blanks the homepage for *every* first-time
-    anonymous visitor for as long as the Auth0 check takes — and they are the entire
-    audience for that page. `_app.tsx` configures `cacheLocation="localstorage"` with
-    `useRefreshTokens={true}`, so the check can involve a token refresh over the network,
-    not just a synchronous read. Trading a flash seen by returning users for a blank screen
-    seen by new ones is the wrong way round; #42 is about exactly how fragile that first
-    visit is.
-
-    Two directions worth costing before picking one:
-
-    - **Decide synchronously from the SDK's own cache.** With `cacheLocation="localstorage"`
-      the client writes a key prefixed `@@auth0spajs@@::<clientId>::…`, readable on first
-      render before any network call. Its presence is a good-enough hint of "there was a
-      session here" to choose between blanking and rendering, with the real answer still
-      arriving normally. Needs checking against the SDK version actually installed rather
-      than assumed — the key format is internal and has changed before.
-    - **Stop making `/` do two jobs.** The redirect exists because the marketing page and
-      the logged-in entry point share a route. A logged-in user could be sent to `/list`
-      before the page renders at all, which is a Next.js middleware or a server-side
-      session question, and would settle #42's "land in an account holding nothing" problem
-      in the same move rather than layering another client-side guard on top.
-
-    Not urgent — it is cosmetic, and only on a route a logged-in user reaches by typing the
-    bare domain. But it reads as broken to the one audience that already trusts the
-    product, and the fix is cheap in one of the two directions above.
 
 59. **There is no way to delete an Account, and GDPR requires one.** Raised alongside #43
     (2026-08-16), which builds the privacy policy that will have to describe this right

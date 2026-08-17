@@ -8,6 +8,7 @@ import Logo from '@components/svg/logo';
 import useAuth0 from '@hooks/use-auth';
 import useLogin from '@hooks/use-login';
 import { apiPost, apiPatch } from '../lib/api-client';
+import { arrivedFromLogin } from '../lib/auth-callback';
 import type { User } from '../types/models';
 
 // The logged-out homepage: a marketing page for someone who has never heard of
@@ -15,8 +16,14 @@ import type { User } from '../types/models';
 // brand purple as a spot colour - which the Shopping List now shares (see
 // pages/styles.css's "Cookbook" tokens and components/layout/header.module.css).
 //
-// An already-onboarded user never sees any of it: the effect below redirects
-// them to /list, exactly as this page did before it was rewritten.
+// A logged-in user sees all of it too. This page used to redirect them to
+// /list, which is what made it flash the pitch at its own customers on the way
+// past - marketing page, then blank, then /list, three states where there
+// should be one (follow-ups.md #58). The redirect is gone; `/` now does one
+// job, and the header is what tells a logged-in visitor where their list is.
+//
+// One arrival is still sent onward: coming back from Auth0's login page, where
+// staying put would make the Log in button look broken. See lib/auth-callback.ts.
 
 // The two human needs underneath the mechanics: the deciding, and the buying
 // twice. Both are written as a concession followed by the real claim - saying
@@ -147,9 +154,9 @@ const Index = () => {
   const { isAuthenticated, isLoading, user, getAccessTokenSilently } = useAuth0();
   const { logIn, signUp } = useLogin();
   const router = useRouter();
-  // null while we're still checking onboarded status - kept blank rather than
-  // flashing the marketing copy at an already-onboarded user who's about to be
-  // redirected to /list.
+  // null until POST /user has come back and said which of the two this is.
+  // Neither state hides the page any more - 'onboarding' swaps the CTAs, and
+  // 'redirecting' only ever happens on the way out to /list.
   const [status, setStatus] = useState<'onboarding' | 'redirecting' | null>(null);
 
   // Neither mutation invalidates: no cached query reads User state, and on
@@ -174,10 +181,21 @@ const Index = () => {
     async function resolveOnboarding() {
       if (!user) return;
       const { name, email } = user;
+      // Still unconditional, and still on this page only: POST /user is what
+      // creates the User row and its Account on a first login, and `/` is its
+      // only caller in the app. It is an idempotent upsert, so running it on
+      // an ordinary visit from an already-known user costs one request and
+      // repairs the case where the original call failed.
       const saved = await saveUserMutation.mutateAsync({ name, email }).catch(() => undefined);
       if (saved?.onboarded) {
-        setStatus('redirecting');
-        router.replace('/list');
+        // The only surviving redirect. They clicked Log in, went to Auth0, and
+        // came back here because that is where redirect_uri points - so send
+        // them into the product. Someone who simply typed the bare domain did
+        // not ask to go anywhere, and stays.
+        if (arrivedFromLogin) {
+          setStatus('redirecting');
+          router.replace('/list');
+        }
         return;
       }
       // First-time user: show the onboarding screen once, and mark them
@@ -188,14 +206,49 @@ const Index = () => {
     resolveOnboarding();
   }, [isLoading, isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // A first-time user who has just signed up lands here once. They don't need
-  // selling to any more, so both CTAs become the one link into the product.
-  const onboarding = status === 'onboarding';
+  // Both CTAs come in two versions - "sign up" and "go to your list" - and,
+  // like the header, which one shows is decided in CSS from the `data-auth`
+  // stamp rather than here. Anyone logged in gets the second: they do not need
+  // selling to, and telling an existing customer to "Add your first recipe"
+  // under the word "Free" is nonsense the moment this page stops redirecting
+  // them away.
+  //
+  // This used to be keyed off `status === 'onboarding'`, which reached the same
+  // two variants by a narrower route - a first-time user, once, immediately
+  // after signing up. Every logged-in visitor is now that audience, so the
+  // stamp subsumes it and the flag is gone. `status` still exists; it decides
+  // the redirect and nothing about what is rendered.
 
-  // Blank rather than the marketing copy for anyone already logged in whose
-  // onboarding state is still being resolved: they're about to be sent to
-  // /list, and a flash of the pitch on the way there reads as a bug.
-  const resolvingLoggedInUser = isAuthenticated && status !== 'onboarding';
+  // The authoritative half of the `data-auth` stamp that pages/_document.tsx
+  // guesses at before first paint. Everything the stamp drives is in
+  // index.module.css; React sets the attribute and does not branch on it, so
+  // the markup is identical on the server and the client and there is no
+  // hydration mismatch to reconcile.
+  //
+  // Writing it from an effect rather than during render is the point: this
+  // runs after the guess has already done its job, and its only purpose is to
+  // correct the guess once Auth0 has actually answered.
+  useEffect(() => {
+    const el = document.documentElement;
+    // While the SDK is still checking, leave the pre-paint guess exactly where
+    // it is. It is the best answer available, and replacing it with 'out' here
+    // would produce the "Log in" button flickering into "Your shopping list"
+    // that this whole mechanism exists to remove.
+    if (isLoading) return;
+
+    // Hold the page veiled only while an authenticated arrival is genuinely
+    // still on its way to /list. Every other outcome reveals it - including a
+    // login that failed, which is what stops a bad callback stranding someone
+    // on a blank screen.
+    const leaving = isAuthenticated && arrivedFromLogin && status !== 'onboarding';
+    el.dataset.auth = leaving ? 'returning' : isAuthenticated ? 'in' : 'out';
+
+    // <html> outlives this page. Left alone, a client-side navigation to /list
+    // would carry 'returning' with it - harmless, since every rule keyed off it
+    // is scoped to this page's styles, but a stale attribute that only looks
+    // harmless is the kind of thing the next person has to re-derive.
+    return () => { delete el.dataset.auth; };
+  }, [isLoading, isAuthenticated, status]);
 
   return (
     <>
@@ -216,7 +269,6 @@ const Index = () => {
         <link href="/static/icon512.png" rel="apple-touch-startup-image" />
       </Head>
 
-      {resolvingLoggedInUser ? <div className={styles.page} /> : (
       <div className={styles.page}>
         <div className={styles.grain} aria-hidden="true" />
 
@@ -225,13 +277,24 @@ const Index = () => {
             <Logo className={styles.mark} />
             <span className={styles.wordmark}>Big Shop</span>
           </a>
-          {isAuthenticated ? (
-            <Link href="/list" className={styles.logIn}>Your shopping list</Link>
-          ) : (
-            <button type="button" className={styles.logIn} onClick={logIn} disabled={isLoading}>
-              Log in
-            </button>
-          )}
+          {/* Both affordances are always in the markup, and CSS decides which
+              one is shown from the `data-auth` stamp on <html>. That is what
+              lets the right one be painted before React has run at all - a
+              ternary here could only ever swap it after hydration, which is
+              the seam follow-ups.md #58 describes as changing under the
+              cursor. The hidden one is `display: none`, so it is out of the
+              accessibility tree too rather than announced twice. */}
+          <Link href="/list" className={`${styles.logIn} ${styles.whenLoggedIn}`}>
+            Your shopping list
+          </Link>
+          <button
+            type="button"
+            className={`${styles.logIn} ${styles.whenLoggedOut}`}
+            onClick={logIn}
+            disabled={isLoading}
+          >
+            Log in
+          </button>
         </header>
 
         <main id="top">
@@ -248,24 +311,19 @@ const Index = () => {
                 single shopping list &mdash; ingredients added up across every dish and sorted by aisle.
                 One decision on Sunday, one trip, nothing bought twice.
               </p>
-              {onboarding ? (
-                <div className={styles.actions}>
-                  <Link href="/list" className={styles.primary}>Start building your shopping list</Link>
-                </div>
-              ) : (
-                <>
-                  {/* One action only. Anyone who already has an account has the
-                      Log in button in the header, three inches up. */}
-                  <div className={styles.actions}>
-                    <button type="button" className={styles.primary} onClick={signUp}>Add your first recipe</button>
-                  </div>
-                  <p className={styles.footnote}>
-                    <strong className={styles.free}>Free.</strong>{' '}
-                    No card, no app to install &mdash; it works on the phone that’s already in your
-                    hand at the shop.
-                  </p>
-                </>
-              )}
+              <div className={`${styles.actions} ${styles.whenLoggedIn}`}>
+                <Link href="/list" className={styles.primary}>Start building your shopping list</Link>
+              </div>
+              {/* One action only. Anyone who already has an account has the
+                  Log in button in the header, three inches up. */}
+              <div className={`${styles.actions} ${styles.whenLoggedOut}`}>
+                <button type="button" className={styles.primary} onClick={signUp}>Add your first recipe</button>
+              </div>
+              <p className={`${styles.footnote} ${styles.whenLoggedOut}`}>
+                <strong className={styles.free}>Free.</strong>{' '}
+                No card, no app to install &mdash; it works on the phone that’s already in your
+                hand at the shop.
+              </p>
             </div>
 
             <div className={styles.heroCard}>
@@ -401,16 +459,15 @@ const Index = () => {
               <br />
               <em>one list</em> to buy it.
             </h2>
-            {onboarding ? (
-              <Link href="/list" className={styles.primary}>Start building your shopping list</Link>
-            ) : (
-              <>
-                <button type="button" className={styles.primary} onClick={signUp}>Start with one recipe</button>
-                <p className={styles.closerFootnote}>
-                  <strong className={styles.free}>Free.</strong> One recipe is enough to make a list.
-                </p>
-              </>
-            )}
+            <Link href="/list" className={`${styles.primary} ${styles.whenLoggedIn}`}>
+              Start building your shopping list
+            </Link>
+            <button type="button" className={`${styles.primary} ${styles.whenLoggedOut}`} onClick={signUp}>
+              Start with one recipe
+            </button>
+            <p className={`${styles.closerFootnote} ${styles.whenLoggedOut}`}>
+              <strong className={styles.free}>Free.</strong> One recipe is enough to make a list.
+            </p>
           </section>
         </main>
 
@@ -419,7 +476,6 @@ const Index = () => {
           <p>Big Shop &mdash; recipes in, shopping list out.</p>
         </footer>
       </div>
-      )}
     </>
   );
 };

@@ -107,7 +107,7 @@ The recipe image extraction uses Netlify Blobs to store async job results; the f
 
 ## Database Schema
 
-Production: TiDB (MySQL-compatible). Migrations in `migrations/` applied manually, in order — there is no consolidated schema file, so `migrations/*.sql` (currently 32 files) is the authoritative source for exact columns/constraints.
+Production: TiDB (MySQL-compatible). Migrations in `migrations/` applied manually, in order — there is no consolidated schema file, so `migrations/*.sql` (currently 34 files) is the authoritative source for exact columns/constraints.
 
 | Table | Purpose |
 |-------|---------|
@@ -126,6 +126,7 @@ Production: TiDB (MySQL-compatible). Migrations in `migrations/` applied manuall
 | `account_user` | User ↔ account join (user_id is Auth0 string ID) |
 | `invite` | Email invitations with expiring tokens |
 | `user` | Auth0-backed user identity, plus per-user flags: `onboarded` and `show_pantry_staples` (view preference — see CONTEXT.md's Pantry Staple) |
+| `consent_event` | **Append-only** record of analytics-consent decisions (user_id, analytics, policy_version, source, created_at). Never updated and never deleted: a withdrawal is a new row, because the question it answers is "what did they consent to, and when", including consents since withdrawn. Deliberately carries no IP address or user agent — see `migrations/034_consent_event.sql` |
 
 ## Component Structure
 
@@ -139,6 +140,9 @@ Components are organized by feature with index files:
 - `components/identity/`: Auth0 login/logout/create account buttons
 - `components/dave-chat/`: Conversational chat UI for Dave AI assistant
 - `components/invite/`: Invite card for account sharing flow
+- `components/consent-banner/`: The cookie banner, plus the `ConsentProvider`/`useCookieSettings()` pair that lets any page re-open it. Mounted in `_app.tsx` **outside `InnerApp`**, because `InnerApp` renders nothing until Auth0 resolves and the question is only ever asked on a logged-out page
+- `components/consent-sync/`: Renders nothing. Carries a browser consent decision to `POST /consent` once there is an account to attach it to, and adopts the server's when that one is newer. Mounted *inside* `InnerApp`, being the half that needs auth
+- `components/analytics/`: Renders nothing. Turns the consent decision into GA being loaded or not, and reports page views from an effect on the router's own state (deliberately *not* a `routeChangeComplete` listener — see the component)
 - `components/button/`, `components/message/`, `components/svg/`: Shared UI primitives
 - Each directory typically has `index.js` and a CSS module
 
@@ -162,6 +166,9 @@ Components are organized by feature with index files:
 | `use-viewport.js` | Track window width for responsive design |
 | `use-interval.js` | `setInterval` wrapper that pauses when page is hidden |
 | `use-page-visibility.js` | Detect `document.visibilityState` changes |
+| `use-local-storage-flag.ts` | A boolean view preference kept on the device, read through `useSyncExternalStore` so SSR and the first client render agree |
+| `use-synced-flag.ts` | The same, but with the server as source of truth and localStorage as a cache that paints first |
+| `use-consent.ts` | The analytics-consent decision: `unset` / `granted` / `denied`, where `unset` is what shows the banner and is deliberately not the same as `denied` |
 
 ## Data Fetching & Cache Invalidation
 

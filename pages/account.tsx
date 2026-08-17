@@ -10,6 +10,7 @@ import Layout, { MainContent, Sidebar } from '@components/layout'
 import PageHeading from '@components/page-heading';
 import Button from '@components/button';
 import { useCookieSettings } from '@components/consent-banner';
+import { inviteSent } from '../lib/analytics/events';
 import type { Invite as InviteModel } from '../types/models';
 
 const List = () => {
@@ -75,7 +76,13 @@ const List = () => {
     mutationFn: async (email: string) => {
       const accessToken = await getAccessTokenSilently();
       return apiPost('/invite', accessToken, { email });
-    }
+    },
+    // On success only, which matters more here than elsewhere: follow-ups.md #46
+    // records that POST /invite answers 400 whenever the email fails to send,
+    // and SENDGRID_API_KEY is set nowhere - so counting clicks would report a
+    // thriving sharing feature that has never once worked. The email address is
+    // of course not a parameter.
+    onSuccess: () => inviteSent()
   });
 
   // TODO: Error handling

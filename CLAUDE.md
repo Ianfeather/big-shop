@@ -8,6 +8,16 @@ Big Shop is a recipe management and meal planning app: a Next.js 16 / React 19 f
 - **How it's built** (DB schema, API routes, component structure, hooks, deployment, dependencies) → [technical-architecture.md](./technical-architecture.md)
 - **Known issues we don't plan to fix** (investigated, judged not worth acting on — check here before chasing a surprising error) → [known-issues.md](./known-issues.md)
 
+**Analytics and consent.** `/privacy` is the published policy and `lib/consent.ts`
+holds the decision; nothing non-essential loads without one. Two rules bite when
+touching anything nearby: a page title sent to Google comes from
+`lib/analytics/page-titles.ts`'s static per-route map and **never** from
+`document.title` (a test reads the `pages/` directory, so a new route without an
+entry fails), and an analytics event is added only when answering its question
+needs more than Grafana's 14-day retention — otherwise it is a metric. Both are
+argued in [ADR-0008](./docs/adr/0008-what-telemetry-does-not-carry.md) §1 and
+`lib/analytics/events.ts`.
+
 ## How to run and test the app
 
 ### Frontend Development
@@ -145,6 +155,11 @@ different call than the one you are handling.
 - Auth0 credentials required for authentication flow (unless `DISABLE_AUTH`/`NEXT_PUBLIC_DISABLE_AUTH` set)
 - `OPENAI_API_KEY` required for AI features
 - `SENDGRID_API_KEY` required for email invitations
+- `NEXT_PUBLIC_GA_MEASUREMENT_ID` enables Google Analytics. Unset everywhere but
+  production, and **unset there too until someone deliberately sets it** — its
+  absence means no tag is loaded and no request reaches Google, which is what a
+  laptop, a deploy preview and CI all get. Even with it set, nothing loads until
+  a visitor accepts analytics.
 - Full reference table (dev/prod/server-side secrets) → [technical-architecture.md](./technical-architecture.md#environment-variables)
 
 ### Testing

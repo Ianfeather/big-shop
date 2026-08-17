@@ -261,3 +261,28 @@ export function setAccount(accountId: number | undefined): void {
   }
 }
 
+// Records one of the fixed list of events in lib/analytics/events.ts.
+//
+// **lib/analytics/events.ts is meant to be the only caller**, so that the set of
+// event names and the set of parameter values are both readable in one file. A
+// `trackEvent('whatever', { recipeName })` somewhere in a page is how the
+// no-content rule stops being true, and it would pass every test that only
+// reads events.ts.
+//
+// TypeScript cannot express "exported to one module", so the rule is enforced by
+// a test instead: events.test.ts greps the tree for callers and fails on any
+// outside events.ts. That is deliberately a test rather than a comment - this
+// used to say "deliberately not exported for arbitrary use" while being a plain
+// export, which asserted a guarantee nothing provided.
+//
+// Gated on `collecting`, not on `loaded` - see the flags above. An event fired
+// after a withdrawal would be the same leak page views were.
+export function trackEvent(name: string, params?: Record<string, string>): void {
+  if (!collecting) return;
+
+  try {
+    gtag('event', name, params);
+  } catch {
+    // As above.
+  }
+}

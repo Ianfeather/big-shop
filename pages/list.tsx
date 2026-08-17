@@ -8,6 +8,7 @@ import ShoppingList from '@components/shopping-list/ShoppingList';
 import useAuth0 from '@hooks/use-auth';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api-client';
 import type { ListIngredient } from '../types/models';
+import { shoppingListGenerated } from '../lib/analytics/events';
 
 
 interface ShoppingListResult {
@@ -82,7 +83,12 @@ const List = () => {
     mutationFn: async (selectedRecipes: string[]) => {
       const token = await getAccessTokenSilently();
       return apiPost<ShoppingListResult>('/shopping-list', token, selectedRecipes);
-    }
+    },
+    // Counted on success, not on the click: a generation that failed produced no
+    // list to shop from. No parameter - not the Recipe count, not their names -
+    // because the question is whether the core loop is used at all, and how that
+    // tracks against the onboarding work (follow-ups.md #42).
+    onSuccess: () => shoppingListGenerated()
   });
 
   const clearMutation = useMutation({

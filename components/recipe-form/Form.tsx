@@ -12,6 +12,7 @@ import useAuth from '@hooks/use-auth';
 import { apiPost, apiPut, apiDelete, nextApiPost } from '../../lib/api-client';
 import { queryKeys } from '../../lib/query-keys';
 import type { Recipe as RecipeModel, Ingredient, CreatedResponse } from '../../types/models';
+import { recipeImported, RecipeSource } from '../../lib/analytics/events';
 
 const capitalize = (str: string) => {
   if (!str) {
@@ -42,6 +43,10 @@ interface FormUnit {
 interface FormProps {
   initialRecipe?: Partial<RecipeModel>;
   mode?: 'new' | 'edit';
+  // How this Recipe arrived, for the analytics event fired on a successful
+  // create. Ignored in edit mode - an edit is not an import, and counting it as
+  // one would make the "how do recipes get in" numbers meaningless.
+  importSource?: RecipeSource;
   // Which part of the form the cook came here to fill in, from the pencil beside
   // an empty section on the Recipe page (?add=method). The form is two columns
   // of fields on a desktop and a long scroll on a phone, so "we opened the edit
@@ -65,7 +70,7 @@ function normalizeInitialRecipe(initialRecipe: Partial<RecipeModel>, bareRecipe:
   };
 }
 
-export default function Form({initialRecipe = {}, mode = 'new', focusSection}: FormProps) {
+export default function Form({initialRecipe = {}, mode = 'new', focusSection, importSource = 'manual'}: FormProps) {
   const bareRecipe: FormRecipe = { name: '', remoteUrl: '', notes: '', method: '', ingredients: [], tags: []};
 
   let useInitialRecipe = Object.keys(initialRecipe).length > 0;
@@ -81,6 +86,10 @@ export default function Form({initialRecipe = {}, mode = 'new', focusSection}: F
   const queryClient = useQueryClient();
   const methodSection = useRef<HTMLDivElement>(null);
   const scrolledToFocus = useRef(false);
+  // Whether the bulk paste box was used during this form's life. A ref rather
+  // than state because nothing renders from it - it only changes which Source
+  // the save reports.
+  const pastedText = useRef(false);
 
   const saveMutation = useMutation({
     mutationFn: async (recipeToSave: FormRecipe): Promise<CreatedResponse | undefined> => {
@@ -113,6 +122,22 @@ export default function Form({initialRecipe = {}, mode = 'new', focusSection}: F
         queryClient.invalidateQueries({ queryKey: queryKeys.recipe(recipe.id) });
         router.push(`/recipes/${recipe.id}?stored=updated`);
       } else {
+        // Counted here, on the save succeeding, rather than when an extraction
+        // returns: a fetched recipe the cook abandons never became a Recipe, and
+        // counting it would report an import rate the collection does not show.
+        //
+        // `pastedText` refines 'manual' into 'text', and *only* 'manual'.
+        // Choosing Enter Manually and then pasting the ingredient list in one
+        // lump is a text extraction rather than typing, and telling those apart
+        // is the whole point of having both values.
+        //
+        // The condition is deliberately not `pastedText.current ? 'text' : ...`,
+        // which was the first version and reported the wrong thing: importing
+        // from a URL and then pasting one missing ingredient would overwrite a
+        // real `url` attribution with `text`, quietly under-counting the
+        // extractor that did the actual work.
+        const source = importSource === 'manual' && pastedText.current ? 'text' : importSource;
+        recipeImported(source);
         // Nothing has cached the new Recipe yet - there is no entry to invalidate.
         router.push(`/recipes/${result?.id}?stored=new`);
       }
@@ -253,6 +278,7 @@ export default function Form({initialRecipe = {}, mode = 'new', focusSection}: F
         text: bulkText,
       });
       appendIngredients(result?.ingredients || []);
+      pastedText.current = true;
       setBulkText('');
     } catch (err) {
       setBulkError(err instanceof Error ? err.message : 'Failed to parse ingredients');

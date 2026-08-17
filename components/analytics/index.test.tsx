@@ -1,3 +1,4 @@
+import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import Analytics from './index';
@@ -17,35 +18,26 @@ vi.mock('../../lib/analytics/ga', () => ga);
 const routerState = vi.hoisted(() => ({
   route: '/list',
   asPath: '/list',
-  handlers: new Set<() => void>(),
 }));
 
-// Getters rather than a snapshot, mirroring the real thing: Next's router is a
-// long-lived object whose properties change under you, and the component reads
-// them at call time precisely because of that. A mock that froze the values at
-// render time would test a router nobody has.
+// The component reads `route` and `asPath` during render and reports from an
+// effect keyed on them, so a navigation is modelled here as what it is for
+// React: a re-render carrying new values. `navigateTo` below does that rather
+// than firing an event behind React's back, which is the arrangement that
+// reported the previous page - see the component.
 vi.mock('next/router', () => ({
-  useRouter: () => ({
-    get route() {
-      return routerState.route;
-    },
-    get asPath() {
-      return routerState.asPath;
-    },
-    events: {
-      on: (_: string, fn: () => void) => routerState.handlers.add(fn),
-      off: (_: string, fn: () => void) => routerState.handlers.delete(fn),
-    },
-  }),
+  useRouter: () => ({ route: routerState.route, asPath: routerState.asPath }),
 }));
 
 const mockUser = vi.hoisted(() => vi.fn());
 vi.mock('@hooks/use-user', () => ({ default: mockUser }));
 
-function navigateTo(route: string, asPath = route) {
+// A navigation is a re-render with new router values, which is what Next does
+// and what the reporting effect keys on.
+function navigateTo(rerender: (ui: React.ReactElement) => void, route: string, asPath = route) {
   routerState.route = route;
   routerState.asPath = asPath;
-  routerState.handlers.forEach(fn => fn());
+  rerender(<Analytics />);
 }
 
 beforeEach(() => {
@@ -53,7 +45,6 @@ beforeEach(() => {
   Object.values(ga).forEach(fn => fn.mockReset());
   routerState.route = '/list';
   routerState.asPath = '/list';
-  routerState.handlers.clear();
   mockUser.mockReturnValue(undefined);
 });
 
@@ -76,11 +67,11 @@ describe('Analytics', () => {
 
   it('reports each navigation once, with the route template title', () => {
     writeConsent('granted');
-    render(<Analytics />);
+    const { rerender } = render(<Analytics />);
     ga.trackPageView.mockClear();
 
-    navigateTo('/recipes/[id]', '/recipes/42');
-    navigateTo('/recipes', '/recipes');
+    navigateTo(rerender, '/recipes/[id]', '/recipes/42');
+    navigateTo(rerender, '/recipes', '/recipes');
 
     expect(ga.trackPageView.mock.calls).toEqual([
       ['/recipes/42', 'Recipe'],
@@ -92,31 +83,35 @@ describe('Analytics', () => {
   // search terms are content.
   it('strips the query string from the reported path', () => {
     writeConsent('granted');
-    render(<Analytics />);
+    const { rerender } = render(<Analytics />);
     ga.trackPageView.mockClear();
 
-    navigateTo('/recipes/[id]', '/recipes/42?stored=new');
+    navigateTo(rerender, '/recipes/[id]', '/recipes/42?stored=new');
 
     expect(ga.trackPageView).toHaveBeenCalledWith('/recipes/42', 'Recipe');
   });
 
+  // The shallow router.replace that strips `?stored=new` from a freshly saved
+  // Recipe is a route change to the same page, and must not be a second view.
   it('does not report the same path twice in a row', () => {
     writeConsent('granted');
-    render(<Analytics />);
+    const { rerender } = render(<Analytics />);
     ga.trackPageView.mockClear();
 
-    navigateTo('/list', '/list');
-    navigateTo('/list', '/list');
+    navigateTo(rerender, '/recipes/[id]', '/recipes/42?stored=new');
+    expect(ga.trackPageView).toHaveBeenCalledTimes(1);
 
-    expect(ga.trackPageView).toHaveBeenCalledTimes(0);
+    navigateTo(rerender, '/recipes/[id]', '/recipes/42');
+
+    expect(ga.trackPageView).toHaveBeenCalledTimes(1);
   });
 
   it('reports nothing for a route with no title rather than guessing one', () => {
     writeConsent('granted');
-    render(<Analytics />);
+    const { rerender } = render(<Analytics />);
     ga.trackPageView.mockClear();
 
-    navigateTo('/some/route/nobody/mapped');
+    navigateTo(rerender, '/some/route/nobody/mapped');
 
     expect(ga.trackPageView).not.toHaveBeenCalled();
   });
@@ -134,14 +129,40 @@ describe('Analytics', () => {
   // - two cookie sweeps and a timer - on every single navigation.
   it('does not re-run the withdrawal on every navigation', () => {
     writeConsent('denied');
-    render(<Analytics />);
+    const { rerender } = render(<Analytics />);
     expect(ga.stop).toHaveBeenCalledTimes(1);
 
-    navigateTo('/recipes');
-    navigateTo('/account');
-    navigateTo('/dave');
+    navigateTo(rerender, '/recipes');
+    navigateTo(rerender, '/account');
+    navigateTo(rerender, '/dave');
 
     expect(ga.stop).toHaveBeenCalledTimes(1);
+  });
+
+  // A declined visitor must not be reported at all, however much they navigate.
+  it('reports no page views while consent is declined', () => {
+    writeConsent('denied');
+    const { rerender } = render(<Analytics />);
+
+    navigateTo(rerender, '/recipes');
+    navigateTo(rerender, '/account');
+
+    expect(ga.trackPageView).not.toHaveBeenCalled();
+  });
+
+  // The spec is explicit that granting mid-visit "has to record the page they
+  // are standing on, which no navigation is going to do for them". It used to be
+  // an explicit call after start(); it now falls out of `consent` being in the
+  // reporting effect's deps, which is easy to lose in a tidy-up.
+  it('reports the current page when consent is granted mid-visit', () => {
+    const { rerender } = render(<Analytics />);
+    expect(ga.trackPageView).not.toHaveBeenCalled();
+
+    writeConsent('granted');
+    rerender(<Analytics />);
+
+    expect(ga.start).toHaveBeenCalledTimes(1);
+    expect(ga.trackPageView).toHaveBeenCalledWith('/list', 'Shopping list');
   });
 
   it('names the Account once it is known', () => {

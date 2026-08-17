@@ -4,6 +4,7 @@ import useAuth0 from '@hooks/use-auth';
 import Layout, { MainContent, Sidebar } from '@components/layout'
 import DaveChat, { DaveMessage } from '@components/dave-chat';
 import useRecipes from '@hooks/use-recipes';
+import { daveTurn } from '../lib/analytics/events';
 
 const Dave = () => {
   const [recipes] = useRecipes();
@@ -51,6 +52,11 @@ const Dave = () => {
       const data = await response.json();
       
       if (data?.message) {
+        // Counted on an answer arriving, not on the question being sent: a turn
+        // is an exchange, and a failed request is not one. No parameter carries
+        // the message - #43's example question is "is Dave used more than three
+        // months ago", which needs a count and nothing else.
+        daveTurn();
         const assistantMessage: DaveMessage = {
           id: Date.now() + 1,
           role: 'assistant',

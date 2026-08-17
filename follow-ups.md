@@ -2,7 +2,7 @@
 
 Small defects and doc-drift found while building `CONTEXT.md` from the codebase (2026-07-13). Not designed here — just flagged for later action.
 
-Items 1–30, 32, 33, 36, 39, 40, 44, 48, 49, 51, 53, 56 and 58 have all been resolved — see [`follow-ups-resolved.md`](./follow-ups-resolved.md) for the full history (numbering preserved for cross-references between entries).
+Items 1–30, 32, 33, 36, 39, 40, 43, 44, 48, 49, 51, 53, 56 and 58 have all been resolved — see [`follow-ups-resolved.md`](./follow-ups-resolved.md) for the full history (numbering preserved for cross-references between entries).
 
 Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are real but deliberately not being fixed, so they are not queued work.
 
@@ -135,71 +135,6 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     onboarding screen in `pages/index.tsx` (shown once, then marked onboarded in the
     background) is worth keeping at all if the two items above land — it currently exists
     only to say "you're in" to someone who has nowhere to go yet.
-
-43. **Google Analytics, and the consent foundation it requires.** The other half of a
-    decision already made: [`observability.md`](./specs/observability.md) puts long-horizon
-    product questions ("is Dave used more than three months ago") explicitly out of scope
-    for Grafana and names GA as their home — which is what makes Grafana Cloud Free's
-    14-day retention a non-issue rather than a constraint. Nothing has been built.
-
-    **Designed: [`specs/analytics-and-consent.md`](./specs/analytics-and-consent.md)**
-    (2026-08-16). Four phases — policy/store/banner, the consent record, GA4 behind the
-    gate, then the events. Two decisions were taken there rather than left open: the
-    consent UI is **own-built** rather than a hosted CMP or an OSS library, and the
-    consent record is **server-side and append-only** rather than client-only. The spec
-    carries one question for sign-off before its Phase 2, which the notes below did not
-    anticipate: consent is given on `/` while the visitor is anonymous, and the Go API
-    has no unauthenticated write path at all (`/health` is its only carve-out), so
-    whether an anonymous decision gets a server record is a genuine fork.
-
-    **Unblocked.** Unlike the observability work, this depends on neither the Fly
-    migration nor anything else. It is pure frontend and could ship first.
-
-    One GA4 property covering **both** surfaces: the public marketing homepage (`/`) and
-    the authenticated app. That scope is what drags in the compliance work below; a
-    homepage-only install would not have needed it. It is also what makes this the
-    measurement half of #42 — the funnel that item describes (read the page → sign up →
-    land in an empty account) is not currently observable at any step, so there is no way
-    to tell whether the onboarding work moved anything.
-
-    Three parts, deliberately one item rather than three, because shipping the tag
-    without the other two is the non-compliant version:
-
-    - A **privacy policy page**. None exists today.
-    - A **minimal consent banner**, two categories (essential / analytics). None exists
-      today either.
-    - **GA4 via Consent Mode v2**, firing only on opt-in. GA4 sets first-party cookies, so
-      under UK PECR it is non-essential storage requiring opt-in — this is a real
-      dependency, not a footnote.
-
-    **Identity: `account.id` as a custom user property, and no `user_id`.** The Account is
-    the unit the product questions are actually about ("how many Accounts have ever used
-    Dave"), and sending it as a property answers them without asserting a cross-device
-    person identity. The Auth0 subject is never sent to Google.
-
-    This extends [ADR-0008](./docs/adr/0008-what-telemetry-does-not-carry.md)'s
-    "pseudonymous identifiers, never content" rule to a second recipient, and the ADR
-    should say so. Nothing leaks today — every `pageTitle` in
-    `components/layout/index.tsx`'s callers is static (`"Recipes"`, `"Chat with Dave"`)
-    and Recipe URLs carry numeric ids — but that is currently an accident rather than a
-    rule. A future `{recipe.name} — Big Shop` title would ship Recipe names to Google.
-
-    Events: page views plus a short fixed list — Recipe imported by Source, Shopping List
-    generated, Dave turn, Invite sent. Two things to get right:
-
-    - **Page views must be fired manually on Next router changes.** Every route bar `/` is
-      a client-rendered SPA, so the default single pageload measures almost nothing.
-    - **GA carries an event only when the question is longitudinal.** Otherwise it stays a
-      Grafana metric. `observability.md` already specifies an import-outcome counter by
-      source and result, and a duration histogram by route; duplicating those in GA is the
-      obvious drift and this rule is what prevents it.
-
-    **Faro is deliberately not gated by the banner.** Frontend error reporting stays always
-    on, treated as necessary for service integrity. Recorded as a knowing risk rather than
-    an oversight: the "strictly necessary" exemption is narrow and error monitoring is a
-    contested fit. The alternative — putting Faro under the analytics category — would
-    blind error reporting for everyone who declines, which is the thing `observability.md`
-    exists to provide.
 
 45. **The API's deploy gate does not include e2e.**
     `.github/workflows/deploy-api.yml` is gated on the `CI` workflow succeeding

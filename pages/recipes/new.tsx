@@ -71,6 +71,11 @@ const NewRecipe = () => {
   const [APIError, setAPIError] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [parsedRecipe, setParsedRecipe] = useState<Partial<RecipeModel> | null>(null);
+  // Which Import Source produced `parsedRecipe`, recorded when the import lands
+  // rather than read off the tab at save time. The cook can switch to Enter
+  // Manually to tidy up a fetched recipe without that changing where it came
+  // from, so the currently-selected tab is not the answer.
+  const [parsedSource, setParsedSource] = useState<'url' | 'photo' | null>(null);
   const [processingJob, setProcessingJob] = useState<{ jobId: string } | null>(null);
   const [urlValue, setUrlValue] = useState('');
   const [urlFetched, setUrlFetched] = useState('');
@@ -133,6 +138,7 @@ const NewRecipe = () => {
       setProcessingJob(null);
       const { name, ingredients, method, tags } = job.result || {};
       setParsedRecipe({ name, ingredients: normalizeParsedIngredients(ingredients), method, tags });
+      setParsedSource('photo');
     } else if (job.status === 'failed') {
       setProcessingJob(null);
       setAPIError('Processing failed');
@@ -155,6 +161,7 @@ const NewRecipe = () => {
     setAPIError(null);
     setErrorDetails(null);
     setParsedRecipe(null);
+    setParsedSource(null);
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
@@ -205,6 +212,7 @@ const NewRecipe = () => {
         remoteUrl: parsedUrl.href,
         tags: result.tags || []
       });
+      setParsedSource('url');
     } catch (err) {
       setAPIError('Failed to fetch recipe');
       setErrorDetails(err instanceof Error ? err.message : 'Could not extract a recipe from that link. Please check it and try again, or use Enter Manually.');
@@ -282,7 +290,16 @@ const NewRecipe = () => {
         )}
 
         { (activeTab === 'manual' || parsedRecipe) && (
-          <Form initialRecipe={parsedRecipe || {}} mode="new"/>
+          // `importSource` is how this Recipe arrived, for the analytics event
+          // the Form fires on a successful save. `parsedSource` is set when an
+          // extraction lands, so it survives the cook switching tabs afterwards
+          // to tidy the result up. The Form upgrades 'manual' to 'text' if the
+          // bulk paste box is used - see there.
+          <Form
+            initialRecipe={parsedRecipe || {}}
+            mode="new"
+            importSource={parsedSource ?? 'manual'}
+          />
         )}
       </MainContent>
     </Layout>

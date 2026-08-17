@@ -64,14 +64,45 @@ Note: `origin/master` moved during this session (#102, request-model-optimisatio
 No overlap with these files; check mergeability before the PR.
 
 ## Session 2: Consent store and banner
-Status: pending
+Status: done
 Scope: Spec Phase 1, second half. `hooks/use-consent.ts` (three states — `unset` is what shows
 the banner and must not collapse into `denied`), `components/consent-banner/`, mounted in
 `_app.tsx` outside `InnerApp` so it never waits on Auth0 (#58). Withdrawal path. e2e fixture
 seed plus `e2e/consent.spec.ts`. Vitest tests for the store.
 Depends on: Session 1 (banner links to the policy)
-Commit:
-Notes:
+Commit: 621c3dc
+Notes: 279 unit tests and 31 e2e pass. Both review axes ran; every finding confirmed and fixed.
+Carry forward:
+
+- **The banner was undismissable with site data blocked** - `writeConsent` swallows the failure,
+  so `readConsent` keeps answering `unset`, which is the state that shows the banner. Fixed by
+  also holding the choice in component state (`decidedHere`). The general trap: this store's
+  fallback *is* the "keep asking" state, unlike `use-local-storage-flag.ts` whose fallback is a
+  usable default. Any later code that treats "no stored consent" as authoritative needs the
+  same care.
+- **`/account` now carries the in-app Cookie settings control.** `components/layout` has no
+  footer and the user menu holds only Account and Logout, so without it consent could be given
+  once and never revisited.
+- **`/privacy` must not describe analytics as live until Session 4.** This was caught twice now
+  (Session 1's review, then Session 2's). The page currently states plainly that nothing is
+  collected and explains why the banner asks anyway; **Session 4 replaces that section.**
+- Shared with the e2e harness from `lib/consent.ts`: `CONSENT_STORAGE_KEY` and
+  `serializeConsent`. Hand-rolling either in the harness fails silently - the seed stops
+  counting as a decision and the banner reappears as unrelated click failures across the suite.
+
+**The e2e cold-start race, unresolved and worth watching.** The first full-suite run failed 4
+tests with `PageNotFoundError: Cannot find module for page: /recipes/N` - `next dev` failing to
+compile the dynamic route while the image built, MySQL migrated and every route compiled at
+once. Four subsequent clean runs passed 31/31 with zero occurrences. Not reproduced and not
+fixed; CI always starts cold, so **if e2e fails on the PR, check for `PageNotFoundError` before
+assuming the change is at fault.** Note also that `npm run test:e2e:stop` must run first - a run
+started without it dies on `ECONNREFUSED` against a half-recreated stack, which looks like a
+code failure and is not.
+
+**Local verification of any logged-out surface needs `NEXT_PUBLIC_DISABLE_AUTH=false`** against
+the same containers, plus clearing the browser's real Auth0 session. Note Next 16 refuses a
+second dev server in one directory, so a manually-running `next dev` blocks `npm run test:e2e`
+entirely - it fails at webServer startup rather than as a test failure.
 
 ## Session 3: Consent record
 Status: pending

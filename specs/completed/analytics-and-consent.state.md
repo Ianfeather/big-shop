@@ -2,7 +2,7 @@
 spec: specs/completed/analytics-and-consent.md
 status: complete
 branch: implement/analytics-and-consent
-pr:
+pr: https://github.com/Ianfeather/big-shop/pull/106
 ---
 
 Sessions map onto the spec's four Phases, with Phase 1 split across Sessions 1 and 2 — the

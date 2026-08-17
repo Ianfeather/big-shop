@@ -306,7 +306,7 @@ Each row has two properties: **Item** (the title) and **State**, one of
 | --- | --- |
 | `backlog` | Filed, not designed. The default for anything newly noticed. |
 | `spec written` | A spec exists under `specs/` and nothing has been built from it yet. |
-| `in development` | Someone is actively building it — a branch or an open PR exists. |
+| `in development` | **Claimed.** Someone is actively building it, and its title is prefixed `WIP `. Don't start it — see "Claim an item before you touch it" below. |
 | `done` | Shipped. |
 
 The row's page body carries the write-up: what the problem is, what was
@@ -324,19 +324,73 @@ lost — the Board view has `hideEmptyGroups: false`, so it appears in a "No
 Status" column — but it is in none of the four real states and reads as a
 mistake. If you find one, give it a state.
 
-**How to work with it:**
+### Claim an item before you touch it
+
+**Several agents work this repo, and the board is the only thing stopping two
+of them building the same item twice.** A claim is not bookkeeping you do
+afterwards — it is the first action of the work, taken **before the first line
+of code, the first migration, or the first edit to a spec file.** An item you
+are working on but have not claimed is invisible to everyone else, and the cost
+lands on whoever picks it up next.
+
+**1. Check it is free.** Before starting anything, read the row's State:
+
+```sql
+-- via notion-query-data-sources, mode: sql
+SELECT "Item", "State" FROM "collection://f5066c26-2463-4017-a02d-c82c02eb23f3"
+WHERE "Item" LIKE '%<the thing you are about to build>%'
+```
+
+If it is already `in development`, **stop and do not start it.** Someone else
+holds it. Say so, and either pick a different item or ask the user — the one
+thing not to do is start anyway because the branch looks quiet.
+
+**2. Claim it, in the same action, before working.** Two changes together:
+
+- **State → `in development`.** This is the claim state whether you are
+  building the thing or writing its spec — both are active work on the item,
+  and both want other agents to keep off. Don't reach for `spec written` here:
+  that describes a spec that *exists*, so setting it before you have written
+  one is a claim disguised as a result.
+- **Prefix the title with `WIP `**, e.g.
+  `#41 — Backfill the Method…` becomes `WIP #41 — Backfill the Method…`.
+
+The `WIP ` prefix is deliberate redundancy. State is invisible in a
+`notion-search` result, in a page mention, and anywhere else only the title is
+rendered — the prefix means a claimed item reads as claimed everywhere, not
+just on the board.
+
+**3. Say where the work is.** Put the branch name in the body as you claim, and
+the PR link as soon as one exists. "Claimed" without "and here is the branch"
+still leaves the next agent unable to tell live work from an abandoned claim.
+
+**4. Release the claim when you stop — finished or not.** This is the half that
+is easy to skip and the one that rots the board:
+
+- **Built and merged** → State `done`, **strip the `WIP ` prefix**, and update
+  the body to say what actually shipped, including anything the original
+  framing got wrong. Several migrated entries do exactly this (#44, #49, #58)
+  and they are the most useful rows on the board. **Not before the merge**: an
+  open PR is not shipped, so the row stays claimed while it waits, and rule 5
+  of "Shipping work" below carries the release as its fourth step.
+- **Spec written, not yet built** → State `spec written`, **strip the `WIP `
+  prefix**, link the spec from the body. The item is free again, and the next
+  agent gets a designed thing to pick up.
+- **Stopped without finishing** → put the State back where you found it,
+  **strip the `WIP ` prefix**, and add a line to the body saying how far it got
+  and what is on the branch. A claim left behind on abandoned work is a
+  permanent lock, and it is worse than no claim at all because it looks
+  deliberate.
+
+### Everything else
 
 - **Noticing something worth doing → create a row in `backlog`.** Don't add it
   to a markdown file, and don't leave it in a PR description.
-- **Starting work → move the row to `in development`.** Finishing it → `done`,
-  with the body updated to say what actually shipped, including anything the
-  original framing got wrong. Several migrated entries do exactly this (#44,
-  #49, #58) and they are the most useful ones on the board.
-- **Writing a spec for an item → move it to `spec written`** and link the spec
-  file from the body.
 - **Titles keep the `#N` prefix** for items that came from `follow-ups.md`, so
   the cross-references in the bodies (and in code comments, migrations and
-  ADRs) still resolve. New items don't need a number.
+  ADRs) still resolve. New items don't need a number. A `WIP ` claim prefix
+  goes in front of the number, not after it.
+- **A `spec written` row links its spec file** from the body.
 
 **`follow-ups.md` and `follow-ups-resolved.md` are a frozen archive.** Every one
 of their entries now lives on the board. They stay in the repo only because
@@ -410,21 +464,28 @@ commit from the one they last ran against. Note the ruleset is deliberately not
 "strict", so a branch does *not* need rebasing merely for being behind
 `master`; do this on an actual conflict, not on every unrelated push.
 
-**5. Merging is the user's call, and it has three steps.** Never merge on your
+**5. Merging is the user's call, and it has four steps.** Never merge on your
 own initiative. When the user does say to merge:
 
 ```bash
 gh pr merge <n> --squash        # 1. merge (squash unless told otherwise)
 git checkout master && git pull origin master   # 2. resync local master
 git branch -d <branch>          # 3. delete the local branch
+                                # 4. release the board claim (below)
 ```
 
-Do all three — leaving a stale local `master` and a dead branch behind is the
+Do all four — leaving a stale local `master` and a dead branch behind is the
 part that quietly bites later, when the next branch is cut from an
 out-of-date `master`. `-d` (not `-D`) is deliberate: it refuses if the branch
 somehow isn't merged, which is a signal worth reading rather than overriding.
 The remote branch is deleted by `gh pr merge` if the repo is set to do so;
 check and delete it explicitly if it lingers.
+
+**Step 4 is the board.** The merge is the moment the work ships, so it is the
+moment the row becomes `done`: set its State, **strip the `WIP ` prefix from
+its title**, and update the body to say what actually shipped. Until this step
+the item is still claimed and still reads as claimed to every other agent —
+which is correct while a PR is open, and wrong the second it lands.
 
 ## Useful External Links
 

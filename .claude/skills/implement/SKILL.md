@@ -16,8 +16,9 @@ Drives a spec file under `specs/` to a green PR. The spec is broken into **Sessi
   - **Exists, `status: complete`** — tell the user this spec is already implemented, name the PR from the state file, and stop.
   - **Exists, `status: planned` or `in-progress`** — this is a **resume**. `git checkout` the branch named in the state file and skip to step 3, at the first Session not marked `done`.
   - **Doesn't exist** — this is a **fresh start**. Continue to step 2.
+- **Find the spec's row on the [Notion board](https://app.notion.com/p/87fae8a2ed054f2c874201e827639bd8) and check nobody else holds it.** See CLAUDE.md's "Claim an item before you touch it" for the query and the rules. **If the row is already `in development` (title prefixed `WIP `) and it isn't this run's own resume, stop and tell the user** — another agent is building it, and the fix is not to race them. On a resume, the row should already be your claim; if it somehow isn't, re-claim it before continuing.
 
-Completion criterion: spec read in full; resume-vs-fresh determined; if resuming, every Session's status loaded from the state file, not assumed from conversation memory.
+Completion criterion: spec read in full; resume-vs-fresh determined; if resuming, every Session's status loaded from the state file, not assumed from conversation memory; board row located and confirmed free (or confirmed to be this run's existing claim).
 
 ### 2. Plan the Sessions (fresh start only)
 
@@ -30,7 +31,9 @@ Break the spec into an ordered list of Sessions:
 
 Create branch `implement/<spec-slug>`. Call `EnterPlanMode`, present the Session breakdown, then `ExitPlanMode` to get the user's approval before writing any code — this is the only point in the run that stops for sign-off on scope; everything after executes without pausing unless a Session hits a blocked gate (step 3). Once approved, write the initial state file (format below), every Session `status: pending`, overall `status: planned`.
 
-Completion criterion: every spec requirement mapped to exactly one Session; user has approved the breakdown; state file written to disk.
+**Claim the board row the moment the plan is approved, before Session 1 writes anything.** Move it to `in development`, prefix its title with `WIP `, and put the branch name in the body. Approval is the right moment: claiming earlier would lock an item the user might send you away from, and claiming later leaves a window where you are building something the board says is free.
+
+Completion criterion: every spec requirement mapped to exactly one Session; user has approved the breakdown; state file written to disk; board row claimed (`in development`, `WIP ` prefix, branch recorded).
 
 ### 3. Work the next pending Session
 
@@ -56,7 +59,9 @@ Any Session still `pending` → back to step 3. Every Session `done` → step 5.
 
 See [EVIDENCE.md](./EVIDENCE.md) for what counts as evidence and how to capture it — the rest of this skill doesn't need that detail, this one step does. **If any Session touched a user-visible surface, screenshots are required, not optional**: capture the golden path the spec describes, in the running app. Only a spec with no visible surface at all ships on metadata alone.
 
-Push the branch, then `gh pr create` with a body containing: a summary of what the spec asked for and what shipped, a Session-by-session checklist, the gathered evidence, and links to any [Notion board](https://app.notion.com/p/87fae8a2ed054f2c874201e827639bd8) rows opened along the way. Anything noticed but not fixed during the run becomes a `backlog` row on the board — never a note in the PR body alone, and never an addition to the frozen `follow-ups.md`. If the spec itself has a board row, move it to `done` at the same time.
+Push the branch, then `gh pr create` with a body containing: a summary of what the spec asked for and what shipped, a Session-by-session checklist, the gathered evidence, and links to any [Notion board](https://app.notion.com/p/87fae8a2ed054f2c874201e827639bd8) rows opened along the way. Anything noticed but not fixed during the run becomes a `backlog` row on the board — never a note in the PR body alone, and never an addition to the frozen `follow-ups.md`.
+
+**The spec's own row stays claimed.** Add the PR link to its body, but leave it `in development` with its `WIP ` prefix: `done` means shipped, and an open PR is not shipped. It is released at merge, which is the user's call and may happen long after this run ends — CLAUDE.md's "Shipping work: pull requests" rule 5 carries that step. Releasing it here would advertise the item as free while a branch is still waiting to land on it.
 
 Set the state file's `status: complete` with the PR URL, then move the spec and its state file into `specs/completed/` — matching this repo's existing convention for finished specs.
 

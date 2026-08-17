@@ -7,9 +7,23 @@ import styles from './index.module.css';
 const PencilIcon = icons.pencil;
 import type { Recipe as RecipeModel } from '../../types/models';
 
+// The only place in the app where stored data becomes an href, and therefore
+// the only place a scheme test is load-bearing. `remoteUrl` is a free-text
+// field on the edit form and an Account is shared between Users, so the value
+// rendered here need not have been typed by the person about to click it -
+// which is what makes `javascript:` worth excluding by rule rather than by
+// trusting whoever authored the Recipe.
+//
+// Anchored on the scheme rather than the bare `/^http/` prefix test this used
+// to be. That test did exclude `javascript:`, but only as a side effect of
+// what it happened to allow; a prefix is a weaker thing to rest on than a
+// scheme, and it read as an accident rather than a decision. Anything that
+// fails renders as plain text, which React escapes.
+const SAFE_LINK_SCHEME = /^https?:\/\//i;
+
 const RecipeLink = ({ link }: { link?: string | null }) => {
   if (!link) return false;
-  if (link.match(/^http/)) {
+  if (SAFE_LINK_SCHEME.test(link)) {
     return <a target="_blank" rel="noreferrer" href={link}>View original recipe</a>;
   }
   return <span>Taken from {link}</span>;

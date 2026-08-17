@@ -146,6 +146,21 @@ Components are organized by feature with index files:
 - `components/button/`, `components/message/`, `components/svg/`: Shared UI primitives
 - Each directory typically has `index.js` and a CSS module
 
+### Rendering stored content safely
+
+Recipe names, ingredient text and Method prose are **not user-authored** — they
+arrive from LLM extraction of arbitrary third-party web pages, and an Account is
+shared, so imported content renders in other people's browsers. The invariant
+that keeps this safe is that **no rendering path may introduce raw HTML**:
+React's escaping is the whole defence, `dangerouslySetInnerHTML` may take only
+build-time constants, and the one place stored data becomes an attribute
+(`RecipeLink`'s `remoteUrl` href) is scheme-tested.
+
+Adding a markdown renderer for Dave, or rich-text Method, is the change that
+would break it and needs sanitisation designed in rather than added after. The
+full audit, the reasoning, and the commands to re-run it are in
+[docs/stored-content-rendering.md](./docs/stored-content-rendering.md).
+
 ## Pages & Features
 
 | Page | File | Purpose |

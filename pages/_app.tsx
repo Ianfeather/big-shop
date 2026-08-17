@@ -11,6 +11,7 @@ import { appOrigin } from '../lib/app-origin';
 import { identifyUser, setupFaro, setView } from '../lib/telemetry/faro';
 import { ConsentProvider } from '@components/consent-banner';
 import ConsentSync from '@components/consent-sync';
+import Analytics from '@components/analytics';
 
 // Started here rather than at module scope so it runs in the browser only, and
 // once. _app.tsx is also rendered on the server, where there is no window for
@@ -50,10 +51,9 @@ const InnerApp = ({ Component, pageProps }: Pick<AppProps, 'Component' | 'pagePr
   return (
     <>
       {/* The half of the consent machinery that needs to know who is signed in.
-          The banner itself is mounted outside this and outside Auth0Provider,
-          so it can ask the question on a logged-out page; this carries the
-          answer to the server once there is an account to attach it to.
-          Renders nothing. */}
+          The banner itself is mounted above this, outside InnerApp, so it can
+          ask the question on a logged-out page; this carries the answer to the
+          server once there is an account to attach it to. Renders nothing. */}
       <ConsentSync />
       <Component {...pageProps} />
     </>
@@ -101,23 +101,27 @@ export default function App({ Component, pageProps, router }: AppProps) {
     <Component {...pageProps} />
   );
 
-  // ConsentProvider sits *outside* InnerApp and outside Auth0Provider below,
-  // and both of those are the point.
+  // ConsentProvider sits *outside* InnerApp, which is the placement that
+  // matters: InnerApp renders nothing at all until Auth0 has resolved
+  // (`if (isLoading || !isAuthenticated) return false`), so a banner inside it
+  // would be invisible on every logged-out page - which is every page a
+  // first-time visitor sees, and the only place the question is ever asked.
   //
-  // Outside InnerApp, because InnerApp renders nothing at all until Auth0 has
-  // resolved (`if (isLoading || !isAuthenticated) return false`). A banner
-  // inside it would be invisible on every logged-out page - which is every page
-  // a first-time visitor sees, and the only place the question is ever asked.
+  // It is *inside* Auth0Provider, because that wraps the whole tree below and
+  // there is nowhere else to be. That costs nothing, and the reason is worth
+  // stating so nobody moves it: the banner consumes no auth context. It calls
+  // no useAuth0, waits on no token, and reads its answer from synchronous
+  // localStorage - so it paints with the first frame regardless of what the SDK
+  // is doing. Being a descendant of a provider is not the same as depending on
+  // it, and only the second would put a flash back on the homepage that
+  // follow-ups.md #58 was just fixed to remove.
   //
-  // Outside Auth0Provider, because consent is not an authenticated concern: the
-  // decision is taken on the marketing page by someone who has no account and
-  // may never have one, and it is read from synchronous localStorage. Nesting
-  // it inside would tie a banner that needs nothing to a provider that does a
-  // token refresh over the network, putting a flash back on the homepage that
-  // follow-ups.md #58 has just been fixed to remove.
+  // components/consent-sync is the half that *does* need auth, and it is
+  // mounted inside InnerApp for exactly that reason.
   const wrappedContent = (
     <ConsentProvider>
       <QueryClientProvider client={queryClient}>
+        <Analytics />
         {content}
       </QueryClientProvider>
     </ConsentProvider>

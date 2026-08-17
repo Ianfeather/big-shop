@@ -152,6 +152,18 @@ type User struct {
 	// sets it, so it is always present on output. Same reason Ingredient's
 	// DisplayUnit is a *string.
 	ShowPantryStaples *bool `json:"showPantryStaples,omitempty"`
+	// AccountID is the Account this User currently belongs to, or nil if they
+	// belong to none.
+	//
+	// Sent so the browser can name the Account to Google Analytics as a user
+	// property - the unit the product questions are actually about ("how many
+	// Accounts have ever used Dave") - without a second request for it. Joined
+	// into GetUser's existing query rather than resolved separately; see there.
+	//
+	// A pointer because "belongs to no Account" is a real state rather than
+	// account zero: DisableUserAccount leaves exactly that behind when someone
+	// accepts an invite into a different Account.
+	AccountID *int `json:"accountId,omitempty"`
 	// Consent is the User's most recent analytics-consent decision, or nil if
 	// they have never made one.
 	//

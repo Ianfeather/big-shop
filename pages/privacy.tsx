@@ -4,6 +4,7 @@ import styles from './privacy.module.css';
 import Logo from '@components/svg/logo';
 import { POLICY_VERSION, policyLastUpdated } from '../lib/consent';
 import { useCookieSettings } from '@components/consent-banner';
+import { enabled as analyticsConfigured } from '../lib/analytics/ga';
 
 // The privacy policy. A public page, reachable logged-out from the marketing
 // footer, so it is built on the same "Cookbook" furniture as pages/index.tsx -
@@ -32,6 +33,19 @@ import { useCookieSettings } from '@components/consent-banner';
 // double-check. **Describe what ships with it, not what is planned.**
 
 const CONTACT_EMAIL = 'info@ianfeather.co.uk';
+
+// Whether analytics is switched on for this build at all. Read here, rather
+// than assumed, because it is what stops this page going stale in the one
+// direction it keeps going stale in.
+//
+// **This page has twice claimed a feature that was not live**, both times
+// caught in review rather than by anyone reading it. Analytics ships dark - the
+// code is present and the measurement id is not - so a page that flatly says
+// "Big Shop uses Google Analytics" would be false on the day it is published
+// and true some weeks later, with nothing in between to prompt an edit. Keying
+// the wording to the same switch the code uses means neither state can be
+// described wrongly, and nobody has to remember.
+const ANALYTICS_LIVE = analyticsConfigured();
 
 // Who else processes data, why, and where. Assembled by tracing the code
 // rather than from a template: ADR-0006 places the API on Fly in `fra` and
@@ -75,6 +89,15 @@ const processors = [
     purpose: 'Sending an invite email when you share your account with someone.',
     where: 'United States',
   },
+  ...(ANALYTICS_LIVE
+    ? [
+        {
+          name: 'Google Analytics',
+          purpose: 'Counting how the site is used \u2014 only if you accept. See \u201cAnalytics\u201d below.',
+          where: 'United States',
+        },
+      ]
+    : []),
 ];
 
 // What is written to your own browser, which is the half of a privacy policy
@@ -112,6 +135,15 @@ const deviceStorage = [
     what: 'An error-reporting session id',
     detail: 'A random id that ties several errors together into one visit. Kept for the tab only, and gone when you close it.',
   },
+  ...(ANALYTICS_LIVE
+    ? [
+        {
+          what: 'Google Analytics cookies',
+          detail:
+            'Only if you accept analytics. A random id for this browser and one for the current visit; removed again if you withdraw.',
+        },
+      ]
+    : []),
 ];
 
 export default function Privacy() {
@@ -245,17 +277,41 @@ export default function Privacy() {
 
           <section className={styles.section}>
             <h2 className={styles.heading}>Analytics</h2>
+            {!ANALYTICS_LIVE && (
+              <p>
+                <strong>Big Shop is not running any analytics at the moment.</strong>{' '}
+                Nothing is counting what you do, and the only thing watching the app is the error
+                reporting described above. The cookie banner asks anyway, because that is due to
+                change and we would rather have your answer before anything starts than after.
+                What follows is what your answer will mean.
+              </p>
+            )}
             <p>
-              <strong>Big Shop runs no analytics today.</strong>{' '}
-              No Google Analytics, no third-party tracking, nothing counting what you do. The only
-              thing watching the app is the error reporting described above.
+              Analytics is the one thing here you get a say over, and it is off until you say
+              otherwise.
             </p>
             <p>
-              The cookie banner still asks, because that is due to change, and we would rather
-              have your answer before anything starts collecting than after. Whatever you choose
-              now is what will apply: decline and nothing will ever load &mdash; not a reduced
-              version, not a cookieless one. You can change your mind whenever you like, using the
-              Cookie settings link at the bottom of this page.
+              <strong>Decline and nothing loads.</strong>{' '}
+              Not a reduced version, not a cookieless one, nothing at all &mdash; no script from
+              Google is fetched and no request reaches them. That is stricter than the usual
+              arrangement, where the tag loads for everyone and merely promises not to store
+              anything.
+            </p>
+            <p>
+              Accept and Big Shop {ANALYTICS_LIVE ? 'uses' : 'would use'} Google Analytics to
+              count how the site is used: which pages get visited, and a short fixed list of
+              actions like “a recipe was imported”. It is never told who you are. It gets an
+              account number, so that several visits from one household count as one household
+              rather than several strangers &mdash; and it does not get your login identifier,
+              your name, your email address, or the names of your recipes. Loading it does let
+              Google see the usual things any website sees: your IP address, which page you came
+              from, and what browser you are using. Advertising features are switched off
+              permanently; Big Shop runs no ads.
+            </p>
+            <p>
+              You can change your mind whenever you like, using the Cookie settings link at the
+              bottom of this page. Withdrawing stops the collection there and then &mdash; no
+              further page is counted &mdash; and deletes the cookies Google has already set.
             </p>
           </section>
 
@@ -280,9 +336,10 @@ export default function Privacy() {
               </table>
             </div>
             <p className={styles.note}>
-              All of it is needed for the site to work or to keep it working, none of it is used to
-              track you anywhere else, and there is nothing here you have to consent to. Clearing
-              your browser data for this site removes the lot.
+              {ANALYTICS_LIVE
+                ? 'Everything above Google Analytics is needed for the site to work or to keep it working, is not used to track you anywhere else, and is not something you are asked to consent to. The Google Analytics row is the only one that depends on your answer, and it is absent entirely unless you accept.'
+                : 'All of it is needed for the site to work or to keep it working, none of it is used to track you anywhere else, and there is nothing here you are asked to consent to.'}{' '}
+              Clearing your browser data for this site removes the lot.
             </p>
           </section>
 

@@ -449,6 +449,9 @@ components:
           format: uri
           readOnly: true
           type: string
+        accountId:
+          format: int64
+          type: integer
         consent:
           $ref: "#/components/schemas/Consent"
         email:

@@ -643,6 +643,8 @@ export interface components {
              * @example /api/bigshop/schemas/User.json
              */
             readonly $schema?: string;
+            /** Format: int64 */
+            accountId?: number;
             consent?: components["schemas"]["Consent"];
             email: string;
             id?: string;

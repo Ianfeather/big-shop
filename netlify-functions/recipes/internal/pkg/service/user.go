@@ -26,17 +26,37 @@ func AddUser(ctx context.Context, db *sql.DB, user common.User) error {
 }
 
 func GetUser(ctx context.Context, db *sql.DB, userID string) (u *common.User, e error) {
-	userQuery := `SELECT id, name, email, onboarded, show_pantry_staples FROM user WHERE id = ?`
+	// account_id is joined in rather than fetched separately, and that is the
+	// point: common.Caller resolves it with a query of its own, so asking it
+	// here would add a round trip to a route every authenticated page already
+	// calls - the exact cost specs/request-model-optimisations.md spent six
+	// phases removing. A LEFT JOIN keeps this one query.
+	//
+	// LEFT, not INNER: a user with no enabled account_user row still has to
+	// come back. That is a real state - the invite flow disables every row for
+	// a user who accepts an invite elsewhere (see DisableUserAccount) - and an
+	// INNER JOIN would turn it into "no such user" and blank their preferences.
+	userQuery := `
+		SELECT u.id, u.name, u.email, u.onboarded, u.show_pantry_staples, au.account_id
+			FROM user u
+			LEFT JOIN account_user au ON au.user_id = u.id AND au.enabled = true
+			WHERE u.id = ?
+	`
 	user := &common.User{}
 
 	// Scanned into a local and then pointed at, so the field is always non-nil
 	// on the way out - a read of this User always states the preference,
 	// including when it is false. See the field's comment in common/types.go.
 	var showPantryStaples bool
-	if err := db.QueryRowContext(ctx, userQuery, userID).Scan(&user.ID, &user.Name, &user.Email, &user.Onboarded, &showPantryStaples); err != nil {
+	var accountID sql.NullInt64
+	if err := db.QueryRowContext(ctx, userQuery, userID).Scan(&user.ID, &user.Name, &user.Email, &user.Onboarded, &showPantryStaples, &accountID); err != nil {
 		return nil, err
 	}
 	user.ShowPantryStaples = &showPantryStaples
+	if accountID.Valid {
+		id := int(accountID.Int64)
+		user.AccountID = &id
+	}
 
 	// The latest consent decision rides along on the User rather than costing a
 	// route of its own - see the field's comment in common/types.go. A user who

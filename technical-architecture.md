@@ -260,6 +260,7 @@ because the trust boundary is different in each.
 | `NEXT_PUBLIC_FARO_COLLECTOR_URL` | Faro, in the **browser** (`lib/telemetry/faro.ts`) | no — see below |
 | `FARO_APP_ID`, `FARO_STACK_ID` | `scripts/upload-sourcemaps.sh`, at **build time** | no |
 | `FARO_API_KEY` | the same script | **yes** |
+| `NEXT_PUBLIC_GA_MEASUREMENT_ID` | Google Analytics, in the **browser** (`lib/analytics/ga.ts`) | no — see below |
 
 Two things worth stating plainly.
 
@@ -268,6 +269,15 @@ prefix is correct rather than an oversight: every visitor's browser posts to it,
 so it is in the bundle whatever we do. It embeds an app key, which is an
 ingestion identifier and not a credential — it grants writing telemetry to one
 Faro app and nothing else.
+
+**The GA measurement id is public for the same reason, and its absence is the
+off switch.** `lib/analytics/ga.ts` treats the presence of the variable as the
+entire on/off decision, exactly as `faro.ts` treats its collector URL — so a
+build without it loads no tag and makes no request to Google, which is what a
+deploy preview and a laptop get. Unsetting it in Netlify is a complete
+disable, with no code change. Note that this is only the *outer* switch: even
+with the id set, nothing loads until a visitor accepts analytics
+(`specs/analytics-and-consent.md`).
 
 **`OTEL_EXPORTER_OTLP_HEADERS` and `FARO_API_KEY` must never gain a
 `NEXT_PUBLIC_` prefix.** Next inlines every such variable into the client

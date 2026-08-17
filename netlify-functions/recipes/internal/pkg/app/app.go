@@ -34,7 +34,7 @@ type App struct {
 	purger cachePurger
 	// catalogs holds the global Unit and Ingredient catalogs in process, so a
 	// shopping-list request does not re-read the whole of both tables. Cleared
-	// by the same handler that purges the edge cache - see purgeUnitsCache.
+	// by the same handler that purges the edge caches - see purgeCatalogCaches.
 	// A nil *service.Catalogs is a valid uncached cache, so nothing breaks if
 	// an App is built without one.
 	catalogs *service.Catalogs
@@ -376,12 +376,62 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, huma.API, error) {
 		next(w, r)
 	}))
 	n.Use(c)
-	if os.Getenv("DISABLE_AUTH") == "true" {
-		n.Use(negroni.HandlerFunc(a.devUserMiddleware))
-	} else {
-		n.Use(jwtHandler())
-		n.Use(negroni.HandlerFunc(a.userMiddleware))
+
+	// The three global catalogs are reachable without a token, like /health and
+	// unlike everything else.
+	//
+	// This is not a relaxation - it is the gate catching up with a decision
+	// ADR-0009 already made. Each of these routes answers `public` with an
+	// `s-maxage`, which instructs a *shared* cache to store the response and
+	// hand it to whoever asks next. That is the whole point of them, and it
+	// means the contents were already public the moment the first response was
+	// cached: a gate a CDN is licensed to serve around is not a gate. ADR-0009
+	// says as much in each handler's comment ("`public` makes this readable by
+	// an unauthenticated caller"), and until now that was aspirational rather
+	// than true.
+	//
+	// Making it true is what lets Recipe Import read /ingredients through the
+	// edge at all (follow-ups.md #51). A shared CDN will not reliably store a
+	// response to a request carrying Authorization, so as long as the only way
+	// to get one was to send a token, the cache headers were decoration.
+	//
+	// What is exposed is exactly what ADR-0001 defines as global and
+	// non-personal: Ingredient names, Unit names, and the seeded Tag list. No
+	// account is named, no Recipe is reachable, and none of the three handlers
+	// takes a Caller - which is checked below rather than trusted, because a
+	// handler that started needing one would otherwise panic in production
+	// rather than fail here.
+	catalogPaths := map[string]bool{
+		base + "/ingredients": true,
+		base + "/units":       true,
+		base + "/tags":        true,
 	}
+	isPublicCatalog := func(r *http.Request) bool {
+		return r.Method == http.MethodGet && catalogPaths[r.URL.Path]
+	}
+
+	// Both branches are wrapped as one unit rather than skipped individually,
+	// because the JWT and user middlewares are a pair: running the second
+	// without the first is the "misassembled stack" callerFrom's comment warns
+	// about, and skipping only one would be exactly that.
+	var auth negroni.HandlerFunc
+	if os.Getenv("DISABLE_AUTH") == "true" {
+		auth = a.devUserMiddleware
+	} else {
+		jwt := jwtHandler()
+		auth = func(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+			jwt(w, r, func(w2 http.ResponseWriter, r2 *http.Request) {
+				a.userMiddleware(w2, r2, next)
+			})
+		}
+	}
+	n.Use(negroni.HandlerFunc(func(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+		if isPublicCatalog(r) {
+			next(w, r)
+			return
+		}
+		auth(w, r, next)
+	}))
 	// After the auth pair, deliberately: the server span is opened outside this
 	// whole stack (main.go wraps it), but the identity that makes the span worth
 	// finding is only on the context once one of the two middlewares above has

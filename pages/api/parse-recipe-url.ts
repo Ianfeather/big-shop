@@ -27,7 +27,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const html = await (await fetch(url)).text();
     // Read from the database rather than taken from the request body - see
     // lib/recipe-import/known-names.ts for why the client is no longer asked.
-    const { knownIngredients, knownUnits } = await fetchKnownNames(req);
+    const { knownIngredients, knownUnits } = await fetchKnownNames();
     const result = await extractRecipe({
       input: htmlToInput(html),
       knownIngredients,

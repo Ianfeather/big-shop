@@ -2,7 +2,7 @@
 
 Small defects and doc-drift found while building `CONTEXT.md` from the codebase (2026-07-13). Not designed here — just flagged for later action.
 
-Items 1–30, 32, 33, 36, 39, 40, 44, 48, 49, 53, 56 and 58 have all been resolved — see [`follow-ups-resolved.md`](./follow-ups-resolved.md) for the full history (numbering preserved for cross-references between entries).
+Items 1–30, 32, 33, 36, 39, 40, 44, 48, 49, 51, 53, 56 and 58 have all been resolved — see [`follow-ups-resolved.md`](./follow-ups-resolved.md) for the full history (numbering preserved for cross-references between entries).
 
 Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are real but deliberately not being fixed, so they are not queued work.
 
@@ -343,68 +343,6 @@ Items 34 and 35 have moved to [`known-issues.md`](./known-issues.md): they are r
     - **#42 is the reason the lifecycle emails would work or not.** A retention email
       pointing someone back into an empty Account is the same wound from a different
       angle — sequencing matters more than content here.
-
-51. **Every Recipe Import fetches the whole Ingredient catalog across the Atlantic.**
-    Opened by the `Cache-Control` audit (#44, resolved), which concluded that `/ingredients`
-    is the one global catalog edge caching cannot help and named an in-process cache as
-    "the real win". That conclusion was too quick, and this item deliberately reopens the
-    question rather than inheriting it: the round trip is real, but an in-process cache is
-    only one of three ways to remove it, and probably not the best.
-
-    **What was actually verified**, by tracing every caller rather than by reading #44:
-
-    - **`/ingredients` has exactly one consumer**: `fetchKnownNames` in
-      `lib/recipe-import/known-names.ts`. The two browser hooks that used to read it
-      (`use-ingredient-names`, `use-ingredient-metadata`) no longer exist — they went when
-      the fetch moved server-side so the model would stop coining near-duplicates of names
-      created moments earlier. Dave does not touch it.
-    - **It runs on every ingredient-bearing import** — `/api/parse-recipe-url`,
-      `/api/parse-recipe-text` and `/api/recipe-image`, skipped only for a method-only
-      import.
-    - **The path is transatlantic.** Those are Next.js API routes, so they run as Netlify
-      functions, which [ADR-0006](./docs/adr/0006-go-api-leaves-netlify-functions.md)
-      records as defaulting to `cmh` (US East, Ohio) with region selection paywalled. They
-      call `API_HOST_INTERNAL` — the Fly origin in Frankfurt — *directly*, not through
-      `www.bigshop.life`. So the hop is Ohio → Frankfurt → TiDB and back, which is the
-      exact cost ADR-0006 moved the API to remove, reintroduced from the other side.
-    - **The payload has no ceiling.** `GetAllIngredients` is `SELECT name FROM ingredient`
-      — the entire global catalog, unscoped, unpaginated, growing monotonically as people
-      import recipes ([ADR-0001](./docs/adr/0001-global-ingredient-catalog.md)).
-
-    So the endpoint is not irrelevant — the data is what stops catalog fragmentation, which
-    migration 029 exists to undo — but its shape is an artifact of the extractor living in
-    a Netlify function while the catalog lives in Frankfurt.
-
-    **Three fixes, in increasing order of how much they actually solve.** Pick one
-    deliberately; they are alternatives, not stages.
-
-    - **Route the call through `www.bigshop.life` instead of the Fly origin.** Then it
-      crosses Netlify's edge like everything else and caches exactly like `/units` — and a
-      hit is served from the Ohio PoP rather than Frankfurt, which is the whole latency
-      problem gone. Cheapest by far: a host change plus the `public`/`s-maxage` header and
-      a cache tag, and `internal/pkg/purge` already exists to invalidate it. Costs: a hop
-      back through the platform the migration routed around; the catalog becomes publicly
-      readable (the same trade already accepted for `/tags` and `/units`, fine under
-      ADR-0001); and it needs purging on **every** Recipe save, since saves coin
-      ingredients far more often than units. **Unverified assumption, and the thing to test
-      first: that Netlify's CDN caches a response fetched by one of its own functions.**
-    - **Cache in-process in `known-names.ts`** — what #44 proposed. Works, but the ceiling
-      is lower than it looks: a module-level variable is only long-lived on a long-lived
-      process, and this runs in a Netlify function, where a cold start starts empty and
-      concurrent invocations do not share one. A short TTL is enough on correctness
-      grounds — a stale list costs a near-duplicate name, not a broken import, and
-      `extract.js` degrades honestly on an empty one.
-    - **Move Recipe Import extraction into the Go API.** The structurally correct answer:
-      co-located with the database, `fetchKnownNames` becomes a local query and
-      `/ingredients` can be deleted outright. Much the largest change — the LLM calls,
-      `OPENAI_API_KEY`, image upload and `formidable` all move — so it wants its own spec,
-      and it is worth noting as the destination even if the first option is what ships.
-
-    **Measure before building any of them.** Two numbers decide it: how long
-    `fetchKnownNames` actually takes in production, and how often imports happen. If
-    imports are rare, this is a round trip nobody is waiting on and the right answer is to
-    do nothing. `observability.md`'s tracing would answer both directly — as with #49, the
-    cheapest move may be to wait for it rather than to guess now.
 
 52. **The Go API has no DB-backed test harness, so no handler and no query is tested.**
     Surfaced by the `Cache-Control` audit (#44), which wanted to assert that a Recipe write

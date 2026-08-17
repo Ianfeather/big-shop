@@ -203,7 +203,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     // entirely for a method-only import, which has no name to canonicalise.
     const { knownIngredients, knownUnits } = methodOnly
       ? { knownIngredients: [], knownUnits: [] }
-      : await fetchKnownNames(req);
+      : await fetchKnownNames();
 
     // Read the file and convert to base64
     const imageBuffer = await fs.readFile(imageFile.filepath);

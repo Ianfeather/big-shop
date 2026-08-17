@@ -4,8 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -14,6 +17,10 @@ import (
 	"recipes/internal/pkg/common"
 
 	"github.com/danielgtaylor/huma/v2"
+	// Registered for its side effect only, so sql.Open("mysql", ...) above has
+	// a driver. main.go imports it for the same reason; the app package never
+	// names it outside this test.
+	_ "github.com/go-sql-driver/mysql"
 
 	jose "gopkg.in/go-jose/go-jose.v2"
 	josejwt "gopkg.in/go-jose/go-jose.v2/jwt"
@@ -268,9 +275,23 @@ func TestEachRouteStampsItsOwnPolicy(t *testing.T) {
 		t.Errorf("/units Netlify-Cache-Tag = %q, UnitsCacheTag = %q", units.NetlifyCacheTag, UnitsCacheTag)
 	}
 
-	// Not cached, and deliberately not `private` either - see the constant.
-	if got := (&IngredientsOutput{}).withCachePolicy().CacheControl; got != "no-store" {
+	// Five minutes and a tag, matching /units exactly. This route was
+	// `no-store` until follow-ups.md #51 pointed Recipe Import at the edge
+	// rather than at Fly directly - before that there was no shared cache in
+	// the path for a header to talk to.
+	ingredients := (&IngredientsOutput{}).withCachePolicy()
+	if got := ingredients.CacheControl; got != "public, max-age=0, s-maxage=300" {
 		t.Errorf("/ingredients Cache-Control = %q", got)
+	}
+	if ingredients.NetlifyCacheTag != IngredientsCacheTag || IngredientsCacheTag != "ingredients" {
+		t.Errorf("/ingredients Netlify-Cache-Tag = %q, IngredientsCacheTag = %q", ingredients.NetlifyCacheTag, IngredientsCacheTag)
+	}
+
+	// The two Open catalogs must not share a tag. They are purged together
+	// today, so a copy-paste here would look correct right up until one of them
+	// needed purging alone.
+	if IngredientsCacheTag == UnitsCacheTag {
+		t.Errorf("both Open catalogs use the tag %q", UnitsCacheTag)
 	}
 }
 
@@ -288,33 +309,106 @@ func (s *spyPurger) Purge(tag string) {
 	s.tags = append(s.tags, tag)
 }
 
-// A Recipe create or edit runs insertUnits, which can coin a Unit the cached
-// /units response does not have - so both purge the edge cache.
+// A Recipe create or edit runs insertUnits and insertIngredients, either of
+// which can coin a row the cached /units or /ingredients response does not have
+// - so both writes purge both edge caches.
 //
-// Exercised through purgeUnitsCache rather than through addRecipe/editRecipe,
+// Exercised through purgeCatalogCaches rather than through addRecipe/editRecipe,
 // which cannot be reached without a database. What that leaves untested is the
 // call site itself; the e2e suite covers it by saving real Recipes, and a
-// missing call would show up there as a stale unit list rather than an error.
+// missing call would show up there as a stale catalog rather than an error.
 //
-// purgeUnitsCache also clears the API's own in-process copy of the catalogs,
+// purgeCatalogCaches also clears the API's own in-process copy of the catalogs,
 // which this cannot see - Catalogs deliberately exposes no "is it loaded". That
-// half is covered by service's catalog_cache_test.go, and the reason the two
-// live in one method rather than two call sites is written up there and on
-// purgeUnitsCache itself. The interesting failure is clearing one and not the
-// other: the client would see a new Unit immediately while the Shopping List
+// half is covered by service's catalog_cache_test.go, and the reason all three
+// live in one method rather than three call sites is written up there and on
+// purgeCatalogCaches itself. The interesting failure is clearing one and not
+// another: the client would see a new Unit immediately while the Shopping List
 // went on combining without it, which reads as a combining bug.
-func TestRecipeWritesPurgeTheUnitsCache(t *testing.T) {
+func TestRecipeWritesPurgeBothOpenCatalogs(t *testing.T) {
 	spy := &spyPurger{}
 	// catalogs is left nil on purpose: a nil *service.Catalogs invalidates
 	// harmlessly, which is the property that lets a test assemble an App from
 	// only the fields it cares about.
 	application := &App{purger: spy}
 
-	application.purgeUnitsCache()
+	application.purgeCatalogCaches()
 
-	if len(spy.tags) != 1 || spy.tags[0] != UnitsCacheTag {
-		t.Errorf("purged %v, want exactly [%s]", spy.tags, UnitsCacheTag)
+	sort.Strings(spy.tags)
+	want := []string{IngredientsCacheTag, UnitsCacheTag}
+	sort.Strings(want)
+	if !slices.Equal(spy.tags, want) {
+		t.Errorf("purged %v, want exactly %v", spy.tags, want)
 	}
+
+	// /tags is seeded by migration and never written to, so purging it would
+	// only spend Netlify's rate limit against a catalog that cannot go stale.
+	if slices.Contains(spy.tags, "tags") {
+		t.Error("purged the tags cache; /tags is seeded by migration and never written to")
+	}
+}
+
+// The three global catalogs answer without a token, like /health and unlike
+// every other route.
+//
+// This is what makes their `public, s-maxage` headers mean anything: a shared
+// CDN will not reliably store a response to a request carrying Authorization,
+// so as long as a token was required the cache policy was decoration. It is
+// also the thing most likely to be "tidied" back by someone reading the
+// middleware stack and seeing an exception with no obvious reason - hence a
+// test that names the reason.
+//
+// Exercised with auth *enabled* and no token presented: a non-401 means the
+// request never reached the JWT middleware. The handler behind it then fails on
+// the database, which is fine and is the assertion working - a 500 here is a
+// request that got all the way through, which is exactly what is being checked.
+//
+// The database is opened against an unroutable port rather than left nil.
+// `database/sql` dials lazily, so this costs no connection at registration, but
+// a nil *sql.DB segfaults inside `(*DB).conn` the moment a handler queries it -
+// a panic, not a status, and nothing to assert on. A refused connection gives
+// the handler a real error to turn into a 500.
+func TestGlobalCatalogsAnswerWithoutAToken(t *testing.T) {
+	t.Setenv("DISABLE_AUTH", "")
+	t.Setenv("AUTH0_DOMAIN", "example.auth0.com")
+	t.Setenv("AUTH0_AUDIENCE", "https://big-shop-api")
+
+	db, err := sql.Open("mysql", "nobody:nothing@tcp(127.0.0.1:1)/none")
+	if err != nil {
+		t.Fatalf("sql.Open() error = %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	application, err := NewApp(&common.Env{DB: db})
+	if err != nil {
+		t.Fatalf("NewApp() error = %v", err)
+	}
+	router, _, err := application.GetRouter(testBase)
+	if err != nil {
+		t.Fatalf("GetRouter() error = %v", err)
+	}
+
+	for _, path := range []string{"/ingredients", "/units", "/tags"} {
+		t.Run(path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testBase+path, nil))
+
+			if rec.Code == http.StatusUnauthorized {
+				t.Errorf("GET %s = 401; the global catalogs must answer without a token", path)
+			}
+		})
+	}
+
+	// The carve-out is by path *and* method. A write is not a catalog read, and
+	// nothing else may slip through beside them.
+	t.Run("does not exempt other routes", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testBase+"/recipes", nil))
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("GET /recipes = %d, want 401 - only the three catalogs are exempt", rec.Code)
+		}
+	})
 }
 
 // The /health carve-out sits ahead of CORS and the JWT middleware in the

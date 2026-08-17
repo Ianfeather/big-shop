@@ -1,8 +1,8 @@
 # Cut the per-request round trips
 
 Measurements and rationale: follow-up #49 (see
-[`follow-ups-resolved.md`](../follow-ups-resolved.md)) and
-[ADR-0006](../docs/adr/0006-go-api-leaves-netlify-functions.md)'s Measured outcome. This
+[`follow-ups-resolved.md`](../../follow-ups-resolved.md)) and
+[ADR-0006](../../docs/adr/0006-go-api-leaves-netlify-functions.md)'s Measured outcome. This
 spec covers the *how*.
 
 **Not urgent, and worth saying so at the top.** Post-Fly, `GET /shopping-list` is ~165ms
@@ -420,7 +420,7 @@ copy. Invalidate from `AddRecipe`/`EditRecipe` — the same write path that alre
 Units (`components/recipe-form/Form.tsx:101` refetches `/units` for exactly this reason).
 
 **This is a different cache from the one #44 shipped, and they have to be invalidated
-together.** #44 (resolved, [ADR-0009](../docs/adr/0009-edge-caching-the-global-catalogs.md))
+together.** #44 (resolved, [ADR-0009](../../docs/adr/0009-edge-caching-the-global-catalogs.md))
 put `GET /units` behind Netlify's edge with a `units` cache tag, purged on Recipe
 create/edit through the new `internal/pkg/purge` package. That cache serves *clients*; this
 one serves the API's own combining logic. A Recipe save must clear both, so hang the

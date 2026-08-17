@@ -7,7 +7,7 @@
 // free: it emits spans through @opentelemetry/api's global tracer whenever one
 // is registered, so page renders and route dispatch appear without this repo
 // writing any of it. See lib/telemetry/setup.ts for what gets installed, and
-// specs/observability.state.md's Phase 4 corrections for what those built-in
+// specs/completed/observability.state.md's Phase 4 corrections for what those built-in
 // spans do and do not manage to export from a freezing Lambda.
 export async function register() {
   // The SDK is Node-only - it reaches for http, async_hooks and process - and

@@ -1,4 +1,14 @@
-# Follow-ups (resolved)
+# Follow-ups (resolved) — FROZEN ARCHIVE
+
+> **This file is no longer the ticketing system, and nothing should be added to
+> it or edited in it.** Every entry below now lives on the
+> [bigshop Notion board](https://app.notion.com/p/87fae8a2ed054f2c874201e827639bd8)
+> with a State of `done` (migrated 2026-08-17), where the item numbers are
+> preserved as `#N` title prefixes. See CLAUDE.md's "Tracking work: the Notion
+> board".
+>
+> This file stays in the repo only because migrations, ADRs, specs and code
+> comments cite it by path. Read it as history; the board is the live state.
 
 Completed items migrated out of [`follow-ups.md`](./follow-ups.md) to keep that
 file focused on what's still open. Original numbering preserved for

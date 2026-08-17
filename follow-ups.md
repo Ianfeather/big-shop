@@ -1,4 +1,15 @@
-# Follow-ups
+# Follow-ups — FROZEN ARCHIVE
+
+> **This file is no longer the ticketing system, and nothing should be added to
+> it or edited in it.** Every entry below, open and resolved, now lives on the
+> [bigshop Notion board](https://app.notion.com/p/87fae8a2ed054f2c874201e827639bd8)
+> (migrated 2026-08-17), where the item numbers are preserved as `#N` title
+> prefixes. File new work there — see CLAUDE.md's "Tracking work: the Notion
+> board".
+>
+> This file stays in the repo only because migrations, ADRs, specs and code
+> comments cite it by path. Read it as history; the board is the live state, and
+> where the two disagree the board wins.
 
 Small defects and doc-drift found while building `CONTEXT.md` from the codebase (2026-07-13). Not designed here — just flagged for later action.
 

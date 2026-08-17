@@ -7,6 +7,7 @@ Big Shop is a recipe management and meal planning app: a Next.js 16 / React 19 f
 - **What this product is** (Account, Recipe, Shopping List, and the rest of the domain vocabulary) → [CONTEXT.md](./CONTEXT.md)
 - **How it's built** (DB schema, API routes, component structure, hooks, deployment, dependencies) → [technical-architecture.md](./technical-architecture.md)
 - **Known issues we don't plan to fix** (investigated, judged not worth acting on — check here before chasing a surprising error) → [known-issues.md](./known-issues.md)
+- **What's queued, in flight and shipped** (the ticketing system — it is not in this repo) → [the bigshop Notion board](https://app.notion.com/p/87fae8a2ed054f2c874201e827639bd8), and "Tracking work" below
 
 ## How to run and test the app
 
@@ -161,7 +162,7 @@ npm run test         # run once
 npm run test:watch   # watch mode
 ```
 Config is `vitest.config.js`. Components/hooks/tests in this codebase are
-TypeScript (`.tsx`/`.ts`, see `follow-ups.md` #9). Test files live next to
+TypeScript (`.tsx`/`.ts`, see board item #9). Test files live next to
 the file under test (e.g. `components/button/index.test.tsx`,
 `hooks/use-page-visibility.test.ts`) — see those two for the established
 pattern.
@@ -221,7 +222,7 @@ migration and the e2e suite keeps running against the old schema — failing in
 ways that look like application bugs (every shopping-list request 500s on a
 missing column, so the list just renders empty) rather than like a stale
 environment. It also stops fixture recipes accumulating across runs, which they
-did, for months, because teardown deletes fail silently (follow-ups.md #24).
+did, for months, because teardown deletes fail silently (board item #24).
 
 The suite covers the core Recipe CRUD and Shopping List flows (add/edit/delete a
 Recipe; add/remove a Recipe on the list, add an Extra Item, mark/un-mark an item
@@ -246,7 +247,7 @@ nothing stops another file stomping it. `recipe-import.spec.ts` therefore
 asserts on the captured save payload rather than on the rendered list. Run this whenever a change touches
 recipe creation/editing/deletion or shopping-list behavior — Vitest alone
 won't catch a regression that only shows up going through the real API
-(e.g. a mismatched request content-type, as `follow-ups.md` #12 notes was
+(e.g. a mismatched request content-type, as board item #12 notes was
 caught this way).
 
 Also runs in CI via `.github/workflows/e2e.yml` on every pull request
@@ -289,6 +290,117 @@ Evals:
 ```bash
 npm run test:evals   # runs evals/run-evals.sh
 ```
+
+## Tracking work: the Notion board
+
+**The [bigshop Notion board](https://app.notion.com/p/87fae8a2ed054f2c874201e827639bd8)
+is the single source of truth for what is queued, in flight and finished.**
+Reach it through the `notion` MCP server: the database is
+`87fae8a2ed054f2c874201e827639bd8` and its data source (the one to create pages
+under, and to query with SQL) is
+`collection://f5066c26-2463-4017-a02d-c82c02eb23f3`.
+
+Each row has two properties: **Item** (the title) and **State**, one of
+
+| State | Meaning |
+| --- | --- |
+| `backlog` | Filed, not designed. The default for anything newly noticed. |
+| `spec written` | A spec exists under `specs/` and nothing has been built from it yet. |
+| `in development` | **Claimed.** Someone is actively building it, and its title is prefixed `WIP `. Don't start it — see "Claim an item before you touch it" below. |
+| `done` | Shipped. |
+
+The row's page body carries the write-up: what the problem is, what was
+investigated, what was deliberately *not* done and why. That prose is the point
+of the board — keep writing it at the length the thing deserves, the way the
+entries migrated from `follow-ups.md` do. A one-line row is nearly worthless
+three months later.
+
+**Always set `State` explicitly when creating a row.** There is no default:
+verified against this data source, a `notion-create-pages` call that omits
+`State` produces a row whose State is **null**, not `backlog`. Notion's status
+properties expose no default value the MCP server can set (`update_data_source`
+takes DDL only), so nothing but this rule prevents it. A stateless row is not
+lost — the Board view has `hideEmptyGroups: false`, so it appears in a "No
+Status" column — but it is in none of the four real states and reads as a
+mistake. If you find one, give it a state.
+
+### Claim an item before you touch it
+
+**Several agents work this repo, and the board is the only thing stopping two
+of them building the same item twice.** A claim is not bookkeeping you do
+afterwards — it is the first action of the work, taken **before the first line
+of code, the first migration, or the first edit to a spec file.** An item you
+are working on but have not claimed is invisible to everyone else, and the cost
+lands on whoever picks it up next.
+
+**1. Check it is free.** Before starting anything, read the row's State:
+
+```sql
+-- via notion-query-data-sources, mode: sql
+SELECT "Item", "State" FROM "collection://f5066c26-2463-4017-a02d-c82c02eb23f3"
+WHERE "Item" LIKE '%<the thing you are about to build>%'
+```
+
+If it is already `in development`, **stop and do not start it.** Someone else
+holds it. Say so, and either pick a different item or ask the user — the one
+thing not to do is start anyway because the branch looks quiet.
+
+**2. Claim it, in the same action, before working.** Two changes together:
+
+- **State → `in development`.** This is the claim state whether you are
+  building the thing or writing its spec — both are active work on the item,
+  and both want other agents to keep off. Don't reach for `spec written` here:
+  that describes a spec that *exists*, so setting it before you have written
+  one is a claim disguised as a result.
+- **Prefix the title with `WIP `**, e.g.
+  `#41 — Backfill the Method…` becomes `WIP #41 — Backfill the Method…`.
+
+The `WIP ` prefix is deliberate redundancy. State is invisible in a
+`notion-search` result, in a page mention, and anywhere else only the title is
+rendered — the prefix means a claimed item reads as claimed everywhere, not
+just on the board.
+
+**3. Say where the work is.** Put the branch name in the body as you claim, and
+the PR link as soon as one exists. "Claimed" without "and here is the branch"
+still leaves the next agent unable to tell live work from an abandoned claim.
+
+**4. Release the claim when you stop — finished or not.** This is the half that
+is easy to skip and the one that rots the board:
+
+- **Built and merged** → State `done`, **strip the `WIP ` prefix**, and update
+  the body to say what actually shipped, including anything the original
+  framing got wrong. Several migrated entries do exactly this (#44, #49, #58)
+  and they are the most useful rows on the board. **Not before the merge**: an
+  open PR is not shipped, so the row stays claimed while it waits, and rule 5
+  of "Shipping work" below carries the release as its fourth step.
+- **Spec written, not yet built** → State `spec written`, **strip the `WIP `
+  prefix**, link the spec from the body. The item is free again, and the next
+  agent gets a designed thing to pick up.
+- **Stopped without finishing** → put the State back where you found it,
+  **strip the `WIP ` prefix**, and add a line to the body saying how far it got
+  and what is on the branch. A claim left behind on abandoned work is a
+  permanent lock, and it is worse than no claim at all because it looks
+  deliberate.
+
+### Everything else
+
+- **Noticing something worth doing → create a row in `backlog`.** Don't add it
+  to a markdown file, and don't leave it in a PR description.
+- **Titles keep the `#N` prefix** for items that came from `follow-ups.md`, so
+  the cross-references in the bodies (and in code comments, migrations and
+  ADRs) still resolve. New items don't need a number. A `WIP ` claim prefix
+  goes in front of the number, not after it.
+- **A `spec written` row links its spec file** from the body.
+
+**`follow-ups.md` and `follow-ups-resolved.md` are a frozen archive.** Every one
+of their entries now lives on the board. They stay in the repo only because
+migrations, ADRs, specs and code comments cite them by path — **do not add to
+them, and do not edit them**. If an old entry needs correcting, correct the
+Notion row.
+
+`known-issues.md` is unaffected and is still the right place for a problem that
+has been investigated and deliberately will not be fixed. That is a different
+thing from a backlog item: nothing in `known-issues.md` is queued work.
 
 ## Shipping work: pull requests
 
@@ -352,27 +464,35 @@ commit from the one they last ran against. Note the ruleset is deliberately not
 "strict", so a branch does *not* need rebasing merely for being behind
 `master`; do this on an actual conflict, not on every unrelated push.
 
-**5. Merging is the user's call, and it has three steps.** Never merge on your
+**5. Merging is the user's call, and it has four steps.** Never merge on your
 own initiative. When the user does say to merge:
 
 ```bash
 gh pr merge <n> --squash        # 1. merge (squash unless told otherwise)
 git checkout master && git pull origin master   # 2. resync local master
 git branch -d <branch>          # 3. delete the local branch
+                                # 4. release the board claim (below)
 ```
 
-Do all three — leaving a stale local `master` and a dead branch behind is the
+Do all four — leaving a stale local `master` and a dead branch behind is the
 part that quietly bites later, when the next branch is cut from an
 out-of-date `master`. `-d` (not `-D`) is deliberate: it refuses if the branch
 somehow isn't merged, which is a signal worth reading rather than overriding.
 The remote branch is deleted by `gh pr merge` if the repo is set to do so;
 check and delete it explicitly if it lingers.
 
+**Step 4 is the board.** The merge is the moment the work ships, so it is the
+moment the row becomes `done`: set its State, **strip the `WIP ` prefix from
+its title**, and update the body to say what actually shipped. Until this step
+the item is still claimed and still reads as claimed to every other agent —
+which is correct while a PR is open, and wrong the second it lands.
+
 ## Useful External Links
 
+- [bigshop Notion board](https://app.notion.com/p/87fae8a2ed054f2c874201e827639bd8) —
+  the ticketing system. See "Tracking work: the Notion board" above.
 - [Netlify Dashboard](https://app.netlify.com/sites/big-shop/overview)
 - [Fly.io Dashboard](https://fly.io/apps/big-shop-api) — the Go API. First-time setup,
   cutover and rollback: [fly-migration-runbook.md](./docs/fly-migration-runbook.md)
 - [TiDB Console](https://tidbcloud.com/console/clusters/10445360365857932862/sqleditor?orgId=1372813089209222715&projectId=1372813089454538934)
 - [Auth0 Management](https://manage.auth0.com/dashboard/eu/dev-x-n37k6b/applications/HxkTOH3ZYxjbsgrVI4ii1CV2TQx7hk9G/settings)
-- [Trello Backlog](https://trello.com/b/LnaGkQyG/bigshop)

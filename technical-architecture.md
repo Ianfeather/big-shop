@@ -40,7 +40,7 @@ Located in `netlify-functions/recipes/`:
   `dev`) runs a plain `http.Server` on `:8080` — which is what both local development
   *and* the production container on Fly run — and the default is `lambda.Start`, still
   deployed to Netlify Functions during the migration's cooling-off period
-  ([spec](./specs/api-hosting-migration.md) Phase 5 deletes it)
+  ([spec](./specs/completed/api-hosting-migration.md) Phase 5 deletes it)
 - `basePath` / `lambdaBasePath` (`main.go`): the server registers routes under
   `/api/bigshop`, which is also the OpenAPI server URL — Netlify rewrites that path to
   the Fly origin with `status = 200`, so the API stays same-origin to the browser. The
@@ -279,7 +279,7 @@ visitor. This is the same trap `lib/api-host.ts` documents for
 environment variables into the function bundle and the client bundle at *deploy*
 time, so an existing deploy never picks up a variable added afterwards. This is
 not obvious and has already cost one confused debugging session — see the Phase 4
-notes in `specs/observability.state.md`.
+notes in `specs/completed/observability.state.md`.
 
 The Go API's telemetry is configured separately, as Fly secrets on the collector
 sidecar rather than on the app — `docs/adr/0007-observability-otel-grafana-cloud.md`
@@ -367,7 +367,7 @@ that, and so does anything added later.
 
 Three routes override it, each differently — the reasoning is in
 [ADR-0009](./docs/adr/0009-edge-caching-the-global-catalogs.md) and the audit that produced
-it is `follow-ups.md` #44:
+it is board item #44:
 
 | Route | `Cache-Control` | Notes |
 |---|---|---|

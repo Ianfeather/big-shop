@@ -315,7 +315,9 @@ Reach it through the `notion` MCP server: the database is
 under, and to query with SQL) is
 `collection://f5066c26-2463-4017-a02d-c82c02eb23f3`.
 
-Each row has two properties: **Item** (the title) and **State**, one of
+Each row has three properties: **Item** (the title), **State**, and **Tags**.
+
+**State** is one of
 
 | State | Meaning |
 | --- | --- |
@@ -323,6 +325,35 @@ Each row has two properties: **Item** (the title) and **State**, one of
 | `spec written` | A spec exists under `specs/` and nothing has been built from it yet. |
 | `in development` | **Claimed.** Someone is actively building it, and its title is prefixed `WIP `. Don't start it — see "Claim an item before you touch it" below. |
 | `done` | Shipped. |
+
+**Tags** is a multi-select, currently `blocked` and `needs answers`. It answers
+a different question from State, and the distinction is the whole point of
+having both: **State says how far an item has got; a tag says why it is not
+moving.** A tagged item is almost always still `backlog` — the tag is not a
+fifth state and must never be used as one.
+
+| Tag | Meaning | What clears it |
+| --- | --- | --- |
+| `blocked` | Cannot be started until something *outside the item* happens: a fact must be established, or another item must land first. | The external thing happening. Nobody can clear it by deciding harder. |
+| `needs answers` | Cannot be designed until a person decides something — a product call, a policy choice, a trade-off that isn't the implementer's to make. | Somebody answering. The work is a conversation, not an investigation. |
+
+The two are not interchangeable, and picking the wrong one sends the next agent
+down the wrong path. `blocked` says *go and find something out, or wait*;
+`needs answers` says *go and ask someone*. They can legitimately co-exist on
+one row, and an item can move from one to the other — #59 was `needs answers`
+because the shared-Account erasure question was a product decision, and once
+that was answered it acquired a dependency on #50 instead.
+
+**A tag without a body note is close to useless.** Whichever you apply, the row
+must also say, in prose, *what specifically* is being waited on and what would
+resolve it. "Blocked" alone tells the next reader nothing they can act on.
+
+**Adding a new tag value replaces the whole option list.** The MCP server's
+`update_data_source` takes DDL, and `ALTER COLUMN "Tags" SET MULTI_SELECT(...)`
+is a *replacement*, not an addition — omit an existing value and it is dropped
+from the schema, silently taking it off every row that carried it. Always
+restate every existing option alongside the new one, then re-query the rows
+that had tags to confirm they survived.
 
 The row's page body carries the write-up: what the problem is, what was
 investigated, what was deliberately *not* done and why. That prose is the point
@@ -348,17 +379,25 @@ of code, the first migration, or the first edit to a spec file.** An item you
 are working on but have not claimed is invisible to everyone else, and the cost
 lands on whoever picks it up next.
 
-**1. Check it is free.** Before starting anything, read the row's State:
+**1. Check it is free.** Before starting anything, read the row's State and
+Tags:
 
 ```sql
 -- via notion-query-data-sources, mode: sql
-SELECT "Item", "State" FROM "collection://f5066c26-2463-4017-a02d-c82c02eb23f3"
+SELECT "Item", "State", "Tags" FROM "collection://f5066c26-2463-4017-a02d-c82c02eb23f3"
 WHERE "Item" LIKE '%<the thing you are about to build>%'
 ```
 
 If it is already `in development`, **stop and do not start it.** Someone else
 holds it. Say so, and either pick a different item or ask the user — the one
 thing not to do is start anyway because the branch looks quiet.
+
+If it carries a **tag**, read the body before starting. `blocked` and `needs
+answers` both mean the item was deliberately parked, and the body says by whom
+and on what — starting anyway means either re-deriving something already known
+to be unanswerable, or making a decision that was explicitly left to someone
+else. Neither is a claim you can take on your own. If you believe the tag is
+stale, say why and clear it deliberately; don't just ignore it.
 
 **2. Claim it, in the same action, before working.** Two changes together:
 

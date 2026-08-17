@@ -15,7 +15,7 @@
   },
   "editable": true,
   "graphTooltip": 1,
-  "description": "The dashboard you open when something looks wrong. Triage first: what is broken, what failed, what is slow - in that order.\n\nCounts rather than rates throughout, because Big Shop has very few users and a percentage over a handful of requests is noise. See `specs/observability.md`.",
+  "description": "The dashboard you open when something looks wrong. Triage first: what is broken, what failed, what is slow - in that order.\n\nCounts rather than rates throughout, because Big Shop has very few users and a percentage over a handful of requests is noise. See `specs/completed/observability.md`.",
   "links": [
     {
       "title": "Browser errors and web vitals (Frontend Observability)",

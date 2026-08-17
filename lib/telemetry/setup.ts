@@ -72,7 +72,7 @@ export const LOGGER_NAME = 'web';
 // multiplier). It is, however, explicitly bounded by `timeoutMillis` - so this
 // one number caps total time spent whether the SDK retries or not, which is the
 // property the ADR actually wanted. See the Phase 4 correction in
-// specs/observability.state.md.
+// specs/completed/observability.state.md.
 export const EXPORT_TIMEOUT_MS = 250;
 
 // Enabled reports whether telemetry will actually be set up.

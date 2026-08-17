@@ -315,6 +315,15 @@ of the board — keep writing it at the length the thing deserves, the way the
 entries migrated from `follow-ups.md` do. A one-line row is nearly worthless
 three months later.
 
+**Always set `State` explicitly when creating a row.** There is no default:
+verified against this data source, a `notion-create-pages` call that omits
+`State` produces a row whose State is **null**, not `backlog`. Notion's status
+properties expose no default value the MCP server can set (`update_data_source`
+takes DDL only), so nothing but this rule prevents it. A stateless row is not
+lost — the Board view has `hideEmptyGroups: false`, so it appears in a "No
+Status" column — but it is in none of the four real states and reads as a
+mistake. If you find one, give it a state.
+
 **How to work with it:**
 
 - **Noticing something worth doing → create a row in `backlog`.** Don't add it
@@ -426,4 +435,3 @@ check and delete it explicitly if it lingers.
   cutover and rollback: [fly-migration-runbook.md](./docs/fly-migration-runbook.md)
 - [TiDB Console](https://tidbcloud.com/console/clusters/10445360365857932862/sqleditor?orgId=1372813089209222715&projectId=1372813089454538934)
 - [Auth0 Management](https://manage.auth0.com/dashboard/eu/dev-x-n37k6b/applications/HxkTOH3ZYxjbsgrVI4ii1CV2TQx7hk9G/settings)
-- [Trello Backlog](https://trello.com/b/LnaGkQyG/bigshop)

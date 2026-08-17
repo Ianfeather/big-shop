@@ -1,6 +1,6 @@
 # Grafana dashboards
 
-Phase 6 of [`specs/observability.md`](../specs/observability.md). Three dashboards, checked in as
+Phase 6 of [`specs/completed/observability.md`](../specs/completed/observability.md). Three dashboards, checked in as
 JSON.
 
 **Why they live in the repo rather than only in Grafana.** A dashboard built by clicking exists in

@@ -32,7 +32,7 @@ services:
   # production and development noise never touches the free-tier quota
   # (docs/adr/0007-observability-otel-grafana-cloud.md).
   #
-  # Grafana is on ${GRAFANA_PORT:-3200}, NOT 3000. specs/observability.md says
+  # Grafana is on ${GRAFANA_PORT:-3200}, NOT 3000. specs/completed/observability.md says
   # 3000 is free because "dev-full.sh serves the web app on 3001" - it doesn't:
   # scripts/dev-full.sh defaults WEB_PORT to 3000 and only moves off it on a
   # collision. Publishing Grafana there would silently push the web app to 3001

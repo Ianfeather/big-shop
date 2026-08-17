@@ -1,7 +1,7 @@
 # Observability: OpenTelemetry traces, metrics and logs to Grafana Cloud
 
-Decisions and rationale: [ADR-0007](../docs/adr/0007-observability-otel-grafana-cloud.md)
-(architecture) and [ADR-0008](../docs/adr/0008-what-telemetry-does-not-carry.md)
+Decisions and rationale: [ADR-0007](../../docs/adr/0007-observability-otel-grafana-cloud.md)
+(architecture) and [ADR-0008](../../docs/adr/0008-what-telemetry-does-not-carry.md)
 (content and cardinality rules).
 
 **Depends on [`api-hosting-migration.md`](./api-hosting-migration.md) landing first.**

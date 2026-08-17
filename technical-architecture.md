@@ -279,7 +279,7 @@ visitor. This is the same trap `lib/api-host.ts` documents for
 environment variables into the function bundle and the client bundle at *deploy*
 time, so an existing deploy never picks up a variable added afterwards. This is
 not obvious and has already cost one confused debugging session — see the Phase 4
-notes in `specs/observability.state.md`.
+notes in `specs/completed/observability.state.md`.
 
 The Go API's telemetry is configured separately, as Fly secrets on the collector
 sidecar rather than on the app — `docs/adr/0007-observability-otel-grafana-cloud.md`

@@ -1,12 +1,31 @@
 ---
-spec: specs/observability.md
-status: in-progress
-branch: observability-phase4
-pr: https://github.com/Ianfeather/big-shop/pull/95
+spec: specs/completed/observability.md
+status: complete
+branch: observability-phase6
+pr: https://github.com/Ianfeather/big-shop/pull/97
 ---
 
-Decisions and rationale live in [ADR-0007](../docs/adr/0007-observability-otel-grafana-cloud.md)
-and [ADR-0008](../docs/adr/0008-what-telemetry-does-not-carry.md). Sessions 1–7 map onto the
+**All six phases have shipped.** Six PRs, because each phase was independently
+deployable and was deployed:
+
+| Phases | PR |
+| --- | --- |
+| Session 0 + Phase 1 | [#91](https://github.com/Ianfeather/big-shop/pull/91) |
+| Phase 2 | [#93](https://github.com/Ianfeather/big-shop/pull/93) |
+| Phase 3 | [#94](https://github.com/Ianfeather/big-shop/pull/94) |
+| Phase 4 | [#95](https://github.com/Ianfeather/big-shop/pull/95) |
+| Phase 5 | [#96](https://github.com/Ianfeather/big-shop/pull/96) |
+| Phase 6 | [#97](https://github.com/Ianfeather/big-shop/pull/97) |
+
+The `branch`/`pr` fields above name the last of them. Three things the spec
+deliberately left out, each tracked on the [Notion
+board](https://app.notion.com/p/87fae8a2ed054f2c874201e827639bd8) rather than
+here: threshold-based alerting (#37), long-horizon product analytics (#43), and
+making Photo Import's detached extraction reliable rather than merely observed
+(#55).
+
+Decisions and rationale live in [ADR-0007](../../docs/adr/0007-observability-otel-grafana-cloud.md)
+and [ADR-0008](../../docs/adr/0008-what-telemetry-does-not-carry.md). Sessions 1–7 map onto the
 spec's Phases 1–6, with Phase 3 split across two Sessions and a preparatory Session 0 the spec
 does not contain.
 

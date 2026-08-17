@@ -9,7 +9,10 @@ npm run dev
 Requires node 14+
 
 ## backlog
-https://trello.com/b/LnaGkQyG/bigshop
+The [bigshop Notion board](https://app.notion.com/p/87fae8a2ed054f2c874201e827639bd8) —
+what is queued (`backlog`), designed (`spec written`), being built
+(`in development`) and shipped (`done`). See CLAUDE.md's "Tracking work: the
+Notion board" for how to work with it.
 
 ## deploying
 This is handled automatically by netlify.

@@ -25,7 +25,7 @@
 -- someone who usually has no account, and their choice is honoured entirely
 -- from localStorage; it reaches here when (and only when) they log in. The
 -- alternative - a public write endpoint keyed by a random client-minted id -
--- was rejected in specs/analytics-and-consent.md: it would mean minting a
+-- was rejected in specs/completed/analytics-and-consent.md: it would mean minting a
 -- tracking identifier for someone who may have just declined, which is a
 -- strange way to document lawful processing. The accepted gap is that a visitor
 -- who accepts and never signs up has no row here.

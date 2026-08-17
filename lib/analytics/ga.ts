@@ -1,7 +1,7 @@
 // Google Analytics 4, loaded only for someone who has said yes.
 //
 // The fourth recipient of anything in this system, after Grafana (twice) and
-// OpenAI, and the only one gated on consent - see specs/analytics-and-consent.md
+// OpenAI, and the only one gated on consent - see specs/completed/analytics-and-consent.md
 // and ADR-0008 §1, which this extends. What Google gets is deliberately narrow:
 // which pages were visited, a short fixed list of actions, and an account
 // number. Not who you are, and not what you cook.

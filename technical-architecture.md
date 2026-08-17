@@ -284,7 +284,7 @@ build without it loads no tag and makes no request to Google, which is what a
 deploy preview and a laptop get. Unsetting it in Netlify is a complete
 disable, with no code change. Note that this is only the *outer* switch: even
 with the id set, nothing loads until a visitor accepts analytics
-(`specs/analytics-and-consent.md`).
+(`specs/completed/analytics-and-consent.md`).
 
 **`OTEL_EXPORTER_OTLP_HEADERS` and `FARO_API_KEY` must never gain a
 `NEXT_PUBLIC_` prefix.** Next inlines every such variable into the client

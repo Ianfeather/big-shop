@@ -1,6 +1,6 @@
 ---
-spec: specs/analytics-and-consent.md
-status: in-progress
+spec: specs/completed/analytics-and-consent.md
+status: complete
 branch: implement/analytics-and-consent
 pr:
 ---
@@ -200,10 +200,47 @@ Carry forward:
   owns the CLAUDE.md side and `follow-ups.md`.
 
 ## Session 5: Events and docs
-Status: pending
+Status: done
 Scope: Spec Phase 4. Four events, no free-text parameters, and the longitudinal-only rule in
 the module comment so the Grafana metrics are not duplicated. Move #43 to
 `follow-ups-resolved.md`; update CLAUDE.md and `technical-architecture.md` env var tables.
 Depends on: Session 4
-Commit:
-Notes:
+Commit: c4fcbe2
+Notes: 357 unit tests and 34 e2e pass.
+
+**Correction to the spec, applied here rather than by editing it.** Phase 3 says page views
+"fire on `routeChangeComplete`". They cannot: with that listener every navigation reported the
+*previous* page — saving a Recipe recorded a view for the form it had just left, and the
+Recipe's own view appeared one navigation later. Reading the router through a ref did not help.
+Reporting now runs from an effect keyed on `router.route`/`router.asPath`, which cannot have the
+problem because it runs *because* React re-rendered with those values. Observable behaviour is
+what the spec wanted — one view per navigation, none from the tag itself. **The precise cause
+inside Next was not pinned down and the code says so**, after an earlier comment asserted a
+mechanism that turned out not to describe the code it replaced.
+
+**Verified against the real stack**, per Phase 4's exit criterion, with a dummy measurement id:
+`shopping_list_generated` on ticking a Recipe; `recipe_imported` with `source: 'manual'` on a
+real save; page views in step across `/recipes → /list → /dave → /recipes` and on to a saved
+Recipe, with the shallow `?stored=new` strip producing one view rather than two. `invite_sent`
+was exercised and correctly did **not** fire, because `POST /invite` 400s without
+`SENDGRID_API_KEY` — which is the meaningful check, since it proves the event is wired to
+success rather than to the click.
+
+**`dave_turn` has never been seen to fire.** There is no `OPENAI_API_KEY` locally, so the path
+cannot be driven end to end. It is unit-tested and fires on a reply arriving rather than a
+question being sent, but it is the one event with no observation behind it.
+
+Carry forward:
+
+- **`lib/analytics/events.ts` is the only permitted caller of `trackEvent`**, and that is now a
+  test that greps the tree rather than a comment claiming it. The comment used to assert the
+  guarantee while `trackEvent` was a plain export; a fifth event added in a page would have
+  passed the four-event and no-free-text assertions, which only read `events.ts`. The guard was
+  checked by planting a violation and watching it fail.
+- **`RecipeSource` deliberately diverges from `lib/telemetry/metrics.ts`'s `ImportSource`.**
+  That type describes extractions, so it has `method-url`/`method-photo` and no `manual` —
+  typing a Recipe never runs an extractor. Adding a Source is a two-file edit with no test
+  linking them; worth knowing before adding a fifth.
+- **The bulk paste box refines `manual` into `text` and nothing else.** The first version
+  overrode unconditionally, so a URL import topped up with one pasted ingredient reported
+  `text` and lost the `url` attribution.

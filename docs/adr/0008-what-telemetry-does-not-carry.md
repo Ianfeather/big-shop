@@ -64,7 +64,7 @@ accumulate. The identifier that makes debugging work — "show me everything for
 around 14:20" — has no counterpart question worth answering in GA, so it is not sent.
 
 Consent is a further gate on top of all of this, not a substitute for it:
-`specs/analytics-and-consent.md` covers when the tag loads at all.
+`specs/completed/analytics-and-consent.md` covers when the tag loads at all.
 
 ## 2. No unbounded labels on metrics — including `account.id`
 

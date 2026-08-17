@@ -407,7 +407,7 @@ cross-references between entries (e.g. #9 references #16).
     deletes silently fail and that `deleteRecipeById` does not assert — both untrue since #24.
 
 43. ~~Google Analytics, and the consent foundation it requires.~~ **Resolved** — designed as
-    [`specs/analytics-and-consent.md`](./specs/analytics-and-consent.md) and shipped in five
+    [`specs/completed/analytics-and-consent.md`](./specs/completed/analytics-and-consent.md) and shipped in five
     sessions. All three parts the item insisted on shipping together did:
 
     - **A privacy policy** at `/privacy`, written from the code rather than a template: the

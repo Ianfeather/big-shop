@@ -3,7 +3,7 @@
 //
 // Small on purpose: this is the one fact the policy page, the consent banner
 // and the stored consent record all have to agree on, so it lives in one place
-// rather than being typed into three. See specs/analytics-and-consent.md, whose
+// rather than being typed into three. See specs/completed/analytics-and-consent.md, whose
 // Phase 2 records a `policy_version` against every decision precisely so a
 // later material change can re-ask the people whose consent predates it.
 

@@ -157,15 +157,47 @@ to this work:
   before answering is part of what the spec asserts.
 
 ## Session 4: GA4 behind the gate
-Status: pending
+Status: done
 Scope: Spec Phase 3. `lib/analytics/ga.ts` shaped like `faro.ts`. No `gtag.js` until granted —
 deliberately contrary to Consent Mode v2's intended design, and the reason goes in the code.
 Ad signals permanently denied. Withdrawal clears `_ga*`. Manual page views on
 `routeChangeComplete`. Static `page_title` lookup with an exhaustiveness test. `account.id` as
 a user property, never `user_id`, never the Auth0 subject. Amend ADR-0008 §1.
 Depends on: Session 2
-Commit:
-Notes:
+Commit: ebf2c5d
+Notes: 343 unit tests and 34 e2e pass.
+
+**Verified in a browser with a dummy measurement id**, which the spec requires ("verify in
+devtools, not by reading the code"): declining produced zero requests to any Google domain
+across a full reload; accepting loaded the tag, queued `consent default` (all four signals
+denied) ahead of `config`, and reported a page view carrying the static title "Privacy policy"
+while `document.title` read "Privacy — Big Shop"; SPA navigation reported again; withdrawal
+stopped further reports, cleared the `_ga*` cookies, and re-granting in the same visit resumed
+collection without a second copy of the tag.
+
+**Not verifiable locally: `account_id` as a user property.** It needs a real GA property, and
+the local API runs on a non-default port so `GET /user` did not resolve. Structure is
+unit-tested; the value is Ian's to confirm once `NEXT_PUBLIC_GA_MEASUREMENT_ID` is set.
+
+Carry forward:
+
+- **Two flags, not one.** `loaded` (the tag is in the page, irreversible) and `collecting` (we
+  may send, flips with every decision) are separate because conflating them broke withdrawal in
+  both directions - page views kept flowing to a loaded tag after a withdrawal, and re-granting
+  in the same visit was a silent no-op. Session 5's events must gate on `collecting`.
+- **The router must be read live, not closed over.** `routeChangeComplete` fires from Next, not
+  React, so a callback closed over `router.asPath` can report the page being navigated away
+  from. `components/analytics` reads through a ref. The unit tests only caught this once the
+  router mock used getters instead of a snapshot - a mock that freezes router values tests a
+  router nobody has.
+- **`/privacy` is now keyed to `enabled()` from `lib/analytics/ga.ts`.** It described a feature
+  that was not live three separate times across Sessions 1, 2 and 4, caught in review every
+  time and never by reading. It no longer depends on anyone remembering: the wording, the
+  processor row and the cookie row all follow the same switch the code uses.
+- **`trackEvent` was removed from `ga.ts`** as Session 5's surface. Session 5 adds it back
+  along with `lib/analytics/events.ts`, which `ga.ts`'s comment referenced before it existed.
+- `NEXT_PUBLIC_GA_MEASUREMENT_ID` is documented in `technical-architecture.md`; Session 5 still
+  owns the CLAUDE.md side and `follow-ups.md`.
 
 ## Session 5: Events and docs
 Status: pending

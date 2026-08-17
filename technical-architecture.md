@@ -40,7 +40,7 @@ Located in `netlify-functions/recipes/`:
   `dev`) runs a plain `http.Server` on `:8080` — which is what both local development
   *and* the production container on Fly run — and the default is `lambda.Start`, still
   deployed to Netlify Functions during the migration's cooling-off period
-  ([spec](./specs/api-hosting-migration.md) Phase 5 deletes it)
+  ([spec](./specs/completed/api-hosting-migration.md) Phase 5 deletes it)
 - `basePath` / `lambdaBasePath` (`main.go`): the server registers routes under
   `/api/bigshop`, which is also the OpenAPI server URL — Netlify rewrites that path to
   the Fly origin with `status = 200`, so the API stays same-origin to the browser. The

@@ -149,7 +149,7 @@ properly.
 
 ### The model
 
-Four concepts, defined in [CONTEXT.md](../CONTEXT.md) and used verbatim in schema and code:
+Four concepts, defined in [CONTEXT.md](../../CONTEXT.md) and used verbatim in schema and code:
 
 - **Absolute Unit** — fixed size regardless of Ingredient: gram, kilogram, millilitre,
   litre, teaspoon, tablespoon. Carries a `kind` naming its dimension (weight or volume)
@@ -408,7 +408,7 @@ through this call — there is no path to route around it.
   something has to *order* the garlic automatically.
 - **Locale-scoped or Account-scoped Unit Sizes.** Deferred until there's a second locale to
   learn the real requirements from; Account-scoping would additionally require revisiting
-  [ADR-0001](../docs/adr/0001-global-ingredient-catalog.md).
+  [ADR-0001](../../docs/adr/0001-global-ingredient-catalog.md).
 - **The admin panel**, and the `curated`/`classified` provenance columns that only it would
   display.
 - **Imperial display.** Storing metric leaves the door open, and the original spec is

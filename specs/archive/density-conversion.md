@@ -1,7 +1,7 @@
 # Follow-up: density-based unit conversion
 
 > **Superseded — do not build this.** The redesigned
-> [unit-normalisation.md](../unit-normalisation.md) makes density a *use* of one general
+> [unit-normalisation.md](../completed/unit-normalisation.md) makes density a *use* of one general
 > mechanism rather than a feature of its own: a Unit Size states how much one of a given
 > Unit of a given Ingredient comes to, so "one tablespoon of flour is 8 g" is the same kind
 > of fact as "one potato is 180 g" and "one tin of coconut milk is 400 ml". No density

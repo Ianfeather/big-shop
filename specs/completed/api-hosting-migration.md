@@ -1,6 +1,6 @@
 # Move the Go API off Netlify Functions onto Fly.io in Frankfurt
 
-Decisions and rationale: [ADR-0006](../docs/adr/0006-go-api-leaves-netlify-functions.md).
+Decisions and rationale: [ADR-0006](../../docs/adr/0006-go-api-leaves-netlify-functions.md).
 This spec covers the *how*. Do this before [`observability.md`](./observability.md) —
 that spec's design assumes the API is a long-lived process.
 

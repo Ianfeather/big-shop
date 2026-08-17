@@ -105,15 +105,42 @@ second dev server in one directory, so a manually-running `next dev` blocks `npm
 entirely - it fails at webServer startup rather than as a test failure.
 
 ## Session 3: Consent record
-Status: pending
+Status: done
 Scope: Spec Phase 2. `migrations/034_consent_event.sql`, append-only, no IP and no user agent.
 `service/consent.go`, `app/consent.go` with `POST /consent`. Latest state joins `GET /user` as
 a pointer field matching `ShowPantryStaples`, rather than a new read route (#53). Client sync
 via `use-synced-flag.ts`'s arrangement. Regenerate `openapi.yaml` and `types/api.d.ts` — CI
 gates on drift.
 Depends on: Session 2
-Commit:
-Notes:
+Commit: f003c03
+Notes: 295 unit tests and 33 e2e pass. Append-only verified directly in MySQL after a run:
+three rows, `login-sync` (harness baseline), `banner` (accept), `settings` (withdrawal).
+
+**Correction to the spec, applied here rather than by editing it.** Phase 2 asks for both
+"the server value wins when it arrives and disagrees" *and* "a decision made before login is
+written through on the first authenticated load". Those conflict once both sides hold a
+decision, and either rule alone discards a real answer — "server wins" was implemented first
+and made a logged-out change on `/privacy` silently revert at the next login. Resolved by
+recording `decidedAt` on both sides and taking the newer. A clock-skew tie-break preferring
+`denied` was then tried and **removed**: any deliberate change within the window is also two
+decisions seconds apart, so it discarded acceptances. Both failures were caught by e2e, not by
+review. Residual skew risk is named in `components/consent-sync/index.tsx`.
+
+Carry forward:
+
+- **A server decision against a superseded POLICY_VERSION is not a decision.** Adopting one
+  re-stamped it as current and silently dismissed the banner a version bump had just raised.
+  Session 4 must not reintroduce this when it reads consent to gate gtag.
+- **`ConsentSync` remounts on every crossing between public and authenticated routes**, because
+  it lives inside `InnerApp` which `_app.tsx` does not render on `publicRoutes`. Anything added
+  there must be idempotent; a "have I run yet" ref does not survive.
+- **Under `DISABLE_AUTH` the consent record is one global row for the whole e2e run.**
+  `e2e/global-setup.ts` seeds it to match `e2e/fixtures.ts`'s per-test localStorage seed, and
+  the fixture stamps `decidedAt` in 2020 deliberately — without both, every spec races to push
+  its seeded decision and a single run wrote 27 rows.
+- **Out of scope, taken deliberately: follow-ups.md #56** (delete of an already-deleted Recipe
+  returned 500, not 404). It was failing this branch's e2e runs. Flag it in the PR body; #56
+  can be closed.
 
 ## Session 4: GA4 behind the gate
 Status: pending

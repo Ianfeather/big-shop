@@ -113,8 +113,8 @@ export default function App({ Component, pageProps, router }: AppProps) {
   // decision is taken on the marketing page by someone who has no account and
   // may never have one, and it is read from synchronous localStorage. Nesting
   // it inside would tie a banner that needs nothing to a provider that does a
-  // token refresh over the network - the fourth flash follow-ups.md #58 warns
-  // about.
+  // token refresh over the network, putting a flash back on the homepage that
+  // follow-ups.md #58 has just been fixed to remove.
   const wrappedContent = (
     <ConsentProvider>
       <QueryClientProvider client={queryClient}>

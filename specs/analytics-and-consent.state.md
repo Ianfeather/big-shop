@@ -138,9 +138,23 @@ Carry forward:
   `e2e/global-setup.ts` seeds it to match `e2e/fixtures.ts`'s per-test localStorage seed, and
   the fixture stamps `decidedAt` in 2020 deliberately — without both, every spec races to push
   its seeded decision and a single run wrote 27 rows.
-- **Out of scope, taken deliberately: follow-ups.md #56** (delete of an already-deleted Recipe
-  returned 500, not 404). It was failing this branch's e2e runs. Flag it in the PR body; #56
-  can be closed.
+- **follow-ups.md #56 was fixed here first, then dropped in a rebase.** This branch carried its
+  own 500-to-404 fix because the flake was failing its e2e runs; #56 landed independently on
+  master as #99 while Session 3 was in review, and the rebase resolved both conflicts in
+  master's favour. Nothing of it remains on this branch, and there is nothing to flag in the PR
+  body.
+
+**Rebased onto master after Session 3** (`a7059c6`, `5a9a05c`, `f6926f7`). Two of those matter
+to this work:
+
+- **#58 is fixed on master** — `/` no longer redirects, and `pages/_document.tsx` stamps
+  `data-auth` before first paint so the homepage decides what it shows without waiting on the
+  Auth0 SDK. Comments here that described #58 as a live problem have been corrected, and the
+  argument for mounting the banner outside `Auth0Provider` is now *stronger* rather than
+  weaker: there is a pre-paint decision to avoid undoing.
+- `e2e/consent.spec.ts`'s reason for driving `/privacy` rather than `/` is obsolete (the
+  redirect is gone). It stays on `/privacy` on the better grounds that the policy's readability
+  before answering is part of what the spec asserts.
 
 ## Session 4: GA4 behind the gate
 Status: pending

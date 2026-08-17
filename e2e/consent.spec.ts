@@ -13,13 +13,18 @@ import { getRecordedConsent } from './api';
 // e2e/fixtures.ts.
 test.use({ seedConsent: false });
 
-// Driven from /privacy rather than from the marketing homepage, and that is
-// forced by the environment rather than a preference. The e2e stack runs with
-// NEXT_PUBLIC_DISABLE_AUTH=true, under which hooks/use-auth.ts's mock reports
-// `isAuthenticated: true` unconditionally - so '/' immediately redirects an
-// "already onboarded" user to /list and the marketing page never settles.
-// /privacy is the one public page that renders the same either way, and it
-// carries the same footer control.
+// Driven from /privacy rather than the marketing homepage.
+//
+// This used to be forced: '/' redirected an already-onboarded user to /list, and
+// under NEXT_PUBLIC_DISABLE_AUTH the auth mock reports `isAuthenticated: true`
+// unconditionally, so the homepage never settled. follow-ups.md #58 removed that
+// redirect, so '/' would work now too.
+//
+// Kept on /privacy anyway, for a reason that outlived the original one: this is
+// the page whose readability *before* answering the banner is the thing being
+// asserted, and it is also the regression test for /privacy having once sat
+// behind the auth gate. Driving the same flow from the homepage would test the
+// banner without testing that.
 const PUBLIC_PAGE = '/privacy';
 
 const dialog = (page: Page) => page.getByRole('dialog', { name: 'Cookies' });

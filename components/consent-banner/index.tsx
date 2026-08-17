@@ -11,10 +11,11 @@ import { ConsentDecision } from '../../lib/consent';
 // a real one is theatre.
 //
 // **Mounted outside the auth gate** (see pages/_app.tsx) and reads only
-// synchronous localStorage, so it never waits on anything. Deliberate:
-// follow-ups.md #58 records that the homepage already shows three states while
-// the Auth0 SDK resolves, and a banner that waited on a network call would add
-// a fourth flash to the one screen that has to look composed.
+// synchronous localStorage, so it never waits on anything. That is deliberate
+// and still worth keeping now that follow-ups.md #58 is fixed: the homepage
+// went to some trouble to decide what it shows before the first paint, via the
+// data-auth stamp in pages/_document.tsx, and a banner that waited on a network
+// call would put the flash back on the one screen that work was done for.
 //
 // **No "reject all" behind a second click.** Accept and Decline are the same
 // size, the same shape, one tap apart. A banner where declining costs more

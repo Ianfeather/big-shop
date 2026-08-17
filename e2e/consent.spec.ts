@@ -1,6 +1,7 @@
 import { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { CONSENT_STORAGE_KEY } from '../lib/consent';
+import { getRecordedConsent } from './api';
 
 // The cookie banner, against the real app. The unit tests in
 // components/consent-banner cover the state machine; what only this level can
@@ -74,6 +75,52 @@ test.describe('cookie consent', () => {
       'href',
       '/privacy'
     );
+  });
+});
+
+// The Session 3 half: a decision taken in the browser reaches the server.
+//
+// Serial, and not sharing the describe above, because these mutate one row that
+// is global to the dev user - `DISABLE_AUTH` resolves every request to
+// `local-dev-user`, so there is exactly one consent history for the whole run.
+// Playwright parallelises spec *files*, not describes within one, so this is
+// safe from the other specs; it is not safe from itself.
+test.describe.serial('consent reaches the server', () => {
+  test('a decision made logged-out is carried in on the first authenticated load', async ({
+    page,
+    request,
+  }) => {
+    await page.goto(PUBLIC_PAGE);
+    await page.getByRole('button', { name: 'Accept analytics' }).click();
+
+    // /privacy is public, so nothing has synced yet. An authenticated page is
+    // where ConsentSync mounts.
+    await page.goto('/recipes');
+    // Level 1 specifically: the sidebar filter carries an h4 reading "Your
+    // recipes" too, and a name-only match is ambiguous between them.
+    await expect(page.getByRole('heading', { level: 1, name: 'Your Recipes' })).toBeVisible();
+
+    await expect(async () => {
+      expect(await getRecordedConsent(request)).toMatchObject({ analytics: true });
+    }).toPass({ timeout: 10_000 });
+  });
+
+  test('changing the decision is recorded as a new answer, not a lost one', async ({
+    page,
+    request,
+  }) => {
+    await page.goto('/account');
+    await page.getByRole('button', { name: 'Cookie settings' }).click();
+    await page.getByRole('button', { name: 'Decline analytics' }).click();
+
+    await expect(async () => {
+      expect(await getRecordedConsent(request)).toMatchObject({ analytics: false });
+    }).toPass({ timeout: 10_000 });
+
+    // The table is append-only, so the previous `true` is still there - what
+    // changed is which row is latest. Asserting the *count* would need a route
+    // that deliberately does not exist; asserting the flip is what this level
+    // can honestly show.
   });
 });
 

@@ -4,6 +4,11 @@ import { WEB_PORT, API_PORT, DB_PORT, BASE_URL, COMPOSE_PROJECT_NAME } from './e
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
+  // Records the dev user's consent once, matching what e2e/fixtures.ts seeds
+  // into every browser. Without it, every spec's first authenticated page load
+  // races to push that seeded decision to the one row `DISABLE_AUTH` gives the
+  // whole run. See e2e/global-setup.ts.
+  globalSetup: './e2e/global-setup.ts',
   retries: process.env.CI ? 1 : 0,
   // Locally, 'list' is enough - failures are visible right in the terminal.
   // In CI there's no terminal to look back at, so also write an HTML report

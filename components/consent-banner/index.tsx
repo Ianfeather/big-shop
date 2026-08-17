@@ -106,7 +106,10 @@ function Banner({ forcedOpen, onClose }: { forcedOpen: boolean; onClose: () => v
   if (!showing) return null;
 
   function choose(decision: ConsentDecision) {
-    decide(decision);
+    // Re-opened deliberately means this is a change of mind; appearing on its
+    // own means it is the first answer. The server record keeps the two apart,
+    // which is what makes "when did they change it, and from what" answerable.
+    decide(decision, forcedOpen ? 'settings' : 'banner');
     setDecidedHere(decision);
     // Always close, including when the decision did not change. Re-opening via
     // Cookie settings and pressing the button you already chose has to dismiss

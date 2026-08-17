@@ -10,6 +10,7 @@ import { requireEnv } from '../lib/env';
 import { appOrigin } from '../lib/app-origin';
 import { identifyUser, setupFaro, setView } from '../lib/telemetry/faro';
 import { ConsentProvider } from '@components/consent-banner';
+import ConsentSync from '@components/consent-sync';
 
 // Started here rather than at module scope so it runs in the browser only, and
 // once. _app.tsx is also rendered on the server, where there is no window for
@@ -46,7 +47,17 @@ const InnerApp = ({ Component, pageProps }: Pick<AppProps, 'Component' | 'pagePr
     return false;
   }
 
-  return <Component {...pageProps} />;
+  return (
+    <>
+      {/* The half of the consent machinery that needs to know who is signed in.
+          The banner itself is mounted outside this and outside Auth0Provider,
+          so it can ask the question on a logged-out page; this carries the
+          answer to the server once there is an account to attach it to.
+          Renders nothing. */}
+      <ConsentSync />
+      <Component {...pageProps} />
+    </>
+  );
 }
 
 export default function App({ Component, pageProps, router }: AppProps) {

@@ -1,5 +1,5 @@
 import { test as base, expect } from '@playwright/test';
-import { CONSENT_STORAGE_KEY, serializeConsent } from '../lib/consent';
+import { CONSENT_STORAGE_KEY, POLICY_VERSION, serializeConsent } from '../lib/consent';
 
 // Next.js dev mode's build-activity indicator renders into a <nextjs-portal>
 // custom element that can sit on top of interactive elements and swallow
@@ -64,7 +64,21 @@ export const test = base.extend<ConsentOptions & { page: import('@playwright/tes
             // spec that cares about it will say so.
           }
         },
-        { key: CONSENT_STORAGE_KEY, value: serializeConsent('denied') }
+        {
+          key: CONSENT_STORAGE_KEY,
+          // Deliberately ancient. components/consent-sync resolves a
+          // disagreement by taking the newer decision, and `serializeConsent`
+          // defaults `decidedAt` to now - so a seed stamped at test time looks
+          // newer than the row global-setup.ts recorded, and *every* spec
+          // pushes its seeded decision to the server on its first authenticated
+          // page. That is harmless to assertions but writes a row per test into
+          // an append-only table (27 in one run, before this), which buries the
+          // decisions that were actually made.
+          //
+          // Stamped in the past, the server's record always wins, the two agree
+          // on the answer, and nothing is written at all.
+          value: serializeConsent('denied', 'banner', POLICY_VERSION, '2020-01-01T00:00:00.000Z'),
+        }
       );
     }
 

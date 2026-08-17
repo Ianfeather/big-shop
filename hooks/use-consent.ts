@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react';
-import { ConsentDecision, ConsentState, readConsent, writeConsent } from '../lib/consent';
+import { ConsentDecision, ConsentSource, ConsentState, readConsent, writeConsent } from '../lib/consent';
 
 // The visitor's analytics-consent decision, read from localStorage.
 //
@@ -47,11 +47,19 @@ function serverSnapshot(): ConsentState {
   return 'unset';
 }
 
-export default function useConsent(): [ConsentState, (decision: ConsentDecision) => void] {
+export default function useConsent(): [
+  ConsentState,
+  (decision: ConsentDecision, source?: ConsentSource) => void
+] {
   const state = useSyncExternalStore(subscribe, readConsent, serverSnapshot);
 
-  const decide = useCallback((decision: ConsentDecision) => {
-    writeConsent(decision);
+  // `source` records how the decision was given, and travels with it: the
+  // server's consent record wants it (migrations/034_consent_event.sql), and it
+  // is not recoverable after the fact - by the time components/consent-sync
+  // pushes a decision up, possibly days later at login, the control that
+  // produced it is long gone.
+  const decide = useCallback((decision: ConsentDecision, source: ConsentSource = 'banner') => {
+    writeConsent(decision, source);
     notify();
   }, []);
 

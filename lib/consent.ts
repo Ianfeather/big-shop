@@ -47,6 +47,18 @@ export type ConsentState = 'unset' | 'granted' | 'denied';
 // A decision is only ever `granted` or `denied`; `unset` is the absence of one.
 export type ConsentDecision = Exclude<ConsentState, 'unset'>;
 
+// How a decision was given - the "how" half of what a consent record has to
+// carry, and the same three values migrations/034_consent_event.sql accepts.
+//
+// Recorded in the browser as well as on the server because it belongs to the
+// decision rather than to the request that reported it: a choice made on the
+// banner while logged out is still a banner choice when it is pushed up three
+// days later at login, and `created_at` already carries the fact that we only
+// learned it then. `login-sync` is for a row no control can be attributed to -
+// a decision this browser adopted from the server, or one written by a harness
+// or a back-fill.
+export type ConsentSource = 'banner' | 'settings' | 'login-sync';
+
 // Follows the `bigshop:<kebab-name>` convention already set by
 // SHOW_STAPLES_KEY in components/shopping-list/ShoppingList.
 //
@@ -65,37 +77,26 @@ export const CONSENT_STORAGE_KEY = 'bigshop:consent';
 interface StoredConsent {
   analytics: ConsentDecision;
   version: string;
+  source: ConsentSource;
+  // When the decision was made, RFC 3339. Not decoration: the server holds a
+  // timestamp too, and reconciling without one means guessing which side is
+  // newer - so either a decision just made here is discarded by a stale server
+  // record, or a decision made on another device is stamped over by this one.
+  // See components/consent-sync.
+  decidedAt: string;
 }
 
-// Reads the stored decision, or `unset` if there isn't a usable one.
-//
-// Three things count as "no usable decision", and they deliberately collapse to
-// the same answer:
-//
-//   - nothing stored, the first-visit case;
-//   - a decision recorded against an older POLICY_VERSION, which is the
-//     re-asking mechanism working;
-//   - anything unparseable. A hand-edited or half-written value must fail to
-//     `unset` rather than throw or, worse, be read as consent - the safe
-//     direction here is to ask again, never to assume yes.
-//
-// Reading localStorage throws outright in a browser with site data blocked,
-// which is why the whole thing sits in a try/catch - see the same guard in
-// hooks/use-local-storage-flag.ts.
-export function readConsent(): ConsentState {
-  try {
-    const raw = window.localStorage.getItem(CONSENT_STORAGE_KEY);
-    if (!raw) return 'unset';
-
-    const stored = JSON.parse(raw) as Partial<StoredConsent>;
-    if (stored.version !== POLICY_VERSION) return 'unset';
-    if (stored.analytics !== 'granted' && stored.analytics !== 'denied') return 'unset';
-
-    return stored.analytics;
-  } catch {
-    return 'unset';
-  }
+// The stored decision in full, for the code that has to reconcile it with the
+// server. Distinct from readConsent, which answers the narrower question the
+// banner asks ("do I show?") and deliberately flattens everything unusable to
+// `unset`.
+export interface ConsentRecord {
+  analytics: ConsentDecision;
+  version: string;
+  source: ConsentSource;
+  decidedAt: string;
 }
+
 
 // The exact bytes readConsent expects, for anyone who has to write the value
 // without going through writeConsent - i.e. the e2e seed, which runs in the
@@ -104,9 +105,61 @@ export function readConsent(): ConsentState {
 // Sharing this rather than letting the harness hand-roll the JSON is what stops
 // the two drifting: a seed that writes a shape readConsent rejects does not
 // fail loudly, it just quietly counts as "never asked".
-export function serializeConsent(decision: ConsentDecision, version: string = POLICY_VERSION): string {
-  const stored: StoredConsent = { analytics: decision, version };
+export function serializeConsent(
+  decision: ConsentDecision,
+  source: ConsentSource = 'banner',
+  version: string = POLICY_VERSION,
+  decidedAt: string = new Date().toISOString()
+): string {
+  const stored: StoredConsent = { analytics: decision, version, source, decidedAt };
   return JSON.stringify(stored);
+}
+
+// The stored decision, or null if there isn't a usable one.
+//
+// Same acceptance rules as readConsent - including that a decision recorded
+// against an older POLICY_VERSION does not count - so the two can never
+// disagree about whether a decision exists. An unrecognised `source` is
+// tolerated rather than rejected: it is provenance, and losing a real decision
+// because a future version added a fourth source would be the worse failure.
+export function readConsentRecord(): ConsentRecord | null {
+  try {
+    const raw = window.localStorage.getItem(CONSENT_STORAGE_KEY);
+    if (!raw) return null;
+
+    const stored = JSON.parse(raw) as Partial<StoredConsent>;
+    if (stored.version !== POLICY_VERSION) return null;
+    if (stored.analytics !== 'granted' && stored.analytics !== 'denied') return null;
+
+    const source: ConsentSource =
+      stored.source === 'banner' || stored.source === 'settings' || stored.source === 'login-sync'
+        ? stored.source
+        : 'banner';
+
+    // A record written before this field existed, or carrying a mangled value,
+    // is treated as maximally old rather than discarded: the decision is the
+    // part that matters, and the worst outcome of an epoch timestamp is that
+    // the server's copy wins, which is the safe direction.
+    const decidedAt =
+      typeof stored.decidedAt === 'string' && !Number.isNaN(Date.parse(stored.decidedAt))
+        ? stored.decidedAt
+        : new Date(0).toISOString();
+
+    return { analytics: stored.analytics, version: stored.version, source, decidedAt };
+  } catch {
+    return null;
+  }
+}
+
+// Reads the stored decision, or `unset` if there isn't a usable one.
+//
+// The narrow question the banner asks - "do I show?" - expressed in terms of
+// readConsentRecord below rather than parsing the value a second time. The two
+// used to have their own copies of the accept/reject rules, which is precisely
+// the pair that must never drift: if they disagreed about whether a decision
+// exists, the banner would go away while the sync still pushed, or the reverse.
+export function readConsent(): ConsentState {
+  return readConsentRecord()?.analytics ?? 'unset';
 }
 
 // Records a decision against the current policy version.
@@ -114,9 +167,16 @@ export function serializeConsent(decision: ConsentDecision, version: string = PO
 // Never writes `unset`: there is no way back to "never asked" from the UI, and
 // offering one would only produce a state the banner cannot distinguish from a
 // first visit. Withdrawing consent is `denied`, which is a decision.
-export function writeConsent(decision: ConsentDecision): void {
+export function writeConsent(
+  decision: ConsentDecision,
+  source: ConsentSource = 'banner',
+  decidedAt: string = new Date().toISOString()
+): void {
   try {
-    window.localStorage.setItem(CONSENT_STORAGE_KEY, serializeConsent(decision));
+    window.localStorage.setItem(
+      CONSENT_STORAGE_KEY,
+      serializeConsent(decision, source, POLICY_VERSION, decidedAt)
+    );
   } catch {
     // Storage blocked, so the decision cannot be persisted at all and the next
     // visit will ask again.

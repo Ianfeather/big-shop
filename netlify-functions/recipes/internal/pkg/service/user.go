@@ -37,6 +37,16 @@ func GetUser(ctx context.Context, db *sql.DB, userID string) (u *common.User, e 
 		return nil, err
 	}
 	user.ShowPantryStaples = &showPantryStaples
+
+	// The latest consent decision rides along on the User rather than costing a
+	// route of its own - see the field's comment in common/types.go. A user who
+	// has never been asked gets nil, which is not an error.
+	consent, err := GetLatestConsent(ctx, db, userID)
+	if err != nil {
+		return nil, err
+	}
+	user.Consent = consent
+
 	return user, nil
 }
 

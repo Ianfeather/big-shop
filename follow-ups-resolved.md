@@ -416,6 +416,50 @@ cross-references between entries (e.g. #9 references #16).
     still open. Also deleted a stale comment in `shopping-list.spec.ts` claiming those teardown
     deletes silently fail and that `deleteRecipeById` does not assert — both untrue since #24.
 
+43. ~~Google Analytics, and the consent foundation it requires.~~ **Resolved** — designed as
+    [`specs/completed/analytics-and-consent.md`](./specs/completed/analytics-and-consent.md) and shipped in five
+    sessions. All three parts the item insisted on shipping together did:
+
+    - **A privacy policy** at `/privacy`, written from the code rather than a template: the
+      processor list, the regions (Netlify's functions in Ohio, the API and database in
+      Frankfurt) and the device-storage inventory are all traced from what the system actually
+      does. Faro is described plainly as always-on rather than buried, per the spec's Decided
+      section. `_app.tsx` gained a `publicRoutes` list, because the page was behind the auth
+      gate — invisible to the one audience it exists for, and invisible in local development
+      because `NEXT_PUBLIC_DISABLE_AUTH` makes the auth mock report `isAuthenticated`
+      unconditionally.
+    - **A consent banner**, own-built rather than a CMP. Three states, not two: `unset` is what
+      shows the banner, and collapsing it into `denied` would re-ask everyone who declined on
+      every visit. Accept and Decline are the same size, shape and row. Not modal, so the
+      policy it links to can be read before answering it. Withdrawal is reachable from both
+      public footers and from `/account`, because `components/layout` has no footer and consent
+      you cannot revisit is not consent.
+    - **GA4 via Consent Mode v2, firing only on opt-in** — and the tag is not loaded at all
+      until then, which is a deliberate departure from Consent Mode's intended design of
+      loading always and gating storage. Those cookieless pings feed ads conversion modelling
+      Big Shop has no use for and still carry the visitor's IP.
+
+    **`account.id` as a user property, and no `user_id`**, as the item specified. The Auth0
+    subject never reaches Google. `page_title` comes from a static per-route lookup rather than
+    `document.title`, with a test that reads the pages directory — the item's warning that a
+    future `{recipe.name}` title would ship Recipe names to Google was closer than it looked,
+    since `pages/recipes/new.tsx` already passed the title from a variable.
+    [ADR-0008](./docs/adr/0008-what-telemetry-does-not-carry.md) is amended for the second
+    recipient, and states the tighter rule GA is held to.
+
+    Events: the four the item named, and the rule that keeps the list short — an event goes to
+    GA only when answering its question needs more than Grafana's fourteen days.
+
+    **Beyond what the item asked for**, because the work turned it up: consent decisions are
+    recorded server-side in an append-only `consent_event` table (migration 034), so "what did
+    they consent to, and when" is answerable for consents since withdrawn. The item did not ask
+    for this; Ian chose it over a client-only record.
+
+    Two things deliberately left: analytics **ships dark** until
+    `NEXT_PUBLIC_GA_MEASUREMENT_ID` is set in Netlify, so the exit criterion "`account.id`
+    appears as a user property" is verifiable only against a real property; and the privacy
+    policy's wording, while accurate about the system, has not had a lawyer near it.
+
 58. ~~A logged-in user sees the marketing page flash before the homepage realises who they
     are.~~ **Resolved** — by removing the redirect rather than hiding it. `/` no longer sends a
     logged-in visitor to `/list`; it renders for everyone, and the header says where their list

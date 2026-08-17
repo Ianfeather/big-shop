@@ -38,6 +38,51 @@ components:
         - quantity
         - unit
       type: object
+    Consent:
+      additionalProperties: false
+      properties:
+        analytics:
+          type: boolean
+        decidedAt:
+          type: string
+        policyVersion:
+          type: string
+      required:
+        - analytics
+        - policyVersion
+        - decidedAt
+      type: object
+    ConsentInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /api/bigshop/schemas/ConsentInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        analytics:
+          description: true to grant analytics consent, false to decline or withdraw
+          type:
+            - boolean
+            - "null"
+        policyVersion:
+          description: the privacy policy version this decision was made against
+          minLength: 1
+          type: string
+        source:
+          description: which control produced the decision
+          enum:
+            - banner
+            - settings
+            - login-sync
+          type: string
+      required:
+        - analytics
+        - policyVersion
+        - source
+      type: object
     CreatedResponse:
       additionalProperties: false
       properties:
@@ -404,6 +449,11 @@ components:
           format: uri
           readOnly: true
           type: string
+        accountId:
+          format: int64
+          type: integer
+        consent:
+          $ref: "#/components/schemas/Consent"
         email:
           type: string
         id:
@@ -492,6 +542,32 @@ paths:
       summary: Remove a user from the current account
       tags:
         - Account
+  /consent:
+    post:
+      description: "Appends the signed-in user's analytics-consent decision. Append-only: changing a decision writes a new record rather than replacing the previous one."
+      operationId: record-consent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConsentInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Record an analytics-consent decision
+      tags:
+        - Users
   /ingredients:
     get:
       description: Returns every Ingredient name known to the system. Read server-side during Recipe Import to tell the model which names already exist, so it reuses one instead of coining a near-duplicate.

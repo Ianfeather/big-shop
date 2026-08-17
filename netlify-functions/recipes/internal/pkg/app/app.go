@@ -338,6 +338,7 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, huma.API, error) {
 	a.registerTagsRoutes(api)
 	a.registerAccountRoutes(api)
 	a.registerUserRoutes(api)
+	a.registerConsentRoutes(api)
 	a.registerInviteRoutes(api)
 
 	c := cors.New(cors.Options{

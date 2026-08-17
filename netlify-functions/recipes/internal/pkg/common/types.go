@@ -152,6 +152,55 @@ type User struct {
 	// sets it, so it is always present on output. Same reason Ingredient's
 	// DisplayUnit is a *string.
 	ShowPantryStaples *bool `json:"showPantryStaples,omitempty"`
+	// AccountID is the Account this User currently belongs to, or nil if they
+	// belong to none.
+	//
+	// Sent so the browser can name the Account to Google Analytics as a user
+	// property - the unit the product questions are actually about ("how many
+	// Accounts have ever used Dave") - without a second request for it. Joined
+	// into GetUser's existing query rather than resolved separately; see there.
+	//
+	// A pointer because "belongs to no Account" is a real state rather than
+	// account zero: DisableUserAccount leaves exactly that behind when someone
+	// accepts an invite into a different Account.
+	AccountID *int `json:"accountId,omitempty"`
+	// Consent is the User's most recent analytics-consent decision, or nil if
+	// they have never made one.
+	//
+	// Carried on the User rather than served from a `GET /consent` of its own,
+	// and that is a deliberate trade rather than laziness: every authenticated
+	// page already fetches this object for its view preferences, so hanging the
+	// decision off it costs nothing, where a second route would add a round trip
+	// to every load - the exact cost specs/request-model-optimisations.md is
+	// currently working to remove.
+	//
+	// A pointer for the same reason ShowPantryStaples is one, and then some:
+	// here `nil` and "decided false" are genuinely different facts. Nil means
+	// nobody has ever asked this user, so the browser's own choice should be
+	// pushed up; `{analytics: false}` means they declined, which must not be
+	// overwritten by a device that has not been asked. Collapsing the two turns
+	// a decline into an invitation to re-ask.
+	Consent *Consent `json:"consent,omitempty"`
+}
+
+// Consent is one analytics-consent decision, as last recorded for a User.
+//
+// The policy version travels with the decision rather than being looked up
+// separately, because the pair is the fact worth stating: not "they said yes"
+// but "they said yes to this text". A client comparing it against the version
+// it is currently showing is what makes a material policy change re-ask.
+type Consent struct {
+	Analytics     bool   `json:"analytics"`
+	PolicyVersion string `json:"policyVersion"`
+	// DecidedAt is when this decision was recorded, RFC 3339.
+	//
+	// Sent because the client cannot reconcile without it. Both sides hold a
+	// decision and either may be the newer one - a phone that accepted this
+	// morning, or this browser declining thirty seconds ago while logged out -
+	// and without a time there is no way to tell "another device changed this"
+	// from "this device just changed it", so one of the two always loses
+	// silently. See components/consent-sync.
+	DecidedAt string `json:"decidedAt"`
 }
 
 // Account holds accounts and users

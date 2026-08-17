@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -65,10 +67,20 @@ func (a *App) getUser(ctx context.Context, _ *struct{}) (*UserOutput, error) {
 
 	user, err := service.GetUser(ctx, a.db, caller.UserID)
 	if err != nil {
-		// Also the no-rows case: someone who reached an inner page before POST
-		// /user ever ran for them. Not a server fault, and the client treats it
-		// as "no preferences recorded yet" rather than as an error.
-		return nil, fail(ctx, huma.Error404NotFound("user not found"), err)
+		// The no-rows case is not a fault: someone who reached an inner page
+		// before POST /user ever ran for them. The client treats a 404 as "no
+		// preferences recorded yet" and does not retry.
+		//
+		// Anything else has to be a 500, and the distinction started mattering
+		// when GetUser gained a second query: it now also reads the consent
+		// record, so a genuine database failure - a missing migration, most
+		// likely - would otherwise be reported as "this user does not exist"
+		// and silently blank every preference instead of erroring. That is the
+		// account.go bug ADR-0008 §3 describes, rebuilt out of status codes.
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fail(ctx, huma.Error404NotFound("user not found"), err)
+		}
+		return nil, fail(ctx, huma.Error500InternalServerError("could not read user"), err)
 	}
 
 	return &UserOutput{Body: *user}, nil

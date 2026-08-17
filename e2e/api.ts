@@ -94,3 +94,16 @@ export async function addRecipesToList(request: APIRequestContext, ids: number[]
     throw new Error(`Failed to generate shopping list: ${res.status()} ${await res.text()}`);
   }
 }
+
+// The consent decision the API currently holds for the dev user, or undefined
+// if it has never been told one. Read off GET /user rather than a route of its
+// own, which is where it lives - see common.User's Consent field.
+export async function getRecordedConsent(
+  request: APIRequestContext
+): Promise<{ analytics: boolean; policyVersion: string } | undefined> {
+  const res = await request.get(`${API_HOST}/user`);
+  if (!res.ok()) {
+    throw new Error(`Failed to read user: ${res.status()} ${await res.text()}`);
+  }
+  return (await res.json()).consent;
+}

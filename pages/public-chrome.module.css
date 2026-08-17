@@ -1,0 +1,169 @@
+/* The furniture shared by every page a logged-out visitor can reach - today the
+   marketing homepage and the privacy policy, and whatever joins them next.
+   Composed into each page's own module with `composes`, so a page keeps one
+   stylesheet to read while the shared parts have one definition to change.
+
+   Extracted when /privacy arrived and copied all of this verbatim: the paper
+   surface, the header bar, the wordmark, the footer, and a ~400-character
+   inline SVG turbulence filter. Nine near-identical rules in two files meant a
+   palette or brand change was a two-file edit with no compiler to notice the
+   second one had been missed. The precedent is pages/styles.css, which already
+   holds the "Cookbook" colour tokens for exactly this reason once the Shopping
+   List started sharing them - this is the same argument applied to the chrome
+   built on top of those tokens.
+
+   The page-specific type - display sizes, prose measure, the marketing page's
+   print rules and drop numbers - deliberately stays in each page's own module.
+   It is not shared, and pulling it in here would make this a dumping ground
+   rather than a seam. */
+
+.page {
+  min-height: 100dvh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Print-like tooth over the flat paper colour. Fixed so it doesn't scroll as
+   a visible layer, pointer-events off so it never eats a click. */
+.grain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.22'/%3E%3C/svg%3E");
+}
+
+/* ---------- header ---------- */
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) clamp(var(--space-4), 5vw, 60px);
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--rule);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.mark {
+  width: 54px;
+  fill: none;
+  stroke: var(--ink);
+  stroke-miterlimit: 10;
+  stroke-width: 6px;
+}
+
+.wordmark {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  letter-spacing: -0.02em;
+}
+
+/* The pill in the top right. Both pages have one; only the label and whether
+   it is a <button> or a <Link> differs, which is why this styles neither
+   element type specifically. */
+.headerAction {
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  padding: 9px 22px;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.headerAction:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.headerAction:focus-visible {
+  outline: 2px solid var(--spot);
+  outline-offset: 3px;
+}
+
+/* ---------- footer ---------- */
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-4) var(--space-6);
+  border-top: 1px solid var(--rule);
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+}
+
+.footer p {
+  margin: 0;
+}
+
+.footerMark {
+  fill: none;
+  stroke: var(--ink-soft);
+  stroke-miterlimit: 10;
+  stroke-width: 6px;
+}
+
+/* Small print links beside the strapline. Wraps rather than shrinks: the footer
+   centres a row of small type, and on a narrow phone the links belong under the
+   strapline instead of squeezing it.
+
+   Styles both an <a> and a <button> because the two controls that live here are
+   a Link to /privacy and a button that re-opens the cookie banner - and they
+   have to be visually indistinguishable, since to a reader they are the same
+   kind of thing. */
+.footerLinks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.footerLinks a,
+.footerLinks button {
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--ink-soft);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.footerLinks a:hover,
+.footerLinks button:hover {
+  color: var(--ink);
+}
+
+.footerLinks a:focus-visible,
+.footerLinks button:focus-visible {
+  outline: 2px solid var(--spot);
+  outline-offset: 3px;
+}

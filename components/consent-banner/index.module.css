@@ -1,0 +1,135 @@
+/* The cookie banner. Sits on the "Cookbook" palette (pages/styles.css) because
+   the first place anyone sees it is the marketing homepage, and a banner in the
+   app's older lilac would read as a third-party widget bolted on - which is
+   exactly what this deliberately isn't. */
+
+.banner {
+  position: fixed;
+  /* Bottom rather than top: the top of the homepage is the hero, and covering
+     the one screen the product is sold on to ask about cookies is the trade
+     nobody would choose. */
+  bottom: 0;
+  left: 0;
+  right: 0;
+  /* Above the grain overlay (z-index 2) and the sticky header (3) on the public
+     pages, so it is never half-covered. */
+  z-index: 10;
+  background: var(--card);
+  border-top: 1px solid var(--rule);
+  box-shadow: 0 -6px 24px -12px rgba(36, 29, 38, 0.35);
+  color: var(--ink);
+  font-family: var(--font-body);
+  padding: var(--space-4) clamp(var(--space-4), 5vw, 60px);
+}
+
+.inner {
+  max-width: 1240px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.copy {
+  flex: 1 1 30em;
+  min-width: 0;
+}
+
+.heading {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: var(--text-md);
+  letter-spacing: -0.02em;
+  margin: 0 0 var(--space-1);
+}
+
+.body {
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--ink-soft);
+  margin: 0 0 var(--space-1);
+  max-width: 60em;
+}
+
+.body:last-child {
+  margin-bottom: 0;
+}
+
+.link {
+  color: var(--spot);
+  text-underline-offset: 3px;
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--spot);
+  outline-offset: 3px;
+}
+
+/* Both buttons in one row, same size, same shape. The only difference is fill,
+   and it is the *decline* that gets the plain treatment rather than being
+   demoted to a text link - see the component's note on why. */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.action {
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: 999px;
+  padding: 11px 24px;
+  cursor: pointer;
+  white-space: nowrap;
+  border: 1px solid var(--ink);
+  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.action:focus-visible {
+  outline: 2px solid var(--spot);
+  outline-offset: 3px;
+}
+
+.decline {
+  color: var(--ink);
+  background: transparent;
+}
+
+.decline:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.accept {
+  color: var(--paper);
+  background: var(--ink);
+}
+
+.accept:hover {
+  background: var(--spot);
+  border-color: var(--spot);
+}
+
+/* On a phone the two-column row collapses; the buttons go full width and
+   stay side by side so neither is easier to reach than the other. */
+@media (max-width: 600px) {
+  .inner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .actions {
+    width: 100%;
+  }
+
+  .action {
+    flex: 1 1 0;
+    text-align: center;
+  }
+}

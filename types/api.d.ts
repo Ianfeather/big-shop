@@ -55,6 +55,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record an analytics-consent decision
+         * @description Appends the signed-in user's analytics-consent decision. Append-only: changing a decision writes a new record rather than replacing the previous one.
+         */
+        post: operations["record-consent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ingredients": {
         parameters: {
             query?: never;
@@ -410,6 +430,28 @@ export interface components {
             quantity: string;
             unit: string;
         };
+        Consent: {
+            analytics: boolean;
+            decidedAt: string;
+            policyVersion: string;
+        };
+        ConsentInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/bigshop/schemas/ConsentInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description true to grant analytics consent, false to decline or withdraw */
+            analytics: boolean | null;
+            /** @description the privacy policy version this decision was made against */
+            policyVersion: string;
+            /**
+             * @description which control produced the decision
+             * @enum {string}
+             */
+            source: "banner" | "settings" | "login-sync";
+        };
         CreatedResponse: {
             /**
              * Format: uri
@@ -601,6 +643,9 @@ export interface components {
              * @example /api/bigshop/schemas/User.json
              */
             readonly $schema?: string;
+            /** Format: int64 */
+            accountId?: number;
+            consent?: components["schemas"]["Consent"];
             email: string;
             id?: string;
             name?: string;
@@ -698,6 +743,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Account"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "record-consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsentInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
                 };
             };
             /** @description Error */

@@ -378,3 +378,30 @@ cross-references between entries (e.g. #9 references #16).
     a Recipe save and nowhere else. And 5b's cache is the reason, which is the spec's own
     point that "parallelising four round trips saves less than not making eleven of them"
     arriving one phase earlier than expected.
+
+56. ~~Deleting an already-deleted Recipe returns 500, and it makes the e2e suite flaky.~~
+    **Resolved** — `app/recipe.go`'s `deleteRecipe` now has the `errors.Is(err, sql.ErrNoRows)`
+    branch the service layer was already written for: `service/recipe.go` returns that sentinel
+    deliberately unwrapped, with a comment about not breaking "any caller comparing against it",
+    and the one caller finally does. A Recipe that is not on the Account answers **404 Recipe not
+    found**; everything else still answers 500.
+
+    Both branches now go through `fail(ctx, clientErr, cause)` rather than returning the client
+    error bare, which is what the rest of the package does. That has two consequences worth
+    stating: a 500 from a delete now records its *cause* on the span instead of only the generic
+    message the client saw, and the 404 is deliberately **not** flagged as a server error —
+    `fail` treats `sql.ErrNoRows` as the one expected cause, so a missing Recipe cannot inflate
+    the error rate the dashboards read.
+
+    **The flake needed the e2e side too, and that is the half the item did not spell out.**
+    `deleteRecipeById` asserts on the response status (added by #24, deliberately), so a 404 was
+    still a failed teardown — it only stopped being a *lie* about why. It now returns early on
+    404 and throws on everything else: teardown deletes by id, spec files run in parallel against
+    one shared Account under `DISABLE_AUTH`, and a Recipe can be gone before its own teardown
+    runs, so "already gone" is a successful teardown. #24's protection is untouched — the 500 that
+    went unnoticed for months would still fail the suite today.
+
+    Covered by an e2e test (`recipe.spec.ts`, "deleting a recipe that is not there is a 404, not
+    a 500") rather than a Go one, because reaching the branch needs a real database and #52 is
+    still open. Also deleted a stale comment in `shopping-list.spec.ts` claiming those teardown
+    deletes silently fail and that `deleteRecipeById` does not assert — both untrue since #24.

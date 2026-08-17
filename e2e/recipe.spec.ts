@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures';
 import { createRecipe, deleteRecipeByName, findRecipeIdByName } from './api';
+import { API_HOST } from './env';
 
 // Each test creates its own uniquely-named, throwaway Recipe and cleans up
 // after itself via a direct API call (not through the UI, so cleanup doesn't
@@ -69,5 +70,16 @@ test.describe('recipe management', () => {
     await expect(page.getByRole('checkbox', { name: recipeName })).toHaveCount(0);
 
     recipeName = undefined; // deletion under test already cleaned this up
+  });
+
+  // Deliberately at this level rather than in Go: reaching the handler's
+  // sql.ErrNoRows branch needs a real database, and the API has no DB-backed
+  // test harness (follow-ups.md #52). This is the cheapest thing that actually
+  // exercises the branch, and the status code is the whole contract - a 500
+  // here told every client "the server is broken" for a Recipe that was simply
+  // not there, and made teardown flaky (follow-ups.md #56).
+  test('deleting a recipe that is not there is a 404, not a 500', async ({ request }) => {
+    const res = await request.delete(`${API_HOST}/recipe`, { data: { id: 2_000_000_000 } });
+    expect(res.status()).toBe(404);
   });
 });

@@ -49,7 +49,7 @@ Present, and load-bearing for the design:
   outside a transaction**, using `db.ExecContext` directly, so a mid-cascade failure leaves
   a recipe stripped of its parts. Phase 0 fixes that as a side effect of reusing it.
 - **`consent_event` has a foreign key to `user.id`** and a header comment reading *"INSERT
-  only. Never UPDATE, never DELETE."* See "The one unresolved conflict" below.
+  only. Never UPDATE, never DELETE."* Both matter — see "`consent_event`" below.
 - **`user.email` is plaintext `varchar(255)`** (`migrations/006_user.sql:4`), upserted on
   every login by `service.AddUser`. This is what makes the SendGrid erasure call possible
   at all.
@@ -91,41 +91,57 @@ invite is the moment they need to understand that Recipes they contribute become
 Account's and outlive their departure. That copy is #46's to write into the invite flow;
 this spec's obligation is that `/privacy` agrees with it (Phase 5).
 
-## The one unresolved conflict — needs a decision before Phase 4
+## `consent_event` — the rows are deleted. Resolved 2026-08-18.
 
-**Two decisions already on #59 cannot both hold as written.** The board says keep
-`consent_event` (it proves the processing was lawful, and destroying that evidence to
-satisfy an erasure request is the wrong trade) and also says hard-delete the user. But
-`consent_event.user_id` carries `CONSTRAINT fk_consent_event_user_id FOREIGN KEY (user_id)
-REFERENCES user (id)`, so deleting the `user` row with its consent rows still present
-fails outright. The table's own comment anticipated the implementer arriving here and told
-them not to resolve it in passing — so, deliberately:
+**Two decisions already on #59 could not both hold as written**, and the resolution
+reverses one of them. The board said keep `consent_event` (it proves the processing was
+lawful, and destroying that evidence to satisfy an erasure request is the wrong trade) and
+also said hard-delete the user. But `consent_event.user_id` carries
+`CONSTRAINT fk_consent_event_user_id FOREIGN KEY (user_id) REFERENCES user (id)`, so
+deleting the `user` row with its consent rows still present fails outright.
 
-**Recommended: pseudonymise, don't delete.** Drop the foreign key, and on deletion replace
-`consent_event.user_id` with `HMAC-SHA256(user_id, pepper)` — the same primitive and the
-same pepper Phase 1 introduces for `invite.email`.
+**Decided: `DELETE FROM consent_event WHERE user_id = ?`, inside the deletion
+transaction, before the `user` row goes.**
 
-Why this and not the alternatives:
+The argument that settles it is that **severing the link destroys the very thing the
+retention was for.** The board kept these rows to preserve proof that *a specific person*
+consented. Break the link to that person — by any mechanism — and what survives says
+"somebody consented on this date, under this policy version, via the banner", which rebuts
+nothing if an ex-user later claims they were tracked without consent. So delinking does not
+serve the principle that motivated keeping the row; it only pays schema complexity to
+retain something inert. The legal shape agrees: the UK GDPR Article 7(1) duty to
+demonstrate consent runs for data subjects whose data you process, and after erasure you
+process none of theirs.
 
-- **It keeps the evidence useful.** A consent record that cannot be tied to anybody proves
-  nothing. Under this scheme, if the person ever disputes that they consented, they
-  identify themselves, we recompute the digest and find the row. That is exactly the
-  circumstance the record exists for.
-- **It is unlinkable without the subject.** A database dump yields digests, and Auth0
-  subjects are not guessable the way email addresses are, so the digest is materially
-  stronger here than it is on `invite.email`.
-- **Keeping a tombstone `user` row instead was rejected**: it satisfies the FK but retains
-  the Auth0 subject in plaintext, which is a pseudonymous identifier for a person we have
-  just told we erased them.
-- **Deleting the rows was rejected** because it reverses a settled board decision.
+Three delinking schemes were considered and all fail for the same reason:
 
-The cost is honest and must be written into `migrations/034`'s comment rather than left to
-be discovered: this is an `UPDATE` against a table that says it never takes one. The
-defence is that it changes the *subject key* and never the decision, the timestamp, the
-policy version or the source — the append-only guarantee is about not rewriting history,
-and this does not.
+- **A peppered HMAC of `user_id`** was the original recommendation here and is withdrawn.
+  Its justification was that a disputing ex-user could identify themselves and we could
+  recompute the digest to find their row — but that requires re-obtaining their Auth0
+  subject, which the deletion has just destroyed. It happens to work for social identities
+  (`google-oauth2|…` carries a provider-stable id, so a re-signup yields the same subject)
+  and fails for database identities (a new random subject). #50 records that nobody has
+  audited which connections the tenant even has enabled, so the scheme would work for an
+  unknown fraction of users by accident of connection type. It also leaves a column holding
+  Auth0 subjects in some rows and hex digests in others with nothing marking which.
+- **The GA UUID mapping-table pattern does not transfer.** That pattern exists because
+  *Google* holds data we cannot delete, and severing the link is the only lever we have
+  over someone else's database. `consent_event` is our own table with no external copy
+  being stranded, so a mapping table would produce an outcome identical to nulling the
+  column, via an extra table and an extra join.
+- **Nulling `user_id`** is the honest minimum of the above, and is rejected for the same
+  reason as the rest: an inert row is not evidence.
 
-**Do not start Phase 4 until this is confirmed.** Phases 0–3 are unaffected.
+Retaining a **tombstone `user` row** was also rejected. It satisfies the foreign key, but
+keeps the Auth0 subject in plaintext for somebody we have just told we erased.
+
+**This needs no schema change at all** — no dropped foreign key, no new column, no
+migration. Deleting children before the parent is what the constraint is for. It does
+contradict `migrations/034_consent_event.sql`'s header, which says "INSERT only. Never
+UPDATE, never DELETE", so **that comment must be amended in the same change**: the
+append-only guarantee is about never rewriting a decision that was made, and it stands.
+Erasing a person entirely is a different act, and the comment should say which one it is
+ruling out.
 
 ## Decisions carried in from the board
 
@@ -270,7 +286,7 @@ DELETE FROM invite               WHERE account = ?      -- sent by this Account
 DELETE FROM invite               WHERE email = <digest> -- addressed to this user,
                                                            across ALL accounts
 DELETE FROM ga_account_uuid      WHERE account_id = ?
-UPDATE consent_event SET user_id = <digest> WHERE user_id = ?   -- pseudonymise
+DELETE FROM consent_event        WHERE user_id = ?      -- before `user`; see above
 DELETE FROM account_user         WHERE user_id = ? AND account_id = ?
 DELETE FROM user                 WHERE id = ?
 DELETE FROM account              WHERE id = ?
@@ -311,8 +327,8 @@ win available.
   backfill run against an empty pepper produces plain digests that the peppered read path
   will never match, silently orphaning every live invite. Not fatal (they expire in 30
   days) but avoidable.
-- A `service.HashEmail` helper — the single place the digest is computed, since Phase 4's
-  `consent_event` pseudonymisation and the deletion cascade both reuse it.
+- A `service.HashEmail` helper — the single place the digest is computed, since the
+  deletion cascade in Phase 2 reuses it to find invites addressed to the departing user.
 - Hash at every call site: `CreateInvite`, `GetInvites`, `GetInvite`, `DeleteInvite`.
 - Lazy purge in `CreateInvite` and `GetInvites`.
 - `/privacy`: invite retention and hashing.
@@ -328,12 +344,18 @@ account-page load.
   actually better served by the scoped version.
 - `service.DeleteAccount(ctx, tx, caller)`: member-count branch, both cascades, wired to
   Phase 0's primitive.
+- `DELETE FROM consent_event WHERE user_id = ?`, ordered before the `user` row so the
+  foreign key is satisfied rather than dropped. **Amend `migrations/034_consent_event.sql`'s
+  header comment in the same change** — it currently says "Never UPDATE, never DELETE" and
+  addresses a note to whoever implements this item. Replace that note with what was actually
+  decided and why, so the next reader finds the answer where they were told to look.
 - Go tests for both branches, and for the invites-in-both-directions rule.
 
 No route yet, no external calls. This is the piece worth getting wrong in private.
 
-*Done when:* Go tests cover sole-member and shared-member deletion, and assert that a
-shared Account's recipes survive.
+*Done when:* Go tests cover sole-member and shared-member deletion, assert that a shared
+Account's recipes survive, and assert that deleting a user with consent history does not
+trip the foreign key.
 
 ### Phase 3 — external systems
 
@@ -347,15 +369,12 @@ shared Account's recipes survive.
 *Done when:* deletion runs correctly with no SendGrid key present, and the Auth0 failure
 path aborts without having destroyed anything.
 
-### Phase 4 — the GA mapping table, and `consent_event`
+### Phase 4 — the GA mapping table
 
-**Blocked on the unresolved conflict above being confirmed.**
-
-- Migration: `ga_account_uuid (account_id, uuid)`; drop `fk_consent_event_user_id`; amend
-  `migrations/034`'s comment to record why an `UPDATE` is now permitted.
+- Migration: `ga_account_uuid (account_id, uuid)`.
 - `ga.ts:254` sends the UUID instead of `account_id`. Existing accounts get a UUID on
   first read.
-- Both wired into the cascade.
+- Wired into the cascade.
 
 Deliberately late: it is the only phase that changes what production analytics reports, and
 it is the one whose benefit is an argument about unlinkability rather than a deletion.
@@ -390,11 +409,10 @@ seems necessary, that is a gap in `DeleteAccount`, and the fix belongs there.
 
 ## Open questions
 
-1. **The `consent_event` FK conflict** — see above. Needs confirming before Phase 4.
-2. **Data export (right of access)** is the same underlying question — what belongs to this
+1. **Data export (right of access)** is the same underlying question — what belongs to this
    person — answered in the other direction. #59 notes the two are best designed together.
    This spec does not cover it, and Phase 2's member-count branch is the piece an export
    would reuse.
-3. **Auth0 tenant configuration** for the Management API client is unspecced here; #50's
+2. **Auth0 tenant configuration** for the Management API client is unspecced here; #50's
    audit of the tenant is the natural place to settle it, and Phase 3 is the first thing
    that needs it.

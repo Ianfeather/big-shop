@@ -32,9 +32,17 @@ func (a *App) acceptInvite(ctx context.Context, input *InviteTokenInput) (*struc
 		return nil, fail(ctx, huma.Error400BadRequest("Error finding invite"), err)
 	}
 
-	// Disable old user account
-	if err := service.DisableUserAccount(ctx, a.db, *currentUser); err != nil {
-		return nil, huma.Error500InternalServerError("Error disabling user account")
+	// Disable the invitee's *old* account, which is the one they are currently
+	// resolved to. Named explicitly rather than left to match every membership
+	// the user has: see DisableUserAccount, which used to do the latter and
+	// could leave someone able to log in and resolve to no Account at all.
+	//
+	// A user with no current account is not an error here - they are simply
+	// joining their first one, and there is nothing to disable.
+	if currentUser.AccountID != nil {
+		if err := service.DisableUserAccount(ctx, a.db, currentUser.ID, *currentUser.AccountID); err != nil {
+			return nil, fail(ctx, huma.Error500InternalServerError("Error disabling user account"), err)
+		}
 	}
 
 	// Add user to the account

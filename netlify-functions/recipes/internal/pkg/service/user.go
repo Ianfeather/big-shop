@@ -33,9 +33,11 @@ func GetUser(ctx context.Context, db *sql.DB, userID string) (u *common.User, e 
 	// phases removing. A LEFT JOIN keeps this one query.
 	//
 	// LEFT, not INNER: a user with no enabled account_user row still has to
-	// come back. That is a real state - the invite flow disables every row for
-	// a user who accepts an invite elsewhere (see DisableUserAccount) - and an
-	// INNER JOIN would turn it into "no such user" and blank their preferences.
+	// come back. That is a real state - the invite flow disables someone's old
+	// membership as they accept an invite elsewhere (see DisableUserAccount),
+	// so there is a moment with none enabled, and account deletion's soft gate
+	// leaves them that way on purpose - and an INNER JOIN would turn it into
+	// "no such user" and blank their preferences.
 	userQuery := `
 		SELECT u.id, u.name, u.email, u.onboarded, u.show_pantry_staples, au.account_id
 			FROM user u

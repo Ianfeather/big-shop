@@ -40,7 +40,11 @@ Status: pending
 Scope: migration `035_user_timezone.sql`; `common.User.Timezone` with `omitempty`; `service.AddUser` insert-only (omitted from `ON DUPLICATE KEY UPDATE`); `pages/index.tsx` adds `Intl.DateTimeFormat().resolvedOptions().timeZone` to the existing `POST /user` payload.
 Depends on: none (independent of Session 1, ordered first because Session 3 reads the column)
 Commit:
-Notes: Must regenerate BOTH drift-checked artefacts or CI's `go` job fails — `go run . openapi > ../../docs/openapi.yaml`, then `npm run generate:api-types`.
+Notes:
+- **Partly started.** `migrations/035_user_timezone.sql` is already written and committed (it rode along in b13aea5, ahead of its session — it is a new file and conflicts with nothing). Its syntax was applied by hand against the local DB and the column is correct: `timezone varchar(64) NULL`. Everything else in this session is still to do.
+- Still to do: `common.User.Timezone` with `omitempty`; `service.AddUser` writing it on insert and **omitting it from `ON DUPLICATE KEY UPDATE`**; `pages/index.tsx` adding `Intl.DateTimeFormat().resolvedOptions().timeZone` to the existing `POST /user` payload.
+- Must regenerate BOTH drift-checked artefacts or CI's `go` job fails — `go run . openapi > ../../docs/openapi.yaml`, then `npm run generate:api-types`.
+- Local stack for this worktree: `COMPOSE_PROJECT_NAME=bigshop-impl50 DB_PORT=3320 API_PORT=8083 GRAFANA_PORT=3220 OTLP_HTTP_PORT=4328 docker compose up -d db api`. Go runs inside `bigshop-impl50-api-1` (there is no Go toolchain on the host). Tear down with the same project name and `down -v` — a plain `docker compose down` would hit another worktree's stack.
 
 ## Session 3: Phase 1c — the ticker and the send log
 Status: pending

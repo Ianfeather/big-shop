@@ -55,7 +55,10 @@ Notes: Proven with a stub sender, no templates. The per-tick guard is not option
 
 ## Session 4: Phase 1d — the four emails
 Status: pending
-Scope: four `html/template` files with the non-promotional constraint stated in each; `utm_*` links carrying no identifier; the welcome email's inline fire-and-forget send in `addUser`; a dev-only preview route; `/privacy` updated for the lifecycle family, its lawful basis, `user.timezone`, and the permanent suppression list.
+Scope: four `html/template` files with the non-promotional constraint stated in each; `utm_*` links carrying no identifier; the welcome email's inline fire-and-forget send in `addUser`; the `preview` and `send-test` modes (spec, "Trying it out before trusting it"); `/privacy` updated for the lifecycle family, its lawful basis, `user.timezone`, and the permanent suppression list.
 Depends on: Sessions 1 and 3
 Commit:
-Notes: The welcome send must never fail `POST /user` — that is exactly the mistake `POST /invite` makes today. It still writes `email_send`, so a failure retries on the next tick.
+Notes:
+- The welcome send must never fail `POST /user` — that is exactly the mistake `POST /invite` makes today. It still writes `email_send`, so a failure retries on the next tick.
+- `send-test` is a subcommand on `os.Args[1]`, not an HTTP route: a route that mails an address from its request body is an open relay. Like `openapi` mode it returns before the DB is opened. **It must never write an `email_send` row** — doing so would mean a real user silently never receives the email being tested.
+- The external setup is now real: SendGrid account live, key set via `fly secrets` *and* declared in `machine_config.json`, domain authenticated, `hello@bigshop.life` verified and monitored, ASM group **32124** set in `fly.toml`'s `[env]`. So `SendLifecycle` will genuinely send once this merges — the `email_launch` marker from Session 3 is the only thing keeping the existing user base out of it.

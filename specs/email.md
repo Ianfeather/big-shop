@@ -318,6 +318,76 @@ alias or an unattended SendGrid identity. It has to be a real mailbox somebody o
 The Day 14 email asks for a reply; asking for one and dropping it in a void is worse than
 not asking.
 
+### Trying it out before trusting it
+
+The sequence is four emails spread over a fortnight, sent at 10:00 in the recipient's
+morning. Taken literally, seeing the Day 14 email means waiting fourteen days, and seeing
+a fix to it means waiting another fourteen. That is not a workable loop, and without a
+deliberate answer the loop people actually use is "deploy it and watch the first real
+signup", which tests the copy on a stranger.
+
+So three mechanisms, each answering a different question. They are separate on purpose:
+the fast one is not trustworthy about deliverability, and the trustworthy one is too slow
+to iterate on.
+
+**1. `go run . preview` — what does it look like?** A development-only HTTP route that
+renders any template in the browser, with sample data, and reloads on edit. Registered
+only when `DISABLE_AUTH=true`, so it cannot exist in production. Sends nothing, needs no
+API key, and is the loop for writing copy and fixing table markup. It is also what makes
+the "hand-written table-based HTML email" cost accepted above survivable.
+
+What it cannot tell you: whether Gmail renders it the same way, whether it lands in the
+inbox or in Promotions, or whether the unsubscribe link works — the substitution tag is
+still a literal `<%asm_group_unsubscribe_raw_url%>` until SendGrid rewrites it.
+
+**2. `go run . send-test --to=<address> --kind=<kind>` — does it survive a real mail
+client?** Sends exactly one named email, immediately, to one address, through SendGrid,
+with the real ASM group attached. This is the only way to answer the questions that
+matter most and that no local tool can: inbox placement, how the layout degrades in
+Gmail, Outlook and Apple Mail, whether SPF and DKIM align, and whether the unsubscribe
+link actually resolves.
+
+A subcommand rather than an HTTP route, and that is a security decision, not a stylistic
+one. A route that sends mail to an address in its request body is an open relay wearing a
+Big Shop badge, and the moment it exists somebody has to keep it authenticated. The binary
+already dispatches on `os.Args[1]` (`serve`, `openapi`), so this is the established shape,
+and it is reachable in production through `fly ssh console` without any of it being
+exposed to the internet. Like `openapi` mode it returns early before the database is
+opened — it renders and sends, and touches nothing else.
+
+**It must never write an `email_send` row.** A test send is not a send to that user; the
+send log is the idempotency guarantee for the real sequence, and polluting it means a real
+user silently never receives the email you were testing. The `--to` address is also not
+looked up, so testing does not require a User to exist.
+
+**3. A backdated User — does the schedule work?** The one thing neither of the above
+exercises is the part most likely to be wrong: the due-query, the timezone arithmetic and
+the one-per-tick guard. Test that by inserting a User with a backdated `created_at`:
+
+```sql
+INSERT INTO user (id, name, email, timezone, created_at)
+VALUES ('test|schedule', 'Schedule Test', '<an address you own>', 'Europe/London',
+        NOW() - INTERVAL 8 DAY);
+```
+
+The next tick at 10:00 London should send that user exactly one email — the tips email,
+not tips *and* recipes — and the tick after that should send nothing until the following
+day. That is the guard and the self-healing `>=` query both demonstrated in one
+observation. Go tests cover the same ground against an injected clock and are what CI
+runs; this is the belt-and-braces check that the query really means what the tests assume.
+
+**The trap that will bite whoever tests this first.** SendGrid suppression is permanent
+and it is keyed on the address, not on the user. Click your own unsubscribe link while
+testing and that address is suppressed for the whole ASM group — every subsequent test
+send to it is accepted by the API, logged as a success, and silently delivered nowhere.
+It looks exactly like a broken template. Two consequences:
+
+- **Test the unsubscribe link last**, or test it with a `+suffix` address you are willing
+  to burn.
+- Know that the fix is to remove the entry under Suppressions in the SendGrid dashboard.
+  This is the one place the permanence argued for above is inconvenient rather than
+  correct, and it is worth the trade — see the unsubscribe section.
+
 ### When there is no key
 
 **No `SENDGRID_API_KEY` means a clean no-op, never an error**, following the precedent
@@ -462,14 +532,19 @@ same (user, kind) twice, and never selects more than one kind per user per tick.
 
 - Four templates, the `utm_*` links, the non-promotional constraint stated in the templates
   themselves.
+- `preview` and `send-test` modes, per "Trying it out before trusting it" above. They land
+  here rather than earlier because both need templates to be worth having, and `send-test`
+  is what proves the whole chain — key, sender, SPF/DKIM, ASM group — before a real signup
+  is the thing that tests it.
 - The welcome email's inline fire-and-forget send in `addUser`.
 - `/privacy`: the lifecycle family, its lawful basis, the permanent suppression list, and
   `user.timezone`.
 - The SendGrid ASM group created, the sender verified, SPF/DKIM set, and
   `hello@bigshop.life` monitored as a real mailbox that receives as well as sends.
 
-*Done when:* a real signup receives a welcome immediately and the remaining three arrive on
-schedule against a seeded clock; unsubscribing from any one of them stops the rest.
+*Done when:* all four render correctly in a real mail client via `send-test`, a real signup
+receives a welcome immediately, a backdated User receives exactly one email on the next
+tick, and unsubscribing from any one of them stops the rest.
 
 ### Phase 2 — transactional
 

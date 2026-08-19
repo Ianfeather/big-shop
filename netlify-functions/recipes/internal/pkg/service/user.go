@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"recipes/internal/pkg/common"
+	"recipes/internal/pkg/telemetry"
 )
 
 func AddUser(ctx context.Context, db *sql.DB, user common.User) error {
@@ -58,6 +59,21 @@ func GetUser(ctx context.Context, db *sql.DB, userID string) (u *common.User, e 
 	if accountID.Valid {
 		id := int(accountID.Int64)
 		user.AccountID = &id
+
+		// The Account's Google Analytics identifier, minted on first read. Sent
+		// to Google in place of account.id - see the field's comment in
+		// common/types.go and migrations/036_ga_account_uuid.sql.
+		//
+		// **The error is deliberately swallowed**, which is the same rule
+		// ADR-0007 states for telemetry: analytics must never be the reason
+		// somebody cannot load their recipes. A failure leaves AnalyticsID nil,
+		// the browser names no Account to Google, and everything else on this
+		// page works exactly as it did.
+		if analyticsID, err := AccountAnalyticsID(ctx, db, id); err != nil {
+			telemetry.RecordWarning(ctx, "mint account analytics id", err)
+		} else {
+			user.AnalyticsID = &analyticsID
+		}
 	}
 
 	// The latest consent decision rides along on the User rather than costing a

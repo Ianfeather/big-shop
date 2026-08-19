@@ -645,6 +645,7 @@ export interface components {
             readonly $schema?: string;
             /** Format: int64 */
             accountId?: number;
+            analyticsId?: string;
             consent?: components["schemas"]["Consent"];
             email: string;
             id?: string;

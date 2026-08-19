@@ -164,6 +164,27 @@ type User struct {
 	// account zero: DisableUserAccount leaves exactly that behind when someone
 	// accepts an invite into a different Account.
 	AccountID *int `json:"accountId,omitempty"`
+	// AnalyticsID is the random identifier this User's Account is known by in
+	// Google Analytics, or nil if they belong to no Account.
+	//
+	// **It is sent to Google instead of AccountID, and that is the whole point
+	// of it.** A random UUID means `account.id` stops being the same join key
+	// across Google, Grafana and our own database, so the mapping table becomes
+	// the only place that link exists - backups and logs included - and deleting
+	// its row severs it. What that buys is unlinkability, not deletion: Google
+	// keeps what it already has, along with its own `_ga` client id and
+	// IP-derived geography, whatever we do. See
+	// migrations/036_ga_account_uuid.sql.
+	//
+	// Carried on the User for the same reason AccountID and Consent are: every
+	// authenticated page already fetches this object, so a separate route would
+	// add a round trip to every load.
+	//
+	// A pointer, and nil is a normal state rather than an error - a user who
+	// belongs to no Account has no Account to name, and a failure to mint one is
+	// deliberately swallowed, because analytics must never be why somebody
+	// cannot load their recipes.
+	AnalyticsID *string `json:"analyticsId,omitempty"`
 	// Consent is the User's most recent analytics-consent decision, or nil if
 	// they have never made one.
 	//

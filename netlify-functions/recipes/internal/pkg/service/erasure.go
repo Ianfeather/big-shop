@@ -49,7 +49,8 @@ func auth0BaseURL() string {
 }
 
 // EraseSendGridRecipient asks SendGrid to delete everything it holds about an
-// address, and reports whether it actually called.
+// address. `called` reports whether it was attempted, and like
+// DeleteAuth0User's is only meaningful when err is nil.
 //
 // **Best-effort by design.** SendGrid expires recipient personal data at 37
 // days regardless, which is the backstop that lets this fail without failing
@@ -65,8 +66,11 @@ func auth0BaseURL() string {
 // that we may lawfully mail somebody again inverts the point of the right being
 // exercised here.
 //
-// The address must be read *before* the deletion transaction destroys the
-// `user` row - see DeleteUserAndAccount, which does exactly that.
+// **The address has to be read before the deletion transaction destroys the
+// `user` row that holds it**, and nothing here enforces that: this takes the
+// address as a parameter, so the obligation lands on whoever resolves it. The
+// route in app/account.go is that caller, and it loads the User first for
+// exactly this reason.
 func EraseSendGridRecipient(ctx context.Context, email string) (called bool, err error) {
 	key := os.Getenv("SENDGRID_API_KEY")
 	if key == "" {
@@ -138,6 +142,10 @@ func auth0ManagementToken(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("requesting an Auth0 management token: %w", err)
 	}
 	defer res.Body.Close()
+	// Drained on the way out so the connection returns to the pool rather than
+	// being dropped - including on the error path below, which is the one that
+	// was leaking it.
+	defer func() { _, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 4096)) }()
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return "", fmt.Errorf("Auth0's token endpoint returned %d", res.StatusCode)
@@ -155,8 +163,13 @@ func auth0ManagementToken(ctx context.Context) (string, error) {
 	return token.AccessToken, nil
 }
 
-// DeleteAuth0User removes the identity a departing user logs in with, and
-// reports whether it actually called.
+// DeleteAuth0User removes the identity a departing user logs in with.
+//
+// `called` reports whether the call was attempted at all, and is **only
+// meaningful when err is nil** - a token exchange that fails returns
+// (true, err) having never reached the delete. The caller reads it solely to
+// tell "skipped because unconfigured" apart from "done", which is a question
+// that only arises on the success path.
 //
 // **This is the hard gate of the deletion sequence.** A working login for a
 // deleted account is the failure board item #59 exists to fix, so when this
@@ -233,16 +246,34 @@ func DeleteAuth0User(ctx context.Context, userID string) (called bool, err error
 //
 // It returns whether the Account itself was deleted, so the caller can tell the
 // user which of the two outcomes happened.
+// The four steps, held in variables so a test can assert the sequence's one
+// load-bearing property - that a failing hard gate never reaches the
+// irreversible step - without a database or a live tenant. Nothing but a test
+// ever assigns to them.
+var (
+	softGateStep     = DisableUserAccount
+	sendGridStep     = EraseSendGridRecipient
+	auth0Step        = DeleteAuth0User
+	hardDeleteStep   = DeleteAccount
+	externalsTimeout = 20 * time.Second
+)
+
 func DeleteUserAndAccount(ctx context.Context, db *sql.DB, userID string, accountID int, email string) (accountDeleted bool, err error) {
 	// 1. The soft gate. Deliberately an UPDATE: it is the only step before the
 	//    hard delete that changes anything, and it is reversible.
-	if err := DisableUserAccount(ctx, db, userID, accountID); err != nil {
+	if err := softGateStep(ctx, db, userID, accountID); err != nil {
 		return false, fmt.Errorf("gating the account: %w", err)
 	}
 
-	// 2. SendGrid, best-effort, reading the address while the `user` row that
-	//    holds it still exists.
-	if called, err := EraseSendGridRecipient(ctx, email); err != nil {
+	// Steps 2 and 3 are two sequential network calls at ten seconds each,
+	// inside a request somebody is watching. Bounded together so the worst case
+	// is one wait rather than the sum of them.
+	externalsCtx, cancelExternals := context.WithTimeout(ctx, externalsTimeout)
+	defer cancelExternals()
+
+	// 2. SendGrid, best-effort, using the address read before step 4 destroys
+	//    the row holding it.
+	if called, err := sendGridStep(externalsCtx, email); err != nil {
 		telemetry.RecordWarning(ctx, "sendgrid recipient erasure", err)
 	} else if !called {
 		telemetry.RecordWarning(ctx, "sendgrid recipient erasure skipped",
@@ -250,7 +281,7 @@ func DeleteUserAndAccount(ctx context.Context, db *sql.DB, userID string, accoun
 	}
 
 	// 3. Auth0, the hard gate.
-	called, err := DeleteAuth0User(ctx, userID)
+	called, err := auth0Step(externalsCtx, userID)
 	if err != nil {
 		// Abort with the Account still gated and every row intact. This is the
 		// survivable failure, and keeping it survivable is the whole design.
@@ -266,5 +297,12 @@ func DeleteUserAndAccount(ctx context.Context, db *sql.DB, userID string, accoun
 	// 4. The irreversible step, last. It reports which branch it took from
 	//    inside its own transaction, so the caller can name the outcome without
 	//    a second count against rows that no longer exist.
-	return DeleteAccount(ctx, db, userID, accountID, email)
+	//
+	// **Detached from the request's cancellation, deliberately.** Once Auth0 has
+	// destroyed the identity, a client that disconnects - or a gateway that
+	// times out - must not be able to stop the cascade: that would leave the
+	// exact state this ordering exists to prevent, rows intact for somebody who
+	// can no longer log in to retry. Past this line the work is finished on the
+	// server's terms.
+	return hardDeleteStep(context.WithoutCancel(ctx), db, userID, accountID, email)
 }

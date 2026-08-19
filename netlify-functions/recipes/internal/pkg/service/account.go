@@ -3,8 +3,11 @@ package service
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"recipes/internal/pkg/common"
+
+	"github.com/google/uuid"
 )
 
 // CreateAccount creates a new account for a user
@@ -297,6 +300,20 @@ func deleteAccountTx(ctx context.Context, tx execer, userID string, accountID in
 	}
 
 	if soleMember {
+		// The Google Analytics identifier, in the sole-member branch only -
+		// which departs from the spec's cascade list, deliberately.
+		//
+		// The spec puts this above the line where the shared case starts
+		// skipping statements, but in the shared case the Account survives, so
+		// deleting its UUID only causes a different one to be minted on the next
+		// page load. That severs nothing that stays severed, and it splits the
+		// surviving members' Account across two identifiers in Google. The
+		// departing person's link to Google ran through the Account, and the
+		// Account is staying either way.
+		if _, err := tx.ExecContext(ctx, "DELETE FROM ga_account_uuid WHERE account_id = ?;", accountID); err != nil {
+			return fmt.Errorf("deleting the account's analytics identifier: %w", err)
+		}
+
 		// Any membership row *other* people hold on this Account. A co-member
 		// disabled by the invite flow still has one, and the member count
 		// ignores it while fk_account_user_account_id does not - so leaving it
@@ -389,4 +406,51 @@ func DeleteAccount(ctx context.Context, db *sql.DB, userID string, accountID int
 	// re-counted afterwards: the rows it was derived from no longer exist, and
 	// asking again would be a different question with a different answer.
 	return soleMember, nil
+}
+
+// AccountAnalyticsID returns the random identifier this Account is known by in
+// Google Analytics, minting one the first time it is asked for.
+//
+// **The identifier exists so that `account.id` is not the same join key across
+// Google, Grafana and our own database.** See migrations/036_ga_account_uuid.sql
+// for the full argument, and ADR-0008 §1 for why the Auth0 subject never gets
+// this far. What it buys is unlinkability rather than deletion: Google keeps
+// whatever it already has, and `ga_account_uuid` becomes the only place the link
+// between that data and an Account exists - which is what makes deleting the row
+// meaningful.
+//
+// Minted lazily rather than backfilled, so an Account that is never visited
+// again never gets an identifier at all.
+//
+// **A failure here is the caller's to swallow.** This hangs off GET /user, and
+// analytics must never be the reason somebody cannot load their recipes - the
+// same rule ADR-0007 states for telemetry. GetUser treats an error as "no
+// identifier yet", which degrades to no Account being named in Google.
+func AccountAnalyticsID(ctx context.Context, db *sql.DB, accountID int) (string, error) {
+	var id string
+	err := db.QueryRowContext(ctx,
+		"SELECT uuid FROM ga_account_uuid WHERE account_id = ?;", accountID).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("reading the account's analytics id: %w", err)
+	}
+
+	minted := uuid.NewString()
+	// INSERT IGNORE, then read back: two concurrent first page loads for the
+	// same Account would otherwise race, and the loser must return the value
+	// that actually landed rather than the one it generated. Reading back is
+	// what makes the identifier stable - a browser that reported one UUID and
+	// then another would split one Account across two in Google, which is the
+	// failure this table exists to avoid.
+	if _, err := db.ExecContext(ctx,
+		"INSERT IGNORE INTO ga_account_uuid (account_id, uuid) VALUES (?, ?);", accountID, minted); err != nil {
+		return "", fmt.Errorf("minting the account's analytics id: %w", err)
+	}
+	if err := db.QueryRowContext(ctx,
+		"SELECT uuid FROM ga_account_uuid WHERE account_id = ?;", accountID).Scan(&id); err != nil {
+		return "", fmt.Errorf("reading back the account's analytics id: %w", err)
+	}
+	return id, nil
 }

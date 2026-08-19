@@ -165,11 +165,18 @@ describe('Analytics', () => {
     expect(ga.trackPageView).toHaveBeenCalledWith('/list', 'Shopping list');
   });
 
-  it('names the Account once it is known', () => {
+  it('names the Account by its analytics id once it is known', () => {
     writeConsent('granted');
-    mockUser.mockReturnValue({ email: 'dev@localhost', accountId: 7 });
+    mockUser.mockReturnValue({
+      email: 'dev@localhost',
+      accountId: 7,
+      analyticsId: '4d1f0f8e-2a3b-4c5d-9e6f-70718293a4b5',
+    });
     render(<Analytics />);
 
-    expect(ga.setAccount).toHaveBeenCalledWith(7);
+    // The random identifier, not the Account id sitting right next to it in the
+    // same object - that is the whole point of the mapping table.
+    expect(ga.setAccount).toHaveBeenCalledWith('4d1f0f8e-2a3b-4c5d-9e6f-70718293a4b5');
+    expect(ga.setAccount).not.toHaveBeenCalledWith(7);
   });
 });

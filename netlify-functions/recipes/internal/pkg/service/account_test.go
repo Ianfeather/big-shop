@@ -262,6 +262,40 @@ func TestDeleteAccountTx(t *testing.T) {
 		}
 	})
 
+	t.Run("the analytics identifier goes with the account, and only with it", func(t *testing.T) {
+		// Departs from the spec's cascade list, deliberately. The spec deletes
+		// this in both branches, but in the shared case the Account survives, so
+		// dropping its UUID only mints a different one on the next page load -
+		// severing nothing that stays severed, while splitting the surviving
+		// members' Account across two identifiers in Google.
+		sole := &fakeExecer{}
+		if err := deleteAccountTx(context.Background(), sole, userID, accountI, digest, true); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !contains(tablesTouched(sole.queries), "ga_account_uuid") {
+			t.Error("the account's analytics identifier survives its deletion, leaving the link to Google intact")
+		}
+
+		shared := &fakeExecer{}
+		if err := deleteAccountTx(context.Background(), shared, userID, accountI, digest, false); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if contains(tablesTouched(shared.queries), "ga_account_uuid") {
+			t.Error("a surviving Account's analytics identifier was rotated, splitting it in two in Google for no erasure benefit")
+		}
+	})
+
+	t.Run("ga_account_uuid goes before the account row it names", func(t *testing.T) {
+		fake := &fakeExecer{}
+		if err := deleteAccountTx(context.Background(), fake, userID, accountI, digest, true); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		tables := tablesTouched(fake.queries)
+		if indexOf(tables, "ga_account_uuid") > indexOf(tables, "account") {
+			t.Errorf("the analytics identifier is deleted after the account: %v", tables)
+		}
+	})
+
 	t.Run("the global ingredient catalog is never touched", func(t *testing.T) {
 		// ADR-0001. These names are coined during everyone's imports, are not
 		// personal data, and erasing them would damage every other Account.

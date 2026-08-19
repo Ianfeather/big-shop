@@ -108,8 +108,10 @@ export default function Analytics() {
   // this or the Account is never named for the rest of the visit. Removing it is
   // the tidy-up that quietly loses the user property.
   useEffect(() => {
-    setAccount(user?.accountId);
-  }, [user?.accountId, consent]);
+    // The Account's random analytics id, not `accountId` - see setAccount. The
+    // raw Account id is deliberately never sent to Google.
+    setAccount(user?.analyticsId);
+  }, [user?.analyticsId, consent]);
 
   return null;
 }

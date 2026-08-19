@@ -44,7 +44,7 @@ describe('without a measurement id', () => {
     const ga = await loadGa();
     ga.start();
     ga.trackPageView('/list', 'Shopping list');
-    ga.setAccount(1);
+    ga.setAccount('11111111-1111-4111-8111-111111111111');
 
     expect(window.dataLayer).toBeUndefined();
   });
@@ -85,7 +85,7 @@ describe('with a measurement id', () => {
     const ga = await loadGa('G-TEST123');
     ga.start();
     ga.trackPageView('/', 'Home');
-    ga.setAccount(7);
+    ga.setAccount('77777777-7777-4777-8777-777777777777');
 
     const consentPayloads = (window.dataLayer as IArguments[])
       .map(args => Array.from(args))
@@ -113,17 +113,34 @@ describe('with a measurement id', () => {
   it('sends the account as a user property and never as user_id', async () => {
     const ga = await loadGa('G-TEST123');
     ga.start();
-    ga.setAccount(42);
+    ga.setAccount('4d1f0f8e-2a3b-4c5d-9e6f-70718293a4b5');
 
     const calls = (window.dataLayer as IArguments[]).map(args => Array.from(args));
     const set = calls.find(c => c[0] === 'set');
-    expect(set?.[2]).toEqual({ account_id: '42' });
+    expect(set?.[2]).toEqual({ account_id: '4d1f0f8e-2a3b-4c5d-9e6f-70718293a4b5' });
 
     // The rule ADR-0008's amendment states: Google is never told who someone
     // is, only which Account they are acting for.
     const serialised = JSON.stringify(calls);
     expect(serialised).not.toContain('user_id');
     expect(serialised).not.toContain('auth0|');
+  });
+
+  // The point of the mapping table, pinned: what reaches Google must be the
+  // random identifier and never `account.id`, so that the same key does not
+  // join Google, Grafana and our own database together.
+  it('sends the random identifier rather than the Account id', async () => {
+    const ga = await loadGa('G-TEST123');
+    ga.start();
+    ga.setAccount('4d1f0f8e-2a3b-4c5d-9e6f-70718293a4b5');
+
+    const serialised = JSON.stringify(
+      (window.dataLayer as IArguments[]).map(args => Array.from(args))
+    );
+    // The Account this stands for is id 7 in the database; that number must
+    // appear nowhere, in any form.
+    expect(serialised).not.toContain('"7"');
+    expect(serialised).toContain('4d1f0f8e-2a3b-4c5d-9e6f-70718293a4b5');
   });
 
   it('says nothing about an account it does not have', async () => {
@@ -184,7 +201,7 @@ describe('with a measurement id', () => {
 
     const before = (window.dataLayer as IArguments[]).length;
     ga.trackPageView('/list', 'Shopping list');
-    ga.setAccount(9);
+    ga.setAccount('99999999-9999-4999-8999-999999999999');
 
     expect((window.dataLayer as IArguments[]).length).toBe(before);
   });

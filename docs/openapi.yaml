@@ -452,6 +452,8 @@ components:
         accountId:
           format: int64
           type: integer
+        analyticsId:
+          type: string
         consent:
           $ref: "#/components/schemas/Consent"
         email:

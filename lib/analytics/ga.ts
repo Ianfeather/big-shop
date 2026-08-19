@@ -251,11 +251,28 @@ export function trackPageView(path: string, title: string): void {
 // API's spans and stops there. ADR-0008 §1 permits pseudonymous identifiers to
 // Grafana; the rule for this recipient is tighter, and the amendment there says
 // so.
-export function setAccount(accountId: number | undefined): void {
-  if (!collecting || accountId === undefined) return;
+//
+// **And neither is `account.id`.** What is sent is a random UUID minted per
+// Account and held in the `ga_account_uuid` table, so that `account.id` stops
+// being the same join key across Google, Grafana and our own database. That
+// mapping table becomes the only place the link exists - backups and logs
+// included - and deleting its row severs it.
+//
+// What that buys is **unlinkability, not deletion**, and the difference matters
+// enough to state here rather than only in the migration. Google keeps whatever
+// it has already collected either way, along with its own `_ga` client id and
+// IP-derived geography. Google's own deletion API cannot help: it accepts only
+// userId/clientId/appInstanceId/userProvidedData, and a custom user property is
+// not among them - which is precisely why the identifier had to stop being
+// meaningful instead.
+//
+// The parameter is a string rather than a number for the same reason: an
+// opaque identifier, not a key into anything.
+export function setAccount(analyticsId: string | undefined): void {
+  if (!collecting || analyticsId === undefined) return;
 
   try {
-    gtag('set', 'user_properties', { account_id: String(accountId) });
+    gtag('set', 'user_properties', { account_id: analyticsId });
   } catch {
     // As above.
   }

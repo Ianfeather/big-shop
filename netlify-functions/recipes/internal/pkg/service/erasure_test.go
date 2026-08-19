@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -167,6 +169,49 @@ func TestDeleteAuth0User(t *testing.T) {
 		}
 	})
 
+	t.Run("a hostile subject cannot escape the users endpoint", func(t *testing.T) {
+		// An Auth0 subject is not attacker-chosen today, but it is a string
+		// interpolated into a URL path, and this is what stops it becoming a
+		// way to reach another Management API endpoint.
+		clearAuth0Env(t)
+		t.Setenv("AUTH0_DOMAIN", "tenant.eu.auth0.com")
+		t.Setenv("AUTH0_MGMT_CLIENT_ID", "an-id")
+		t.Setenv("AUTH0_MGMT_CLIENT_SECRET", "a-secret")
+
+		for _, hostile := range []string{
+			"../../clients/all",
+			"auth0|1/../../connections",
+			"auth0|1?fields=whatever",
+			"auth0|1#fragment",
+		} {
+			var reached string
+			var gotQuery string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/oauth/token" {
+					_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "t"})
+					return
+				}
+				reached, gotQuery = r.URL.Path, r.URL.RawQuery
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			auth0BaseURLOverride = srv.URL
+
+			if _, err := DeleteAuth0User(context.Background(), hostile); err != nil {
+				t.Fatalf("%q: unexpected error: %v", hostile, err)
+			}
+			// Whatever the subject contained, the request must still land under
+			// the users collection with no query of its own.
+			if !strings.HasPrefix(reached, "/api/v2/users/") {
+				t.Errorf("%q escaped to %q", hostile, reached)
+			}
+			if gotQuery != "" {
+				t.Errorf("%q smuggled a query string: %q", hostile, gotQuery)
+			}
+			srv.Close()
+			auth0BaseURLOverride = ""
+		}
+	})
+
 	t.Run("a 404 is success, so a retry of a partial deletion can finish", func(t *testing.T) {
 		// The identity not being there is the state being asked for. Treating
 		// it as a failure would make the sequence unretryable, which is the one
@@ -239,6 +284,129 @@ func TestDeleteAuth0User(t *testing.T) {
 		}
 		if deleteAttempted {
 			t.Error("attempted the delete without a token")
+		}
+	})
+}
+
+// swapSteps replaces the four sequence steps for the duration of a test and
+// restores them afterwards.
+//
+// These tests must never call t.Parallel(): the steps and the two base-URL
+// variables above are package-level, so a parallel test would race another's
+// substitution. Every test in this file also calls t.Setenv, which panics under
+// t.Parallel and enforces that today - this comment is what stops a future test
+// without a t.Setenv quietly breaking it.
+func swapSteps(t *testing.T, order *[]string, softGateErr, auth0Err, hardDeleteErr error) {
+	t.Helper()
+	origSoft, origSendGrid, origAuth0, origHard := softGateStep, sendGridStep, auth0Step, hardDeleteStep
+	t.Cleanup(func() {
+		softGateStep, sendGridStep, auth0Step, hardDeleteStep = origSoft, origSendGrid, origAuth0, origHard
+	})
+
+	softGateStep = func(_ context.Context, _ execer, _ string, _ int) error {
+		*order = append(*order, "soft-gate")
+		return softGateErr
+	}
+	sendGridStep = func(_ context.Context, _ string) (bool, error) {
+		*order = append(*order, "sendgrid")
+		return false, nil
+	}
+	auth0Step = func(_ context.Context, _ string) (bool, error) {
+		*order = append(*order, "auth0")
+		return true, auth0Err
+	}
+	hardDeleteStep = func(_ context.Context, _ *sql.DB, _ string, _ int, _ string) (bool, error) {
+		*order = append(*order, "hard-delete")
+		return true, hardDeleteErr
+	}
+}
+
+// TestDeleteUserAndAccountSequence covers the property the spec's Phase 3
+// "Done when" names: "the Auth0 failure path aborts without having destroyed
+// anything."
+func TestDeleteUserAndAccountSequence(t *testing.T) {
+	t.Run("runs the four steps in the order the design requires", func(t *testing.T) {
+		clearAuth0Env(t)
+		var order []string
+		swapSteps(t, &order, nil, nil, nil)
+
+		deleted, err := DeleteUserAndAccount(context.Background(), nil, "auth0|1", 7, "bob@example.com")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !deleted {
+			t.Error("did not report the account as deleted")
+		}
+		want := []string{"soft-gate", "sendgrid", "auth0", "hard-delete"}
+		if strings.Join(order, ",") != strings.Join(want, ",") {
+			t.Errorf("sequence = %v, want %v", order, want)
+		}
+	})
+
+	t.Run("a failing Auth0 hard gate aborts before anything irreversible", func(t *testing.T) {
+		// The whole reason the sequence is ordered this way. Auth0 surviving
+		// while the database is gone leaves a working login resolving to
+		// nothing, which is the failure #59 exists to fix - so when the gate
+		// fails, the cascade must not run at all.
+		clearAuth0Env(t)
+		var order []string
+		swapSteps(t, &order, nil, errors.New("tenant said no"), nil)
+
+		deleted, err := DeleteUserAndAccount(context.Background(), nil, "auth0|1", 7, "bob@example.com")
+		if err == nil {
+			t.Fatal("expected the hard gate to abort the sequence")
+		}
+		if deleted {
+			t.Error("reported a deletion that did not happen")
+		}
+		for _, step := range order {
+			if step == "hard-delete" {
+				t.Fatal("the irreversible step ran after the hard gate failed")
+			}
+		}
+		// And the soft gate did run, which is what leaves the Account
+		// unreachable-but-retryable rather than untouched.
+		if len(order) == 0 || order[0] != "soft-gate" {
+			t.Errorf("the account was not gated before the attempt: %v", order)
+		}
+	})
+
+	t.Run("a failing soft gate stops immediately", func(t *testing.T) {
+		clearAuth0Env(t)
+		var order []string
+		swapSteps(t, &order, errors.New("database down"), nil, nil)
+
+		if _, err := DeleteUserAndAccount(context.Background(), nil, "auth0|1", 7, "bob@example.com"); err == nil {
+			t.Fatal("expected an error")
+		}
+		if strings.Join(order, ",") != "soft-gate" {
+			t.Errorf("kept going after the gate failed: %v", order)
+		}
+	})
+
+	t.Run("the cascade is detached from the request's cancellation", func(t *testing.T) {
+		// Once Auth0 has destroyed the identity, a client disconnecting must
+		// not be able to stop the cascade - that would leave rows intact for
+		// somebody who can no longer log in to retry, which is the one outcome
+		// the ordering exists to prevent.
+		clearAuth0Env(t)
+		var order []string
+		var cascadeCtxErr error
+		swapSteps(t, &order, nil, nil, nil)
+		hardDeleteStep = func(ctx context.Context, _ *sql.DB, _ string, _ int, _ string) (bool, error) {
+			order = append(order, "hard-delete")
+			cascadeCtxErr = ctx.Err()
+			return true, nil
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // the client has already gone away
+
+		if _, err := DeleteUserAndAccount(ctx, nil, "auth0|1", 7, "bob@example.com"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cascadeCtxErr != nil {
+			t.Errorf("the cascade inherited the cancellation (%v), so a disconnect could strand a deleted identity with live rows", cascadeCtxErr)
 		}
 	})
 }

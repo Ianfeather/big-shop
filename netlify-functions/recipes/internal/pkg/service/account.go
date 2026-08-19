@@ -321,7 +321,8 @@ func deleteAccountTx(ctx context.Context, tx execer, userID string, accountID in
 }
 
 // DeleteAccount erases a User and, if they are the Account's last member, the
-// Account with them.
+// Account with them. It reports which of those two happened, so a caller can
+// tell the user which outcome they got.
 //
 // **The transaction is this function's guarantee**, which is why it opens one
 // rather than accepting one - the spec drafted it as taking a `*sql.Tx`, but a
@@ -341,10 +342,10 @@ func deleteAccountTx(ctx context.Context, tx execer, userID string, accountID in
 // that sequence leaves a gated, retryable Account rather than a half-deleted
 // one, and re-running the whole sequence reaches the same branch here because
 // the count ignores the departing user's own row.
-func DeleteAccount(ctx context.Context, db *sql.DB, userID string, accountID int, email string) error {
+func DeleteAccount(ctx context.Context, db *sql.DB, userID string, accountID int, email string) (accountDeleted bool, err error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("starting transaction: %w", err)
+		return false, fmt.Errorf("starting transaction: %w", err)
 	}
 	defer tx.Rollback()
 
@@ -361,24 +362,31 @@ func DeleteAccount(ctx context.Context, db *sql.DB, userID string, accountID int
 	if err := tx.QueryRowContext(ctx,
 		"SELECT COUNT(*) FROM account_user WHERE user_id = ? AND account_id = ?;",
 		userID, accountID).Scan(&membership); err != nil {
-		return fmt.Errorf("checking the user belongs to the account: %w", err)
+		return false, fmt.Errorf("checking the user belongs to the account: %w", err)
 	}
 	if membership == 0 {
-		return fmt.Errorf("user %q is not a member of account %d", userID, accountID)
+		return false, fmt.Errorf("user %q is not a member of account %d", userID, accountID)
 	}
 
 	others, err := OtherAccountMembers(ctx, tx, accountID, userID)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// "Sole member" means nobody else is left, counted without reference to the
 	// departing user's own row - see OtherAccountMembers for why counting
 	// enabled rows and testing for one is a data-loss bug rather than a
 	// simplification.
-	if err := deleteAccountTx(ctx, tx, userID, accountID, HashEmail(email), others == 0); err != nil {
-		return err
+	soleMember := others == 0
+	if err := deleteAccountTx(ctx, tx, userID, accountID, HashEmail(email), soleMember); err != nil {
+		return false, err
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("committing the deletion: %w", err)
+	}
+	// Reported from inside the committed transaction's own decision rather than
+	// re-counted afterwards: the rows it was derived from no longer exist, and
+	// asking again would be a different question with a different answer.
+	return soleMember, nil
 }

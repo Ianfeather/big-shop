@@ -357,6 +357,13 @@ unproxied origin to every visitor and undo the same-origin property.
 - `OPENAI_API_KEY` — GPT-4 Vision + GPT-3.5-turbo
 - `SENDGRID_API_KEY` — Email invitations
 - `AUTH0_DOMAIN` / `AUTH0_AUDIENCE` — Go JWT validation
+- `AUTH0_MGMT_CLIENT_ID` / `AUTH0_MGMT_CLIENT_SECRET` — a machine-to-machine
+  application authorised for the Auth0 Management API, used by account deletion to
+  remove the identity a departing user logs in with. **Both unset means the Auth0 step
+  is skipped**, which is what lets deletion work in dev, e2e and CI where no tenant is
+  reachable — and, in production, would leave a working login for a deleted account.
+  The skip records a warning on the request's span naming what is missing. See
+  `service.DeleteAuth0User`.
 - `INVITE_EMAIL_PEPPER` — the HMAC key `service.HashEmail` digests `invite.email` with.
   **Read server-side by the Go process, so it must never gain a `NEXT_PUBLIC_` prefix**;
   publishing it to the browser bundle would hand every visitor the one secret that stops
@@ -495,9 +502,9 @@ Two independent pipelines, one per deployable — an accepted consequence of
   check is never deployed
 - Config: `netlify-functions/recipes/fly.toml`; image:
   `netlify-functions/recipes/Dockerfile`
-- Needs a `FLY_API_TOKEN` repository secret; `DSN`, `SENDGRID_API_KEY` and
-  `INVITE_EMAIL_PEPPER` are Fly secrets, `AUTH0_DOMAIN`/`AUTH0_AUDIENCE` are in
-  `fly.toml`'s `[env]`
+- Needs a `FLY_API_TOKEN` repository secret; `DSN`, `SENDGRID_API_KEY`,
+  `INVITE_EMAIL_PEPPER`, `AUTH0_MGMT_CLIENT_ID` and `AUTH0_MGMT_CLIENT_SECRET` are Fly
+  secrets, `AUTH0_DOMAIN`/`AUTH0_AUDIENCE` are in `fly.toml`'s `[env]`
 - Reached from the browser through a Netlify `status = 200` rewrite, so it stays
   same-origin. Server-side callers address it directly
 - First-time setup, cutover and rollback:

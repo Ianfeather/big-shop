@@ -101,7 +101,23 @@ alone), so re-running it after fixing the order is safe.
 Unlike the two above, leaving this unset is not a clean degradation: invites keep working,
 but the digests become unpeppered, which is the protection the change exists for.
 
-Otherwise only `DSN`, `SENDGRID_API_KEY` and `INVITE_EMAIL_PEPPER`. `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` are public
+**And two for account deletion** (board item #59) — a machine-to-machine Auth0
+application authorised for the Management API with the `delete:users` scope:
+
+```bash
+fly secrets set \
+  AUTH0_MGMT_CLIENT_ID='<the M2M application's client id>' \
+  AUTH0_MGMT_CLIENT_SECRET='<its client secret>'
+```
+
+**Leaving these unset is not a clean degradation, and this one matters.** Deletion still
+runs and still deletes every database row, but it *skips* removing the Auth0 identity —
+so the deleted user can still log in, resolving to nothing. That is precisely the failure
+#59 was raised to fix. The skip is deliberate (it is what lets deletion work in dev, e2e
+and CI, where no tenant is reachable) and it records a warning on the request's span
+saying exactly which variable is missing, but nothing refuses the deletion.
+
+Otherwise only `DSN`, `SENDGRID_API_KEY`, `INVITE_EMAIL_PEPPER`, `AUTH0_MGMT_CLIENT_ID` and `AUTH0_MGMT_CLIENT_SECRET`. `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` are public
 identifiers and are already
 pinned in `fly.toml`'s `[env]` block — deliberately, because getting them wrong does not
 fail loudly: with `AUTH0_DOMAIN` unset the JWKS fetch goes to `https:///.well-known/jwks.json`

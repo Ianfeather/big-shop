@@ -13,6 +13,7 @@ import (
 
 	"recipes/internal/pkg/app"
 	"recipes/internal/pkg/common"
+	"recipes/internal/pkg/lifecycle"
 	"recipes/internal/pkg/service"
 	"recipes/internal/pkg/telemetry"
 
@@ -50,6 +51,13 @@ import (
 var negroniLambda *negroniadapter.NegroniAdapter
 var router *negroni.Negroni
 var openapiAPI huma.API
+
+// db is the connection pool, held at package level so main can reach it.
+//
+// It was a local in init() until the onboarding email ticker needed it: the
+// ticker is started from the serve branch of main, deliberately and only there,
+// so the pool has to outlive the function that opened it.
+var db *sql.DB
 
 // purgeConfigured is captured at startup so main can report it. Held here
 // rather than read from the environment again so that what is logged is what
@@ -180,7 +188,8 @@ func init() {
 	// without it.
 	shutdownTelemetry, _ = telemetry.Setup(context.Background())
 
-	db, err := otelsql.Open("mysql", os.Getenv("DSN"),
+	var err error
+	db, err = otelsql.Open("mysql", os.Getenv("DSN"),
 		otelsql.WithAttributes(semconv.DBSystemNameMySQL),
 		otelsql.WithSpanOptions(otelsql.SpanOptions{
 			// Emit a query span only when the caller passed a context that
@@ -386,6 +395,21 @@ func main() {
 		} else {
 			log.Println("telemetry disabled (set OTEL_EXPORTER_OTLP_ENDPOINT to enable)")
 		}
+
+		// The onboarding email sequence's hourly ticker.
+		//
+		// Started here and nowhere else, which is the point: this branch is the
+		// single always-on Fly machine, so there is exactly one ticker in
+		// existence. The Lambda branch below must never start one - it would
+		// start a fresh ticker on every invocation, each living as long as the
+		// invocation and none of them ever reaching the next hour.
+		//
+		// Given a database and nothing else. With no SendGrid key or no
+		// unsubscribe group configured it runs, finds who is due, declines to
+		// send, and writes nothing - so the sequence begins correctly whenever
+		// the configuration arrives rather than having marked everyone as
+		// already mailed. See internal/pkg/lifecycle.
+		lifecycle.Start(context.Background(), db)
 
 		server := http.Server{
 			Addr:         ":8080",

@@ -1,0 +1,140 @@
+package lifecycle
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"time"
+)
+
+// loadCandidates reads everyone the sequence could possibly apply to.
+//
+// Deliberately not a "who is due right now" query. The spec sketches the due
+// test in SQL, and it could be written that way, but the local-hour and
+// day-counting arithmetic would then have to happen in MySQL - which means
+// CONVERT_TZ, which silently returns NULL unless the server's timezone tables
+// have been populated, a step nobody has run on TiDB or in the e2e container.
+// The failure mode is a query that runs perfectly and matches nobody, forever.
+// So the filtering that is cheap and safe in SQL happens here, and everything
+// involving a clock happens in due(), where it is a pure function with tests.
+//
+// At tens of users this reads the whole table hourly, which is nothing. If it
+// ever stops being nothing, the fix is a created_at index and a ceiling on how
+// far back to look - not moving the arithmetic into SQL.
+//
+// Three filters that are genuinely SQL's job:
+//
+//   - **created_at >= email_launch.launched_at.** The sequence reaches new
+//     signups only. A "Welcome to Big Shop!" landing on somebody who joined
+//     eight months ago reads as broken, and long-dormant addresses are the
+//     likeliest to mark a first send as spam - which poisons the suppression
+//     list permanently, on a sending domain with no reputation yet to spend.
+//     The INNER JOIN is load-bearing: no launch row means no candidates at all,
+//     which is the right answer if this migration somehow has not run.
+//
+//   - **A non-empty email.** Nobody has ever checked how complete or accurate
+//     that column is, and specs/email.md does not assume it is: a null or
+//     malformed address is a skip, not an error.
+//
+//   - **Everything already sent**, gathered in the same pass, so due() can see
+//     the whole picture for a user rather than asking per kind.
+func loadCandidates(ctx context.Context, db *sql.DB) ([]Candidate, error) {
+	const query = `
+		SELECT u.id, u.email, u.name, u.timezone, u.created_at, e.kind, e.sent_at
+			FROM user u
+			JOIN email_launch l ON l.id = 1
+			LEFT JOIN email_send e ON e.user_id = u.id
+			WHERE u.created_at >= l.launched_at
+				AND u.email IS NOT NULL
+				AND u.email <> ''
+			ORDER BY u.id
+	`
+
+	rows, err := db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("loading email candidates: %w", err)
+	}
+	defer rows.Close()
+
+	// One row per (user, sent kind), so a user with two sends appears twice and
+	// a user with none appears once with a NULL kind. Folded back into one
+	// Candidate each, in id order.
+	var candidates []Candidate
+	byID := map[string]int{}
+
+	for rows.Next() {
+		var (
+			id, email string
+			name      sql.NullString
+			timezone  sql.NullString
+			createdAt time.Time
+			kind      sql.NullString
+			sentAt    sql.NullTime
+		)
+		if err := rows.Scan(&id, &email, &name, &timezone, &createdAt, &kind, &sentAt); err != nil {
+			return nil, fmt.Errorf("scanning email candidate: %w", err)
+		}
+
+		index, seen := byID[id]
+		if !seen {
+			candidates = append(candidates, Candidate{
+				UserID:    id,
+				Email:     email,
+				Name:      name.String,
+				Timezone:  timezone.String,
+				CreatedAt: createdAt,
+				Sent:      map[Kind]bool{},
+			})
+			index = len(candidates) - 1
+			byID[id] = index
+		}
+		if kind.Valid {
+			candidates[index].Sent[Kind(kind.String)] = true
+		}
+		// The latest send across all kinds, which is what due()'s one-per-day
+		// guard needs. Accumulated here rather than with a MAX() in SQL because
+		// the rows are already being folded per user.
+		if sentAt.Valid && sentAt.Time.After(candidates[index].LastSentAt) {
+			candidates[index].LastSentAt = sentAt.Time
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("reading email candidates: %w", err)
+	}
+
+	return candidates, nil
+}
+
+// RecordSend writes the email_send row that stops this email ever being sent to
+// this user again.
+//
+// **Called only after a send actually succeeded.** That is half of what makes
+// the sequence self-heal - the other half being due()'s `>=` - and it is the
+// reason a failed send, an outage, or a deploy during the send hour costs a day
+// rather than losing an email entirely.
+//
+// The composite primary key on (user_id, kind) is the idempotency guarantee
+// itself: a duplicate is a key violation rather than a second email in
+// somebody's inbox. That is what makes the ticker safe to re-run by hand, and
+// what would catch a second machine if Fly ever scaled past one.
+//
+// Exported because the welcome email is sent inline on signup rather than by
+// the ticker, and has to record itself the same way.
+//
+// **sentAt is supplied rather than left to the column's DEFAULT
+// CURRENT_TIMESTAMP**, which is what it used to be. The value is read back by
+// due()'s one-per-day guard and compared against a time this process produced,
+// so the two have to come from the same clock. MySQL's CURRENT_TIMESTAMP is
+// evaluated in the *database server's* timezone while the driver parses
+// datetimes back as UTC, so a database not running in UTC would return a
+// sent_at skewed by its offset - enough, at the wrong offset, to put a send on
+// the wrong side of a local midnight and defeat the guard it exists to feed.
+// Passing the instant removes the question rather than relying on a
+// configuration nobody here controls.
+func RecordSend(ctx context.Context, db *sql.DB, userID string, kind Kind, sentAt time.Time) error {
+	const query = `INSERT INTO email_send (user_id, kind, sent_at) VALUES (?, ?, ?)`
+	if _, err := db.ExecContext(ctx, query, userID, string(kind), sentAt.UTC()); err != nil {
+		return fmt.Errorf("recording %s email for %s: %w", kind, userID, err)
+	}
+	return nil
+}

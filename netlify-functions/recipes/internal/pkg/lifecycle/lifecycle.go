@@ -162,8 +162,17 @@ func daysSinceSignup(createdAt, now time.Time, loc *time.Location) int {
 		t = t.In(loc)
 		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, loc)
 	}
-	elapsed := midnight(now).Sub(midnight(createdAt))
-	return int((elapsed + 12*time.Hour) / (24 * time.Hour))
+	// Unix seconds rather than time.Duration subtraction, and that is a bug fix
+	// rather than a style preference. A Duration is an int64 of nanoseconds and
+	// saturates at ±292 years, so a nonsense created_at - the zero time, which
+	// is what the driver yields for a MySQL 0000-00-00 datetime - produced a
+	// saturated value that then overflowed when 12h was added, giving a days
+	// count of -106751. due() would return false for that user on every tick
+	// forever, silently, with nothing logged: the worst failure this scheduler
+	// has, since a skipped email is unrecoverable in a way a delayed one is not.
+	const day = 24 * 60 * 60
+	elapsed := midnight(now).Unix() - midnight(createdAt).Unix()
+	return int((elapsed + day/2) / day)
 }
 
 // sameLocalDay reports whether two instants fall on the same calendar day in
@@ -222,11 +231,10 @@ func due(c Candidate, now time.Time) (Email, bool) {
 		if days >= email.Day {
 			return email, true
 		}
-		// The sequence is ordered, so the first entry that is not yet due means
-		// nothing later is due either. Returning rather than continuing is not
-		// an optimisation: without it, someone on day 3 with an unsent welcome
-		// would match tips as well, and which one arrived would depend on list
-		// order rather than on anything deliberate.
+		// The sequence is ordered by Day, so the first entry not yet due means
+		// nothing later is due either. While that ordering holds a `continue`
+		// would behave identically; the `return` is what keeps this correct if
+		// an entry is ever added out of order.
 		return Email{}, false
 	}
 	return Email{}, false
@@ -235,8 +243,9 @@ func due(c Candidate, now time.Time) (Email, bool) {
 // String makes a Kind print as itself in log lines and errors.
 func (k Kind) String() string { return string(k) }
 
-// EmailFor returns the sequence entry for a Kind, which the send-test command
-// needs to turn a --kind flag into a subject and a template.
+// EmailFor returns the sequence entry for a Kind, turning a kind name into a
+// subject and a template. Used by the send-test command that Phase 1d adds; it
+// has no caller until then.
 func EmailFor(kind Kind) (Email, error) {
 	for _, e := range Sequence {
 		if e.Kind == kind {

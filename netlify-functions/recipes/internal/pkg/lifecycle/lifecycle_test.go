@@ -325,3 +325,45 @@ func TestTheOnePerDayGuardUsesTheRecipientsDay(t *testing.T) {
 		t.Errorf("%s was due on the same Tokyo day as the previous send", got.Kind)
 	}
 }
+
+// A nonsense created_at must not silently remove a user from the sequence
+// forever. The zero time is what the MySQL driver yields for a 0000-00-00
+// datetime, and subtracting it as a time.Duration saturates at ±292 years and
+// then overflows when the half-day is added - giving a days count of -106751,
+// so due() returned false on every tick, permanently, with nothing logged.
+// A skipped email is unrecoverable in a way a delayed one is not.
+func TestDaysSinceSignupDoesNotOverflowOnAbsurdDates(t *testing.T) {
+	london := mustLoad(t, "Europe/London")
+	now := time.Date(2026, 9, 21, 10, 30, 0, 0, london)
+
+	t.Run("the zero time gives the honest answer, not a saturated one", func(t *testing.T) {
+		got := daysSinceSignup(time.Time{}, now, london)
+		// Year 1 to 2026 is roughly 740,000 days. The bug made this -106751 -
+		// a *negative* count, which read as "signed up in the future" and so
+		// removed the user from the sequence permanently and silently.
+		if got < 700000 {
+			t.Errorf("daysSinceSignup(zero time) = %d; want a large positive count, not a saturated one", got)
+		}
+		// Such a row is excluded before it ever reaches here anyway:
+		// loadCandidates requires created_at >= email_launch.launched_at, and
+		// the zero time is comfortably before it. Belt and braces, because the
+		// failure this guards is unrecoverable rather than merely wrong.
+	})
+
+	t.Run("a far-future signup is not due", func(t *testing.T) {
+		future := time.Date(3000, 1, 1, 0, 0, 0, 0, london)
+		candidate := signedUpAt(t, "Europe/London", future)
+		if got, ok := due(candidate, now); ok {
+			t.Errorf("%s was due for a user who signs up in the year 3000", got.Kind)
+		}
+	})
+
+	t.Run("a very old signup is still due", func(t *testing.T) {
+		old := time.Date(1970, 1, 2, 9, 0, 0, 0, london)
+		candidate := signedUpAt(t, "Europe/London", old)
+		got, ok := due(candidate, now)
+		if !ok || got.Kind != KindWelcome {
+			t.Errorf("got %v (ok=%v), want %s for a very old signup", got.Kind, ok, KindWelcome)
+		}
+	})
+}

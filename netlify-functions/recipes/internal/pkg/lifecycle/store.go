@@ -118,8 +118,9 @@ func loadCandidates(ctx context.Context, db *sql.DB) ([]Candidate, error) {
 // somebody's inbox. That is what makes the ticker safe to re-run by hand, and
 // what would catch a second machine if Fly ever scaled past one.
 //
-// Exported because the welcome email is sent inline on signup rather than by
-// the ticker, and has to record itself the same way.
+// Exported because Phase 1d gives the welcome email an inline send on signup, in
+// addition to the ticker's, and it has to record itself the same way. Until then
+// the ticker is the only caller and welcome is simply Day 0 in the Sequence.
 //
 // **sentAt is supplied rather than left to the column's DEFAULT
 // CURRENT_TIMESTAMP**, which is what it used to be. The value is read back by

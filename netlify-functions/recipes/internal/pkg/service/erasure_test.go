@@ -298,14 +298,18 @@ func TestDeleteAuth0User(t *testing.T) {
 // without a t.Setenv quietly breaking it.
 func swapSteps(t *testing.T, order *[]string, softGateErr, auth0Err, hardDeleteErr error) {
 	t.Helper()
-	origSoft, origSendGrid, origAuth0, origHard := softGateStep, sendGridStep, auth0Step, hardDeleteStep
+	origSoft, origSendGrid, origAuth0, origHard, origRestore := softGateStep, sendGridStep, auth0Step, hardDeleteStep, restoreStep
 	t.Cleanup(func() {
-		softGateStep, sendGridStep, auth0Step, hardDeleteStep = origSoft, origSendGrid, origAuth0, origHard
+		softGateStep, sendGridStep, auth0Step, hardDeleteStep, restoreStep = origSoft, origSendGrid, origAuth0, origHard, origRestore
 	})
 
 	softGateStep = func(_ context.Context, _ execer, _ string, _ int) error {
 		*order = append(*order, "soft-gate")
 		return softGateErr
+	}
+	restoreStep = func(_ context.Context, _ execer, _ string, _ int) error {
+		*order = append(*order, "un-gate")
+		return nil
 	}
 	sendGridStep = func(_ context.Context, _ string) (bool, error) {
 		*order = append(*order, "sendgrid")
@@ -407,6 +411,66 @@ func TestDeleteUserAndAccountSequence(t *testing.T) {
 		}
 		if cascadeCtxErr != nil {
 			t.Errorf("the cascade inherited the cancellation (%v), so a disconnect could strand a deleted identity with live rows", cascadeCtxErr)
+		}
+	})
+}
+
+// TestFailedDeletionLeavesTheAccountReachable is a regression test for an
+// account-bricking bug.
+//
+// The sequence's soft gate sets `account_user.enabled = false`, and
+// GetAccountID filters on `enabled = true`. So a failure at any later step used
+// to leave the person unable to resolve an Account at all - not merely unable
+// to retry the deletion, but unable to use any account-scoped route, with
+// nothing anywhere to put it back. Meanwhile the handler returned a 500 and the
+// UI told them to try again, which could not work.
+//
+// "Any failure leaves a gated, retryable Account rather than a half-deleted
+// one" is the claim the whole ordering exists to support. This is what makes it
+// true.
+func TestFailedDeletionLeavesTheAccountReachable(t *testing.T) {
+	t.Run("the Auth0 hard gate failing restores access", func(t *testing.T) {
+		clearAuth0Env(t)
+		var order []string
+		swapSteps(t, &order, nil, errors.New("tenant said no"), nil)
+
+		if _, err := DeleteUserAndAccount(context.Background(), nil, "auth0|1", 7, "bob@example.com"); err == nil {
+			t.Fatal("expected an error")
+		}
+		if !contains(order, "un-gate") {
+			t.Errorf("the account was left gated and unreachable after a failed deletion: %v", order)
+		}
+		// And it happens after the gate, not instead of it.
+		if indexOf(order, "un-gate") < indexOf(order, "soft-gate") {
+			t.Errorf("un-gated before gating: %v", order)
+		}
+	})
+
+	t.Run("the cascade failing restores access", func(t *testing.T) {
+		clearAuth0Env(t)
+		var order []string
+		swapSteps(t, &order, nil, nil, errors.New("database down"))
+
+		if _, err := DeleteUserAndAccount(context.Background(), nil, "auth0|1", 7, "bob@example.com"); err == nil {
+			t.Fatal("expected an error")
+		}
+		if !contains(order, "un-gate") {
+			t.Errorf("the account was left gated and unreachable after a failed cascade: %v", order)
+		}
+	})
+
+	t.Run("a successful deletion does not un-gate", func(t *testing.T) {
+		// There is nothing to restore - the membership row is gone - and an
+		// UPDATE against it would be a pointless write on the happy path.
+		clearAuth0Env(t)
+		var order []string
+		swapSteps(t, &order, nil, nil, nil)
+
+		if _, err := DeleteUserAndAccount(context.Background(), nil, "auth0|1", 7, "bob@example.com"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if contains(order, "un-gate") {
+			t.Errorf("restored access to an account that was successfully deleted: %v", order)
 		}
 	})
 }

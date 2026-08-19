@@ -304,18 +304,28 @@ export default function Privacy() {
             <p>
               Accept and Big Shop {ANALYTICS_LIVE ? 'uses' : 'would use'} Google Analytics to
               count how the site is used: which pages get visited, and a short fixed list of
-              actions like “a recipe was imported”. It is never told who you are. It gets an
-              account number, so that several visits from one household count as one household
-              rather than several strangers &mdash; and it does not get your login identifier,
-              your name, your email address, or the names of your recipes. Loading it does let
-              Google see the usual things any website sees: your IP address, which page you came
-              from, and what browser you are using. Advertising features are switched off
-              permanently; Big Shop runs no ads.
+              actions like “a recipe was imported”. It is never told who you are. It gets a
+              random identifier standing for your account, so that several visits from one
+              household count as one household rather than several strangers &mdash; and it does
+              not get your login identifier, your name, your email address, or the names of your
+              recipes. Loading it does let Google see the usual things any website sees: your IP
+              address, which page you came from, and what browser you are using. Advertising
+              features are switched off permanently; Big Shop runs no ads.
             </p>
             <p>
               You can change your mind whenever you like, using the Cookie settings link at the
               bottom of this page. Withdrawing stops the collection there and then &mdash; no
               further page is counted &mdash; and deletes the cookies Google has already set.
+            </p>
+            <p className={styles.note}>
+              <strong>What deleting your account does here, precisely.</strong>{' '}
+              That random identifier is the only thing tying Google&rsquo;s copy of these counts to
+              your account, and the table linking the two is kept here rather than by Google. When
+              you delete your account, that link is destroyed. Being straight about the limits of
+              that: it does not reach into Google and delete anything, and Google keeps its own
+              cookie id and the rough location it works out from your IP address regardless. What
+              it does mean is that nothing left in Google can be tied back to you or your account
+              &mdash; by us or by anyone else.
             </p>
           </section>
 
@@ -379,11 +389,12 @@ export default function Privacy() {
           <section className={styles.section}>
             <h2 className={styles.heading}>How long it is kept</h2>
             <p>
-              Your account, recipes and lists are kept until you ask us to delete them. Error and
-              performance data is deleted after 14 days. Invites disappear when accepted or
-              rejected, and any that are never answered are deleted once they expire, 30 days after
-              they were sent &mdash; so nothing is held indefinitely for someone who never signed
-              up.
+              Your account, recipes and lists are kept until you delete them. Error and
+              performance data is not deleted on request &mdash; it expires on its own after 14
+              days, and that expiry is the mechanism rather than a promise to go and find it.
+              Invites disappear when accepted or rejected, and any that are never answered are
+              deleted once they expire, 30 days after they were sent &mdash; so nothing is held
+              indefinitely for someone who never signed up.
             </p>
           </section>
 
@@ -391,9 +402,26 @@ export default function Privacy() {
             <h2 className={styles.heading}>Your rights, and how to use them</h2>
             <p>
               Under UK data protection law you can ask for a copy of your data, ask for it to be
-              corrected, ask for it to be deleted, or object to how it is used. There is no button
-              for any of that yet &mdash; it is done by hand, by email, and we would rather say so
-              than imply a self-service flow that does not exist.
+              corrected, ask for it to be deleted, or object to how it is used.
+            </p>
+            <p>
+              <strong>Deletion has a button.</strong> It is on your{' '}
+              <Link href="/account">account page</Link>, and it deletes rather than deactivates:
+              your name and email address, your cookie choices, every invite you have sent or
+              received, and &mdash; if the account is yours alone &mdash; the recipes, the shopping
+              list and its history. Signing in again afterwards would start a brand new, empty
+              account; there is nothing left to go back to.
+            </p>
+            <p>
+              If we have ever emailed you, we also ask SendGrid to erase what it holds about your
+              address, and SendGrid removes recipient details after 37 days in any case. The one
+              thing deliberately kept is a record that you unsubscribed or reported a message as
+              spam, if you ever did: deleting that would let us lawfully email you again, which
+              inverts the point of asking to be forgotten.
+            </p>
+            <p>
+              Everything else on that list is still done by hand, by email, and we would rather say
+              so than imply a self-service flow that does not exist.
             </p>
             <p>
               Email <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> and it will be actioned.
@@ -403,9 +431,14 @@ export default function Privacy() {
               </a>.
             </p>
             <p className={styles.note}>
-              One honest complication: an account can be shared. If you are on an account with other
-              people, deleting “your” recipes would delete theirs too, so tell us what you want to
-              happen and we will sort it out with you rather than guess.
+              One honest complication, and it is worth reading before you press the button: an
+              account can be shared, and recipes belong to the account rather than to you
+              personally. If you are the only person on your account, deleting it takes the recipes
+              and the shopping list with it. If you share it with someone else, <em>they keep the
+              recipes</em> &mdash; including ones you added &mdash; and you are removed from the
+              account. Either way everything about <em>you</em> goes: your login, your name, your
+              email, your cookie choices and every invite in either direction. The page tells you
+              which of the two will happen before you confirm.
             </p>
           </section>
 
@@ -414,8 +447,11 @@ export default function Privacy() {
             <p>
               If something material changes &mdash; a new company processing your data, a new
               purpose &mdash; the version at the top changes, and we will make sure you are told
-              rather than leaving you to notice. Smaller corrections are made quietly, and only the
-              date changes.
+              rather than leaving you to notice. Smaller corrections and clarifications are made
+              quietly and do not move it, because that version is what asks everyone the cookie
+              question again: re-asking for a reworded sentence is how a consent prompt becomes
+              something to click past without reading. So the date at the top is the date of the
+              last material change, not of the last edit.
             </p>
           </section>
         </main>

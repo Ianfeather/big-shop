@@ -252,6 +252,7 @@ func DeleteAuth0User(ctx context.Context, userID string) (called bool, err error
 // ever assigns to them.
 var (
 	softGateStep     = DisableUserAccount
+	restoreStep      = DisableUserAccountRestore
 	sendGridStep     = EraseSendGridRecipient
 	auth0Step        = DeleteAuth0User
 	hardDeleteStep   = DeleteAccount
@@ -263,6 +264,25 @@ func DeleteUserAndAccount(ctx context.Context, db *sql.DB, userID string, accoun
 	//    hard delete that changes anything, and it is reversible.
 	if err := softGateStep(ctx, db, userID, accountID); err != nil {
 		return false, fmt.Errorf("gating the account: %w", err)
+	}
+
+	// **And it is un-gated again if anything later fails**, which is the half
+	// that makes "retryable" true rather than merely stated.
+	//
+	// The gate works by setting `account_user.enabled = false`, and
+	// GetAccountID filters on `enabled = true`. So a failure after this point
+	// would leave the caller unable to resolve an Account at all - not only
+	// unable to retry the deletion, but unable to use any account-scoped route,
+	// with nothing anywhere to put it back. The account would be bricked rather
+	// than gated, and the handler would still be telling them to try again.
+	//
+	// Restoring it costs one UPDATE on a path that is already failing, and its
+	// own failure is only recorded: there is nothing further to try, and the
+	// original error is the one worth reporting.
+	unGate := func() {
+		if err := restoreStep(context.WithoutCancel(ctx), db, userID, accountID); err != nil {
+			telemetry.RecordWarning(ctx, "restoring account access after a failed deletion", err)
+		}
 	}
 
 	// Steps 2 and 3 are two sequential network calls at ten seconds each,
@@ -283,8 +303,9 @@ func DeleteUserAndAccount(ctx context.Context, db *sql.DB, userID string, accoun
 	// 3. Auth0, the hard gate.
 	called, err := auth0Step(externalsCtx, userID)
 	if err != nil {
-		// Abort with the Account still gated and every row intact. This is the
-		// survivable failure, and keeping it survivable is the whole design.
+		// Abort with every row intact and the Account reachable again. This is
+		// the survivable failure, and keeping it survivable is the whole design.
+		unGate()
 		return false, fmt.Errorf("deleting the Auth0 identity: %w", err)
 	}
 	if !called {
@@ -304,5 +325,12 @@ func DeleteUserAndAccount(ctx context.Context, db *sql.DB, userID string, accoun
 	// exact state this ordering exists to prevent, rows intact for somebody who
 	// can no longer log in to retry. Past this line the work is finished on the
 	// server's terms.
-	return hardDeleteStep(context.WithoutCancel(ctx), db, userID, accountID, email)
+	accountDeleted, err = hardDeleteStep(context.WithoutCancel(ctx), db, userID, accountID, email)
+	if err != nil {
+		// The cascade is one transaction, so nothing of it has applied. Put the
+		// Account back within reach so the person can try again.
+		unGate()
+		return false, err
+	}
+	return accountDeleted, nil
 }

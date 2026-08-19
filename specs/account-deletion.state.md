@@ -42,8 +42,13 @@ Commit: 293aa87
 Notes: Go suite, lint, typecheck, 368 frontend tests and 34 e2e green. Verified on a fresh volume that migration 036 applies and GET /user mints a stable id lazily. Deleted in the sole-member branch only — in the shared case the Account survives, so rotating its UUID severs nothing that stays severed and splits the remaining members in two in Google. `google/uuid` was already an indirect dependency and is now direct; no new module. docs/openapi.yaml and types/api.d.ts regenerated (both drift-checked in CI).
 
 ## Session 6: Phase 5 — the route, the UI, and the policy
-Status: pending
+Status: done
 Scope: `DELETE /account`; account-page confirmation naming which of the two outcomes will happen; `/privacy` (SendGrid erasure and the suppression carve-out, Grafana's 14-day expiry, the GA UUID as unlinkability, the right of erasure); non-destructive e2e; env documentation for `INVITE_EMAIL_PEPPER` and the Auth0 Management secrets.
 Depends on: Session 5
-Commit:
-Notes: e2e asserts the confirmation copy and cancels — it never calls DELETE, because under `DISABLE_AUTH` the whole run shares one Account and Playwright runs spec files in parallel.
+Commit: 4cd9912
+Notes: Go suite, lint, typecheck, 368 frontend tests, both drift checks and all 37 e2e tests green. Verified end to end in the running app through the real route AND through the UI, both branches; screenshots in specs/evidence/account-deletion/.
+Review found one serious bug: a failed deletion left the account BRICKED rather than retryable — the soft gate sets enabled=false and GetAccountID filters enabled=true, so after any failure past the gate the person could neither use the app nor retry, while the UI told them to try again. Fixed with `DisableUserAccountRestore` on both abort paths, verified live.
+Two /privacy sentences were overclaiming (the exact failure that page's header comment warns about): the login is NOT deleted when the Auth0 Management credentials are unset, which is production today, and SendGrid erasure does not happen with no API key. Both reworded to claims that hold in every configuration. Also from review: the `accountDeleted` flag is now actually used so the confirmation cannot tell a shared-account user "everything has been removed"; the branch no longer defaults to sole-member while GET /account is in flight; and the "only the date changes" sentence was unimplementable since the date derives from POLICY_VERSION.
+POLICY_VERSION deliberately not bumped — lib/consent.ts's rule is to bump only for a new recipient, purpose or category, and these edits describe a right and reduce what Google is sent.
+e2e is non-destructive by necessity; it asserts the confirmation copy against what GET /account independently reports, which caught that the dev/e2e account is SHARED (migration 008's user plus the seeded local-dev-user), so the sole-member UI path is never exercised there.
+Filed: a `blocked` backlog row for setting AUTH0_MGMT_CLIENT_ID/SECRET on Fly.

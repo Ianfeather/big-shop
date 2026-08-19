@@ -20,6 +20,7 @@ export const queryKeys = {
   units: ['units'] as const,
   invites: ['invites'] as const,
   user: ['user'] as const,
+  account: ['account'] as const,
   // Keyed per job and polled until it settles, so it is never shared between
   // call sites and never invalidated. Listed here only to keep this a
   // complete inventory of what is in the cache.

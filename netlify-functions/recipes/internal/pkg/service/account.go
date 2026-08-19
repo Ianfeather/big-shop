@@ -127,6 +127,25 @@ func DisableUserAccount(ctx context.Context, db execer, userID string, accountID
 	return nil
 }
 
+// DisableUserAccountRestore undoes DisableUserAccount.
+//
+// It exists for exactly one caller: the deletion sequence, when a step after
+// its soft gate fails. Without it a failed deletion leaves the person unable to
+// resolve an Account at all - GetAccountID filters `enabled = true` - so they
+// could neither use the app nor retry the deletion that failed, which turns the
+// design's "gated, retryable Account" into a bricked one.
+//
+// Named as the inverse of the gate rather than something like `EnableUser`
+// because that is the whole of its purpose; it is not a general-purpose
+// membership control, and RemoveUserFromAccount below is not its opposite.
+func DisableUserAccountRestore(ctx context.Context, db execer, userID string, accountID int) error {
+	query := `UPDATE account_user SET enabled = true WHERE user_id = ? AND account_id = ?`
+	if _, err := db.ExecContext(ctx, query, userID, accountID); err != nil {
+		return fmt.Errorf("restoring user account access: %w", err)
+	}
+	return nil
+}
+
 func RemoveUserFromAccount(ctx context.Context, db *sql.DB, accountID int, user common.User) error {
 	accountQuery := `DELETE FROM account_user WHERE user_id = ? AND account_id = ?;`
 	_, err := db.ExecContext(ctx, accountQuery, user.ID, accountID)

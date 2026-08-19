@@ -4,14 +4,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import Invite from '@components/invite';
 import useAuth0 from '@hooks/use-auth';
-import { apiGet, apiPost } from '../lib/api-client';
+import { apiDelete, apiGet, apiPost } from '../lib/api-client';
 import { queryKeys } from '../lib/query-keys';
 import Layout, { MainContent, Sidebar } from '@components/layout'
 import PageHeading from '@components/page-heading';
 import Button from '@components/button';
 import { useCookieSettings } from '@components/consent-banner';
 import { inviteSent } from '../lib/analytics/events';
-import type { Invite as InviteModel } from '../types/models';
+import type { Account, Invite as InviteModel } from '../types/models';
 
 const List = () => {
   // Tokens of invites this user has already accepted or rejected in this
@@ -21,12 +21,31 @@ const List = () => {
   let [dismissedTokens, setDismissedTokens] = useState<string[]>([]);
   let [invitee, setInvitee] = useState('');
   let [successMessage, setSuccessMessage] = useState<string | false>(false);
-  const { user, getAccessTokenSilently } = useAuth0();
+  // Whether the delete confirmation is open. Deliberately a second, explicit
+  // step rather than a window.confirm(): the whole point of the panel is the
+  // sentence naming which of the two outcomes will happen, and a native dialog
+  // has nowhere to put it.
+  let [confirmingDelete, setConfirmingDelete] = useState(false);
+  let [deleteError, setDeleteError] = useState<string | false>(false);
+  // Set the moment the deletion succeeds, and it does two jobs. It swaps the
+  // page for a confirmation, and it switches off the queries below - without
+  // that, every account-scoped query on this page immediately refetches against
+  // a user who no longer exists and retries its way through a row of 500s while
+  // the browser is on its way out.
+  // null until the deletion succeeds, then the server's answer to "did the
+  // Account go too". Not a boolean `deleted` plus a guess: the confirmation
+  // screen has to say which of the two things happened, and only the server
+  // knows - it decides the branch inside the transaction, from rows that no
+  // longer exist by the time the response arrives.
+  let [deletedOutcome, setDeletedOutcome] = useState<{ accountDeleted: boolean } | null>(null);
+  const deleted = deletedOutcome !== null;
+  const { user, getAccessTokenSilently, logout } = useAuth0();
   const queryClient = useQueryClient();
   const openCookieSettings = useCookieSettings();
 
   const { data: fetchedInvites } = useQuery<InviteModel[]>({
     queryKey: queryKeys.invites,
+    enabled: !deleted,
     queryFn: async () => {
       const token = await getAccessTokenSilently();
       return apiGet<InviteModel[]>('/invites', token);
@@ -40,6 +59,52 @@ const List = () => {
   const invites = (fetchedInvites ?? []).filter(
     invite => !dismissedTokens.includes(invite.token)
   );
+
+  // The Account's other members, which is what decides whether deleting this
+  // user also deletes the Recipes. Read from the route the page can already
+  // ask for rather than a count of its own - GET /account returns the enabled
+  // members, so `users.length > 1` is the same question the server asks.
+  const { data: account } = useQuery<Account>({
+    queryKey: queryKeys.account,
+    enabled: !deleted,
+    queryFn: async () => {
+      const token = await getAccessTokenSilently();
+      return apiGet<Account>('/account', token);
+    }
+  });
+
+  // Deliberately not defaulted. `account?.users?.length ?? 1` would read as
+  // "sole member" while the request is still in flight or after it failed,
+  // which is the confirmation naming the wrong outcome - telling somebody their
+  // recipes will be deleted when they will not, or the reverse. Undefined means
+  // "not known yet", and the confirmation refuses to render until it is.
+  const otherMembers = account?.users ? Math.max(account.users.length - 1, 0) : undefined;
+  const sharedAccount = otherMembers !== undefined && otherMembers > 0;
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getAccessTokenSilently();
+      return apiDelete<{ accountDeleted: boolean }>('/account', token);
+    },
+    onSuccess: (result) => {
+      // Both of these are needed, and neither is sufficient. Setting the
+      // outcome switches the queries above off (`enabled: !deleted`) so nothing
+      // refetches for a user who has just ceased to exist; clearing drops what
+      // is already cached. React batches the state update, so the clear on the
+      // next line still runs against enabled observers - the ordering is not a
+      // guarantee, which is why the `enabled` flag does the real work.
+      setDeletedOutcome(result);
+      queryClient.clear();
+      // Then out. In production this redirects to Auth0 and back to the
+      // marketing page; the confirmation below is what the user sees in the
+      // moment before that, and all they see when auth is disabled locally.
+      logout({ logoutParams: { returnTo: window.location.origin } });
+    },
+    // Deliberately surfaced rather than swallowed. Every failure in the
+    // deletion sequence leaves a gated, retryable Account behind, so "try
+    // again" is honest advice rather than a shrug.
+    onError: () => setDeleteError('Something went wrong and your account has not been deleted. Please try again.')
+  });
 
   const acceptMutation = useMutation({
     mutationFn: async (token: string) => {
@@ -105,6 +170,32 @@ const List = () => {
     setInvitee('');
   }
 
+  if (deletedOutcome) {
+    return (
+      <Layout>
+        <MainContent name="Shopping List">
+          {/* Which of the two outcomes actually happened, taken from the
+              server's own answer rather than re-derived here. The panel above
+              said which one to expect; this confirms it, and they must not be
+              able to disagree. */}
+          <PageHeading
+            subheading={
+              deletedOutcome.accountDeleted
+                ? 'Your account and everything in it have been removed. Thanks for cooking with us.'
+                : 'Everything about you has been removed. The recipes and shopping list stay with the account you shared.'
+            }
+          >
+            Your account is deleted
+          </PageHeading>
+          <p>
+            You are being signed out. If you would like to start again, you are welcome to{' '}
+            <Link href="/">make a new account</Link>.
+          </p>
+        </MainContent>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <MainContent name="Shopping List">
@@ -161,6 +252,69 @@ const List = () => {
             </p>
             <Button style="primary" onClick={openCookieSettings}>Cookie settings</Button>
           </div>
+
+          {/* Deletion lives here rather than behind a settings sub-page: this is
+              already the page for "things about you", and burying the control
+              is not the same as making it considered. What makes it considered
+              is the confirmation step below, which names the outcome. */}
+          <div className={styles.accountModule}>
+            <h3 className={styles.moduleHeading}>Delete your account</h3>
+            {!confirmingDelete && (
+              <>
+                <p>
+                  This removes you from Big Shop completely &mdash; your login, your name and
+                  email, and every invite you have sent or received.
+                </p>
+                <Button
+                  style="danger"
+                  onClick={() => { setDeleteError(false); setConfirmingDelete(true); }}
+                  disabled={otherMembers === undefined}
+                >
+                  Delete your account
+                </Button>
+              </>
+            )}
+            {confirmingDelete && (
+              <div className={styles.confirmDelete}>
+                {/* The sentence this whole panel exists for. The two outcomes
+                    are invisible from the outside and are the thing people will
+                    be angriest about getting wrong, so the difference is stated
+                    before the button is pressed, not after. */}
+                <p className={styles.confirmQuestion}>
+                  {sharedAccount ? (
+                    <>
+                      <strong>Your recipes will stay</strong> with the account you share with{' '}
+                      {otherMembers} other {otherMembers === 1 ? 'person' : 'people'}. They keep the
+                      recipes and the shopping list; you are removed from the account and everything
+                      about you is deleted.
+                    </>
+                  ) : (
+                    <>
+                      <strong>Your recipes will be deleted.</strong>{' '}
+                      You are the only person on this account, so the account goes too &mdash;
+                      every recipe, your shopping list and its history.
+                    </>
+                  )}
+                </p>
+                <p>This cannot be undone.</p>
+                <div className={styles.confirmActions}>
+                  <Button
+                    style="danger"
+                    outline={false}
+                    onClick={() => deleteAccountMutation.mutate()}
+                    disabled={deleteAccountMutation.isPending}
+                  >
+                    {deleteAccountMutation.isPending ? 'Deleting\u2026' : 'Yes, delete my account'}
+                  </Button>
+                  <Button onClick={() => setConfirmingDelete(false)} disabled={deleteAccountMutation.isPending}>
+                    Cancel
+                  </Button>
+                </div>
+                {deleteError && <p className={styles.deleteError}>{deleteError}</p>}
+              </div>
+            )}
+          </div>
+
         </div>
       </MainContent>
     </Layout>

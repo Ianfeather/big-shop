@@ -50,3 +50,33 @@
     grid-gap: 1rem;
   }
 }
+
+/* The delete confirmation. Given its own visual weight rather than reusing the
+   invite form's, because the two are asking for very different levels of
+   attention from the same page. */
+.confirmDelete {
+  border: 1px solid var(--color-danger, #b3261e);
+  border-radius: 4px;
+  padding: var(--space-2, 1rem);
+}
+
+.confirmQuestion {
+  margin-top: 0;
+}
+
+.confirmActions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+@media (min-width: 500px) {
+  .confirmActions {
+    flex-direction: row;
+  }
+}
+
+.deleteError {
+  color: var(--color-danger, #b3261e);
+  margin-bottom: 0;
+}

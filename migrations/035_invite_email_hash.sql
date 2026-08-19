@@ -45,7 +45,7 @@
 -- silently orphaning every live invite. Not fatal - they expire within 30 days
 -- and the lazy purge in service/invite.go then removes them - but avoidable.
 --
--- Board item #59; see specs/account-deletion.md, "The invite table".
+-- Board item #59; see specs/completed/account-deletion.md, "The invite table".
 
 ALTER TABLE `invite`
   MODIFY COLUMN `email` varchar(255) NOT NULL

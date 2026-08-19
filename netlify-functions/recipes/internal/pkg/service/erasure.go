@@ -18,7 +18,7 @@ import (
 // The three systems outside our database that hold something about a departing
 // user, and the sequence that ties them to the cascade in account.go.
 //
-// See specs/account-deletion.md, "Sequencing across four systems". There is no
+// See specs/completed/account-deletion.md, "Sequencing across four systems". There is no
 // distributed transaction here and no scheduler to retry with, so the ordering
 // is chosen around which failure is survivable rather than around tidiness.
 

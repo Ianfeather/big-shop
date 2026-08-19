@@ -1,8 +1,8 @@
 ---
-spec: specs/account-deletion.md
-status: in-progress
+spec: specs/completed/account-deletion.md
+status: complete
 branch: implement/account-deletion
-pr:
+pr: https://github.com/Ianfeather/big-shop/pull/111
 ---
 
 ## Session 1: Phase 0 — the cascade primitive

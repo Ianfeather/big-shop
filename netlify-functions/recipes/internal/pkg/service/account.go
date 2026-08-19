@@ -372,7 +372,7 @@ func deleteAccountTx(ctx context.Context, tx execer, userID string, accountID in
 // INSERT into `account_user`. `FOR UPDATE` is used to make the read a locking
 // one, so a second deletion of the same Account serialises behind this one.
 //
-// This is step 5 of the sequence in specs/account-deletion.md - the only
+// This is step 5 of the sequence in specs/completed/account-deletion.md - the only
 // irreversible one, and deliberately last. The caller is responsible for the
 // soft gate and the external systems that precede it. A failure anywhere in
 // that sequence leaves a gated, retryable Account rather than a half-deleted

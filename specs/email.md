@@ -341,7 +341,7 @@ access, which is not something the lifecycle work should wait on.
 ### The Auth0 tenant audit
 
 #50 framed this as hygiene. It is now a **dependency of work already in flight**:
-`specs/account-deletion.md`'s Open Question 2 says *"Auth0 tenant configuration for the
+`specs/completed/account-deletion.md`'s Open Question 2 says *"Auth0 tenant configuration for the
 Management API client is unspecced here; #50's audit of the tenant is the natural place to
 settle it, and Phase 3 is the first thing that needs it."*
 

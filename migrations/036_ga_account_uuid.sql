@@ -30,7 +30,7 @@
 -- would need a UUID generator in SQL and would mint identifiers for Accounts
 -- that may never be visited again.
 --
--- Board item #59; see specs/account-deletion.md, "GA4 — a UUID mapping table".
+-- Board item #59; see specs/completed/account-deletion.md, "GA4 — a UUID mapping table".
 
 CREATE TABLE `ga_account_uuid` (
   `account_id` int NOT NULL COMMENT 'the Account this identifier stands for; not an FK, see the header',

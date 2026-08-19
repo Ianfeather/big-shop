@@ -66,7 +66,7 @@
 -- transaction, ordered before the `user` row. **This needs no schema change at
 -- all** - no dropped foreign key, no new column. Deleting children before the
 -- parent is what the constraint is for. See service.deleteAccountTx and
--- specs/account-deletion.md.
+-- specs/completed/account-deletion.md.
 CREATE TABLE `consent_event` (
   `id` int NOT NULL AUTO_INCREMENT COMMENT 'primary key',
   `user_id` varchar(255) NOT NULL COMMENT 'auth0 id; FK to user.id, the same key account_user.user_id uses',

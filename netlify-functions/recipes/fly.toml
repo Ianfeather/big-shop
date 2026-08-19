@@ -37,11 +37,12 @@ primary_region = "fra"
 # which for a credential means a feature that fails only when exercised. Adding
 # a secret is now a two-part change: set it, and declare it.
 #
-# Live example: SENDGRID_API_KEY is read by internal/pkg/app/user.go for
-# invitation emails and is NOT currently set on this app at all (`fly secrets
-# list`), so that flow is already broken independently of any of this. When it
-# is set, it must also be added to the `api` container's `secrets` array or it
-# still will not arrive.
+# Live example, now resolved and left here as the worked one: SENDGRID_API_KEY
+# was read by the API for invitation emails while not being set on this app at
+# all, so that flow was broken independently of any of this. It is now set with
+# `fly secrets set` AND declared in the `api` container's `secrets` array in
+# machine_config.json. Doing only the first would have left it absent at runtime
+# with nothing reporting a problem - a feature that fails only when exercised.
 #
 # `[experimental]` is Fly's own naming for this block, not a comment on how
 # settled the approach is.
@@ -66,7 +67,10 @@ primary_region = "fra"
 # docs/fly-migration-runbook.md) and deliberately absent from this file:
 #
 #   DSN               - TiDB connection string
-#   SENDGRID_API_KEY  - account invitation emails (internal/pkg/app/user.go)
+#   SENDGRID_API_KEY  - every email Big Shop sends (internal/pkg/service/email).
+#                       Now genuinely set, and correspondingly declared in the
+#                       `api` container's `secrets` array in machine_config.json.
+#                       Both halves are required; see the trap above.
 #
 # The fifth, DISABLE_AUTH, must never be set here. It is a local-development
 # switch that makes the API resolve every request to DEV_USER_ID without
@@ -88,6 +92,21 @@ primary_region = "fra"
   # in the same Tempo - which, on a single shared stack, is the whole of the
   # separation.
   DEPLOY_ENV = "production"
+
+  # The SendGrid unsubscribe group (ASM) every onboarding email is sent under.
+  #
+  # Here rather than in `fly secrets` because it is not a credential - it is a
+  # numeric identifier that appears in the headers of mail we send to strangers.
+  # Values in this block also reach every container without the declare-it-twice
+  # trap above, which is the right trade for something that is not sensitive.
+  #
+  # It is not optional decoration. internal/pkg/service/email's SendLifecycle
+  # refuses to send at all without it: no group means no unsubscribe link and no
+  # List-Unsubscribe header, and ADR-0010 rests the lawful basis for sending
+  # onboarding email to people who never opted in on both being present. Unset
+  # this and the sequence stops rather than sending something the basis does not
+  # cover. Transactional mail sets no group and is unaffected.
+  SENDGRID_ASM_GROUP_ID = "32124"
 
 [http_service]
   internal_port = 8080

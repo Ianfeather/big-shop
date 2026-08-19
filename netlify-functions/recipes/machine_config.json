@@ -3,7 +3,8 @@
     {
       "name": "api",
       "secrets": [
-        { "env_var": "DSN" }
+        { "env_var": "DSN" },
+        { "env_var": "SENDGRID_API_KEY" }
       ],
       "env": {
         "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"

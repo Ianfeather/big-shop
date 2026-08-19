@@ -66,7 +66,7 @@ at startup, verified by booting the production image without it: clean start, `/
 | 1 | Welcome | Day 0, inline on signup | What it is for, and the one thing to do now |
 | 2 | Tips | Day 3, 10:00 local | Import from a URL, the list combining itself, sharing an Account |
 | 3 | Recipes to add to your list | Day 8, 10:00 local | A handful of good ones, one click to add |
-| 4 | How's it going? | Day 14, 10:00 local | Feedback ask, replies to a monitored inbox |
+| 4 | How's it going? | Day 14, 10:00 local | Feedback ask, replies land in `hello@bigshop.life` |
 
 Four rather than five or six: one tips email rather than two, and a fortnight rather than
 three weeks. The risk knowingly accepted is that a single tips email becomes a feature
@@ -299,13 +299,24 @@ And **MJML compiled at build time**, which solves the table misery but adds a No
 step to a Go service's pipeline plus a generated artefact that can drift from its source —
 the repo already carries two `openapi.yaml`/`api.d.ts` drift checks for exactly that.
 
-**Sender: `hello@bigshop.life`, with SPF and DKIM on the domain, replies to a monitored
-inbox.** #50 is right that this is one task and not several: #46 has to pick a verified
-sender and set the key regardless, and settling it once here stops it being re-litigated
-per email type.
+**One address, both directions: `hello@bigshop.life`**, with SPF and DKIM on the domain.
+Every email Big Shop sends comes *from* it, and every reply lands *in* it. #50 is right
+that this is one task and not several: #46 has to pick a verified sender and set the key
+regardless, and settling it once here stops it being re-litigated per email type.
 
-The mailbox must actually exist and actually be read. The Day 14 email asks for a reply;
-asking for one and dropping it in a void is worse than not asking.
+**No second mailbox, and no `Reply-To` header pointing anywhere else.** A separate
+feedback address was the obvious alternative and is rejected: it doubles the number of
+inboxes that have to be monitored to keep one promise, and the failure mode is silent —
+mail arrives somewhere nobody has opened in a month, and the sender has no way to tell.
+One address is also the honest shape for a product of this size. A recipient replying to
+a Big Shop email should reach Big Shop, and there is only one of us.
+
+A consequence worth stating because it is easy to get wrong later: the sending identity
+and the receiving mailbox are the *same* account, so the address cannot be a send-only
+alias or an unattended SendGrid identity. It has to be a real mailbox somebody opens.
+
+The Day 14 email asks for a reply; asking for one and dropping it in a void is worse than
+not asking.
 
 ### When there is no key
 
@@ -454,8 +465,8 @@ same (user, kind) twice, and never selects more than one kind per user per tick.
 - The welcome email's inline fire-and-forget send in `addUser`.
 - `/privacy`: the lifecycle family, its lawful basis, the permanent suppression list, and
   `user.timezone`.
-- The SendGrid ASM group created, the sender verified, SPF/DKIM set, `hello@bigshop.life`
-  monitored.
+- The SendGrid ASM group created, the sender verified, SPF/DKIM set, and
+  `hello@bigshop.life` monitored as a real mailbox that receives as well as sends.
 
 *Done when:* a real signup receives a welcome immediately and the remaining three arrive on
 schedule against a seeded clock; unsubscribing from any one of them stops the rest.

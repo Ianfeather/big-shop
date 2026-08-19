@@ -188,7 +188,11 @@ const Index = () => {
   // Neither mutation invalidates: no cached query reads User state, and on
   // first login there is nothing in the cache yet to be stale.
   const saveUserMutation = useMutation({
-    mutationFn: async (payload: { name?: string; email?: string; timezone?: string }) => {
+    // Partial, not a bare Pick: `email` is required on the generated User (the
+    // server needs one) but Auth0 hands back `string | undefined`, and this
+    // call has always forwarded whatever it got. Derived from User rather than
+    // restated inline so a field added to the model cannot silently drift.
+    mutationFn: async (payload: Partial<Pick<User, 'name' | 'email' | 'timezone'>>) => {
       const token = await getAccessTokenSilently();
       return apiPost<User>('/user', token, payload);
     }

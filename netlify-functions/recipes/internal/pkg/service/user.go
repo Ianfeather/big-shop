@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"recipes/internal/pkg/common"
 	"recipes/internal/pkg/telemetry"
+	"time"
 )
 
 // AddUser upserts the signed-in User. Called on every login, not just the first
@@ -29,7 +30,23 @@ import (
 // accident - there is no meaningful difference between "the browser declined"
 // and "this row predates the column", and both take the same fallback.
 func AddUser(ctx context.Context, db *sql.DB, user common.User) error {
-	userQuery := `
+	query, args := userUpsert(user)
+	if _, err := db.ExecContext(ctx, query, args...); err != nil {
+		return fmt.Errorf("adding user: %w", err)
+	}
+	return nil
+}
+
+// userUpsert builds the statement and its arguments.
+//
+// Split out from AddUser purely so it can be tested without a database. The two
+// things worth pinning are invisible by inspection and easy to break by
+// accident: that the arguments line up with the placeholders across a statement
+// with two parameter groups, and that `timezone` appears in the INSERT list and
+// nowhere in the UPDATE list. The second is the entire behaviour Phase 1b
+// exists to provide, and a later edit to this upsert would silently undo it.
+func userUpsert(user common.User) (string, []any) {
+	const query = `
 		INSERT INTO user (id, name, email, timezone)
 			VALUES (?, ?, ?, ?)
 			ON DUPLICATE KEY UPDATE
@@ -39,17 +56,44 @@ func AddUser(ctx context.Context, db *sql.DB, user common.User) error {
 				last_logged_in_at=CURRENT_TIMESTAMP
 			;
 	`
-
-	var timezone any
-	if user.Timezone != "" {
-		timezone = user.Timezone
+	return query, []any{
+		user.ID, user.Name, user.Email, normaliseTimezone(user.Timezone),
+		user.Name, user.Email,
 	}
+}
 
-	_, err := db.ExecContext(ctx, userQuery, user.ID, user.Name, user.Email, timezone, user.Name, user.Email)
-	if err != nil {
-		return fmt.Errorf("adding user: %w", err)
+// normaliseTimezone turns a client-supplied zone into something safe to store,
+// or nil for SQL NULL.
+//
+// The value arrives from the browser on POST /user and is otherwise
+// unconstrained, which makes it the one field on that request a caller can use
+// to break their own signup. Two ways, both closed here:
+//
+//   - **Too long.** The column is varchar(64) and TiDB is strict, so a longer
+//     value fails the INSERT outright. That turns POST /user into a 500 - and
+//     since pages/index.tsx swallows the failure, the User row and their Account
+//     are never created and the person simply cannot sign up. Over a field that
+//     only decides what hour an email arrives.
+//   - **Not a real zone.** "Neptune/Deep_Space" stores perfectly happily and
+//     then fails when the sender calls time.LoadLocation on it, weeks later, on
+//     a machine nobody is watching. Better to refuse it now and fall back.
+//
+// Rejected as the fix: a `maxLength:"64"` tag on the field, which would make
+// Huma answer 422 instead. That is a clearer error and still a failed signup.
+// Nothing about a timezone is worth failing a registration over, so anything
+// not vouched for becomes NULL and the sender falls back to Europe/London.
+//
+// "Local" is refused along with the empty string: time.LoadLocation accepts both
+// and resolves them against the *server's* zone, which would silently make every
+// such user's mail arrive at 10:00 Frankfurt.
+func normaliseTimezone(tz string) any {
+	if tz == "" || tz == "Local" || len(tz) > 64 {
+		return nil
 	}
-	return nil
+	if _, err := time.LoadLocation(tz); err != nil {
+		return nil
+	}
+	return tz
 }
 
 func GetUser(ctx context.Context, db *sql.DB, userID string) (u *common.User, e error) {
@@ -66,7 +110,7 @@ func GetUser(ctx context.Context, db *sql.DB, userID string) (u *common.User, e 
 	// leaves them that way on purpose - and an INNER JOIN would turn it into
 	// "no such user" and blank their preferences.
 	userQuery := `
-		SELECT u.id, u.name, u.email, u.onboarded, u.show_pantry_staples, u.timezone, au.account_id
+		SELECT u.id, u.name, u.email, u.onboarded, u.show_pantry_staples, au.account_id
 			FROM user u
 			LEFT JOIN account_user au ON au.user_id = u.id AND au.enabled = true
 			WHERE u.id = ?
@@ -78,16 +122,21 @@ func GetUser(ctx context.Context, db *sql.DB, userID string) (u *common.User, e 
 	// including when it is false. See the field's comment in common/types.go.
 	var showPantryStaples bool
 	var accountID sql.NullInt64
-	// Nullable in the database - every row predating the column has none, as
-	// does anyone whose browser declined to report one - so it cannot be scanned
-	// straight into a string. An absent zone becomes "", which omitempty drops
-	// from the response and every reader treats as "fall back to Europe/London".
-	var timezone sql.NullString
-	if err := db.QueryRowContext(ctx, userQuery, userID).Scan(&user.ID, &user.Name, &user.Email, &user.Onboarded, &showPantryStaples, &timezone, &accountID); err != nil {
+	// timezone is deliberately NOT selected here, though the column exists and
+	// this is the obvious place to read it from.
+	//
+	// It has no reader on this path: the email programme's due-query reads the
+	// column directly, and nothing in the frontend uses it. Selecting it anyway
+	// would put a location signal - coarse, but a location signal - into every
+	// GET /user and POST /user response body and into the browser's query cache,
+	// for nothing. specs/email.md's whole justification for storing it is that
+	// "it goes no further than our database", so shipping it to the client by
+	// default would quietly weaken the claim that made storing it acceptable.
+	// Add it here when something actually needs it.
+	if err := db.QueryRowContext(ctx, userQuery, userID).Scan(&user.ID, &user.Name, &user.Email, &user.Onboarded, &showPantryStaples, &accountID); err != nil {
 		return nil, err
 	}
 	user.ShowPantryStaples = &showPantryStaples
-	user.Timezone = timezone.String
 	if accountID.Valid {
 		id := int(accountID.Int64)
 		user.AccountID = &id

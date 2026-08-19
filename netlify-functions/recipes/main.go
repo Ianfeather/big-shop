@@ -16,6 +16,25 @@ import (
 	"recipes/internal/pkg/service"
 	"recipes/internal/pkg/telemetry"
 
+	// The IANA timezone database, compiled into the binary.
+	//
+	// time.LoadLocation otherwise reads it from the operating system, and this
+	// binary ships on distroless/static - a base image with no shell, no package
+	// manager and nothing else. The Dockerfile asserts that image carries tzdata;
+	// this makes the program not care whether that stays true.
+	//
+	// It became load-bearing with the onboarding email programme
+	// (specs/email.md), which sends at 10:00 in the *recipient's* morning and so
+	// resolves a stored zone name for every send. The failure it prevents is the
+	// quiet kind: with no database available LoadLocation fails for every zone,
+	// every user silently falls back to Europe/London, and the only symptom is
+	// mail arriving at the wrong hour on someone else's continent. Nothing errors
+	// and no test catches it, because tests run on an image that has tzdata.
+	//
+	// Costs about 450KB of binary. Cheap for removing a whole class of
+	// works-locally-wrong-in-production failure.
+	_ "time/tzdata"
+
 	"github.com/XSAM/otelsql"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"

@@ -86,6 +86,18 @@ func AddUserToAccount(ctx context.Context, db *sql.DB, accountID int, user commo
 	// Exec, not Query: these are writes, and Query returns an *sql.Rows that
 	// nothing closed - holding the connection until the garbage collector got
 	// to it. The first one's error was also being discarded entirely.
+	// This is the second path that can create a `user` row, and it writes no
+	// timezone. Combined with AddUser's insert-only rule - the zone is written
+	// on INSERT and never on UPDATE - a row born here can never acquire one:
+	// the next POST /user finds an existing row and takes the UPDATE branch,
+	// which does not touch the column. Such a user falls back to Europe/London
+	// for the onboarding sequence, which is the designed behaviour for an
+	// unknown zone rather than a failure.
+	//
+	// Not live today: both callers resolve an existing user first, so this
+	// INSERT is effectively a no-op guard. Recorded because "captured at
+	// signup" is only true while AddUser remains the only path that really
+	// creates users, and that is not enforced anywhere.
 	userQuery := `INSERT INTO user (id, name) VALUES (?,?) ON DUPLICATE KEY UPDATE id=id;`
 	if _, err := db.ExecContext(ctx, userQuery, user.ID, user.Name); err != nil {
 		return fmt.Errorf("adding user: %w", err)

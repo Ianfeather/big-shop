@@ -430,36 +430,127 @@ func EditRecipe(ctx context.Context, recipe common.Recipe, caller *common.Caller
 	return tx.Commit()
 }
 
-// DeleteRecipe removes a recipe from the db
-func DeleteRecipe(ctx context.Context, recipe common.Recipe, caller *common.Caller, db *sql.DB) error {
-	accountID, err := caller.AccountID()
-	if err != nil {
-		return fmt.Errorf("resolving account: %w", err)
+// scope is a WHERE fragment and the arguments that fill it, carried together
+// because they are only correct together. deleteRecipeData below builds three
+// of them and reuses one across two statements; as loose (string, []interface{})
+// pairs, an edit to the fragment that forgot its arguments - or an argument
+// list rebuilt between the two statements that share it - would produce a
+// silently mis-scoped DELETE rather than a compile error.
+type scope struct {
+	where string
+	args  []interface{}
+}
+
+// withAccountID prefixes a direct account_id predicate, for the two tables that
+// carry their own copy of it. Redundant against the subquery, but it keeps them
+// on an indexed column and preserves exactly what the previous per-recipe
+// statements asserted.
+func (s scope) withAccountID(accountID int) scope {
+	// A fresh slice, not an append onto s.args: the literal has len == cap == 1,
+	// so this cannot write through into the scope it was derived from.
+	return scope{
+		where: "account_id = ? AND " + s.where,
+		args:  append([]interface{}{accountID}, s.args...),
 	}
-	var id string
-	// Checking to see if this recipe exists for this user
-	if err := db.QueryRowContext(ctx, "SELECT id FROM recipe WHERE id=? AND account_id = ?;", recipe.ID, accountID).Scan(&id); err == sql.ErrNoRows {
-		// Returned unwrapped: it is a sentinel, and its identity is the whole
-		// message. Wrapping it would add "no results:" to an error that already
-		// says exactly that, and break any caller comparing against it.
-		return err
-	} else if err != nil {
-		return err
+}
+
+// deleteRecipeData removes everything hanging off a set of Recipes, in the one
+// order that satisfies the foreign keys. **It is the only place that order
+// lives**, and that is the whole point of it existing.
+//
+// **The caller must pass a transaction.** The parameter is `execer` rather than
+// `*sql.Tx` so that the tests can drive it without a database, matching what
+// insertIngredients/insertParts/insertTags in this file already do - but that
+// widening means *sql.DB satisfies it too, and a caller passing one gets five
+// unatomic statements and the half-deleted Recipe this function exists to
+// prevent. The type cannot enforce it; this comment is the enforcement.
+//
+// Nothing here touches `ingredient`, `unit`, `tag`, `department`,
+// `ingredient_department` or `ingredient_unit_size`, and that is deliberate
+// rather than an omission: per ADR-0001 the Global Ingredient Catalog is shared
+// by every Account, its names are not personal data, and erasing "their"
+// ingredients would damage everyone else's. Only the join tables that link a
+// Recipe to the catalog (`part`, `recipe_tag`) are removed. This matters most
+// to DeleteAccount, the caller this function was extracted to serve, where the
+// temptation to go looking for a departing user's ingredients is strongest.
+//
+// The alternative shapes are both wrong. Looping DeleteRecipe over every Recipe
+// in an Account is N times the queries and still leaves the `list` and
+// `shopping_list_event` rows that aren't tied to a Recipe at all. Hand-writing a
+// second, account-scoped cascade means two orderings that have to be kept in
+// sync forever, and the second one drifts the first time a table is added. So:
+// one set-based primitive, two entry points - DeleteRecipe below, and
+// DeleteAccount, which needs the same order over a whole Account.
+//
+// recipeIDs == nil means "every Recipe in the account", which is what account
+// deletion wants and what keeps this from being run in a loop. A non-nil but
+// empty slice means "no Recipes", and does nothing - the distinction matters,
+// because collapsing the two would turn an empty selection into a full wipe.
+//
+// Every statement is account-scoped even when explicit ids are given: the ids
+// are filtered through `recipe.account_id` rather than trusted, so a caller
+// cannot reach another Account's rows by passing its ids.
+func deleteRecipeData(ctx context.Context, tx execer, accountID int, recipeIDs []int) error {
+	if recipeIDs != nil && len(recipeIDs) == 0 {
+		return nil
 	}
 
-	// Delete the existing relationships between recipe & ingredients
-	if _, err := db.ExecContext(ctx, "DELETE FROM part WHERE recipe_id=?;", recipe.ID); err != nil {
-		return err
+	// The child tables (part, recipe_tag) carry no account_id of their own, so
+	// their scope has to come from `recipe` via a subquery.
+	//
+	// `recipe_id IN (subquery)` also excludes NULLs, which is correct: a `list`
+	// row with no recipe_id is an Extra Item and a `shopping_list_event` with
+	// none is not about a Recipe. Neither belongs to any Recipe, so neither is
+	// this function's to delete - DeleteAccount removes them separately.
+	children := scope{
+		where: "recipe_id IN (SELECT id FROM recipe WHERE account_id = ?)",
+		args:  []interface{}{accountID},
+	}
+	// The final DELETE cannot use that subquery: MySQL refuses to delete from a
+	// table while selecting from it in the same statement (error 1093), so the
+	// Recipe delete states its scope directly.
+	recipes := scope{
+		where: "account_id = ?",
+		args:  []interface{}{accountID},
 	}
 
-	// Delete the existing relationships between recipe & tags
-	if _, err := db.ExecContext(ctx, "DELETE FROM recipe_tag WHERE recipe_id=?;", recipe.ID); err != nil {
-		return err
+	if recipeIDs != nil {
+		// Given ids are filtered *through* recipe.account_id rather than
+		// trusted, so a caller passing another Account's ids reaches nothing.
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(recipeIDs)), ",")
+		ids := make([]interface{}, 0, len(recipeIDs)+1)
+		ids = append(ids, accountID)
+		for _, id := range recipeIDs {
+			ids = append(ids, id)
+		}
+		children = scope{
+			where: fmt.Sprintf("recipe_id IN (SELECT id FROM recipe WHERE account_id = ? AND id IN (%s))", placeholders),
+			args:  ids,
+		}
+		recipes = scope{
+			where: fmt.Sprintf("account_id = ? AND id IN (%s)", placeholders),
+			args:  append([]interface{}{}, ids...),
+		}
 	}
 
-	// Delete the recipe items from the shopping list
-	if _, err := db.ExecContext(ctx, "DELETE FROM list WHERE recipe_id=? and account_id=?;", recipe.ID, accountID); err != nil {
-		return err
+	// list and shopping_list_event carry their own account_id, so they take the
+	// subquery *and* a direct predicate. Derived once and shared by both, which
+	// is safe because a scope is immutable once built.
+	ownedChildren := children.withAccountID(accountID)
+
+	// The relationships between recipe & ingredients.
+	if _, err := tx.ExecContext(ctx, "DELETE FROM part WHERE "+children.where+";", children.args...); err != nil {
+		return fmt.Errorf("deleting recipe ingredient links: %w", err)
+	}
+
+	// The relationships between recipe & tags.
+	if _, err := tx.ExecContext(ctx, "DELETE FROM recipe_tag WHERE "+children.where+";", children.args...); err != nil {
+		return fmt.Errorf("deleting recipe tag links: %w", err)
+	}
+
+	// The recipe's items on the shopping list.
+	if _, err := tx.ExecContext(ctx, "DELETE FROM list WHERE "+ownedChildren.where+";", ownedChildren.args...); err != nil {
+		return fmt.Errorf("deleting recipe list items: %w", err)
 	}
 
 	// And its Shopping List Events. migrations/015 puts a foreign key on
@@ -472,15 +563,59 @@ func DeleteRecipe(ctx context.Context, recipe common.Recipe, caller *common.Call
 	// `recipe_id IS NOT NULL`, and a Recipe that no longer exists cannot be
 	// suggested - so a nulled row would be dead weight. It also matches what
 	// this function already does with the Recipe's parts, tags and list items.
-	if _, err := db.ExecContext(ctx, "DELETE FROM shopping_list_event WHERE recipe_id=? AND account_id=?;", recipe.ID, accountID); err != nil {
-		return err
+	if _, err := tx.ExecContext(ctx, "DELETE FROM shopping_list_event WHERE "+ownedChildren.where+";", ownedChildren.args...); err != nil {
+		return fmt.Errorf("deleting recipe shopping list events: %w", err)
 	}
 
-	if _, err := db.ExecContext(ctx, "DELETE FROM recipe WHERE id=? and account_id = ?;", recipe.ID, accountID); err != nil {
-		return err
+	if _, err := tx.ExecContext(ctx, "DELETE FROM recipe WHERE "+recipes.where+";", recipes.args...); err != nil {
+		return fmt.Errorf("deleting recipes: %w", err)
 	}
 
 	return nil
+}
+
+// DeleteRecipe removes a recipe from the db.
+//
+// A thin caller of deleteRecipeData: the cascade order lives there, and this
+// adds only the "does it exist, and is it theirs" check and the transaction.
+func DeleteRecipe(ctx context.Context, recipe common.Recipe, caller *common.Caller, db *sql.DB) error {
+	accountID, err := caller.AccountID()
+	if err != nil {
+		return fmt.Errorf("resolving account: %w", err)
+	}
+
+	var id string
+	// Checking to see if this recipe exists for this user. A precondition, run
+	// before opening a transaction - the same shape EditRecipe uses and states
+	// in its own comment, so the two siblings agree: there is nothing to roll
+	// back if the answer is "not yours", and it keeps the transaction's life as
+	// short as the writes themselves.
+	if err := db.QueryRowContext(ctx, "SELECT id FROM recipe WHERE id=? AND account_id = ?;", recipe.ID, accountID).Scan(&id); err == sql.ErrNoRows {
+		// Returned unwrapped: it is a sentinel, and its identity is the whole
+		// message. Wrapping it would add "no results:" to an error that already
+		// says exactly that, and break any caller comparing against it.
+		return err
+	} else if err != nil {
+		return err
+	}
+
+	// One transaction, which this has always needed and never had: the cascade
+	// is five statements, and a failure part-way through used to leave a Recipe
+	// stripped of its parts, tags and list items but still present - readable,
+	// and empty.
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("starting transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Unwrapped deliberately: deleteRecipeData names the failing table in its
+	// own error, and wrapping again would only prefix a second "deleting…".
+	if err := deleteRecipeData(ctx, tx, accountID, []int{recipe.ID}); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func insertIngredients(ctx context.Context, recipe common.Recipe, db execer) error {

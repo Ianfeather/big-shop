@@ -36,22 +36,31 @@ Notes:
 - **Declined:** the reviewer's Data Clump call on `(to, subject, template, data)` threading through the send path. Four parameters across two thin wrappers does not yet justify a Message type, and the two-door API is the property worth keeping.
 
 ## Session 2: Phase 1b — timezone capture
-Status: pending
+Status: done
 Scope: migration `035_user_timezone.sql`; `common.User.Timezone` with `omitempty`; `service.AddUser` insert-only (omitted from `ON DUPLICATE KEY UPDATE`); `pages/index.tsx` adds `Intl.DateTimeFormat().resolvedOptions().timeZone` to the existing `POST /user` payload.
 Depends on: none (independent of Session 1, ordered first because Session 3 reads the column)
-Commit:
+Commit: 6377e51, migration in b13aea5, review fixes in bd3f426
 Notes:
-- **Partly started.** `migrations/035_user_timezone.sql` is already written and committed (it rode along in b13aea5, ahead of its session — it is a new file and conflicts with nothing). Its syntax was applied by hand against the local DB and the column is correct: `timezone varchar(64) NULL`. Everything else in this session is still to do.
-- Still to do: `common.User.Timezone` with `omitempty`; `service.AddUser` writing it on insert and **omitting it from `ON DUPLICATE KEY UPDATE`**; `pages/index.tsx` adding `Intl.DateTimeFormat().resolvedOptions().timeZone` to the existing `POST /user` payload.
-- Must regenerate BOTH drift-checked artefacts or CI's `go` job fails — `go run . openapi > ../../docs/openapi.yaml`, then `npm run generate:api-types`.
+- Go suite, `typecheck`, `lint` and all 367 frontend tests green. Both drift-checked artefacts regenerated and re-verified clean; `timezone` is optional in each, which is what `omitempty` exists to guarantee.
+- All three of the spec's *done when* clauses verified against the running stack: a genuinely new user records `Asia/Tokyo`; a second login claiming `Europe/Paris` with a new name updates the name and leaves the zone at `Asia/Tokyo`; a login sending no zone stores NULL.
+- **A pre-existing user never acquires a zone**, by design — the first POST after the migration takes the UPDATE branch, which does not touch the column. Confirmed with the seeded `local-dev-user`. Those users fall back to Europe/London, and are excluded from the sequence anyway by Session 3's `email_launch` marker.
+- Review fix: **an over-length `timezone` used to 500 `POST /user`**, and since `pages/index.tsx` swallows that, neither the User row nor their Account was created — a client-supplied string could break its own signup. `normaliseTimezone` now stores NULL for anything it cannot vouch for (too long, not a real IANA zone, empty, or `"Local"`, which resolves against the *server's* zone). Verified: a 200-char zone returns 200 with the account created.
+- Review fix: **`GetUser` no longer selects the column.** It had no reader, and returning it put a location signal into every `GET`/`POST /user` body and the browser's query cache — against the spec's own "it goes no further than our database".
+- Review fix: `userUpsert` is split out so the statement and args are testable without a DB. The insert-only rule lives entirely in one SQL statement's shape, so only a test can catch it being undone.
+- **`_ "time/tzdata"` added to main.go.** `time.LoadLocation` is now load-bearing and the production image is distroless/static. Without the embedded database every zone fails to load, every user silently falls back to Europe/London, and no test catches it because tests run on an image that has tzdata. Session 3 depends on this.
+- **e2e NOT yet run for this session.** It touches `pages/index.tsx`'s login path so it genuinely needs it, but worktree 2 had a live `bigshop-e2e` stack and `npm run test:e2e` starts by tearing those containers down. Must be run before the PR.
 - Local stack for this worktree: `COMPOSE_PROJECT_NAME=bigshop-impl50 DB_PORT=3320 API_PORT=8083 GRAFANA_PORT=3220 OTLP_HTTP_PORT=4328 docker compose up -d db api`. Go runs inside `bigshop-impl50-api-1` (there is no Go toolchain on the host). Tear down with the same project name and `down -v` — a plain `docker compose down` would hit another worktree's stack.
 
 ## Session 3: Phase 1c — the ticker and the send log
-Status: pending
+Status: pending (migration written, not committed as done)
 Scope: migration `036_email_send.sql` (`email_send` + the `email_launch` marker); hourly `time.Ticker` started from `isServeMode()` only; the due-query (`>=` on days-since-signup, rows on success only); the one-email-per-user-per-tick guard; 10:00 local with `Europe/London` fallback; Go tests across timezone/DST/launch-marker boundaries.
 Depends on: Session 2 (reads `user.timezone`)
 Commit:
-Notes: Proven with a stub sender, no templates. The per-tick guard is not optional — without it a week-long outage sends three emails within a second, which is the likeliest spam report this design has.
+Notes:
+- **`migrations/036_email_send.sql` is already written** (uncommitted at time of writing) and both of its guarantees were demonstrated against a real MySQL rather than assumed: the composite PK rejects a duplicate `(user, kind)` while allowing a different kind for the same user, and `email_launch`'s CHECK constraint genuinely refuses a second row.
+- The launch cutoff is an `email_launch` marker row stamped when the migration runs, not a hand-picked date constant. Rejected: backfilling `email_send` rows for existing users — a row there means "handed to SendGrid", so writing four per existing user would make the log begin its life lying.
+- Proven with a stub sender, no templates. The per-tick guard is not optional — without it a week-long outage sends three emails within a second, which is the likeliest spam report this design has.
+- `normaliseTimezone` in `service/user.go` already guarantees every stored zone is loadable by `time.LoadLocation`, so the sender's fallback is only for NULL, not for garbage.
 
 ## Session 4: Phase 1d — the four emails
 Status: pending

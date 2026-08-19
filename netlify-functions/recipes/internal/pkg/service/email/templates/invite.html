@@ -1,0 +1,31 @@
+{{ define "content" }}
+  {{/*
+    The Account invite - the only email Big Shop sent before specs/email.md, and
+    the only transactional one until Phase 2. Transactional, so no unsubscribe
+    footer: someone who was just invited to an Account has not opted into
+    anything they can opt out of, and telling them about it is not marketing.
+
+    The accept link below points at an API Gateway stack that no longer serves
+    anything, so this email is broken on arrival. That is deliberate here: this
+    change moves the send onto one seam without altering behaviour, and the
+    broken URL - along with POST /invite answering 400 when the send fails - is
+    owned by board item #46, which is changing that handler for its own reasons.
+    Fixing it here would be a second concurrent change to the same flow.
+  */}}
+  <p style="margin:0 0 16px 0;">Hello,</p>
+
+  <p style="margin:0 0 16px 0;">
+    {{ .Data.InviterName }} has invited you to collaborate on their Big Shop account.
+    You will share recipes and one shopping list, so whoever is actually at the shops
+    has the same list as whoever planned the week.
+  </p>
+
+  <p style="margin:0 0 24px 0;">
+    <a href="https://pleeyu7yrd.execute-api.us-east-1.amazonaws.com/prod/invitation/{{ .Data.Token }}"
+       style="display:inline-block; padding:12px 20px; background-color:#1f7a4d; color:#ffffff; border-radius:6px; text-decoration:none; font-weight:600;">Accept the invitation</a>
+  </p>
+
+  <p style="margin:0; font-size:14px; color:#6b7178;">
+    If you were not expecting this, you can ignore it and nothing will happen.
+  </p>
+{{ end }}

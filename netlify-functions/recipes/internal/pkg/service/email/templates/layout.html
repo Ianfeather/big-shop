@@ -1,0 +1,82 @@
+<!doctype html>
+<!--
+  The shell every Big Shop email renders inside. Header, footer and - for the
+  onboarding sequence - the unsubscribe link live here and only here, so no
+  individual template can ship without them. That is the whole reason the layout
+  is a separate file rather than copied into each one.
+
+  READ THIS BEFORE EDITING ANY EMAIL COPY
+  =======================================
+  The onboarding sequence is sent to every new user without asking them first.
+  That is lawful because these are service messages about a product the
+  recipient actively signed up for, sent on legitimate interests - see
+  docs/adr/0010-lifecycle-email-lawful-basis.md.
+
+  It stops being lawful the moment the copy becomes promotional. No referral
+  pitch, no upsell, no discount, no third-party content, no "invite your friends
+  and get X". Add any of those and these become direct marketing under PECR
+  regulation 22, which requires opt-in consent that nobody has given.
+
+  This warning is repeated in the ADR and in specs/email.md on purpose, because
+  whoever breaks the condition will be editing copy and will never open either.
+
+  Table-based markup and inline styles are not stylistic. Email clients - Outlook
+  in particular - do not reliably support flexbox, grid, or external and embedded
+  stylesheets, so layout goes in tables and every style goes on the element.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Big Shop</title>
+  </head>
+  <body style="margin:0; padding:0; background-color:#f4f4f2;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f2;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px; background-color:#ffffff; border-radius:8px;">
+
+            <tr>
+              <td style="padding:28px 32px 8px 32px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+                <a href="{{ .SiteURL }}?utm_source=email&amp;utm_medium=lifecycle" style="font-size:20px; font-weight:700; color:#1f7a4d; text-decoration:none;">Big Shop</a>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:8px 32px 28px 32px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:16px; line-height:1.55; color:#23282d;">
+                {{ template "content" . }}
+              </td>
+            </tr>
+
+          </table>
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;">
+            <tr>
+              <td style="padding:20px 32px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:13px; line-height:1.5; color:#6b7178;">
+                <p style="margin:0 0 8px 0;">Big Shop &mdash; recipes and the shopping list that comes out of them.</p>
+                {{- if .Unsubscribable }}
+                <p style="margin:0;">
+                  You are getting this because you signed up for Big Shop.
+                  <!--
+                    The href below is a SendGrid substitution tag, replaced at send
+                    time with the unsubscribe URL for this message's ASM group. It is
+                    written literally rather than passed in as data because
+                    html/template percent-encodes anything substituted into an href,
+                    which would turn it into a dead link SendGrid never rewrites. See
+                    unsubscribeTag in email.go.
+                  -->
+                  <a href="<%asm_group_unsubscribe_raw_url%>" style="color:#6b7178;">Unsubscribe from these emails</a>.
+                </p>
+                {{- else }}
+                <p style="margin:0;">This is a service message about your Big Shop account.</p>
+                {{- end }}
+              </td>
+            </tr>
+          </table>
+
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

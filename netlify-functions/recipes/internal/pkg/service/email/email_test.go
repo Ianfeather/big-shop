@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,10 +89,13 @@ func TestLifecycleRenderCarriesUnsubscribeTag(t *testing.T) {
 		t.Fatalf("Render returned an error: %v", err)
 	}
 
-	// Verbatim, not escaped. html/template would percent-encode this into
-	// something SendGrid no longer substitutes if the tag were an ordinary
-	// string rather than a template.URL - and the failure would be silent, an
-	// unsubscribe link leading to a 404 rather than an error anybody sees.
+	// Verbatim, not escaped. The tag is literal text in layout.html precisely
+	// so it survives: substituted in as data it would be percent-encoded by
+	// html/template's URL normalizer into something SendGrid never rewrites,
+	// and a template.URL would not save it - that skips the safety filter, not
+	// the normalizer. The failure would be silent, an unsubscribe link leading
+	// nowhere rather than an error anybody sees, which is why this is asserted
+	// rather than left to the golden files.
 	if !strings.Contains(html, string(unsubscribeTag)) {
 		t.Errorf("lifecycle email does not contain the unsubscribe substitution tag %q", unsubscribeTag)
 	}
@@ -248,4 +253,97 @@ func TestSiteURL(t *testing.T) {
 			t.Errorf("SiteURL() = %q, want %q", got, "http://localhost:3000")
 		}
 	})
+}
+
+// A group id that is present but unusable must behave exactly like an absent
+// one. Forwarding it would put SendGrid's own 400 in the path of the fail-safe
+// that exists to keep unsendable lifecycle mail from being attempted at all.
+func TestLifecycleWithUnusableASMGroupDoesNotSend(t *testing.T) {
+	for _, raw := range []string{"0", "-3", "not-a-number"} {
+		t.Run(raw, func(t *testing.T) {
+			t.Setenv("SENDGRID_API_KEY", "SG.not-a-real-key")
+			t.Setenv("SENDGRID_ASM_GROUP_ID", raw)
+
+			sent, err := SendLifecycle(context.Background(),
+				Recipient{Name: "A", Address: "a@example.com"}, "Subject", "invite", inviteData{})
+			if err != nil {
+				t.Fatalf("expected a clean skip, got error: %v", err)
+			}
+			if sent {
+				t.Errorf("lifecycle email reported as sent with SENDGRID_ASM_GROUP_ID=%q", raw)
+			}
+		})
+	}
+}
+
+// withStubSendGrid points the package at a local server for the duration of a
+// test, and is the reason sendGridBaseURL is a variable.
+func withStubSendGrid(t *testing.T, handler http.HandlerFunc) {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	previous := sendGridBaseURL
+	sendGridBaseURL = server.URL
+	t.Cleanup(func() {
+		sendGridBaseURL = previous
+		server.Close()
+	})
+}
+
+func TestSendReportsSuccess(t *testing.T) {
+	t.Setenv("SENDGRID_API_KEY", "SG.not-a-real-key")
+	withStubSendGrid(t, func(w http.ResponseWriter, r *http.Request) {
+		// What SendGrid really answers a successful v3 mail send with.
+		w.WriteHeader(http.StatusAccepted)
+	})
+
+	sent, err := SendTransactional(context.Background(),
+		Recipient{Name: "A", Address: "a@example.com"}, "Subject", "invite", inviteData{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !sent {
+		t.Error("a 202 from SendGrid was not reported as a send")
+	}
+}
+
+// SendGrid signals refusal by status code, not by returning an error, so a
+// rejected message arrives as a perfectly successful HTTP call. Unchecked, every
+// suppressed address, unverified sender or bad group id would be written to the
+// send log as delivered and never retried - the send log would record sends
+// that never happened.
+func TestSendTreatsNon2xxAsAFailure(t *testing.T) {
+	t.Setenv("SENDGRID_API_KEY", "SG.not-a-real-key")
+	withStubSendGrid(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"errors":[{"message":"does not contain a valid address"}]}`))
+	})
+
+	sent, err := SendTransactional(context.Background(),
+		Recipient{Name: "A", Address: "a@example.com"}, "Subject", "invite", inviteData{})
+	if err == nil {
+		t.Fatal("a 400 from SendGrid was not reported as an error")
+	}
+	if sent {
+		t.Error("a 400 from SendGrid was reported as a send")
+	}
+	if !strings.Contains(err.Error(), "400") {
+		t.Errorf("error does not name the status code: %v", err)
+	}
+}
+
+// The promise the whole programme ships on: with nothing configured, a broken
+// template still cannot fail the caller's request. app.inviteUser turns an error
+// from here into a 400, so an error on this path would be a user-visible
+// failure on a machine that was never going to send anything.
+func TestUnconfiguredSkipHappensBeforeRendering(t *testing.T) {
+	t.Setenv("SENDGRID_API_KEY", "")
+
+	sent, err := SendTransactional(context.Background(),
+		Recipient{Name: "A", Address: "a@example.com"}, "Subject", "no-such-template", nil)
+	if err != nil {
+		t.Fatalf("an unconfigured send must never error, even on a bad template: %v", err)
+	}
+	if sent {
+		t.Error("reported a send with no API key configured")
+	}
 }

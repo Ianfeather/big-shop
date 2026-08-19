@@ -44,6 +44,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
@@ -68,6 +69,30 @@ const (
 // production because production is the only place email actually sends; SITE_URL
 // exists so the local preview route renders links you can click.
 const defaultSiteURL = "https://www.bigshop.life"
+
+// sendGridBaseURL is where the send actually goes.
+//
+// A variable rather than a constant for exactly one reason: it is what lets a
+// test point the response-code check below at an httptest.Server. That check is
+// the difference between a rejected message being recorded in the send log as
+// delivered and never retried, and it being retried on the next tick - so it is
+// the branch in this file least affordable to leave uncovered. The sibling
+// purge package keeps its endpoint injectable for the same reason
+// (purge.Purger's `endpoint` field).
+var sendGridBaseURL = "https://api.sendgrid.com"
+
+// The unconfigured cases are announced once per process, not once per send.
+//
+// Not tidiness. From Session 3 there is an hourly ticker, and with no key set -
+// which is every environment today, and the state the whole email programme
+// ships into - an unguarded log would write one line per due user per hour,
+// forever, to say nothing has changed. That buries anything worth reading and
+// it is the sibling purge package's behaviour that is right here: an
+// unconfigured purger says nothing at all.
+var (
+	noKeyOnce   sync.Once
+	noGroupOnce sync.Once
+)
 
 // unsubscribeTag is SendGrid's substitution token for the raw unsubscribe URL
 // of the ASM group set on the message. SendGrid replaces it at send time and
@@ -192,8 +217,15 @@ func asmGroupID() int {
 		return 0
 	}
 	id, err := strconv.Atoi(raw)
-	if err != nil {
-		log.Printf("email: SENDGRID_ASM_GROUP_ID is not a number (%q); lifecycle email will not send", raw)
+	// Anything not a positive integer is treated as "not configured" rather
+	// than passed through. A SendGrid group id is always positive, so a zero or
+	// negative one is a typo, and forwarding it would fail the send at the API
+	// with a 400 - which SendLifecycle's fail-safe is specifically designed to
+	// avoid reaching. Declining here means the email waits for a real group
+	// instead, which is the same outcome as an unset variable and the correct
+	// one for a malformed one.
+	if err != nil || id <= 0 {
+		log.Printf("email: SENDGRID_ASM_GROUP_ID is not a positive integer (%q); lifecycle email will not send", raw)
 		return 0
 	}
 	return id
@@ -215,7 +247,9 @@ func asmGroupID() int {
 func SendLifecycle(ctx context.Context, to Recipient, subject, templateName string, data any) (bool, error) {
 	group := asmGroupID()
 	if group == 0 {
-		log.Printf("email: SENDGRID_ASM_GROUP_ID is unset; skipping lifecycle email %q", templateName)
+		noGroupOnce.Do(func() {
+			log.Println("email: no SendGrid unsubscribe group configured (SENDGRID_ASM_GROUP_ID); lifecycle email will not be sent")
+		})
 		return false, nil
 	}
 	return send(ctx, to, subject, templateName, data, group)
@@ -250,20 +284,35 @@ func send(ctx context.Context, to Recipient, subject, templateName string, data 
 		return false, nil
 	}
 
+	// The key is checked before anything is rendered, and the order matters.
+	//
+	// The package promises that an unconfigured environment is a clean skip and
+	// never an error, and rendering first breaks that promise: a template
+	// execution failure - a field renamed in Go but not in the HTML - would
+	// return an error on a machine that was never going to send anything, and
+	// app.inviteUser turns an error from here into a 400. Rendering is
+	// exercised by the golden tests and by the preview route, which is where a
+	// broken template should be caught; it should not be able to fail a request
+	// that had no email to send in the first place.
+	key := os.Getenv("SENDGRID_API_KEY")
+	if key == "" {
+		noKeyOnce.Do(func() {
+			log.Println("email: no SendGrid API key configured (SENDGRID_API_KEY); no email will be sent")
+		})
+		return false, nil
+	}
+
 	html, err := Render(templateName, data, asmGroup != 0)
 	if err != nil {
 		return false, err
 	}
 
-	key := os.Getenv("SENDGRID_API_KEY")
-	if key == "" {
-		log.Printf("email: SENDGRID_API_KEY is unset; not sending %q", templateName)
-		return false, nil
-	}
-
 	message := buildMessage(to, subject, html, asmGroup)
 
-	response, err := sendgrid.NewSendClient(key).SendWithContext(ctx, message)
+	client := sendgrid.NewSendClient(key)
+	client.BaseURL = sendGridBaseURL + "/v3/mail/send"
+
+	response, err := client.SendWithContext(ctx, message)
 	if err != nil {
 		return false, fmt.Errorf("email: sending %q: %w", templateName, err)
 	}

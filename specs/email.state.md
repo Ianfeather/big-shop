@@ -1,6 +1,6 @@
 ---
 spec: specs/email.md
-status: planned
+status: in-progress
 branch: implement/email
 pr:
 ---
@@ -22,11 +22,18 @@ Three decisions taken at planning time, recorded because they are not in the spe
   does not, because transactional email is not unsubscribable (ADR-0010).
 
 ## Session 1: Phase 1a — the sending seam
-Status: pending
-Scope: `internal/pkg/service/email` package with `Send(ctx, to, subject, template, data) (sent bool, err error)`; go:embed layout partial + golden-file test; clean no-op when `SENDGRID_API_KEY` is unset; sender centralised as `hello@bigshop.life`; `inviteUser`'s inline send ported onto it with behaviour unchanged.
+Status: done
+Scope: `internal/pkg/service/email` package; go:embed layout partial + golden-file test; clean no-op when `SENDGRID_API_KEY` is unset; sender centralised as `hello@bigshop.life`; `inviteUser`'s inline send ported onto it with behaviour unchanged.
 Depends on: none
-Commit:
-Notes: The `sent bool` is load-bearing — Session 3 uses it to decide whether to write `email_send`. Do NOT fix the dead `pleeyu7yrd.execute-api...` invite URL or the 400-on-send-failure; both are #46's.
+Commit: 271ea40 (+ review fixes)
+Notes:
+- Go tests green; `POST /invite` exercised against the local stack and now answers **204** where it previously answered 400 on every call, with the clean skip logged. No OpenAPI drift.
+- **Deviation from the spec's stated signature.** Phase 1a asks for "one `Send(ctx, to, subject, template, data)` entry point". Shipped as two — `SendLifecycle` and `SendTransactional` — which is the mechanical consequence of the ASM decision above: with one entry point there is a path that sends onboarding email without an unsubscribe, and with two there is not. The `sent bool` is load-bearing: Session 3 uses it to decide whether to write `email_send`.
+- The dead `pleeyu7yrd.execute-api...` invite URL and the 400-on-send-failure are deliberately untouched; both are #46's.
+- Review findings fixed: the unconfigured skip now happens **before** rendering (a template error could otherwise 400 `POST /invite` on a machine with no key); `SENDGRID_ASM_GROUP_ID` rejects non-positive and non-numeric values instead of forwarding them; `sendGridBaseURL` is injectable so the non-2xx branch is actually tested; the unconfigured-state logs fire once per process, not once per send, because Session 3's ticker would otherwise write a line per due user per hour forever.
+- Review finding fixed: `utm_source`/`utm_medium=lifecycle` had been put on the **shared layout**, so the transactional invite carried them too. Removed — campaign tagging is per-template and belongs to Session 4's lifecycle emails only.
+- `SITE_URL`, `SENDGRID_API_KEY` and `SENDGRID_ASM_GROUP_ID` documented in `technical-architecture.md`.
+- **Declined:** the reviewer's Data Clump call on `(to, subject, template, data)` threading through the send path. Four parameters across two thin wrappers does not yet justify a Message type, and the two-door API is the property worth keeping.
 
 ## Session 2: Phase 1b — timezone capture
 Status: pending

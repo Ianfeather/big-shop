@@ -39,7 +39,16 @@
 
             <tr>
               <td style="padding:28px 32px 8px 32px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
-                <a href="{{ .SiteURL }}?utm_source=email&amp;utm_medium=lifecycle" style="font-size:20px; font-weight:700; color:#1f7a4d; text-decoration:none;">Big Shop</a>
+                <!--
+                  No utm_* parameters on this link, deliberately. Campaign
+                  attribution is per-email and belongs to the onboarding
+                  sequence only: the layout is shared with transactional mail,
+                  so tagging it here would attribute an invite click to
+                  utm_medium=lifecycle, which is the one thing the invite is
+                  not. Lifecycle templates add their own, carrying the campaign
+                  name - and never a user or account identifier.
+                -->
+                <a href="{{ .SiteURL }}" style="font-size:20px; font-weight:700; color:#1f7a4d; text-decoration:none;">Big Shop</a>
               </td>
             </tr>
 

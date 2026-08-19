@@ -1,0 +1,39 @@
+-- The IANA timezone name this User's browser reported when they signed up.
+--
+-- Exists for one reason: the onboarding email sequence (specs/email.md) sends at
+-- 10:00 in the *recipient's* morning, not ours. Mid-morning is past the
+-- commute-and-triage window, so the mail is not buried under the overnight pile,
+-- and a grocery app is a daytime thought. Without a zone every send is 10:00
+-- London, which is the middle of the night for a third of the plausible
+-- audience.
+--
+-- **Nullable, and every reader must cope with null.** It is populated from
+-- `Intl.DateTimeFormat().resolvedOptions().timeZone` on the POST /user the
+-- frontend already makes at login, so every row that predates this migration
+-- has none, and so does anyone whose browser declines to say. The sender falls
+-- back to Europe/London rather than skipping them.
+--
+-- **Insert-only. Never updated.** service.AddUser deliberately omits this column
+-- from its ON DUPLICATE KEY UPDATE clause, where `name`, `email` and
+-- `last_logged_in_at` are all refreshed on every login. So the value is whatever
+-- was reported at signup and it stays there. That costs nothing to implement and
+-- buys the property that a fortnight abroad cannot scramble a fortnight-long
+-- sequence - a user who logs in from Tokyo on day 4 does not get days 8 and 14
+-- shifted by nine hours. The accepted cost is that the column is stale for
+-- anyone who genuinely relocates, which for a sequence ending on day 14 is close
+-- to irrelevant.
+--
+-- **This is a new piece of personal data**, and it is worth naming as such
+-- rather than filing it as a technical column. A zone name is coarse, but it is
+-- a location signal: `Europe/London` narrows someone to a country. So it goes no
+-- further than this database - it is never sent to SendGrid, Google Analytics or
+-- Grafana, and ADR-0008's rules about what telemetry carries apply to it
+-- unchanged - and /privacy names it explicitly.
+--
+-- Rejected: storing a UTC *offset* instead, on the grounds that a number holds
+-- less about someone than a place name. It breaks across DST boundaries, so a
+-- sequence spanning late March or late October sends an hour early or late -
+-- paying correctness for a reduction nobody asked for. varchar(64) comfortably
+-- fits the longest names in the IANA database
+-- (`America/Argentina/ComodRivadavia`, 32 characters).
+ALTER TABLE `user` ADD COLUMN `timezone` varchar(64) NULL COMMENT 'IANA zone name reported at signup; never updated';

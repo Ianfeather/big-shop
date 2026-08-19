@@ -481,6 +481,8 @@ components:
           type: boolean
         showPantryStaples:
           type: boolean
+        timezone:
+          type: string
       required:
         - email
       type: object

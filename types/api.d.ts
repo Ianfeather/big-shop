@@ -665,6 +665,7 @@ export interface components {
             name?: string;
             onboarded?: boolean;
             showPantryStaples?: boolean;
+            timezone?: string;
         };
     };
     responses: never;

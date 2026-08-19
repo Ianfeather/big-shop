@@ -8,10 +8,30 @@ import (
 	"recipes/internal/pkg/telemetry"
 )
 
+// AddUser upserts the signed-in User. Called on every login, not just the first
+// one (see pages/index.tsx), so the UPDATE half runs far more often than the
+// INSERT half.
+//
+// **timezone is in the INSERT and deliberately absent from the UPDATE.** Every
+// other column here is refreshed on each login - a changed display name or
+// email should win, and last_logged_in_at is the whole point of re-running this
+// - but the zone is captured once, at signup, and then left alone. The
+// onboarding email sequence sends at 10:00 in the recipient's morning across a
+// fortnight, and someone logging in from Tokyo on day 4 should not have days 8
+// and 14 shifted by nine hours. The accepted cost is a stale column for anyone
+// who genuinely relocates, which for a fourteen-day sequence is close to
+// irrelevant. See migrations/035_user_timezone.sql and specs/email.md.
+//
+// Passing an empty timezone is normal rather than a fault: the frontend sends
+// whatever Intl.DateTimeFormat reports and some browsers report nothing, so the
+// column is nullable and every reader falls back to Europe/London. It is stored
+// as NULL rather than "" so the two states cannot be told apart later by
+// accident - there is no meaningful difference between "the browser declined"
+// and "this row predates the column", and both take the same fallback.
 func AddUser(ctx context.Context, db *sql.DB, user common.User) error {
 	userQuery := `
-		INSERT INTO user (id, name, email)
-			VALUES (?, ?, ?)
+		INSERT INTO user (id, name, email, timezone)
+			VALUES (?, ?, ?, ?)
 			ON DUPLICATE KEY UPDATE
 				id=id,
 				name=?,
@@ -19,7 +39,13 @@ func AddUser(ctx context.Context, db *sql.DB, user common.User) error {
 				last_logged_in_at=CURRENT_TIMESTAMP
 			;
 	`
-	_, err := db.ExecContext(ctx, userQuery, user.ID, user.Name, user.Email, user.Name, user.Email)
+
+	var timezone any
+	if user.Timezone != "" {
+		timezone = user.Timezone
+	}
+
+	_, err := db.ExecContext(ctx, userQuery, user.ID, user.Name, user.Email, timezone, user.Name, user.Email)
 	if err != nil {
 		return fmt.Errorf("adding user: %w", err)
 	}
@@ -40,7 +66,7 @@ func GetUser(ctx context.Context, db *sql.DB, userID string) (u *common.User, e 
 	// leaves them that way on purpose - and an INNER JOIN would turn it into
 	// "no such user" and blank their preferences.
 	userQuery := `
-		SELECT u.id, u.name, u.email, u.onboarded, u.show_pantry_staples, au.account_id
+		SELECT u.id, u.name, u.email, u.onboarded, u.show_pantry_staples, u.timezone, au.account_id
 			FROM user u
 			LEFT JOIN account_user au ON au.user_id = u.id AND au.enabled = true
 			WHERE u.id = ?
@@ -52,10 +78,16 @@ func GetUser(ctx context.Context, db *sql.DB, userID string) (u *common.User, e 
 	// including when it is false. See the field's comment in common/types.go.
 	var showPantryStaples bool
 	var accountID sql.NullInt64
-	if err := db.QueryRowContext(ctx, userQuery, userID).Scan(&user.ID, &user.Name, &user.Email, &user.Onboarded, &showPantryStaples, &accountID); err != nil {
+	// Nullable in the database - every row predating the column has none, as
+	// does anyone whose browser declined to report one - so it cannot be scanned
+	// straight into a string. An absent zone becomes "", which omitempty drops
+	// from the response and every reader treats as "fall back to Europe/London".
+	var timezone sql.NullString
+	if err := db.QueryRowContext(ctx, userQuery, userID).Scan(&user.ID, &user.Name, &user.Email, &user.Onboarded, &showPantryStaples, &timezone, &accountID); err != nil {
 		return nil, err
 	}
 	user.ShowPantryStaples = &showPantryStaples
+	user.Timezone = timezone.String
 	if accountID.Valid {
 		id := int(accountID.Int64)
 		user.AccountID = &id

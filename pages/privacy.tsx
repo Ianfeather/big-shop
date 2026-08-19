@@ -215,8 +215,12 @@ export default function Privacy() {
                 what lets Dave suggest from what you actually cook.
               </li>
               <li>
-                <strong>Invites you send.</strong>{' '}The email address of anyone you invite to share
-                your account, until the invite is accepted or rejected.
+                <strong>Invites you send.</strong>{' '}Not the email address itself. When you invite
+                someone, their address is scrambled into a fingerprint that cannot be turned back
+                into an address, and only the fingerprint is stored &mdash; enough to show them the
+                invite when they log in, and no use to anyone who got hold of the database. The
+                invite is deleted when it is accepted or rejected, and expires after 30 days either
+                way.
               </li>
               <li>
                 <strong>A few preferences.</strong>{' '}Whether you have been shown the welcome screen,
@@ -377,7 +381,9 @@ export default function Privacy() {
             <p>
               Your account, recipes and lists are kept until you ask us to delete them. Error and
               performance data is deleted after 14 days. Invites disappear when accepted or
-              rejected.
+              rejected, and any that are never answered are deleted once they expire, 30 days after
+              they were sent &mdash; so nothing is held indefinitely for someone who never signed
+              up.
             </p>
           </section>
 

@@ -1,0 +1,52 @@
+-- `invite.email` stops being a plaintext address and becomes a peppered digest.
+--
+-- **Why this table and not `user.email`.** The invite table was the app's
+-- largest privacy exposure and the least obvious one. A row is deleted on
+-- accept and on reject, and nothing deleted it on expiry - `GetInvites` only
+-- ever filtered `expires > ?`. So every address anyone had ever typed into the
+-- invite box was still here, indefinitely, including addresses of people who
+-- never signed up, never consented, and have no Account to delete. They are not
+-- users; there was no path by which they could ever have asked us to stop
+-- holding it.
+--
+-- Hashing works here precisely because of how the column is read. Every read is
+-- an equality match against the caller's own `user.Email`
+-- (`service/invite.go`'s GetInvites, GetInvite, DeleteInvite), and the
+-- plaintext is never read back out and shown to anybody. A digest breaks no
+-- existing path. `user.email` is a different case - it is mailed to, so it
+-- stays plaintext.
+--
+-- **HMAC-SHA256, not a plain SHA-256.** The email address space is enumerable.
+-- A plain digest would let anyone holding a dump of this table confirm whether
+-- a specific named person had been invited, by hashing their address and
+-- grepping for it - which leaks nearly everything the plaintext did. The pepper
+-- (`INVITE_EMAIL_PEPPER`, a Fly secret) makes that check require the secret as
+-- well as the dump. It defaults to empty outside production, which degrades to
+-- a plain digest deterministically per environment.
+--
+-- **No schema change is needed.** A 64-character hex digest fits the existing
+-- `varchar(255)` and the existing `(account, email)` primary key. Only the
+-- column's COMMENT changes, so that the next person to read the schema is not
+-- told it holds an address.
+--
+-- **The backfill is not in this file, and cannot be.** MySQL 8 has SHA2() but
+-- no HMAC function, and a plain SHA-256 is the thing rejected above. So the
+-- existing rows are converted by a subcommand on the Go binary, which has the
+-- same HashEmail implementation the read path uses:
+--
+--     fly ssh console -a big-shop-api -C "/app/recipes hash-invite-emails"
+--
+-- It is idempotent - a value that is already a 64-character hex digest is left
+-- alone - so it is safe to run twice, and safe to run before or after this
+-- migration.
+--
+-- **Set INVITE_EMAIL_PEPPER before running it.** A backfill against an empty
+-- pepper produces plain digests that the peppered read path will never match,
+-- silently orphaning every live invite. Not fatal - they expire within 30 days
+-- and the lazy purge in service/invite.go then removes them - but avoidable.
+--
+-- Board item #59; see specs/account-deletion.md, "The invite table".
+
+ALTER TABLE `invite`
+  MODIFY COLUMN `email` varchar(255) NOT NULL
+    COMMENT 'HMAC-SHA256 (hex, peppered with INVITE_EMAIL_PEPPER) of the lowercased, trimmed address the invite was sent to. Never a plaintext address - see the header of this migration.';

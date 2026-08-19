@@ -357,6 +357,14 @@ unproxied origin to every visitor and undo the same-origin property.
 - `OPENAI_API_KEY` — GPT-4 Vision + GPT-3.5-turbo
 - `SENDGRID_API_KEY` — Email invitations
 - `AUTH0_DOMAIN` / `AUTH0_AUDIENCE` — Go JWT validation
+- `INVITE_EMAIL_PEPPER` — the HMAC key `service.HashEmail` digests `invite.email` with.
+  **Read server-side by the Go process, so it must never gain a `NEXT_PUBLIC_` prefix**;
+  publishing it to the browser bundle would hand every visitor the one secret that stops
+  a database dump being reversed by hashing a guessed address. Unset outside production,
+  which degrades to a plain (unpeppered) digest — the right trade for a local stack with
+  no real addresses in it, and it means no test needs a secret. Rotating it is not a
+  one-way door: `invite` is never more than ~30 days deep because expired rows are purged
+  lazily, so a rotation self-heals within a month. See `migrations/035_invite_email_hash.sql`.
 
 #### The DSN's query parameters
 
@@ -487,8 +495,9 @@ Two independent pipelines, one per deployable — an accepted consequence of
   check is never deployed
 - Config: `netlify-functions/recipes/fly.toml`; image:
   `netlify-functions/recipes/Dockerfile`
-- Needs a `FLY_API_TOKEN` repository secret; `DSN` and `SENDGRID_API_KEY` are Fly
-  secrets, `AUTH0_DOMAIN`/`AUTH0_AUDIENCE` are in `fly.toml`'s `[env]`
+- Needs a `FLY_API_TOKEN` repository secret; `DSN`, `SENDGRID_API_KEY` and
+  `INVITE_EMAIL_PEPPER` are Fly secrets, `AUTH0_DOMAIN`/`AUTH0_AUDIENCE` are in
+  `fly.toml`'s `[env]`
 - Reached from the browser through a Netlify `status = 200` rewrite, so it stays
   same-origin. Server-side callers address it directly
 - First-time setup, cutover and rollback:

@@ -13,11 +13,11 @@ Commit: 045c857
 Notes: Go suite + all 34 e2e tests green; verified against a real DB (five tables to zero, catalog intact, re-delete still 404). Code review found no correctness bugs. Applied from review: a `scope` type binding each WHERE fragment to its args (the shared list/shopping_list_event args were the fragile part), a doc comment stating that callers MUST pass a transaction since `execer` also admits *sql.DB, an ADR-0001 note that the catalog is deliberately untouched, and the ownership check moved back outside the transaction to match EditRecipe's documented precondition pattern. Kept the name `deleteRecipeData` (the spec names it) over the reviewer's `deleteRecipesCascade`.
 
 ## Session 2: Phase 1 — invite hardening
-Status: pending
+Status: done
 Scope: `service.HashEmail` (HMAC-SHA256 over the lowercased, trimmed address, peppered from `INVITE_EMAIL_PEPPER`); hash at `CreateInvite`/`GetInvites`/`GetInvite`/`DeleteInvite`; lazy purge of expired rows in `CreateInvite` and `GetInvites`; migration `035_invite_email_hash.sql` plus an idempotent `hash-invite-emails` subcommand for the backfill; `/privacy` invite retention and hashing copy.
 Depends on: none (independent of deletion, but sequenced after Session 1 to keep the line straight)
-Commit:
-Notes: Backfill is a Go subcommand rather than SQL because MySQL 8 has no HMAC and the spec rejects a plain SHA-256.
+Commit: 0329a2c
+Notes: Go suite, lint, typecheck, 367 frontend tests and all 34 e2e tests green. Verified live: a colliding pair converged on one digest row, an expired row purged in the same pass, second run a clean no-op, and the POST /invite -> GET /invites round trip still matched through the digest. Backfill is a Go subcommand (`hash-invite-emails`) rather than SQL because MySQL 8 has no HMAC and the spec rejects a plain SHA-256 — the reviewer agreed this is the only way to honour both halves of the spec. Applied from review: split `hashInvites` out behind the `execer` seam so the risky logic is unit-testable (it had no test at all), replaced the RowsAffected-based duplicate handling with an ignoring update plus one set-based sweep (RowsAffected's meaning depends on the DSN's clientFoundRows flag, a production secret), added a self-verification query since a subcommand does not run itself, and flushed telemetry on the subcommand's exit path. A test caught a real bug in the first fix: deriving the hashed count as `len(pending) - swept` goes negative when the sweep catches a straggler from an interrupted run, so the function now reports attempted/removed rather than a single derived number. Also documented INVITE_EMAIL_PEPPER in technical-architecture.md and docs/fly-migration-runbook.md (planned for Session 6; moved here because that is where the secret is introduced).
 
 ## Session 3: Phase 2 — the deletion service, database only
 Status: pending

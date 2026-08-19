@@ -77,7 +77,31 @@ being invalidated when a Recipe save coins a Unit. Nothing fails, and nothing 50
 is deliberately a degradation rather than a dependency, which is why local development, e2e
 and CI all run without them. Set them both or neither; one alone is treated as unset.
 
-Otherwise only `DSN` and `SENDGRID_API_KEY`. `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` are public
+**One more, added by board item #59** — the pepper `service.HashEmail` digests
+`invite.email` with, so that a database dump cannot be reversed by hashing a guessed
+address (`migrations/035_invite_email_hash.sql`):
+
+```bash
+fly secrets set INVITE_EMAIL_PEPPER='<a long random string>'
+```
+
+**Set it before running the backfill, not after.** The backfill is a subcommand rather
+than SQL, because MySQL has no HMAC function:
+
+```bash
+fly ssh console -a big-shop-api -C "/app/recipes hash-invite-emails"
+```
+
+Run against an empty pepper it produces plain digests that the peppered read path will
+never match, silently orphaning every live invite. Not fatal — they expire within 30 days
+and the lazy purge then removes them — but avoidable, and the ordering is free. The
+subcommand is idempotent (a value that is already a 64-character hex digest is left
+alone), so re-running it after fixing the order is safe.
+
+Unlike the two above, leaving this unset is not a clean degradation: invites keep working,
+but the digests become unpeppered, which is the protection the change exists for.
+
+Otherwise only `DSN`, `SENDGRID_API_KEY` and `INVITE_EMAIL_PEPPER`. `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` are public
 identifiers and are already
 pinned in `fly.toml`'s `[env]` block — deliberately, because getting them wrong does not
 fail loudly: with `AUTH0_DOMAIN` unset the JWKS fetch goes to `https:///.well-known/jwks.json`

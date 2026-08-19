@@ -13,6 +13,7 @@ import (
 
 	"recipes/internal/pkg/app"
 	"recipes/internal/pkg/common"
+	"recipes/internal/pkg/service"
 	"recipes/internal/pkg/telemetry"
 
 	"github.com/XSAM/otelsql"
@@ -35,6 +36,11 @@ var openapiAPI huma.API
 // rather than read from the environment again so that what is logged is what
 // the App actually built, not a second guess at it.
 var purgeConfigured bool
+
+// appDB is the database handle init() opened, kept so that maintenance
+// subcommands in main() can use the same pool - and the same DSN, TLS config
+// and pool limits - as the server does, rather than opening a second one.
+var appDB *sql.DB
 
 // routeTemplates is the set of path templates the router registered, used to
 // keep span names and metric labels bounded. Captured at startup because it is
@@ -82,6 +88,21 @@ const lambdaBasePath = "/.netlify/functions/recipes"
 // needed since route registration never touches it.
 func isOpenAPIMode() bool {
 	return len(os.Args) > 1 && os.Args[1] == "openapi"
+}
+
+// isHashInviteEmailsMode reports whether the process was invoked as
+// `... hash-invite-emails`, the one-off backfill that converts any plaintext
+// address left in `invite.email` into a peppered digest.
+//
+// A subcommand rather than a line of SQL in migrations/035_invite_email_hash.sql
+// because MySQL 8 has SHA2() but no HMAC, and a plain SHA-256 is what that
+// migration's header rejects - the address space is enumerable. Running it
+// through the same service.HashEmail the read path uses is also the only way to
+// guarantee the backfill and the reads agree.
+//
+// Unlike `openapi`, this one needs the database, so init() runs in full for it.
+func isHashInviteEmailsMode() bool {
+	return len(os.Args) > 1 && os.Args[1] == "hash-invite-emails"
 }
 
 // isServeMode reports whether the process should run as a plain HTTP server:
@@ -201,6 +222,8 @@ func init() {
 		log.Printf("could not register DB pool metrics: %v", err)
 	}
 
+	appDB = db
+
 	env := &common.Env{DB: db}
 
 	application, err := app.NewApp(env)
@@ -299,6 +322,25 @@ func main() {
 			panic(err.Error())
 		}
 		fmt.Print(string(spec))
+	} else if isHashInviteEmailsMode() {
+		converted, err := service.HashExistingInviteEmails(context.Background(), appDB)
+
+		// Flushed before reporting, and before any log.Fatal below: this
+		// process exits in seconds, so without it the spans for a backfill that
+		// went wrong - the one run anybody would want to look at afterwards -
+		// are still sitting in the batch processor when it dies. The serve
+		// branch flushes for the same reason at the other end of its life.
+		flushCtx, cancel := context.WithTimeout(context.Background(), telemetry.ShutdownTimeout)
+		_ = shutdownTelemetry(flushCtx)
+		cancel()
+
+		if err != nil {
+			// Fatal: a partially-completed backfill is worth knowing about
+			// loudly. It is idempotent, so the fix is to correct whatever
+			// failed and run it again.
+			log.Fatalf("hashing invite emails: %v", err)
+		}
+		log.Printf("converted %d plaintext invite address(es); none remain", converted)
 	} else if isServeMode() {
 		// Said once at startup because the failure it describes is silent
 		// otherwise: with only one of NETLIFY_PURGE_TOKEN/NETLIFY_SITE_ID set,

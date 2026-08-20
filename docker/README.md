@@ -191,6 +191,25 @@ empty database again, and the synthetic migrate-and-seed step in
 entrypoint runs `docker-entrypoint-initdb.d` only when the data directory is
 empty, so editing a migration and restarting the container does nothing.
 
+## Collation: local now matches production
+
+`migrations/040_charset_utf8mb4_bin.sql` brings every table to
+`utf8mb4` / `utf8mb4_bin`. In production that is mostly about what can be
+*stored* - four tables were `latin1`, which cannot hold a character outside
+its 256, and seven were `utf8mb3`, which cannot hold a 4-byte one.
+
+Locally it changes something else, and it is worth knowing about. A database
+built from `migrations/*.sql` used to be uniformly `utf8mb4_0900_ai_ci` -
+case- and accent-**insensitive** - while production has always been binary and
+therefore **sensitive**. So `INSERT INTO ingredient (name) VALUES ('Garlic')
+ON DUPLICATE KEY UPDATE id=id` (`service/recipe.go`) collapsed `Garlic` and
+`garlic` into one row on a laptop and created two in production. Local now
+behaves the way production does.
+
+One thing that gets better as a result: `sync-from-prod.sh` imports production
+rows into these tables, and any pair differing only by case was a
+duplicate-key error against the old local collation.
+
 ## When the `db` container will not go healthy
 
 `mysql-init/01-migrate-and-seed.sh` applies migrations with `--force`, which

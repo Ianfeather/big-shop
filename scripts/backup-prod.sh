@@ -5,6 +5,9 @@
 # Usage:
 #   scripts/backup-prod.sh
 #
+# Host, port, username and database come from .env.tidb (tracked in git - see
+# scripts/lib/tidb-env.sh); only the password is typed, on every run.
+#
 # ---------------------------------------------------------------------------
 # Why Dumpling and not BR
 # ---------------------------------------------------------------------------
@@ -68,16 +71,10 @@ if [ -n "$CA_FILE" ] && [ ! -f "$CA_FILE" ]; then
   exit 1
 fi
 
-read -rp "TiDB host: " TIDB_HOST
-read -rp "TiDB port [4000]: " TIDB_PORT
-TIDB_PORT="${TIDB_PORT:-4000}"
-read -rp "TiDB username: " TIDB_USER
-read -rsp "TiDB password: " TIDB_PASSWORD
-echo
-read -rp "Database [bigshop]: " DB_NAME
-DB_NAME="${DB_NAME:-bigshop}"
+. scripts/lib/tidb-env.sh
+tidb_env_load
 
-OUT_DIR="${BACKUP_ROOT}/${DB_NAME}-$(date +%Y%m%d-%H%M%S)"
+OUT_DIR="${BACKUP_ROOT}/${TIDB_DB}-$(date +%Y%m%d-%H%M%S)"
 
 # Guard: a backup full of email addresses must not land somewhere git tracks.
 case "$(cd "$(dirname "$OUT_DIR")" 2>/dev/null && pwd -P || echo "$OUT_DIR")" in
@@ -88,6 +85,11 @@ case "$(cd "$(dirname "$OUT_DIR")" 2>/dev/null && pwd -P || echo "$OUT_DIR")" in
     ;;
 esac
 
+# Deliberately after the guard above: nothing should ask for a password and
+# then refuse to run. Also before the mkdir, so abandoning the prompt does not
+# leave an empty dated directory behind.
+tidb_prompt_password
+
 mkdir -p "$OUT_DIR"
 
 CA_IN_CONTAINER="$CONTAINER_CA"
@@ -97,7 +99,7 @@ if [ -n "$CA_FILE" ]; then
   echo "Using the CA at $CA_FILE"
 fi
 
-echo "Backing up ${DB_NAME} from ${TIDB_HOST} to ${OUT_DIR} ..."
+echo "Backing up ${TIDB_DB} from ${TIDB_HOST} to ${OUT_DIR} ..."
 
 # --consistency: "auto" resolves to TiDB's snapshot isolation, which needs no
 #   locks and no privileges a TiDB Cloud user lacks. If the instance rejects it
@@ -125,7 +127,7 @@ docker run --rm \
     --filetype sql \
     --consistency "$4" \
     --compress gzip' \
-  "$TIDB_HOST" "$TIDB_PORT" "$TIDB_USER" "$DB_NAME" "${CONSISTENCY:-auto}" "$CA_IN_CONTAINER"
+  "$TIDB_HOST" "$TIDB_PORT" "$TIDB_USER" "$TIDB_DB" "${CONSISTENCY:-auto}" "$CA_IN_CONTAINER"
 
 rm -f "$OUT_DIR/.ca.pem"
 
@@ -139,7 +141,7 @@ echo "⚠  This backup contains real user emails, Auth0 ids and invite tokens."
 echo "   Keep it out of the repository and off anything shared."
 echo
 echo "To restore into your local dev database:"
-echo "   gunzip -c ${OUT_DIR}/*.sql.gz | docker compose exec -T db mysql -uroot -proot ${DB_NAME}"
+echo "   gunzip -c ${OUT_DIR}/*.sql.gz | docker compose exec -T db mysql -uroot -proot ${TIDB_DB}"
 echo
 echo "To restore into a fresh TiDB Cloud instance, use TiDB Lightning or the"
 echo "console's import - a plain mysql client replay works for a database this"

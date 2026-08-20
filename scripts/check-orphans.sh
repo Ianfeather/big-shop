@@ -28,23 +28,19 @@
 # MySQL 9+ having dropped the mysql_native_password plugin TiDB accounts often
 # still use.
 #
-# Credentials come from the TiDB Cloud console. The password is passed via the
-# container's environment, never on the command line where it would show up in
-# the process list.
+# Host, port, username and database come from .env.tidb (tracked in git - see
+# scripts/lib/tidb-env.sh); only the password is typed, on every run. It is
+# passed via the container's environment, never on the command line where it
+# would show up in the process list.
 #
 # Usage:
 #   scripts/check-orphans.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-read -rp "TiDB host: " TIDB_HOST
-read -rp "TiDB port [4000]: " TIDB_PORT
-TIDB_PORT="${TIDB_PORT:-4000}"
-read -rp "TiDB username: " TIDB_USER
-read -rsp "TiDB password: " TIDB_PASSWORD
-echo
-read -rp "Database [bigshop]: " TIDB_DB
-TIDB_DB="${TIDB_DB:-bigshop}"
+. scripts/lib/tidb-env.sh
+tidb_env_load
+tidb_prompt_password
 
 # SQL on stdin; any extra mysql flags as arguments.
 run_mysql() {

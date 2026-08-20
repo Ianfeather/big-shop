@@ -326,6 +326,10 @@ a fix to it means waiting another fourteen. That is not a workable loop, and wit
 deliberate answer the loop people actually use is "deploy it and watch the first real
 signup", which tests the copy on a stranger.
 
+The step-by-step operator version of this section, including what to check in each
+message and the order to do it in, is
+[`docs/email-testing-runbook.md`](../../docs/email-testing-runbook.md).
+
 So three mechanisms, each answering a different question. They are separate on purpose:
 the fast one is not trustworthy about deliverability, and the trustworthy one is too slow
 to iterate on.

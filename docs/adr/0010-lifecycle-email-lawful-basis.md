@@ -54,6 +54,11 @@ Two further conditions, both cheap and both mandatory:
 - **`/privacy` describes the sequence plainly**, including that the suppression list is
   permanent and is not erasable on request.
 
+All three are checked before the programme is switched on — see
+[`docs/email-testing-runbook.md`](../email-testing-runbook.md), whose step 2 verifies the
+unsubscribe footer and the `List-Unsubscribe` headers in a real client, and step 4 confirms
+the suppression actually takes effect.
+
 ## The weakest joint
 
 The Day 8 email — "here are some recipes to add to your list" — is content, and content

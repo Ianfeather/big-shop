@@ -548,5 +548,8 @@ which is correct while a PR is open, and wrong the second it lands.
 - [Netlify Dashboard](https://app.netlify.com/sites/big-shop/overview)
 - [Fly.io Dashboard](https://fly.io/apps/big-shop-api) — the Go API. First-time setup,
   cutover and rollback: [fly-migration-runbook.md](./docs/fly-migration-runbook.md)
+- [SendGrid](https://app.sendgrid.com) — all outbound email. The onboarding programme ships
+  behind `ONBOARDING_EMAIL_ENABLED` (off); how to test it and switch it on:
+  [email-testing-runbook.md](./docs/email-testing-runbook.md)
 - [TiDB Console](https://tidbcloud.com/console/clusters/10445360365857932862/sqleditor?orgId=1372813089209222715&projectId=1372813089454538934)
 - [Auth0 Management](https://manage.auth0.com/dashboard/eu/dev-x-n37k6b/applications/HxkTOH3ZYxjbsgrVI4ii1CV2TQx7hk9G/settings)

@@ -69,7 +69,7 @@
 -- specs/completed/account-deletion.md.
 CREATE TABLE `consent_event` (
   `id` int NOT NULL AUTO_INCREMENT COMMENT 'primary key',
-  `user_id` varchar(255) NOT NULL COMMENT 'auth0 id; FK to user.id, the same key account_user.user_id uses',
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_bin NOT NULL COMMENT 'auth0 id; FK to user.id, the same key account_user.user_id uses',
   `analytics` boolean NOT NULL COMMENT 'TRUE = granted, FALSE = declined or withdrawn',
   -- The version of the privacy policy the decision was made against, as a date
   -- string (lib/consent.ts's POLICY_VERSION). This is what lets a future

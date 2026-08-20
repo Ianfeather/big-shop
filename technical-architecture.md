@@ -270,6 +270,30 @@ NEXT_PUBLIC_HOST=https://www.bigshop.life
 Netlify UI wins over this file. That is what makes the UI the control surface and this the
 default — and why rolling the API cutover back means changing the UI values, not this file.
 
+### Script variables (`.env.tidb`)
+
+Read by `scripts/lib/tidb-env.sh`, and therefore by `scripts/sync-from-prod.sh`,
+`scripts/check-orphans.sh` and `scripts/backup-prod.sh`. Nothing in the running
+application reads them — `@next/env` loads `.env`, `.env.local` and
+`.env.<NODE_ENV>`, and `.env.tidb` is none of those.
+
+| Variable | Default | Notes |
+|---|---|---|
+| `TIDB_HOST` | none — required | From the production `DSN` in the Netlify UI |
+| `TIDB_USER` | none — required | Same place |
+| `TIDB_PORT` | `4000` | TiDB Cloud's protocol port, not MySQL's `3306` |
+| `TIDB_DB` | `bigshop` | |
+| `ACCOUNT_ID` | none — asks | `sync-from-prod.sh` only; deliberately not defaulted to `1` |
+
+**The file is committed, and that is the point.** A host, port, username and
+database name identify an instance without opening it, so none of them is a
+secret, and checking them in is what reduces every one of those scripts to a
+single password prompt. The password is the secret and lives in none of this:
+it is typed on each run, held in memory, and passed to the `mysql`/`mysqldump`/
+Dumpling containers through their environment rather than on a command line the
+host's process list would show. Exported environment variables override the
+file, so a one-off run elsewhere edits nothing.
+
 ### Telemetry variables, and which of them are secret
 
 Set in the Netlify UI, not committed. Three runtimes, three different shapes,

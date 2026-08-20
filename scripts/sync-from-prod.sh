@@ -17,17 +17,27 @@
 #
 # Usage:
 #   scripts/sync-from-prod.sh
+#
+# Host, port, username, database and account id come from .env.tidb (tracked in
+# git - see scripts/lib/tidb-env.sh); only the password is typed, on every run.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-read -rp "TiDB host: " TIDB_HOST
-read -rp "TiDB port [4000]: " TIDB_PORT
-TIDB_PORT="${TIDB_PORT:-4000}"
-read -rp "TiDB username: " TIDB_USER
-read -rsp "TiDB password: " TIDB_PASSWORD
-echo
-read -rp "Account id [1]: " ACCOUNT_ID
-ACCOUNT_ID="${ACCOUNT_ID:-1}"
+. scripts/lib/tidb-env.sh
+tidb_env_load
+
+# ACCOUNT_ID is the one value that still asks when it has not been set. It can
+# live in .env.tidb like the rest, but it must not silently default: migration
+# 012 swapped accounts around, so 1 is not reliably yours in production, and a
+# wrong guess pulls somebody else's recipes onto your laptop. Unset means ask.
+if [ -z "${ACCOUNT_ID:-}" ]; then
+  echo "ACCOUNT_ID is not set in .env.tidb. Find yours with"
+  echo "  SELECT * FROM account_user;   -- in the TiDB console"
+  read -rp "Account id [1]: " ACCOUNT_ID
+  ACCOUNT_ID="${ACCOUNT_ID:-1}"
+fi
+
+tidb_prompt_password
 
 mkdir -p docker/prod-dumps
 DUMP_FILE="docker/prod-dumps/prod-sync-${ACCOUNT_ID}-$(date +%Y%m%d-%H%M%S).sql"
@@ -70,17 +80,17 @@ run_mysqldump() {
 }
 
 echo "Exporting shared reference tables (ingredients, units, tags, departments)..."
-run_mysqldump bigshop department unit ingredient tag ingredient_department > "$DUMP_FILE"
+run_mysqldump "$TIDB_DB" department unit ingredient tag ingredient_department > "$DUMP_FILE"
 
 echo "Exporting your recipes (account_id=${ACCOUNT_ID})..."
-run_mysqldump bigshop recipe --where="account_id=${ACCOUNT_ID}" >> "$DUMP_FILE"
+run_mysqldump "$TIDB_DB" recipe --where="account_id=${ACCOUNT_ID}" >> "$DUMP_FILE"
 
 echo "Exporting those recipes' ingredients..."
-run_mysqldump bigshop part \
+run_mysqldump "$TIDB_DB" part \
   --where="recipe_id IN (SELECT id FROM recipe WHERE account_id=${ACCOUNT_ID})" >> "$DUMP_FILE"
 
 echo "Exporting those recipes' tags..."
-run_mysqldump bigshop recipe_tag \
+run_mysqldump "$TIDB_DB" recipe_tag \
   --where="recipe_id IN (SELECT id FROM recipe WHERE account_id=${ACCOUNT_ID})" >> "$DUMP_FILE"
 
 echo "Saved to ${DUMP_FILE}"

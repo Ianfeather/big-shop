@@ -12,14 +12,14 @@ production instead of the two made-up ones.
 
 ## What `scripts/sync-from-prod.sh` does
 
-One command, no arguments or env vars:
+One command, no arguments:
 
 ```bash
 scripts/sync-from-prod.sh
 ```
 
-It prompts for TiDB host, port (defaults to `4000`), username, password, and
-account id (defaults to `1`), then:
+It reads the connection details from `.env.tidb` and asks only for the
+password (see "Connection details" below), then:
 1. Exports full copies of the shared reference tables - `ingredient`,
    `unit`, `tag`, `department`, `ingredient_department`. These aren't
    scoped to any account, so they're pulled in whole.
@@ -53,29 +53,69 @@ SQL editor (link in `CLAUDE.md`):
 SELECT * FROM account_user;
 ```
 
-Your row's `account_id` is the value to enter when the script prompts for it.
+Your row's `account_id` goes in `.env.tidb` as `ACCOUNT_ID`. It is the one
+value that is *not* defaulted: leave it unset and the script asks rather than
+assuming `1`, because assuming wrong would pull somebody else's recipes onto
+your laptop.
 
 ## Connection details
 
-- Host / username / password - all three can be read straight out of the
-  production `DSN` connection string, which lives in Netlify's environment
-  variables UI (see the Netlify Dashboard link in `CLAUDE.md`) rather than
-  anywhere in this repo. The `DSN` format is
-  `user:password@tcp(host:port)/bigshop?...` (see `main.go`'s
+`sync-from-prod.sh`, `check-orphans.sh` and `backup-prod.sh` share one source
+of connection details: **`.env.tidb` at the repo root**, read by
+`../scripts/lib/tidb-env.sh`. Every one of them asks for exactly one thing at
+run time, the password.
+
+```
+TIDB_HOST=...        # no default - must be set
+TIDB_USER=...        # no default - must be set
+TIDB_PORT=4000       # TiDB Cloud's protocol port, not MySQL's usual 3306
+TIDB_DB=bigshop
+ACCOUNT_ID=          # sync-from-prod.sh only; unset means it asks
+```
+
+**`.env.tidb` is tracked in git**, like `.env.development` and
+`.env.production`. Nothing in it is a secret: a hostname, a port, a username
+and a database name *identify* the instance, they do not open it. Checking them
+in is what makes these scripts a one-liner on a fresh clone instead of four
+questions on every run. The password is the secret, and it is not in there.
+
+Anything already exported in your environment beats the file, so a one-off run
+against somewhere else needs no edit and nothing put back afterwards:
+
+```bash
+TIDB_HOST=some-other-gateway scripts/check-orphans.sh
+```
+
+Missing `TIDB_HOST` or `TIDB_USER` is a hard error naming what is missing -
+they are deliberately not defaulted, because a script that silently connects
+somewhere you did not mean is worse than one that refuses.
+
+- **Host and username** can be read straight out of the production `DSN`
+  connection string, which lives in Netlify's environment variables UI (see the
+  Netlify Dashboard link in `CLAUDE.md`) rather than anywhere in this repo. The
+  `DSN` format is `user:password@tcp(host:port)/bigshop?...` (see `main.go`'s
   `sql.Open("mysql", os.Getenv("DSN"))`). The query parameters after the `?`
   are load-bearing rather than incidental - see
   [technical-architecture.md](../technical-architecture.md#the-dsns-query-parameters)
   before rewriting one.
-- Port - defaults to `4000`, TiDB Cloud's protocol port (not MySQL's usual
-  `3306`). Only enter a different one if yours differs.
-- Password - never passed as an argument or stored anywhere by the script.
-  It prompts for it once (silently) and holds it only in memory for the
-  `mysqldump` calls that need it. Credential-injection tooling (1Password
-  CLI, macOS Keychain) was considered and deliberately skipped for now -
-  1Password's seamless biometric-unlock flow is inherently host-bound and
-  can't run purely in Docker, and the fully-containerized alternative
-  (service account tokens) needs a compatible plan tier and a separate
-  shared vault, which wasn't judged worth it yet.
+- **Password** - never passed as an argument, never read from `.env.tidb` or
+  from the environment, and stored nowhere. Each script prompts once, silently,
+  and holds it in memory only for the container calls that need it, which
+  receive it as an environment variable rather than on a command line where the
+  host's process list would show it. A script whose stdin is not a terminal
+  fails with that explanation rather than reading a line from whatever is piped
+  in. Credential-injection tooling (1Password CLI, macOS Keychain) was
+  considered and deliberately skipped for now - 1Password's seamless
+  biometric-unlock flow is inherently host-bound and can't run purely in
+  Docker, and the fully-containerized alternative (service account tokens)
+  needs a compatible plan tier and a separate shared vault, which wasn't judged
+  worth it yet.
+
+`.env.tidb` is parsed, not `source`d. It holds credentials-adjacent
+configuration, not code, and sourcing it would execute whatever ended up in it
+- including a value pasted out of a console with a `$(...)` somewhere in it.
+Next.js never sees the file either: `@next/env` loads `.env`, `.env.local` and
+`.env.<NODE_ENV>`, and this is none of those.
 
 ## Why mysqldump runs inside Docker
 
@@ -251,8 +291,8 @@ account's recipes. For an actual backup of everything:
 scripts/backup-prod.sh
 ```
 
-Prompts for the same connection details, then writes a compressed logical dump
-to `~/big-shop-backups/bigshop-<timestamp>/` - one schema file and one data
+Uses the same `.env.tidb` and asks only for the password, then writes a
+compressed logical dump to `~/big-shop-backups/bigshop-<timestamp>/` - one schema file and one data
 file per table, the same layout as the older dumps in `backups/`.
 
 **It uses Dumpling, not BR.** BR is the tool people reach for and it cannot work
@@ -269,9 +309,10 @@ subject ids and invite tokens. `backups/` is tracked in git and already holds
 seven users' email addresses from 2024, which is enough of that. The script
 refuses to write anywhere inside the working tree.
 
-Three knobs, all env vars: `BACKUP_ROOT` to change the destination,
-`CONSISTENCY=none` if the instance rejects Dumpling's default snapshot read, and
-`CA_FILE` if you ever need a private CA.
+Three further knobs, all env vars, and none of them in `.env.tidb` because all
+three are per-run rather than per-instance: `BACKUP_ROOT` to change the
+destination, `CONSISTENCY=none` if the instance rejects Dumpling's default
+snapshot read, and `CA_FILE` if you ever need a private CA.
 
 **A Docker Desktop trap worth knowing**, since the first version of this script
 hit it: don't bind-mount the host's `/etc/ssl/cert.pem` into the container. On

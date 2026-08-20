@@ -45,7 +45,22 @@ export default defineConfig({
     command: 'npm run dev:full',
     url: `${BASE_URL}/recipes`,
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    // Generous because on a cold CI runner almost none of this is the app
+    // starting. A measured failing run spent ~110s of its 120s budget before
+    // MySQL had even been asked to start: pulling mysql:8.0 (129MB) and
+    // building the Go API image from scratch, with `docker compose up`
+    // reporting "Container bigshop-e2e-db-1 Waiting" as the clock ran out.
+    // Locally both are cached and the whole thing is up in seconds, which is
+    // why this only ever failed in CI - and it did so on unrelated branches
+    // too, at roughly one run in four.
+    //
+    // Raising the ceiling costs nothing in the normal case: Playwright polls
+    // `url` and proceeds the moment it answers. It only changes how long a
+    // genuinely stuck stack is given - and the common cause of that, a
+    // migration that failed to apply, now makes `docker compose up` exit
+    // non-zero rather than hang, so dev-full.sh fails fast instead of
+    // burning the budget.
+    timeout: 300_000,
     env: {
       WEB_PORT: String(WEB_PORT),
       API_PORT: String(API_PORT),

@@ -187,6 +187,34 @@ npm run dev:full
 empty database again, and the synthetic migrate-and-seed step in
 `mysql-init/` runs fresh.
 
+`down -v` is also the only way to re-run migrations at all: the MySQL
+entrypoint runs `docker-entrypoint-initdb.d` only when the data directory is
+empty, so editing a migration and restarting the container does nothing.
+
+## When the `db` container will not go healthy
+
+`mysql-init/01-migrate-and-seed.sh` applies migrations with `--force`, which
+skips a failing statement and still exits 0. Left alone that hides a broken
+migration as a hole in the schema behind a Healthy container — a
+collation-incompatible `CREATE TABLE consent_event` was skipped exactly this
+way, and surfaced as a 500 from the consent endpoint that looked like an
+application bug.
+
+Every error the replay produces is now checked against
+`mysql-init/expected-migration-errors.txt`, which names the few early
+statements that cannot apply to an empty schema and explains each. Anything
+else writes `ok = 0` to `bigshop._migration_status`, which is what the
+healthcheck reads:
+
+```bash
+docker compose logs db | grep -A20 'not in expected-migration-errors'
+docker compose exec db mysql -uroot -proot -e \
+  "SELECT * FROM bigshop._migration_status"
+```
+
+Fix the migration — or add it to the allowlist with a note, if it genuinely
+cannot apply from scratch — then `docker compose down -v && npm run dev:full`.
+
 ## Checking for orphaned rows: `scripts/check-orphans.sh`
 
 ```bash

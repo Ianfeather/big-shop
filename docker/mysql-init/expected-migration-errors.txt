@@ -1,0 +1,45 @@
+# Migration errors that are expected on a from-scratch replay.
+#
+# migrations/*.sql were applied by hand against a live database over several
+# years, not designed to be replayed in order from an empty schema. A handful
+# of statements therefore cannot succeed here, and 01-migrate-and-seed.sh runs
+# `mysql --force` so the rest of the file still applies.
+#
+# --force on its own is indiscriminate: it skips a genuinely broken statement
+# just as happily as a known-conflicting one, and mysql still exits 0. That is
+# not theoretical - a collation-incompatible `CREATE TABLE consent_event` was
+# skipped outright, the container reported healthy, and the first symptom was
+# the e2e suite failing in global-setup.ts with a 500 `could not record
+# consent`, which looks exactly like an application bug and is nothing of the
+# kind.
+#
+# So every error is checked against this list. Anything not here fails
+# container init. Format, one per line:
+#
+#     <migration file>:<line>:<mysql errno>
+#
+# The line number is part of the key deliberately. These files are frozen
+# history and should never move; if one does, the entry stops matching and
+# somebody has to look at it again. That is the intended outcome.
+#
+# Adding an entry is a claim that the statement CANNOT succeed on an empty
+# database and that skipping it leaves the schema correct. Say why, in a
+# comment, or the next person has to re-derive it.
+
+# 002 re-adds `recipe.remote_url`, which 001_init.sql - a later checkpoint of
+# the same schema, written after the fact - already includes.
+#   ERROR 1060: Duplicate column name 'remote_url'
+002_unique.sql:2:1060
+
+# 006 backfills recipe_user from the author's 45 live recipes. A from-scratch
+# database has no recipe rows, so the INSERT trips the FK to `recipe`. Data
+# migration against data that only ever existed in production; nothing to
+# apply here.
+#   ERROR 1452: Cannot add or update a child row (fk_recipe_user_recipe_id)
+006_user.sql:30:1452
+
+# 012 repoints two named Auth0 subjects at different accounts. Neither
+# account_user row exists on a fresh database, so the UPDATE trips the FK to
+# `account`. Same story as 006.
+#   ERROR 1452: Cannot add or update a child row (fk_account_user_account_id)
+012_user_account.sql:3:1452

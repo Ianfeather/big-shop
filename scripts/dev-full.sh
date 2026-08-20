@@ -67,12 +67,33 @@ export DB_PORT API_PORT GRAFANA_PORT OTLP_HTTP_PORT
 # out costs nothing that decision was protecting.
 START_LGTM="${START_LGTM:-true}"
 
+# `api` depends_on db being healthy, and the db healthcheck now asserts that
+# the migrations actually applied (docker-compose.yml explains what it reads
+# and why). So "dependency failed to start: container ... is unhealthy" here
+# usually means a migration failed, not that MySQL is slow - and compose's
+# message doesn't say where to look.
+compose_up_failed() {
+  cat >&2 <<'MSG'
+
+docker compose could not bring the stack up. If it reported the db as
+unhealthy, the most likely cause is a migration that failed to apply:
+
+    docker compose logs db | grep -A20 'not in expected-migration-errors'
+
+Fix the migration, then recreate the volume - the MySQL entrypoint only
+replays migrations when the data directory is empty:
+
+    docker compose down -v && npm run dev:full
+MSG
+  exit 1
+}
+
 if [ "$START_LGTM" = "true" ]; then
   echo "Starting local MySQL + Go API + LGTM (docker compose)..."
-  docker compose up -d --build db api lgtm
+  docker compose up -d --build db api lgtm || compose_up_failed
 else
   echo "Starting local MySQL + Go API (docker compose); LGTM disabled."
-  docker compose up -d --build db api
+  docker compose up -d --build db api || compose_up_failed
 fi
 
 # The health poll, the browser and server-side code all address the API through

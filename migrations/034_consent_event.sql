@@ -109,8 +109,9 @@
 -- on the two engines, and it is expected to fail in production. MySQL will not
 -- alter a column while a constraint points at it, so locally the constraint
 -- must come off and go back on around the change. Production never created it:
--- TiDB declares 7 of the 15 foreign keys `migrations/*.sql` does (see
--- docker/README.md and scripts/check-orphans.sh), and `account_user` there has
+-- TiDB declares only a fraction of the foreign keys `migrations/*.sql` does
+-- (see docker/README.md and scripts/check-orphans.sh, which counts both for a
+-- given database rather than quoting a number), and `account_user` there has
 -- a plain `KEY` where this repo declares a constraint. Dropping a constraint
 -- that does not exist is an error, not a no-op, so a production run skips this
 -- statement - the local seeding script passes `mysql --force` and skips it for

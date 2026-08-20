@@ -14,9 +14,9 @@
 --                where `<table>` exists. Needed because a declared-only check
 --                covers whatever the server happens to have registered, and
 --                production has far fewer constraints than a database built
---                from migrations/*.sql: 7 against 15 at the time of writing.
---                Checking only those 7 would have looked clean while missing
---                more than half the schema, which is worse than not checking.
+--                from migrations/*.sql. Checking only the declared ones would
+--                have looked clean while missing much of the schema, which is
+--                worse than not checking.
 --
 -- DATA_TYPE comes back because the caller skips a `<> 0` guard on non-integer
 -- columns. MySQL coerces a string to 0 in that comparison, so applying it to

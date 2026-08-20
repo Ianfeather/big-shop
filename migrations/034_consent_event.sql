@@ -97,6 +97,25 @@
 -- case would newly collide. `utf8mb4_bin` keeps the byte-exact comparison
 -- `utf8_bin` already gave production.
 --
+-- **This file was applied to production once before, in a different form, and
+-- that run was undone rather than kept.** The first attempt pinned `utf8_bin`
+-- to match production and succeeded there, which is how production came to
+-- have a `consent_event` at all; the same text then failed against every local
+-- and CI database, silently, because `docker/mysql-init/01-migrate-and-seed.sh`
+-- applies migrations with `mysql --force` and simply skipped the failing
+-- `CREATE TABLE`. Two databases had run two different versions of one
+-- migration and reached two different schemas, and no edit to this file could
+-- have converged them.
+--
+-- So production's `consent_event` was dropped and this file re-run against it.
+-- That was only defensible because the table was **empty** - confirmed by
+-- `SELECT COUNT(*)` immediately before, not assumed. This table is evidence
+-- that consent was given, and the header above argues at length that a record
+-- which has been rewritten demonstrates nothing; an empty one had nothing to
+-- demonstrate and nothing to lose. **Do not repeat that shortcut once rows
+-- exist** - by then the answer is a new migration that alters the column in
+-- place, not a drop.
+--
 -- **This is deliberately not the whole clean-up.** Production's charsets are a
 -- patchwork accreted over years - `list` and `part` are `latin1_bin`, `tag` is
 -- `utf8mb4_bin`, `recipe` and `account` are `utf8_bin` - and normalising all

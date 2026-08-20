@@ -17,6 +17,7 @@ import (
 func clearAuth0Env(t *testing.T) {
 	t.Helper()
 	t.Setenv("AUTH0_DOMAIN", "")
+	t.Setenv("AUTH0_TENANT_DOMAIN", "")
 	t.Setenv("AUTH0_MGMT_CLIENT_ID", "")
 	t.Setenv("AUTH0_MGMT_CLIENT_SECRET", "")
 	t.Setenv("SENDGRID_API_KEY", "")
@@ -166,6 +167,58 @@ func TestDeleteAuth0User(t *testing.T) {
 		}
 		if strings.Contains(deletePath, " ") {
 			t.Errorf("path was not escaped: %q", deletePath)
+		}
+	})
+
+	t.Run("a custom domain does not move the audience", func(t *testing.T) {
+		// **Regression test for a failure that only appears months later.**
+		//
+		// Auth0's rule for the Management API behind a custom domain is
+		// asymmetric: the audience must stay the *canonical* tenant domain,
+		// while the token request and the API call must share a host. Adding a
+		// custom domain forces AUTH0_DOMAIN to become it - the Go API validates
+		// the issuer of login tokens, which the custom domain would then mint -
+		// so an audience derived from AUTH0_DOMAIN would silently follow it
+		// somewhere Auth0 rejects, and deletion would start failing in a way
+		// that reads like an Auth0 outage rather than a config mismatch.
+		clearAuth0Env(t)
+		t.Setenv("AUTH0_DOMAIN", "auth.bigshop.app") // the custom domain
+		t.Setenv("AUTH0_TENANT_DOMAIN", "tenant.eu.auth0.com")
+		t.Setenv("AUTH0_MGMT_CLIENT_ID", "an-id")
+		t.Setenv("AUTH0_MGMT_CLIENT_SECRET", "a-secret")
+
+		var tokenAudience string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/oauth/token" {
+				_ = r.ParseForm()
+				tokenAudience = r.Form.Get("audience")
+				_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "t"})
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		defer srv.Close()
+		auth0BaseURLOverride = srv.URL
+		defer func() { auth0BaseURLOverride = "" }()
+
+		if _, err := DeleteAuth0User(context.Background(), "auth0|123"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if tokenAudience != "https://tenant.eu.auth0.com/api/v2/" {
+			t.Errorf("audience = %q, want the canonical tenant domain - a custom domain here is rejected by Auth0", tokenAudience)
+		}
+		if strings.Contains(tokenAudience, "bigshop.app") {
+			t.Errorf("the audience followed the custom domain: %q", tokenAudience)
+		}
+	})
+
+	t.Run("without a custom domain the tenant domain is just AUTH0_DOMAIN", func(t *testing.T) {
+		// The fallback, which is the state today: one variable, both uses, and
+		// the split above changes nothing.
+		clearAuth0Env(t)
+		t.Setenv("AUTH0_DOMAIN", "tenant.eu.auth0.com")
+		if got := auth0TenantDomain(); got != "tenant.eu.auth0.com" {
+			t.Errorf("auth0TenantDomain() = %q, want it to fall back to AUTH0_DOMAIN", got)
 		}
 	})
 

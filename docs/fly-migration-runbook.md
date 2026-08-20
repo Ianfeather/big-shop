@@ -110,6 +110,12 @@ fly secrets set \
   AUTH0_MGMT_CLIENT_SECRET='<its client secret>'
 ```
 
+**If the tenant ever gets a custom domain, set `AUTH0_TENANT_DOMAIN` too**, to the
+canonical `something.region.auth0.com` name. Auth0 requires the Management API
+audience to remain the canonical domain even behind a custom one, while `AUTH0_DOMAIN`
+must become the custom domain for login-token validation. The code falls back to
+`AUTH0_DOMAIN` while the two are the same, which is why it is unset today.
+
 **Leaving these unset is not a clean degradation, and this one matters.** Deletion still
 runs and still deletes every database row, but it *skips* removing the Auth0 identity —
 so the deleted user can still log in, resolving to nothing. That is precisely the failure

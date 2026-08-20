@@ -36,16 +36,49 @@ var erasureHTTPClient = &http.Client{Timeout: 10 * time.Second}
 // request somewhere else.
 var (
 	sendGridBaseURL = "https://api.sendgrid.com"
-	// Empty means "derive it from AUTH0_DOMAIN", which is what production does.
+	// Empty means "derive it from the tenant domain", which is what production
+	// does.
 	auth0BaseURLOverride string
 )
+
+// auth0TenantDomain is the **canonical** Auth0 tenant domain - the
+// `something.region.auth0.com` one - as opposed to a custom domain.
+//
+// **The distinction only appears once a custom domain exists, and getting it
+// wrong then breaks deletion in a way that reads like an Auth0 outage.** Auth0's
+// rule for the Management API behind a custom domain is asymmetric: the token
+// `audience` must stay the canonical tenant domain ("Continue to use your
+// default tenant domain name ... instead of your custom domain when specifying
+// an audience"), while the token request and the API call must share a host
+// ("All requests ... must use the same domain").
+//
+// Deriving both from AUTH0_DOMAIN, as this used to, is correct only while the
+// two are the same string. The moment a custom domain is added, AUTH0_DOMAIN has
+// to become it - the Go API validates the issuer of login tokens, and those
+// would then be issued by the custom domain - and the audience would silently
+// follow it somewhere Auth0 rejects.
+//
+// So the Management API is pinned to the canonical domain for both the audience
+// and the host. A server-to-server call has no user-facing surface, so it gains
+// nothing from the branded domain, and pinning it means adding a custom domain
+// later is pure Auth0 configuration with no code change.
+//
+// AUTH0_TENANT_DOMAIN only has to be set once AUTH0_DOMAIN stops being the
+// canonical domain. Until then the fallback is the same value, so this changes
+// nothing.
+func auth0TenantDomain() string {
+	if domain := os.Getenv("AUTH0_TENANT_DOMAIN"); domain != "" {
+		return domain
+	}
+	return os.Getenv("AUTH0_DOMAIN")
+}
 
 // auth0BaseURL is the origin the Management API calls go to.
 func auth0BaseURL() string {
 	if auth0BaseURLOverride != "" {
 		return auth0BaseURLOverride
 	}
-	return "https://" + os.Getenv("AUTH0_DOMAIN")
+	return "https://" + auth0TenantDomain()
 }
 
 // EraseSendGridRecipient asks SendGrid to delete everything it holds about an
@@ -109,7 +142,7 @@ func EraseSendGridRecipient(ctx context.Context, email string) (called bool, err
 
 // auth0Configured reports whether the Management API credentials are present.
 func auth0Configured() bool {
-	return os.Getenv("AUTH0_DOMAIN") != "" &&
+	return auth0TenantDomain() != "" &&
 		os.Getenv("AUTH0_MGMT_CLIENT_ID") != "" &&
 		os.Getenv("AUTH0_MGMT_CLIENT_SECRET") != ""
 }
@@ -121,13 +154,12 @@ func auth0Configured() bool {
 // hot path - and a cache would need invalidation logic whose failure mode is an
 // expired token on the one request that must not fail.
 func auth0ManagementToken(ctx context.Context) (string, error) {
-	domain := os.Getenv("AUTH0_DOMAIN")
-
+	// The canonical tenant domain, never a custom one - see auth0TenantDomain.
 	form := url.Values{
 		"grant_type":    {"client_credentials"},
 		"client_id":     {os.Getenv("AUTH0_MGMT_CLIENT_ID")},
 		"client_secret": {os.Getenv("AUTH0_MGMT_CLIENT_SECRET")},
-		"audience":      {"https://" + domain + "/api/v2/"},
+		"audience":      {"https://" + auth0TenantDomain() + "/api/v2/"},
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,

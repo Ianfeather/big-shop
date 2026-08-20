@@ -388,6 +388,33 @@ It looks exactly like a broken template. Two consequences:
   This is the one place the permanence argued for above is inconvenient rather than
   correct, and it is worth the trade — see the unsubscribe section.
 
+### The switch
+
+**`ONBOARDING_EMAIL_ENABLED`, off unless explicitly `true`.**
+
+Added during implementation rather than specified up front, and for a reason the
+spec did not anticipate: the external setup landed *before* the code. By the time
+Phase 1 was ready there was a live SendGrid key, a verified sender and a real
+unsubscribe group, which meant merging the branch and beginning to mail every new
+signup had become the same action. They should not be. The flag makes shipping
+the code and starting the programme two decisions with a gap in between, and the
+gap is where `send-test` puts the four emails in a real inbox to be read.
+
+It gates the ticker and the inline welcome send. It deliberately does not gate
+`send-test` — that is the whole point of merging switched off — nor the Account
+invite, which is transactional and older than any of this.
+
+**The trap on the way out.** Users who sign up between the deploy and the flip
+are already past day 0, 3 or 8, so when it is enabled the ticker walks each of
+them through the backlog one email per day, starting with a "Welcome to Big Shop"
+that is a fortnight late. That is the same wound "New signups only" exists to
+prevent, in miniature. If the gap has grown long enough to matter, move the
+cutoff forward before enabling:
+
+```sql
+UPDATE email_launch SET launched_at = NOW() WHERE id = 1;
+```
+
 ### When there is no key
 
 **No `SENDGRID_API_KEY` means a clean no-op, never an error**, following the precedent

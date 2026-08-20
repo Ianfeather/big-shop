@@ -68,6 +68,15 @@ type TemplateData struct {
 // not a second email - and it means a restart during the send hour still
 // delivers that hour's mail rather than waiting until tomorrow.
 func Start(ctx context.Context, db *sql.DB) {
+	// Said once at startup, because both states are silent otherwise and they
+	// look identical from the outside: a switched-off programme and a broken one
+	// both send nothing. This is the line that tells them apart in the Fly logs.
+	if Enabled() {
+		log.Printf("lifecycle: onboarding email enabled, ticking every %s", tickInterval)
+	} else {
+		log.Printf("lifecycle: onboarding email disabled (set %s=true to enable); the ticker will send nothing", enabledVar)
+	}
+
 	go func() {
 		Run(ctx, db, sendGridSender{}, time.Now())
 
@@ -124,6 +133,13 @@ func Run(ctx context.Context, db *sql.DB, sender Sender, now time.Time) {
 
 // run is Run with the database abstracted away, which is the part worth testing.
 func run(ctx context.Context, st store, sender Sender, now time.Time) {
+	// Checked here rather than only at Start, so that turning the flag off is
+	// enough on its own - a ticker already running, or a Run invoked by hand,
+	// both stop sending. Cheap: one environment read an hour.
+	if !Enabled() {
+		return
+	}
+
 	candidates, err := st.candidates(ctx)
 	if err != nil {
 		log.Printf("lifecycle: could not load candidates: %v", err)

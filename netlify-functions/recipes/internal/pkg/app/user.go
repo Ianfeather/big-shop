@@ -78,6 +78,17 @@ const welcomeTimeout = 20 * time.Second
 // on every login, so without that check this would send a welcome email every
 // time somebody signed in.
 func (a *App) sendWelcomeEmail(ctx context.Context, user common.User) {
+	// The feature flag, checked before anything else here. This is the one send
+	// that fires on a user's request rather than on a schedule, so it is the
+	// first thing that would reach a real person if the programme were switched
+	// on by accident.
+	//
+	// Nothing is recorded when it is off, so switching on later starts everyone
+	// cleanly rather than finding a log that says they were already mailed.
+	if !lifecycle.Enabled() {
+		return
+	}
+
 	// context.WithoutCancel, not the request context, and this is the subtle
 	// part: the request's context is cancelled the moment the response is
 	// written, so a goroutine holding it would have its HTTP call to SendGrid

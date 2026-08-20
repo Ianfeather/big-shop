@@ -108,6 +108,32 @@ primary_region = "fra"
   # cover. Transactional mail sets no group and is unaffected.
   SENDGRID_ASM_GROUP_ID = "32124"
 
+  # The switch for the onboarding email programme. **Off.**
+  #
+  # Everything the sequence needs is already live - a real SendGrid key, a
+  # verified sender, the unsubscribe group above - so without this flag the code
+  # would begin mailing real people the moment it deployed, on the strength of a
+  # merge rather than a decision. Flipping this to "true" is that decision, and
+  # it is a one-line change with a deploy behind it.
+  #
+  # It gates the hourly ticker and the welcome email sent on signup. It
+  # deliberately does NOT gate `send-test`, which is how the copy and the
+  # unsubscribe link get checked in a real inbox first, nor the Account invite,
+  # which is transactional and predates the programme.
+  #
+  # **Before switching it on, consider the gap.** Users who signed up between
+  # the deploy and the flip are already past day 0, 3 or 8, so the ticker will
+  # walk each of them through the backlog one email a day - meaning a "Welcome
+  # to Big Shop" a fortnight late. That is the same wound the launch cutoff
+  # exists to prevent, just smaller. If the gap has grown long enough to matter,
+  # move the cutoff forward first:
+  #
+  #   UPDATE email_launch SET launched_at = NOW() WHERE id = 1;
+  #
+  # which excludes everyone who signed up before that moment, exactly as it
+  # excluded the original user base.
+  ONBOARDING_EMAIL_ENABLED = "false"
+
 [http_service]
   internal_port = 8080
   force_https = true

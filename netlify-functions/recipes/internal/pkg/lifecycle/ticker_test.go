@@ -66,6 +66,11 @@ func londonCandidate(t *testing.T, id string, sent ...Kind) Candidate {
 
 func tickTime(t *testing.T) time.Time {
 	t.Helper()
+	// Every test that drives run() needs the programme switched on; the flag
+	// defaults to off. Set here rather than in each test so a new test cannot
+	// forget it and then pass for the wrong reason - a tick that sends nothing
+	// looks like a tick that correctly decided not to.
+	t.Setenv(enabledVar, "true")
 	return time.Date(2026, 9, 21, 10, 30, 0, 0, mustLoad(t, "Europe/London"))
 }
 
@@ -214,4 +219,52 @@ func TestRunPassesTheRightMessage(t *testing.T) {
 	if data.Campaign != string(KindTips) {
 		t.Errorf("Campaign = %q, want %q", data.Campaign, KindTips)
 	}
+}
+
+// The flag exists so this can be merged and switched on later, deliberately,
+// rather than beginning to mail real people on the strength of a deploy.
+func TestRunSendsNothingWhenTheProgrammeIsDisabled(t *testing.T) {
+	now := tickTime(t)
+	t.Setenv(enabledVar, "false")
+
+	st := &fakeStore{load: []Candidate{londonCandidate(t, "u1"), londonCandidate(t, "u2")}}
+	sender := &fakeSender{result: true}
+
+	run(context.Background(), st, sender, now)
+
+	if len(sender.sent) != 0 {
+		t.Errorf("sent %d emails with the programme disabled", len(sender.sent))
+	}
+	// Nothing recorded either, so switching on later starts everyone cleanly
+	// rather than finding a log claiming they have already been mailed.
+	if len(st.recorded) != 0 {
+		t.Errorf("wrote %d send-log rows with the programme disabled", len(st.recorded))
+	}
+}
+
+func TestEnabled(t *testing.T) {
+	t.Run("off when unset", func(t *testing.T) {
+		t.Setenv(enabledVar, "")
+		if Enabled() {
+			t.Error("the programme is on with the flag unset; it must default to off")
+		}
+	})
+
+	t.Run("on for the spellings people actually type", func(t *testing.T) {
+		for _, raw := range []string{"true", "TRUE", "True", "1", "t"} {
+			t.Setenv(enabledVar, raw)
+			if !Enabled() {
+				t.Errorf("%s=%q did not enable the programme", enabledVar, raw)
+			}
+		}
+	})
+
+	t.Run("off for anything else, including nonsense", func(t *testing.T) {
+		for _, raw := range []string{"false", "0", "no", "yes", "on", "enabled", " true"} {
+			t.Setenv(enabledVar, raw)
+			if Enabled() {
+				t.Errorf("%s=%q enabled the programme; anything not clearly true must be off", enabledVar, raw)
+			}
+		}
+	})
 }

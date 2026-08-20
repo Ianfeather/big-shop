@@ -327,6 +327,7 @@ configuration rather than Netlify's.
 | `SENDGRID_API_KEY` | every send | **yes** |
 | `SENDGRID_ASM_GROUP_ID` | onboarding email only — the SendGrid unsubscribe group | no |
 | `SITE_URL` | link building in templates; defaults to `https://www.bigshop.life` | no |
+| `ONBOARDING_EMAIL_ENABLED` | the switch for the onboarding sequence — **off unless explicitly `true`** | no |
 
 **Their absence is the off switch, and it is a designed state rather than a
 broken one.** With no `SENDGRID_API_KEY` nothing sends, nothing errors, and no
@@ -344,6 +345,15 @@ basis for sending it on both being present — so `SendLifecycle` declines to se
 rather than delivering a message the basis does not cover. Transactional email
 (the Account invite) sets no group and is unaffected, because transactional
 email is deliberately not unsubscribable.
+
+**`ONBOARDING_EMAIL_ENABLED` is the switch, and it is off.** The key, the sender
+and the unsubscribe group are all live, so the sequence would otherwise start
+mailing real people the moment it deployed. It gates the hourly ticker and the
+welcome email sent on signup; it deliberately does not gate `send-test` (the
+point of merging it switched off is being able to test it) or the Account invite
+(transactional, and older than the programme). Before switching it on, see the
+note in `fly.toml` about moving `email_launch.launched_at` forward if the gap
+between deploying and enabling has grown long.
 
 **Both secrets are a two-part change on Fly.** Under `machine_config.json` a
 container receives only the secrets it declares, so `fly secrets set` alone

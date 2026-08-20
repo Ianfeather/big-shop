@@ -1,9 +1,56 @@
 ---
 spec: specs/completed/email.md
-status: complete
+status: complete (PR open, rebase owed)
 branch: implement/email
 pr: https://github.com/Ianfeather/big-shop/pull/112
 ---
+
+## NOT MERGED — rebase owed onto master
+
+**#59 (account deletion, PR #111) merged into `master` while this PR was open**, and the
+two overlap. `gh pr view 112` reports `CONFLICTING`/`DIRTY`. Do not merge until this is
+resolved; per CLAUDE.md rule 4 the fix is `git fetch origin master && git rebase
+origin/master`, resolve, `git push --force-with-lease`, then re-watch the checks.
+
+**The sharp bit is the migration numbering, and it does not show up as a conflict.**
+Git sees four distinct filenames, so it merges them silently:
+
+| | master (#59) | this branch |
+| --- | --- | --- |
+| 035 | `035_invite_email_hash.sql` | `035_user_timezone.sql` |
+| 036 | `036_ga_account_uuid.sql` | `036_email_send.sql` |
+
+Migrations run in alphabetical order from `migrations/*.sql`, so both 035s and both 036s
+would run — they are independent (an `ALTER` on `user`, and two `CREATE TABLE`s), so
+nothing breaks, but the numbering stops meaning anything. **Rename this branch's two to
+`037_user_timezone.sql` and `038_email_send.sql`** as part of the rebase, and update the
+paths cited in `common/types.go`, `service/user.go`, `lifecycle/*.go` and the runbook.
+
+Nine files conflict textually:
+
+- `docs/adr/0010-lifecycle-email-lawful-basis.md` — both edited it; #59 for the suppression
+  position, this branch for the runbook link. Keep both.
+- `netlify-functions/recipes/internal/pkg/service/user.go` and `service/account.go` — #59
+  changes user deletion; this branch changed `AddUser`'s signature to `(created bool, error)`
+  and added `normaliseTimezone`. **Read both sides on their merits**; this is the one place
+  the resolution is a real judgement rather than a mechanical overlap.
+- `netlify-functions/recipes/internal/pkg/common/types.go` — both added a field to `User`.
+- `main.go` — #59 likely touched startup; this branch added `lifecycle.Start`, the two new
+  modes and `_ "time/tzdata"`.
+- `pages/privacy.tsx` and `technical-architecture.md` — both documented their own work.
+  Both sets of prose should survive.
+- `docs/openapi.yaml` and `types/api.d.ts` — **do not hand-merge these.** Regenerate after
+  the Go side resolves: `go run . openapi > ../../docs/openapi.yaml`, then
+  `npm run generate:api-types`.
+
+**After rebasing, re-check the evidence URLs in the PR body.** They are pinned to
+`f9f958e…`, and a rebase rewrites that SHA. `.claude/skills/implement/EVIDENCE.md` covers
+the re-pinning.
+
+Also worth checking during the rebase: #59 owns the SendGrid Recipients' Data Erasure call
+and this branch's `email_send` rows are deliberately **not** foreign-keyed to `user` (see
+`036_email_send.sql`) so that deletion cannot cascade them away — confirm #59's cascade
+does not delete them by another route, because an unsubscribe has to outlive the Account.
 
 Scope of this run: **Phase 1a–1d only**. Phase 2 (transactional) needs Auth0 dashboard
 access and #59/#46 to merge; it gets a `backlog` board row rather than a Session here.

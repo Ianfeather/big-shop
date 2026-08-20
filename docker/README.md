@@ -161,7 +161,7 @@ migration for a baseline, and after to prove nothing was stranded.
 difference is the whole reason this exists. Every constraint in
 `migrations/*.sql` is `NO ACTION`, so deleting a row that still has children
 errors out against a database built from those migrations. TiDB declares **7
-foreign keys where local MySQL declares 15**, so the same statement can succeed
+foreign keys where local MySQL declares 16**, so the same statement can succeed
 against production and leave the children dangling with no error at all.
 Migration `029` did this: it deleted `thyme sprig` while an Ingredient Line
 still referenced it, and Potato & Leek Soup silently lost its thyme. Nothing in
@@ -170,7 +170,7 @@ the test suite could catch it, because the tests run against MySQL.
 That gap is also why the check does not trust declared constraints alone -
 doing so would cover fewer than half the schema and still report clean.
 `scripts/check-orphans.sql` unions the declared foreign keys with every column
-named `<table>_id` whose table exists, giving 21 relationships against the 15
+named `<table>_id` whose table exists, giving 23 relationships against the 16
 declared locally. Expect "Relationships checked" to exceed `declared_fks`.
 
 It runs in two steps - introspect, then build and execute - rather than

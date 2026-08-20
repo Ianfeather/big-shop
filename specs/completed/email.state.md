@@ -1,8 +1,8 @@
 ---
 spec: specs/completed/email.md
-status: in-progress
+status: complete
 branch: implement/email
-pr:
+pr: https://github.com/Ianfeather/big-shop/pull/112
 ---
 
 Scope of this run: **Phase 1a–1d only**. Phase 2 (transactional) needs Auth0 dashboard

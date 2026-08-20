@@ -28,7 +28,8 @@ sql bigshop -e "
     \`detail\` text COMMENT 'the unexpected errors, when ok = 0',
     \`applied_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (\`id\`)
-  ) COMMENT 'set by docker/mysql-init/01-migrate-and-seed.sh; read by the db healthcheck';
+  ) COLLATE=utf8mb4_bin
+    COMMENT 'set by docker/mysql-init/01-migrate-and-seed.sh; read by the db healthcheck';
   REPLACE INTO \`_migration_status\` (id, ok, detail) VALUES (1, 0, 'migrations did not finish');
 "
 

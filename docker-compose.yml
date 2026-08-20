@@ -39,12 +39,21 @@ services:
       #
       # Unhealthy here means: `docker compose logs db`, then
       # `docker compose down -v && docker compose up -d db` once fixed.
+      # 3. A data directory created before _migration_status existed is not a
+      #    failure. The script creates that table before it applies anything,
+      #    so on any volume it has ever run, the table is there - absence means
+      #    the volume predates this check entirely. The entrypoint will never
+      #    re-run migrations on it (non-empty data directory), so there is
+      #    nothing for the check to check, and it falls back to the plain ping
+      #    this healthcheck used to be. Without that, upgrading turned every
+      #    existing developer's database unhealthy and the only way out was
+      #    `down -v`, which throws away a synced copy of production.
       test:
         - CMD-SHELL
         - >-
-          mysql -h 127.0.0.1 -uroot -proot -N -B
-          -e "SELECT ok FROM bigshop._migration_status WHERE id = 1"
-          2>/dev/null | grep -qx 1
+          if mysql -h 127.0.0.1 -uroot -proot -N -B -e "SELECT ok FROM bigshop._migration_status WHERE id = 1" 2>/dev/null | grep -qx 1; then exit 0; fi;
+          if mysql -h 127.0.0.1 -uroot -proot -N -B -e "SELECT 1 FROM bigshop._migration_status LIMIT 0" >/dev/null 2>&1; then exit 1; fi;
+          mysqladmin ping -h 127.0.0.1 -uroot -proot
       interval: 5s
       timeout: 5s
       retries: 20

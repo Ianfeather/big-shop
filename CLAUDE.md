@@ -61,6 +61,24 @@ This runs `scripts/dev-full.sh`, which:
   `serve` mode — the same one the production container on Fly runs —
   `DISABLE_AUTH=true`, hot-reloaded with `air` — edit any `.go` file and
   it rebuilds automatically) services.
+
+  **A failing migration now makes the `db` container unhealthy rather than
+  silently incomplete.** The replay runs `mysql --force`, which skips just the
+  failing statement and still exits 0 — so a broken migration used to leave a
+  hole in the schema behind a container reporting Healthy, and the first
+  symptom was an application-looking 500. Every error is now reconciled against
+  `docker/mysql-init/expected-migration-errors.txt`, which lists the handful of
+  early statements that genuinely cannot apply to an empty schema and says why
+  for each. Anything else sets `bigshop._migration_status.ok = 0`, and the
+  healthcheck reads that row, so `api` never starts against the result.
+
+  The verdict is a row rather than an exit code on purpose: a non-zero exit
+  kills the container, `restart: unless-stopped` brings it straight back, and
+  the entrypoint skips the init scripts on that second start because the data
+  directory is no longer empty — producing a Healthy container with exactly
+  the broken schema the check rejected. **Fixing the migration is not enough
+  on its own for the same reason: the replay only runs against an empty data
+  directory, so recreate the volume** (`docker compose down -v`).
 - Brings up `lgtm` (`grafana/otel-lgtm` — Collector, Tempo, Loki, Prometheus
   and Grafana in one image), the local stand-in for the Grafana Cloud stack.
   Grafana is on **3200**, not 3000 — the web app keeps 3000. The API exports

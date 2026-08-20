@@ -12,17 +12,39 @@ services:
       - ./docker/mysql-seed:/seed:ro
       - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      # -h 127.0.0.1 (not "localhost") is deliberate: the MySQL client treats
-      # the literal host "localhost" as "connect via the Unix socket", and the
-      # official image's entrypoint runs docker-entrypoint-initdb.d (our
-      # migrate-and-seed script) against a temporary, --skip-networking mysqld
-      # that still binds that same socket file before the real, fully-networked
-      # server starts. A "-h localhost" ping can therefore report Healthy
-      # against that temporary instance while migrations/seeding are still
-      # running, which then lets `api` (depends_on: service_healthy) start
-      # against a half-initialized DB. Forcing TCP via "127.0.0.1" only
-      # succeeds once the real server (post-init) is listening.
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      # Two things have to be true, and this asserts both in one query.
+      #
+      # 1. The real server is up. -h 127.0.0.1 (not "localhost") is deliberate:
+      #    the MySQL client treats the literal host "localhost" as "connect via
+      #    the Unix socket", and the official image's entrypoint runs
+      #    docker-entrypoint-initdb.d (our migrate-and-seed script) against a
+      #    temporary, --skip-networking mysqld that still binds that same
+      #    socket file before the real, fully-networked server starts. A
+      #    "-h localhost" ping can therefore report Healthy against that
+      #    temporary instance while migrations/seeding are still running, which
+      #    then lets `api` (depends_on: service_healthy) start against a
+      #    half-initialized DB. Forcing TCP via "127.0.0.1" only succeeds once
+      #    the real server (post-init) is listening.
+      #
+      # 2. The migrations actually applied. 01-migrate-and-seed.sh runs
+      #    `mysql --force`, which skips a failing statement and still exits 0,
+      #    so a broken migration used to leave a silently incomplete schema
+      #    behind a Healthy container - see
+      #    docker/mysql-init/expected-migration-errors.txt. The script now
+      #    writes its verdict to bigshop._migration_status, and this is what
+      #    reads it. Being a row in the data directory rather than an exit
+      #    code is the point: `restart: unless-stopped` would resurrect a
+      #    container that exited, and the entrypoint skips the init scripts on
+      #    that second start because the data directory is no longer empty.
+      #
+      # Unhealthy here means: `docker compose logs db`, then
+      # `docker compose down -v && docker compose up -d db` once fixed.
+      test:
+        - CMD-SHELL
+        - >-
+          mysql -h 127.0.0.1 -uroot -proot -N -B
+          -e "SELECT ok FROM bigshop._migration_status WHERE id = 1"
+          2>/dev/null | grep -qx 1
       interval: 5s
       timeout: 5s
       retries: 20

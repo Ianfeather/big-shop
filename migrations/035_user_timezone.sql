@@ -1,6 +1,6 @@
 -- The IANA timezone name this User's browser reported when they signed up.
 --
--- Exists for one reason: the onboarding email sequence (specs/email.md) sends at
+-- Exists for one reason: the onboarding email sequence (specs/completed/email.md) sends at
 -- 10:00 in the *recipient's* morning, not ours. Mid-morning is past the
 -- commute-and-triage window, so the mail is not buried under the overnight pile,
 -- and a grocery app is a daytime thought. Without a zone every send is 10:00

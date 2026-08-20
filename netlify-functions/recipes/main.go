@@ -25,7 +25,7 @@ import (
 	// this makes the program not care whether that stays true.
 	//
 	// It became load-bearing with the onboarding email programme
-	// (specs/email.md), which sends at 10:00 in the *recipient's* morning and so
+	// (specs/completed/email.md), which sends at 10:00 in the *recipient's* morning and so
 	// resolves a stored zone name for every send. The failure it prevents is the
 	// quiet kind: with no database available LoadLocation fails for every zone,
 	// every user silently falls back to Europe/London, and the only symptom is

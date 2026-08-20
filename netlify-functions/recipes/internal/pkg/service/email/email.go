@@ -3,7 +3,7 @@
 // Before this package there was exactly one send in the whole codebase, inline
 // in app.inviteUser: a hardcoded personal From address, a link to an API
 // Gateway stack from an architecture this app no longer has, and a 400 returned
-// to the caller when the send failed. specs/email.md exists partly to stop that
+// to the caller when the send failed. specs/completed/email.md exists partly to stop that
 // shape being copied three more times, so everything that sends now comes
 // through here.
 //
@@ -17,7 +17,7 @@
 //     and writes no send-log rows - so nothing is marked sent and the sequence
 //     begins correctly the moment a key lands.
 //
-//   - **The key is read per call, not at startup.** specs/email.md verified by
+//   - **The key is read per call, not at startup.** specs/completed/email.md verified by
 //     booting the production image without it that the API starts clean and
 //     /health answers 200, and required everything here to preserve that. A
 //     package-level client built in init() would quietly turn a missing
@@ -52,7 +52,7 @@ import (
 
 // The sender identity, settled once here rather than per email type.
 //
-// specs/email.md is explicit that this is one task and not several: the invite
+// specs/completed/email.md is explicit that this is one task and not several: the invite
 // email had picked "Ian Feather" <info@ianfeather.co.uk> years ago, and every
 // new email type would otherwise re-litigate it. One verified sender on one
 // domain is also what makes SPF and DKIM alignment a single piece of DNS work
@@ -183,7 +183,7 @@ func SiteURL() string {
 //
 // Exported because two callers want rendering without a send: the golden-file
 // tests, and the development-only preview route - which is the cost
-// specs/email.md knowingly accepts for keeping the copy in version control
+// specs/completed/email.md knowingly accepts for keeping the copy in version control
 // where it can be code-reviewed, instead of in SendGrid's template UI where it
 // cannot.
 //
@@ -209,7 +209,7 @@ func Render(name string, data any, unsubscribable bool) (string, error) {
 //
 // One group for the whole lifecycle family, so unsubscribing from any of the
 // four stops the rest - which is what someone who unsubscribes means, and what
-// specs/email.md chose over a preference centre: four emails over a fortnight
+// specs/completed/email.md chose over a preference centre: four emails over a fortnight
 // do not justify per-category preferences.
 func asmGroupID() int {
 	raw := os.Getenv("SENDGRID_ASM_GROUP_ID")
@@ -259,7 +259,7 @@ func SendLifecycle(ctx context.Context, to Recipient, subject, templateName stri
 // did - an invite, and in a later phase a deletion confirmation.
 //
 // No ASM group, deliberately: transactional email is not unsubscribable and
-// should not be (specs/email.md, "What this spec does not do"). Someone who
+// should not be (specs/completed/email.md, "What this spec does not do"). Someone who
 // unsubscribes from the onboarding sequence has said nothing about whether they
 // want to be told their Account was deleted.
 //
@@ -277,7 +277,7 @@ func SendTransactional(ctx context.Context, to Recipient, subject, templateName 
 func send(ctx context.Context, to Recipient, subject, templateName string, data any, asmGroup int) (bool, error) {
 	if to.Address == "" {
 		// A user row with no address is a skip, not an error.
-		// specs/email.md does not assume the address column is complete or
+		// specs/completed/email.md does not assume the address column is complete or
 		// accurate - nobody has ever checked it - so the whole design degrades
 		// to "send them nothing" rather than to a failure that would abort a
 		// tick partway through everyone else's mail.
@@ -351,7 +351,7 @@ func buildMessage(to Recipient, subject, html string, asmGroup int) *mail.SGMail
 
 	// Open and click tracking off, explicitly, on every message.
 	//
-	// **This is a refusal, not a default.** specs/email.md calls the pixel "the
+	// **This is a refusal, not a default.** specs/completed/email.md calls the pixel "the
 	// load-bearing refusal": a tracking pixel is precisely the thing that makes
 	// a service email look like marketing, and ADR-0010's lawful basis rests on
 	// these being service messages - so instrumenting them to see who read what

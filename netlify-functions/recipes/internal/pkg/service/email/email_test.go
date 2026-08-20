@@ -396,7 +396,7 @@ func TestUnconfiguredSkipHappensBeforeRendering(t *testing.T) {
 }
 
 // Every onboarding template must carry campaign-level attribution and nothing
-// else. specs/email.md is emphatic: "No user or account identifier, ever. Not in
+// else. specs/completed/email.md is emphatic: "No user or account identifier, ever. Not in
 // a utm_ value, not in a separate parameter." Putting one in an email link would
 // rebuild, in a URL and in every mail provider's logs, exactly the identifier
 // linkage specs/account-deletion.md spends its GA4 section dismantling.
@@ -464,7 +464,7 @@ func TestOnboardingTemplatesCarryTheNonPromotionalWarning(t *testing.T) {
 	}
 }
 
-// The pixel is what specs/email.md calls "the load-bearing refusal", and click
+// The pixel is what specs/completed/email.md calls "the load-bearing refusal", and click
 // tracking is enabled by default in SendGrid's dashboard - so the refusal only
 // holds if every message says so itself. Asserted on the payload because none of
 // it is visible in the rendered HTML.

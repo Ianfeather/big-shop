@@ -64,7 +64,7 @@ const welcomeTimeout = 20 * time.Second
 // **It must never fail the request, and it must never delay it.** That is not a
 // preference: it is the exact mistake POST /invite makes today, where a send
 // failure returns 400 while the Invite row it already wrote survives - the user
-// sees an error for something that worked. specs/email.md is explicit that this
+// sees an error for something that worked. specs/completed/email.md is explicit that this
 // must not be rebuilt here: "The User is created; the email is a courtesy on
 // top."
 //

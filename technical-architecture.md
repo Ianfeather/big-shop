@@ -333,7 +333,7 @@ broken one.** With no `SENDGRID_API_KEY` nothing sends, nothing errors, and no
 row is written to `email_send` — so the onboarding sequence begins correctly the
 moment a key lands rather than having silently marked everyone as already
 mailed. The key is read per call, never at startup, so the production image
-boots and answers `/health` without it. See `specs/email.md`, "When there is no
+boots and answers `/health` without it. See `specs/completed/email.md`, "When there is no
 key".
 
 **`SENDGRID_ASM_GROUP_ID` is a hard requirement for onboarding email

@@ -1,5 +1,5 @@
 -- The onboarding email programme's two tables: what has been sent, and when the
--- programme started. See specs/email.md.
+-- programme started. See specs/completed/email.md.
 
 -- One row per email actually handed to SendGrid.
 --
@@ -10,17 +10,25 @@
 -- of the send hour, and safe if Fly ever scaled the API to two machines. Nothing
 -- else in the sequence has to be careful, because this cannot be got wrong.
 --
--- **A row is written on success only**, and the due-query uses `>=` on
--- days-since-signup rather than `=`. Together those two choices are what make
--- the sequence self-heal: a failed send, an outage, or a deploy during the send
--- hour does not skip an email, it arrives on the next day's tick. An `=` query
--- would silently drop it forever, and nothing would report that it had.
+-- **For the ticker, a row is written on success only**, and the due-query uses
+-- `>=` on days-since-signup rather than `=`. Together those two choices are what
+-- make the sequence self-heal: a failed send, an outage, or a deploy during the
+-- send hour does not skip an email, it arrives on the next day's tick. An `=`
+-- query would silently drop it forever, and nothing would report that it had.
+--
+-- **The welcome email is the exception: it claims its row *before* sending.**
+-- It is sent inline on the request that creates the User, so unlike every other
+-- email it has two possible writers - that request and the ticker. With both
+-- sending first and recording second, the primary key above would protect the
+-- log while two emails still reached the inbox. Claiming first makes the key
+-- decide who sends; a failed send releases the claim so it is retried. See
+-- lifecycle.ClaimSend and lifecycle.ReleaseSend.
 --
 -- **A row means "handed to SendGrid". Not "delivered", and not "read".**
 -- Unsubscribes are suppressed by SendGrid after we make the call, so a logged
 -- send may have been dropped on their side. That is stated rather than solved,
 -- because solving it means holding unsubscribe state in this database - which is
--- exactly what specs/email.md rejected, since these rows are inside the cascade
+-- exactly what specs/completed/email.md rejected, since these rows are inside the cascade
 -- specs/account-deletion.md deletes, and an unsubscribe has to outlive the
 -- Account.
 --
@@ -42,7 +50,7 @@ CREATE TABLE `email_send` (
 -- When the email programme went live. Exactly one row, forever.
 --
 -- The onboarding sequence fires only for Users created after this moment.
--- specs/email.md argues the case at length under "New signups only": a "Welcome
+-- specs/completed/email.md argues the case at length under "New signups only": a "Welcome
 -- to Big Shop!" landing on somebody who joined eight months ago reads as broken,
 -- and long-dormant addresses are the likeliest to mark a first send as spam -
 -- which poisons the suppression list permanently, on a brand-new sending domain,

@@ -21,7 +21,7 @@ import (
 // fortnight, and someone logging in from Tokyo on day 4 should not have days 8
 // and 14 shifted by nine hours. The accepted cost is a stale column for anyone
 // who genuinely relocates, which for a fourteen-day sequence is close to
-// irrelevant. See migrations/035_user_timezone.sql and specs/email.md.
+// irrelevant. See migrations/035_user_timezone.sql and specs/completed/email.md.
 //
 // Passing an empty timezone is normal rather than a fault: the frontend sends
 // whatever Intl.DateTimeFormat reports and some browsers report nothing, so the
@@ -148,7 +148,7 @@ func GetUser(ctx context.Context, db *sql.DB, userID string) (u *common.User, e 
 	// column directly, and nothing in the frontend uses it. Selecting it anyway
 	// would put a location signal - coarse, but a location signal - into every
 	// GET /user and POST /user response body and into the browser's query cache,
-	// for nothing. specs/email.md's whole justification for storing it is that
+	// for nothing. specs/completed/email.md's whole justification for storing it is that
 	// "it goes no further than our database", so shipping it to the client by
 	// default would quietly weaken the claim that made storing it acceptable.
 	// Add it here when something actually needs it.

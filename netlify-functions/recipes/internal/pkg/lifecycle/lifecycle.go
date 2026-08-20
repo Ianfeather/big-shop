@@ -9,7 +9,7 @@
 // database and no network.
 //
 // The design decision underneath all of it, argued at length in
-// specs/email.md: **there is no behavioural targeting.** No activation ladder,
+// specs/completed/email.md: **there is no behavioural targeting.** No activation ladder,
 // no per-Account state evaluation, no qualification query, no branching. A
 // fixed four-email sequence on days-since-signup goes to everyone. The reason
 // is false positives - any threshold cheap enough to measure is reachable by
@@ -155,7 +155,7 @@ func (c Candidate) location() *time.Location {
 // calendar day is 23 or 25 hours long across a DST boundary, so a plain
 // division by 24 turns three days into 2.958 and truncates it to 2 - which
 // would silently hold the tips email back by a day for anyone whose sequence
-// spans late March or late October. specs/email.md rejected storing a UTC
+// spans late March or late October. specs/completed/email.md rejected storing a UTC
 // offset instead of a zone name for the same reason, from the other direction.
 func daysSinceSignup(createdAt, now time.Time, loc *time.Location) int {
 	midnight := func(t time.Time) time.Time {
@@ -185,7 +185,7 @@ func sameLocalDay(a, b time.Time, loc *time.Location) bool {
 
 // due returns the one email this Candidate should be sent right now, if any.
 //
-// **At most one, ever, per call.** specs/email.md is emphatic about this and it
+// **At most one, ever, per call.** specs/completed/email.md is emphatic about this and it
 // is the single most important line in this file: without it, an outage lasting
 // a week means the recovery tick finds a user due for tips, recipes and
 // feedback simultaneously and sends all three within a second of each other,
@@ -214,7 +214,7 @@ func due(c Candidate, now time.Time) (Email, bool) {
 	// everything received welcome at 10:30 and tips at 10:45, and a restart
 	// loop would have marched them through the whole sequence in minutes.
 	//
-	// That is precisely the burst specs/email.md says is "the single most
+	// That is precisely the burst specs/completed/email.md says is "the single most
 	// likely way this design produces a spam report", so the guard is on the
 	// thing that actually matters - the calendar day, in the recipient's own
 	// zone - rather than on the tick that happens to be running.
@@ -238,7 +238,7 @@ func due(c Candidate, now time.Time) (Email, bool) {
 		// claim in ClaimSend closes that from one side; this closes it from the
 		// other, and together they mean a welcome cannot be sent twice.
 		//
-		// Nothing is lost by waiting. specs/email.md already specifies the
+		// Nothing is lost by waiting. specs/completed/email.md already specifies the
 		// retry as next-day - "a failed welcome is retried by the ticker on the
 		// next day's tick like any other" - so the ticker's job here begins
 		// tomorrow by design rather than by omission.

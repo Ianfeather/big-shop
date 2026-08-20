@@ -159,7 +159,7 @@ const PreviewItem = ({ name, amount, bought = false }: PreviewItemProps) => (
 // The server stores it on insert only and never updates it, so in practice this
 // value matters on a first login and is ignored on every subsequent one. It is
 // read by the onboarding email sequence, which sends at 10:00 in the recipient's
-// morning instead of ours (specs/email.md); nothing in the UI uses it.
+// morning instead of ours (specs/completed/email.md); nothing in the UI uses it.
 //
 // Guarded rather than called directly because resolvedOptions().timeZone is
 // specified to return the runtime's zone but is not universally reliable, and

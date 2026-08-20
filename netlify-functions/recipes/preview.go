@@ -17,7 +17,7 @@ import (
 	"recipes/internal/pkg/service/email"
 )
 
-// This file is the answer to a practical problem specs/email.md raises: the
+// This file is the answer to a practical problem specs/completed/email.md raises: the
 // sequence is four emails over a fortnight, so taken literally, seeing the day
 // 14 email means waiting fourteen days and seeing a fix to it means waiting
 // another fourteen. Without a deliberate alternative, the loop people actually
@@ -45,7 +45,7 @@ type inviteSample struct {
 // runPreview serves every template in a browser, rendered, on localhost.
 //
 // The fast loop: no API key, no SendGrid, nothing sent. This is the cost
-// specs/email.md knowingly accepts for keeping the copy in version control where
+// specs/completed/email.md knowingly accepts for keeping the copy in version control where
 // it can be code-reviewed rather than in SendGrid's template UI where it cannot.
 //
 // A browser reload does *not* pick up a template edit. The templates are

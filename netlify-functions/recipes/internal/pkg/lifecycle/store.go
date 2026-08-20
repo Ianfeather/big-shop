@@ -33,7 +33,7 @@ import (
 //     which is the right answer if this migration somehow has not run.
 //
 //   - **A non-empty email.** Nobody has ever checked how complete or accurate
-//     that column is, and specs/email.md does not assume it is: a null or
+//     that column is, and specs/completed/email.md does not assume it is: a null or
 //     malformed address is a skip, not an error.
 //
 //   - **Everything already sent**, gathered in the same pass, so due() can see

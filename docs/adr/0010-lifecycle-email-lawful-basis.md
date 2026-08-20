@@ -5,7 +5,7 @@ Status: accepted
 Big Shop's analytics are opt-in: nothing non-essential loads until a visitor accepts, every
 decision is recorded in `consent_event`, and [ADR-0008](./0008-what-telemetry-does-not-carry.md)
 spends its length on what is deliberately *not* collected. The onboarding email sequence
-specced in [`specs/email.md`](../../specs/email.md) does the opposite — it is sent to every
+specced in [`specs/completed/email.md`](../../specs/completed/email.md) does the opposite — it is sent to every
 new User without asking first, on the basis of legitimate interests, with an unsubscribe in
 every message.
 
@@ -42,7 +42,7 @@ reasonable-seeming edit two years from now. Add a promotional call to action and
 become direct marketing under regulation 22, at which point they require opt-in consent,
 and the basis recorded here no longer covers them.
 
-The condition is stated in three places on purpose — here, in `specs/email.md`, and in the
+The condition is stated in three places on purpose — here, in `specs/completed/email.md`, and in the
 templates themselves — because the person who breaks it will be editing copy, not reading
 architecture decisions.
 
@@ -90,7 +90,7 @@ because it is the obvious thing to reach for and does not apply here.
 ## Consequences
 
 - The sequence reaches 100% of new signups, which is the point.
-- **No open tracking and no click tracking**, decided in `specs/email.md` and reinforced
+- **No open tracking and no click tracking**, decided in `specs/completed/email.md` and reinforced
   here: a tracking pixel is what makes a service email look like marketing, so instrumenting
   these would argue against our own position. Attribution is campaign-level `utm_*` only,
   carrying no user identifier.

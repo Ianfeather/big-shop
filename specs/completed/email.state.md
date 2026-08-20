@@ -1,5 +1,5 @@
 ---
-spec: specs/email.md
+spec: specs/completed/email.md
 status: in-progress
 branch: implement/email
 pr:

@@ -286,7 +286,7 @@ func TestEmailFor(t *testing.T) {
 // as well as hourly, so a restart during the send hour puts two ticks inside
 // the same 10:00-10:59 window - and a crash loop puts many. Without this, a
 // user overdue for the whole sequence receives it in a burst, which is exactly
-// the spam report specs/email.md warns about.
+// the spam report specs/completed/email.md warns about.
 func TestAtMostOneEmailPerDay(t *testing.T) {
 	london := mustLoad(t, "Europe/London")
 	candidate := signedUpAt(t, "Europe/London", time.Date(2026, 9, 1, 9, 0, 0, 0, london))
@@ -393,7 +393,7 @@ func TestTheTickerLeavesTheWelcomeAloneOnTheSignupDay(t *testing.T) {
 		t.Errorf("the ticker offered %s on the signup day; the inline send owns day 0", got.Kind)
 	}
 
-	// The next day it takes over, which is the retry specs/email.md describes.
+	// The next day it takes over, which is the retry specs/completed/email.md describes.
 	nextDay := time.Date(2026, 9, 2, 10, 30, 0, 0, london)
 	got, ok := due(candidate, nextDay)
 	if !ok || got.Kind != KindWelcome {

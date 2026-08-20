@@ -96,24 +96,57 @@ func (a *App) sendWelcomeEmail(ctx context.Context, user common.User) {
 	go func() {
 		defer cancel()
 
+		// **Claim the send log row before sending, not after.**
+		//
+		// Everywhere else in this programme the row is written only on success,
+		// which is what makes a failure retry rather than vanish. Here that is
+		// not sufficient on its own: this path and the ticker are two writers,
+		// and if both send-then-record then the primary key protects the log
+		// while two emails still reach the inbox. Claiming first makes the key
+		// decide who sends.
+		//
+		// It also makes this correct regardless of whether `created` was right.
+		// That flag comes from RowsAffected on an upsert, and a DSN gaining
+		// clientFoundRows - a change invisible from this file - would make every
+		// login look like an insert. With a claim, the worst that then happens
+		// is a wasted lookup; without one, it is a welcome email on every login.
+		claimed, err := lifecycle.ClaimSend(sendCtx, a.db, user.ID, lifecycle.KindWelcome, time.Now())
+		if err != nil {
+			log.Printf("welcome email: could not claim for %s, the ticker will pick it up: %v", user.ID, err)
+			return
+		}
+		if !claimed {
+			// Somebody already holds it - a concurrent login, or a retried
+			// request. Not a fault, and nothing to say about it.
+			return
+		}
+
 		sent, err := email.SendLifecycle(sendCtx,
 			email.Recipient{Name: user.Name, Address: user.Email},
 			welcome.Subject,
 			welcome.Template,
 			lifecycle.TemplateData{Name: user.Name, Campaign: string(welcome.Kind)},
 		)
-		if err != nil {
-			log.Printf("welcome email to %s failed, the ticker will retry it: %v", user.ID, err)
-			return
-		}
-		if !sent {
-			// Nothing configured. The email package says why, once per process.
+		if err == nil && sent {
 			return
 		}
 
-		if err := lifecycle.RecordSend(sendCtx, a.db, user.ID, lifecycle.KindWelcome, time.Now()); err != nil {
-			log.Printf("welcome email: SENT to %s but could not record it, it may be sent again: %v", user.ID, err)
+		// The send did not happen, so give the claim back or the ticker will
+		// treat this email as already delivered and never retry it. Uses a
+		// fresh context: the usual reason to be here is a timeout, and sendCtx
+		// is then already expired, so releasing on it would silently do nothing
+		// and strand the claim forever.
+		releaseCtx, releaseCancel := context.WithTimeout(context.WithoutCancel(ctx), welcomeTimeout)
+		defer releaseCancel()
+		if releaseErr := lifecycle.ReleaseSend(releaseCtx, a.db, user.ID, lifecycle.KindWelcome); releaseErr != nil {
+			log.Printf("welcome email: NOT sent to %s and could not release the claim, so it will never be retried: %v",
+				user.ID, releaseErr)
 		}
+		if err != nil {
+			log.Printf("welcome email to %s failed, the ticker will retry it: %v", user.ID, err)
+		}
+		// !sent with no error is the unconfigured case. The email package
+		// already says why, once per process, so this stays quiet.
 	}()
 }
 

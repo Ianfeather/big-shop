@@ -7,6 +7,7 @@ import (
 	"html"
 	"log"
 	"net/http"
+	netmail "net/mail"
 	"os"
 	"sort"
 	"strings"
@@ -33,12 +34,25 @@ func previewData(campaign string) lifecycle.TemplateData {
 	return lifecycle.TemplateData{Name: "Ada", Campaign: campaign}
 }
 
+// inviteSample is the invite template's sample data. Its shape has to match
+// app.inviteEmailData, which is unexported, so it is restated here once rather
+// than in both of the callers below.
+type inviteSample struct {
+	InviterName string
+	Token       string
+}
+
 // runPreview serves every template in a browser, rendered, on localhost.
 //
-// The fast loop: no API key, no SendGrid, nothing sent, and a reload picks up an
-// edit. This is the cost specs/email.md knowingly accepts for keeping the copy
-// in version control where it can be code-reviewed rather than in SendGrid's
-// template UI where it cannot.
+// The fast loop: no API key, no SendGrid, nothing sent. This is the cost
+// specs/email.md knowingly accepts for keeping the copy in version control where
+// it can be code-reviewed rather than in SendGrid's template UI where it cannot.
+//
+// A browser reload does *not* pick up a template edit. The templates are
+// go:embed-ed and parsed once in the email package's init(), so seeing a change
+// means restarting this command - which `air` does automatically under
+// `npm run dev:full`, and which is a keystroke otherwise. Said explicitly
+// because "edit, reload, see nothing change" reads as a broken template.
 //
 // What it cannot tell you is whether Gmail renders it the same way, whether it
 // lands in the inbox or in Promotions, or whether the unsubscribe link works -
@@ -55,7 +69,11 @@ func runPreview() {
 		_ = os.Setenv("SITE_URL", "http://localhost:3000")
 	}
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	// A mux of its own rather than http.DefaultServeMux: the default is process
+	// global, so registering on it from here would put these handlers in reach
+	// of anything else in this binary that ever served on it.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		name := strings.Trim(r.URL.Path, "/")
 		if name == "" {
 			writePreviewIndex(w)
@@ -72,10 +90,7 @@ func runPreview() {
 		if entry, err := lifecycle.EmailFor(lifecycle.Kind(name)); err == nil {
 			data, unsubscribable = previewData(string(entry.Kind)), true
 		} else {
-			data, unsubscribable = struct {
-				InviterName string
-				Token       string
-			}{"Ada Lovelace", "preview-token"}, false
+			data, unsubscribable = inviteSample{"Ada Lovelace", "preview-token"}, false
 		}
 
 		rendered, err := email.Render(name, data, unsubscribable)
@@ -87,9 +102,14 @@ func runPreview() {
 		_, _ = w.Write([]byte(rendered))
 	})
 
-	addr := ":" + *port
-	log.Printf("email preview on http://localhost%s (links point at %s)", addr, email.SiteURL())
-	log.Fatal(http.ListenAndServe(addr, nil))
+	// Bound to the loopback interface, not to every interface. This renders
+	// application copy on a developer's machine and has no business being
+	// reachable from the network it happens to be on - and the log line below
+	// said "localhost" while `:port` would have listened everywhere, which is
+	// the kind of mismatch nobody checks.
+	addr := "127.0.0.1:" + *port
+	log.Printf("email preview on http://%s (links point at %s)", addr, email.SiteURL())
+	log.Fatal(http.ListenAndServe(addr, mux))
 }
 
 func writePreviewIndex(w http.ResponseWriter) {
@@ -146,6 +166,14 @@ func runSendTest() {
 		os.Exit(2)
 	}
 
+	// Checked here rather than left to SendGrid, because an address with a typo
+	// is otherwise reported as a 400 from an API several layers away, and the
+	// obvious reading of that is "the template is broken".
+	if _, err := netmail.ParseAddress(*to); err != nil {
+		fmt.Fprintf(os.Stderr, "--to is not a valid email address: %v\n", err)
+		os.Exit(2)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -155,10 +183,7 @@ func runSendTest() {
 	// down the other path deliberately - sending it as an onboarding email would
 	// preview something that is not what really gets sent.
 	if *kind == "invite" {
-		data := struct {
-			InviterName string
-			Token       string
-		}{*name, "send-test-token"}
+		data := inviteSample{*name, "send-test-token"}
 		sent, err := email.SendTransactional(ctx, recipient,
 			"You have been invited to join a Big Shop Account", "invite", data)
 		reportSendTest(sent, err, *kind, *to)

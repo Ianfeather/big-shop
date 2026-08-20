@@ -349,5 +349,27 @@ func buildMessage(to Recipient, subject, html string, asmGroup int) *mail.SGMail
 		message.SetASM(mail.NewASM().SetGroupID(asmGroup))
 	}
 
+	// Open and click tracking off, explicitly, on every message.
+	//
+	// **This is a refusal, not a default.** specs/email.md calls the pixel "the
+	// load-bearing refusal": a tracking pixel is precisely the thing that makes
+	// a service email look like marketing, and ADR-0010's lawful basis rests on
+	// these being service messages - so instrumenting them to see who read what
+	// argues against our own position. Link rewriting is refused for the same
+	// reason, and because it would replace our URLs with SendGrid's, defeating
+	// the utm attribution the templates carry.
+	//
+	// Set here rather than left to the SendGrid dashboard because **click
+	// tracking is on by default there**, and an account-level toggle is not a
+	// decision this repository can review, test, or even see. Stating it per
+	// message makes the refusal mechanical, the same way the ASM group above
+	// makes the unsubscribe mechanical.
+	//
+	// At tens of users, open and click rates are also statistical noise that
+	// would be over-read.
+	message.SetTrackingSettings(mail.NewTrackingSettings().
+		SetClickTracking(mail.NewClickTrackingSetting().SetEnable(false).SetEnableText(false)).
+		SetOpenTracking(mail.NewOpenTrackingSetting().SetEnable(false)))
+
 	return message
 }

@@ -228,6 +228,23 @@ func due(c Candidate, now time.Time) (Email, bool) {
 		if c.Sent[email.Kind] {
 			continue
 		}
+		// **Day zero belongs to the inline send, not to the ticker.**
+		//
+		// The welcome is sent inline on the request that creates the User,
+		// because a welcome arriving the next morning is a broken welcome. If
+		// the ticker also offered it on the signup day, the two would race: a
+		// signup during the recipient's 10:00 hour can load into a tick that
+		// began before the inline send finished, and both would send. The
+		// claim in ClaimSend closes that from one side; this closes it from the
+		// other, and together they mean a welcome cannot be sent twice.
+		//
+		// Nothing is lost by waiting. specs/email.md already specifies the
+		// retry as next-day - "a failed welcome is retried by the ticker on the
+		// next day's tick like any other" - so the ticker's job here begins
+		// tomorrow by design rather than by omission.
+		if email.Kind == KindWelcome && days < 1 {
+			return Email{}, false
+		}
 		if days >= email.Day {
 			return email, true
 		}

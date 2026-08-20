@@ -463,3 +463,46 @@ func TestOnboardingTemplatesCarryTheNonPromotionalWarning(t *testing.T) {
 		t.Error("layout.html no longer carries the copy-editing warning")
 	}
 }
+
+// The pixel is what specs/email.md calls "the load-bearing refusal", and click
+// tracking is enabled by default in SendGrid's dashboard - so the refusal only
+// holds if every message says so itself. Asserted on the payload because none of
+// it is visible in the rendered HTML.
+func TestEveryMessageDisablesTracking(t *testing.T) {
+	for _, group := range []int{0, 42} {
+		m := buildMessage(Recipient{Address: "a@example.com"}, "Subject", "<p>hi</p>", group)
+
+		body, err := json.Marshal(m)
+		if err != nil {
+			t.Fatalf("marshalling message: %v", err)
+		}
+		var payload struct {
+			TrackingSettings *struct {
+				ClickTracking *struct {
+					Enable     *bool `json:"enable"`
+					EnableText *bool `json:"enable_text"`
+				} `json:"click_tracking"`
+				OpenTracking *struct {
+					Enable *bool `json:"enable"`
+				} `json:"open_tracking"`
+			} `json:"tracking_settings"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("unmarshalling message: %v", err)
+		}
+
+		ts := payload.TrackingSettings
+		if ts == nil || ts.ClickTracking == nil || ts.OpenTracking == nil {
+			t.Fatalf("asm group %d: tracking settings absent, so SendGrid's account defaults apply: %s", group, body)
+		}
+		if ts.ClickTracking.Enable == nil || *ts.ClickTracking.Enable {
+			t.Errorf("asm group %d: click tracking is not explicitly disabled", group)
+		}
+		if ts.ClickTracking.EnableText == nil || *ts.ClickTracking.EnableText {
+			t.Errorf("asm group %d: plain-text click tracking is not explicitly disabled", group)
+		}
+		if ts.OpenTracking.Enable == nil || *ts.OpenTracking.Enable {
+			t.Errorf("asm group %d: open tracking is not explicitly disabled", group)
+		}
+	}
+}

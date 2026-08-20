@@ -197,11 +197,19 @@ func TestSequenceDays(t *testing.T) {
 				t.Errorf("%s was due a day early", entry.Kind)
 			}
 		}
-		// The day itself: yes.
-		onTheDay := time.Date(2026, 9, 1+day, 10, 30, 0, 0, london)
+
+		// The welcome is the exception: it is Day 0 of the sequence but the
+		// *ticker* does not offer it until day 1, because day 0 belongs to the
+		// inline send on signup and offering both would race. See due().
+		ticksFrom := day
+		if entry.Kind == KindWelcome {
+			ticksFrom = 1
+		}
+
+		onTheDay := time.Date(2026, 9, 1+ticksFrom, 10, 30, 0, 0, london)
 		got, ok := due(candidate, onTheDay)
 		if !ok || got.Kind != entry.Kind {
-			t.Errorf("on day %d got %v (ok=%v), want %s", day, got.Kind, ok, entry.Kind)
+			t.Errorf("on day %d got %v (ok=%v), want %s", ticksFrom, got.Kind, ok, entry.Kind)
 		}
 
 		sent = append(sent, entry.Kind)
@@ -366,4 +374,29 @@ func TestDaysSinceSignupDoesNotOverflowOnAbsurdDates(t *testing.T) {
 			t.Errorf("got %v (ok=%v), want %s for a very old signup", got.Kind, ok, KindWelcome)
 		}
 	})
+}
+
+// The welcome is sent inline on signup, so the ticker must not also offer it on
+// the signup day. A signup during the recipient's 10:00 hour can land inside a
+// tick that loaded its candidates before the inline send finished; with both
+// paths live on day 0, both would send. Together with ClaimSend on the inline
+// side, this makes a duplicate welcome impossible rather than merely unlikely.
+func TestTheTickerLeavesTheWelcomeAloneOnTheSignupDay(t *testing.T) {
+	london := mustLoad(t, "Europe/London")
+	signup := time.Date(2026, 9, 1, 9, 0, 0, 0, london)
+	candidate := signedUpAt(t, "Europe/London", signup)
+
+	// Day 0, in the send hour, welcome not yet recorded: the inline send owns
+	// this, so the ticker must offer nothing at all.
+	sameDay := time.Date(2026, 9, 1, 10, 30, 0, 0, london)
+	if got, ok := due(candidate, sameDay); ok {
+		t.Errorf("the ticker offered %s on the signup day; the inline send owns day 0", got.Kind)
+	}
+
+	// The next day it takes over, which is the retry specs/email.md describes.
+	nextDay := time.Date(2026, 9, 2, 10, 30, 0, 0, london)
+	got, ok := due(candidate, nextDay)
+	if !ok || got.Kind != KindWelcome {
+		t.Errorf("on day 1 got %v (ok=%v), want the ticker to retry %s", got.Kind, ok, KindWelcome)
+	}
 }

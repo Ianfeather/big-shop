@@ -132,6 +132,56 @@ func loadCandidates(ctx context.Context, db *sql.DB) ([]Candidate, error) {
 // the wrong side of a local midnight and defeat the guard it exists to feed.
 // Passing the instant removes the question rather than relying on a
 // configuration nobody here controls.
+// ClaimSend reserves (user, kind) before an email is sent, reporting whether
+// this caller got the claim.
+//
+// Used by the inline welcome send, where "write the row only on success" is not
+// safe on its own. Both send paths would otherwise send first and record second,
+// which means email_send's primary key protects the *log* and not the *inbox*:
+// two paths can each see no row, each send, and only the second insert fail.
+// Claiming first makes the key do the job it is described as doing - whoever
+// inserts first sends, and the loser does not.
+//
+// A duplicate key is a normal answer, not an error: it means somebody else got
+// there first. Any other error is real and is returned.
+func ClaimSend(ctx context.Context, db *sql.DB, userID string, kind Kind, at time.Time) (bool, error) {
+	const query = `INSERT IGNORE INTO email_send (user_id, kind, sent_at) VALUES (?, ?, ?)`
+	result, err := db.ExecContext(ctx, query, userID, string(kind), at.UTC())
+	if err != nil {
+		return false, fmt.Errorf("claiming %s email for %s: %w", kind, userID, err)
+	}
+	// INSERT IGNORE affects one row when it inserted and none when the key
+	// already existed, which is exactly the question being asked. Preferred over
+	// catching a driver-specific duplicate-key error number.
+	affected, err := result.RowsAffected()
+	if err != nil {
+		// Cannot tell whether the claim was ours. Reporting "not claimed" means
+		// no email rather than a possible duplicate, and the ticker picks it up
+		// tomorrow.
+		return false, nil
+	}
+	return affected == 1, nil
+}
+
+// ReleaseSend gives a claim back when the send it was taken for failed.
+//
+// Without it a failed send would leave a row saying the email went out, and the
+// ticker - which skips anything already in email_send - would never retry it.
+// The email would be lost silently, which is the failure this whole design is
+// built to avoid.
+//
+// If the process dies between claiming and releasing, the claim survives and
+// that one welcome email is never sent. That is a real gap, accepted knowingly:
+// it needs a crash inside a window of seconds, and losing one welcome is a much
+// smaller harm than sending two.
+func ReleaseSend(ctx context.Context, db *sql.DB, userID string, kind Kind) error {
+	const query = `DELETE FROM email_send WHERE user_id = ? AND kind = ?`
+	if _, err := db.ExecContext(ctx, query, userID, string(kind)); err != nil {
+		return fmt.Errorf("releasing %s claim for %s: %w", kind, userID, err)
+	}
+	return nil
+}
+
 func RecordSend(ctx context.Context, db *sql.DB, userID string, kind Kind, sentAt time.Time) error {
 	const query = `INSERT INTO email_send (user_id, kind, sent_at) VALUES (?, ?, ?)`
 	if _, err := db.ExecContext(ctx, query, userID, string(kind), sentAt.UTC()); err != nil {

@@ -190,7 +190,7 @@ type User struct {
 	//
 	// It exists for the onboarding email sequence, which sends at 10:00 in the
 	// recipient's morning rather than ours - see specs/completed/email.md and
-	// migrations/035_user_timezone.sql. Nothing in the UI reads it.
+	// migrations/037_user_timezone.sql. Nothing in the UI reads it.
 	//
 	// **Written once, on insert, and never updated.** service.AddUser leaves it
 	// out of the ON DUPLICATE KEY UPDATE clause that refreshes name, email and

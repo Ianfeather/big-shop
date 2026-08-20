@@ -17,8 +17,8 @@ Git sees four distinct filenames, so it merges them silently:
 
 | | master (#59) | this branch |
 | --- | --- | --- |
-| 035 | `035_invite_email_hash.sql` | `035_user_timezone.sql` |
-| 036 | `036_ga_account_uuid.sql` | `036_email_send.sql` |
+| 035 | `035_invite_email_hash.sql` | `037_user_timezone.sql` |
+| 036 | `036_ga_account_uuid.sql` | `038_email_send.sql` |
 
 Migrations run in alphabetical order from `migrations/*.sql`, so both 035s and both 036s
 would run — they are independent (an `ALTER` on `user`, and two `CREATE TABLE`s), so
@@ -49,7 +49,7 @@ the re-pinning.
 
 Also worth checking during the rebase: #59 owns the SendGrid Recipients' Data Erasure call
 and this branch's `email_send` rows are deliberately **not** foreign-keyed to `user` (see
-`036_email_send.sql`) so that deletion cannot cascade them away — confirm #59's cascade
+`038_email_send.sql`) so that deletion cannot cascade them away — confirm #59's cascade
 does not delete them by another route, because an unsubscribe has to outlive the Account.
 
 Scope of this run: **Phase 1a–1d only**. Phase 2 (transactional) needs Auth0 dashboard
@@ -84,7 +84,7 @@ Notes:
 
 ## Session 2: Phase 1b — timezone capture
 Status: done
-Scope: migration `035_user_timezone.sql`; `common.User.Timezone` with `omitempty`; `service.AddUser` insert-only (omitted from `ON DUPLICATE KEY UPDATE`); `pages/index.tsx` adds `Intl.DateTimeFormat().resolvedOptions().timeZone` to the existing `POST /user` payload.
+Scope: migration `037_user_timezone.sql`; `common.User.Timezone` with `omitempty`; `service.AddUser` insert-only (omitted from `ON DUPLICATE KEY UPDATE`); `pages/index.tsx` adds `Intl.DateTimeFormat().resolvedOptions().timeZone` to the existing `POST /user` payload.
 Depends on: none (independent of Session 1, ordered first because Session 3 reads the column)
 Commit: 6377e51, migration in b13aea5, review fixes in bd3f426
 Notes:
@@ -100,12 +100,12 @@ Notes:
 
 ## Session 3: Phase 1c — the ticker and the send log
 Status: done
-Scope: migration `036_email_send.sql` (`email_send` + the `email_launch` marker); hourly `time.Ticker` started from `isServeMode()` only; the due-query (`>=` on days-since-signup, rows on success only); the one-email-per-user-per-tick guard; 10:00 local with `Europe/London` fallback; Go tests across timezone/DST/launch-marker boundaries.
+Scope: migration `038_email_send.sql` (`email_send` + the `email_launch` marker); hourly `time.Ticker` started from `isServeMode()` only; the due-query (`>=` on days-since-signup, rows on success only); the one-email-per-user-per-tick guard; 10:00 local with `Europe/London` fallback; Go tests across timezone/DST/launch-marker boundaries.
 Depends on: Session 2 (reads `user.timezone`)
 Commit: 0dc7652, migration in 6d14f89, review fix in 14371c7
 Notes:
 - New package `internal/pkg/lifecycle` (kinds + `due()` + `loadCandidates` + `Run`/`Start`), kept separate from `service/email` so every scheduling rule is a pure function testable with no DB and no network. 17 tests.
-- **`migrations/036_email_send.sql`**: both guarantees demonstrated against a real MySQL rather than assumed — the composite PK rejects a duplicate `(user, kind)` while allowing a different kind for the same user, and `email_launch`'s CHECK genuinely refuses a second row.
+- **`migrations/038_email_send.sql`**: both guarantees demonstrated against a real MySQL rather than assumed — the composite PK rejects a duplicate `(user, kind)` while allowing a different kind for the same user, and `email_launch`'s CHECK genuinely refuses a second row.
 - **The guard became one-per-DAY, not one-per-tick**, and only running it revealed why. `Start` ticks on boot as well as hourly, so a restart inside 10:00–10:59 puts two ticks in one send hour; against a real DB the same user got welcome at 10:30 and tips at 10:45, and a crash loop would march someone through the sequence in minutes. That is the burst the spec calls the likeliest route to a spam report. Both reviewers agreed it is a faithful strengthening.
 - **`RecordSend` takes the instant** rather than using `DEFAULT CURRENT_TIMESTAMP`. It feeds the per-day guard and is compared against a Go-produced time; MySQL evaluates `CURRENT_TIMESTAMP` in the *server's* zone while the driver reads datetimes back as UTC, so a non-UTC server could shift a send across a local midnight.
 - **Review fix (worst finding):** `daysSinceSignup` subtracted two instants as a `time.Duration`, which saturates at ±292 years. A zero `created_at` overflowed to −106751 days, read as "signed up in the future", and removed that user from the sequence **permanently and silently**. Now counted in Unix seconds.

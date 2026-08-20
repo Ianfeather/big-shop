@@ -32,14 +32,26 @@
 -- specs/account-deletion.md deletes, and an unsubscribe has to outlive the
 -- Account.
 --
--- No foreign key to `user`, deliberately, and it is the one place this schema
--- departs from its neighbours (account_user, consent_event and invite all have
--- one). Two reasons, both about deletion. specs/account-deletion.md destroys the
--- `user` row, and a cascade would take the send log with it - so a deleted user
--- who signs up again with the same address would start the whole sequence over,
--- which is the opposite of what the suppression list is for. And these rows are
--- not personal data in the way the others are: a user id and a fact that an
--- email was sent, retained to avoid sending it twice.
+-- No foreign key to `user`, and it is the one place this schema departs from its
+-- neighbours (account_user, consent_event and invite all have one). The reason
+-- is ordering rather than retention: the send log is written from a
+-- fire-and-forget goroutine on signup, so it can race the row it would point at,
+-- and a constraint would turn that race into a failed insert.
+--
+-- **These rows are deleted when an Account is erased**, explicitly, in
+-- service.deleteAccountTx. The absence of a foreign key means nothing forces it,
+-- which makes it easy to miss rather than optional: `user_id` is an Auth0
+-- subject in plaintext, and specs/completed/account-deletion.md refuses to keep
+-- one for somebody who has been told they were erased - it rejected a tombstone
+-- `user` row for exactly that.
+--
+-- An earlier version of this comment argued the opposite, that retaining them
+-- stopped "a deleted user who signs up again with the same address starting the
+-- whole sequence over". That conflated this table with SendGrid's suppression
+-- list. **The unsubscribe guarantee lives in SendGrid**, permanently and keyed
+-- on the address - which is the whole reason specs/completed/email.md put it
+-- there instead of in a column here. This table only stops a live user being
+-- sent the same email twice.
 CREATE TABLE `email_send` (
   `user_id` varchar(255) NOT NULL COMMENT 'auth0 id; intentionally not a FK, see above',
   `kind` varchar(64) NOT NULL COMMENT 'welcome | tips | recipes | feedback',

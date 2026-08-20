@@ -308,6 +308,32 @@ func deleteAccountTx(ctx context.Context, tx execer, userID string, accountID in
 		return fmt.Errorf("deleting the user's consent history: %w", err)
 	}
 
+	// The onboarding email send log goes too, and it needs deleting explicitly
+	// because nothing forces it: `email_send.user_id` deliberately carries no
+	// foreign key to `user` (see migrations/038_email_send.sql), so the `DELETE
+	// FROM user` below would succeed and leave these rows orphaned rather than
+	// failing.
+	//
+	// **They hold an Auth0 subject in plaintext**, which is precisely what the
+	// tombstone-row option was rejected for a few lines up: keeping one for
+	// somebody we have just told we erased. That the column is not a foreign key
+	// makes it easier to miss, not more acceptable to keep.
+	//
+	// The migration's own reasoning for retaining them does not survive contact
+	// with this. It argued that a cascade would let "a deleted user who signs up
+	// again with the same address start the whole sequence over, which is the
+	// opposite of what the suppression list is for" - conflating two different
+	// things. **The unsubscribe guarantee lives in SendGrid's suppression list**,
+	// which is permanent, keyed on the address, and untouched by anything here;
+	// that is exactly why specs/completed/email.md put it there rather than in a
+	// column of ours. This table only stops a *live* user being sent the same
+	// email twice. So someone who deletes and signs up again is a new Account
+	// and may reasonably be welcomed again - and if they had unsubscribed,
+	// SendGrid still silently drops it.
+	if _, err := tx.ExecContext(ctx, "DELETE FROM email_send WHERE user_id = ?;", userID); err != nil {
+		return fmt.Errorf("deleting the user's email history: %w", err)
+	}
+
 	// **Every membership this person holds, not just the one being deleted.**
 	// `account_user` has two foreign keys and each needs clearing along its own
 	// axis, which is easy to half-do:

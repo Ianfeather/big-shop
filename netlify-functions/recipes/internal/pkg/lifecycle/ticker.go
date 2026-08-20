@@ -85,7 +85,30 @@ func Start(ctx context.Context, db *sql.DB) {
 	}()
 }
 
-// Run performs one tick: work out who is due, and send each of them one email.
+// store is the database underneath a tick.
+//
+// An interface so Run's decisions can be tested without a database. The
+// branches it protects are not decoration: "declined to send, so record
+// nothing" is the single thing standing between an unconfigured environment and
+// a send log claiming every user has already been mailed - which would silently
+// consume the whole sequence for everybody the moment a key was added.
+type store interface {
+	candidates(ctx context.Context) ([]Candidate, error)
+	record(ctx context.Context, userID string, kind Kind, sentAt time.Time) error
+}
+
+// dbStore is the real one.
+type dbStore struct{ db *sql.DB }
+
+func (s dbStore) candidates(ctx context.Context) ([]Candidate, error) {
+	return loadCandidates(ctx, s.db)
+}
+
+func (s dbStore) record(ctx context.Context, userID string, kind Kind, sentAt time.Time) error {
+	return RecordSend(ctx, s.db, userID, kind, sentAt)
+}
+
+// Run performs one tick against the database.
 //
 // Never returns an error, and that is deliberate. A tick is a background sweep
 // over many users; one bad row, one unloadable template or one SendGrid refusal
@@ -96,7 +119,12 @@ func Start(ctx context.Context, db *sql.DB) {
 // `now` is a parameter rather than read from the clock inside, so tests can
 // place the tick at a precise local hour on a chosen date.
 func Run(ctx context.Context, db *sql.DB, sender Sender, now time.Time) {
-	candidates, err := loadCandidates(ctx, db)
+	run(ctx, dbStore{db}, sender, now)
+}
+
+// run is Run with the database abstracted away, which is the part worth testing.
+func run(ctx context.Context, st store, sender Sender, now time.Time) {
+	candidates, err := st.candidates(ctx)
 	if err != nil {
 		log.Printf("lifecycle: could not load candidates: %v", err)
 		return
@@ -128,7 +156,7 @@ func Run(ctx context.Context, db *sql.DB, sender Sender, now time.Time) {
 			continue
 		}
 
-		if err := RecordSend(ctx, db, candidate.UserID, next.Kind, now); err != nil {
+		if err := st.record(ctx, candidate.UserID, next.Kind, now); err != nil {
 			// The email has already gone. Failing to record it means it will be
 			// sent again on the next tick, which is the one duplicate this
 			// design cannot rule out - so it is logged loudly rather than

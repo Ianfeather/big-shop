@@ -29,12 +29,31 @@ import (
 // as NULL rather than "" so the two states cannot be told apart later by
 // accident - there is no meaningful difference between "the browser declined"
 // and "this row predates the column", and both take the same fallback.
-func AddUser(ctx context.Context, db *sql.DB, user common.User) error {
+// Reports whether this call actually created the User, as opposed to refreshing
+// one who already existed.
+//
+// The caller needs it because this runs on *every* login, not just the first,
+// and the welcome email must be attempted exactly once. MySQL's ROW_COUNT for
+// INSERT ... ON DUPLICATE KEY UPDATE is 1 for an insert, 2 for an update that
+// changed something, and 0 for one that did not - verified against the database
+// rather than taken from the manual, because sending a welcome email on every
+// login is the kind of bug that is only discovered by its recipients.
+func AddUser(ctx context.Context, db *sql.DB, user common.User) (created bool, err error) {
 	query, args := userUpsert(user)
-	if _, err := db.ExecContext(ctx, query, args...); err != nil {
-		return fmt.Errorf("adding user: %w", err)
+	result, err := db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return false, fmt.Errorf("adding user: %w", err)
 	}
-	return nil
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		// The row is written either way; only the "was it new" signal is lost.
+		// Reporting "not new" means no welcome email rather than a duplicate
+		// one, and the ticker picks it up at 10:00 their time regardless - so
+		// the safe answer costs at most a few hours' delay.
+		return false, nil
+	}
+	return affected == 1, nil
 }
 
 // userUpsert builds the statement and its arguments.

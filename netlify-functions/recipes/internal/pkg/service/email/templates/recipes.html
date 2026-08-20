@@ -1,0 +1,61 @@
+{{ define "content" }}
+  {{/*
+    Day 8.
+
+    NON-PROMOTIONAL. See the warning in layout.html. This is the weakest joint in
+    the sequence and ADR-0010 says so directly: content promotes the service that
+    hosts it, and a regulator taking a broad view of "direct marketing" could read
+    it that way. The judgement recorded there is that an email teaching a new user
+    what the product does, sent once, a week after they chose to sign up, with a
+    working unsubscribe, is service communication. Keep it that way - describing
+    food is fine, promoting anything is not.
+
+    **These three are placeholders with a real job, not filler.** specs/email.md's
+    open question 2 asks what the Day 8 recipes should be, and says it is the same
+    question #42 raises for seeding a new Account and should get the same answer
+    rather than a second one - including #42's note that whatever is chosen should
+    use well-curated Ingredients from the Global Catalog. Until that is answered,
+    these are three genuinely good weeknight dishes chosen to be easy to swap:
+    change the prose here and nothing else moves.
+
+    **Inspiration, not a call to action.** The spec's table says "one click to
+    add", which does not exist and is not built here: adding a recipe from an
+    email link needs an endpoint that identifies the user from the URL alone,
+    which is a per-user token in a link, which collides with this sequence's rule
+    that no user or account identifier ever appears in one. That is its own board
+    row. So these describe dishes and link to the app.
+  */}}
+  <p style="margin:0 0 16px 0;">{{ if .Data.Name }}Hello {{ .Data.Name }},{{ else }}Hello,{{ end }}</p>
+
+  <p style="margin:0 0 20px 0;">
+    Three things worth cooking this week, if you are short of ideas. Each is a weeknight
+    dish with a short shopping list.
+  </p>
+
+  <p style="margin:0 0 6px 0;"><strong>Pasta e ceci</strong></p>
+  <p style="margin:0 0 20px 0;">
+    Chickpeas, tinned tomatoes, garlic, rosemary, small pasta. Twenty-five minutes, almost
+    entirely from the cupboard, and better the next day.
+  </p>
+
+  <p style="margin:0 0 6px 0;"><strong>Roast chicken thighs with lemon and potatoes</strong></p>
+  <p style="margin:0 0 20px 0;">
+    One tin, one oven, forty minutes. The potatoes cook underneath the chicken and are the
+    best part.
+  </p>
+
+  <p style="margin:0 0 6px 0;"><strong>Dal with fried onions</strong></p>
+  <p style="margin:0 0 24px 0;">
+    Red lentils, turmeric, cumin, a lot of onions cooked slowly. Cheap, keeps for days, and
+    freezes well.
+  </p>
+
+  <p style="margin:0 0 24px 0;">
+    Add any of them the usual way &mdash; paste a link to a version you like, or type it in.
+  </p>
+
+  <p style="margin:0 0 24px 0;">
+    <a href="{{ .SiteURL }}/recipes?utm_source=email&amp;utm_medium=lifecycle&amp;utm_campaign={{ .Data.Campaign }}"
+       style="display:inline-block; padding:12px 20px; background-color:#1f7a4d; color:#ffffff; border-radius:6px; text-decoration:none; font-weight:600;">Add a recipe</a>
+  </p>
+{{ end }}

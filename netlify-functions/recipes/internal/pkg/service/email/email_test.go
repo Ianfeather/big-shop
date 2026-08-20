@@ -6,11 +6,39 @@ import (
 	"flag"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
+
+// hrefPattern pulls the link targets out of rendered HTML.
+var hrefPattern = regexp.MustCompile(`href="([^"]+)"`)
+
+// queryKeys returns every query parameter name used by any link in the document.
+//
+// The rule being enforced is about URLs specifically, not about the words in the
+// email - the prose can say "account" all it likes, but a URL carrying an
+// account id is logged by every mail provider between here and the recipient.
+func queryKeys(t *testing.T, html string) []string {
+	t.Helper()
+	var keys []string
+	for _, match := range hrefPattern.FindAllStringSubmatch(html, -1) {
+		raw := strings.ReplaceAll(match[1], "&amp;", "&")
+		parsed, err := url.Parse(raw)
+		if err != nil {
+			// The SendGrid unsubscribe substitution tag is not a URL yet; it
+			// becomes one at send time. Nothing to check.
+			continue
+		}
+		for key := range parsed.Query() {
+			keys = append(keys, key)
+		}
+	}
+	return keys
+}
 
 // update rewrites the golden files instead of comparing against them:
 //
@@ -34,6 +62,15 @@ type inviteData struct {
 	Token       string
 }
 
+// lifecycleData mirrors lifecycle.TemplateData. Duplicated rather than imported
+// because lifecycle imports this package, and depending on it back would be a
+// cycle. The shapes are pinned together by TestLifecycleTemplatesRenderWithRealData
+// over in the lifecycle package.
+type lifecycleData struct {
+	Name     string
+	Campaign string
+}
+
 func TestRenderGolden(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -47,6 +84,16 @@ func TestRenderGolden(t *testing.T) {
 			data:           inviteData{InviterName: "Ian Feather", Token: "abc123"},
 			unsubscribable: false,
 		},
+		// The four onboarding emails. Unsubscribable, so each golden file also
+		// pins that the footer link is present - the condition ADR-0010's whole
+		// lawful basis rests on.
+		{name: "welcome", template: "welcome", data: lifecycleData{Name: "Ada", Campaign: "welcome"}, unsubscribable: true},
+		{name: "tips", template: "tips", data: lifecycleData{Name: "Ada", Campaign: "tips"}, unsubscribable: true},
+		{name: "recipes", template: "recipes", data: lifecycleData{Name: "Ada", Campaign: "recipes"}, unsubscribable: true},
+		{name: "feedback", template: "feedback", data: lifecycleData{Name: "Ada", Campaign: "feedback"}, unsubscribable: true},
+		// Name is whatever Auth0 gave us, which is frequently nothing. Rendered
+		// separately so the greeting's fallback is reviewed rather than assumed.
+		{name: "welcome-no-name", template: "welcome", data: lifecycleData{Campaign: "welcome"}, unsubscribable: true},
 	}
 
 	for _, tc := range cases {
@@ -345,5 +392,74 @@ func TestUnconfiguredSkipHappensBeforeRendering(t *testing.T) {
 	}
 	if sent {
 		t.Error("reported a send with no API key configured")
+	}
+}
+
+// Every onboarding template must carry campaign-level attribution and nothing
+// else. specs/email.md is emphatic: "No user or account identifier, ever. Not in
+// a utm_ value, not in a separate parameter." Putting one in an email link would
+// rebuild, in a URL and in every mail provider's logs, exactly the identifier
+// linkage specs/account-deletion.md spends its GA4 section dismantling.
+func TestLifecycleLinksCarryCampaignAndNoIdentifier(t *testing.T) {
+	t.Setenv("SITE_URL", fixedSiteURL)
+
+	for _, name := range []string{"welcome", "tips", "recipes"} {
+		t.Run(name, func(t *testing.T) {
+			html, err := Render(name, lifecycleData{Name: "Ada", Campaign: name}, true)
+			if err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			for _, want := range []string{
+				"utm_source=email",
+				"utm_medium=lifecycle",
+				"utm_campaign=" + name,
+			} {
+				if !strings.Contains(html, want) {
+					t.Errorf("no %s in the rendered email", want)
+				}
+			}
+			// Checked against the query strings themselves rather than the
+			// whole document, because the prose legitimately talks about
+			// accounts and email. What matters is what travels in a URL: every
+			// mail provider in the path logs those.
+			for _, key := range queryKeys(t, html) {
+				if !strings.HasPrefix(key, "utm_") {
+					t.Errorf("link carries the query parameter %q; onboarding links may carry utm_* and nothing else", key)
+				}
+			}
+		})
+	}
+
+	// The feedback email deliberately has no call-to-action link at all: the
+	// action it asks for is a reply.
+	html, err := Render("feedback", lifecycleData{Name: "Ada", Campaign: "feedback"}, true)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if strings.Contains(html, "utm_campaign") {
+		t.Error("the feedback email has a campaign link; it is meant to ask for a reply instead")
+	}
+}
+
+// The non-promotional condition is what ADR-0010's lawful basis is contingent
+// on, and the warning lives in the templates because whoever breaks it will be
+// editing copy rather than reading architecture decisions. This checks the
+// warning is still there to be read.
+func TestOnboardingTemplatesCarryTheNonPromotionalWarning(t *testing.T) {
+	for _, name := range []string{"welcome", "tips", "recipes", "feedback"} {
+		source, err := templateFS.ReadFile("templates/" + name + ".html")
+		if err != nil {
+			t.Fatalf("reading %s: %v", name, err)
+		}
+		if !strings.Contains(string(source), "NON-PROMOTIONAL") {
+			t.Errorf("%s.html no longer carries the non-promotional warning", name)
+		}
+	}
+	layout, err := templateFS.ReadFile("templates/layout.html")
+	if err != nil {
+		t.Fatalf("reading layout: %v", err)
+	}
+	if !strings.Contains(string(layout), "READ THIS BEFORE EDITING ANY EMAIL COPY") {
+		t.Error("layout.html no longer carries the copy-editing warning")
 	}
 }

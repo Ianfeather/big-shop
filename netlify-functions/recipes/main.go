@@ -132,6 +132,20 @@ func isHashInviteEmailsMode() bool {
 	return len(os.Args) > 1 && os.Args[1] == "hash-invite-emails"
 }
 
+// isPreviewMode reports whether the process was invoked as `go run . preview`,
+// which serves the email templates in a browser and sends nothing. Like the
+// OpenAPI printer it needs no database.
+func isPreviewMode() bool {
+	return len(os.Args) > 1 && os.Args[1] == "preview"
+}
+
+// isSendTestMode reports whether the process was invoked as
+// `go run . send-test --to=... --kind=...`, which sends exactly one email to one
+// address and writes nothing to the send log. Needs no database either.
+func isSendTestMode() bool {
+	return len(os.Args) > 1 && os.Args[1] == "send-test"
+}
+
 // isServeMode reports whether the process should run as a plain HTTP server:
 // the production container on Fly, `npm run dev:full`, and the e2e stack.
 // `dev` is the name this mode had when it was only ever used locally; it is
@@ -155,6 +169,14 @@ func init() {
 		MinVersion: tls.VersionTLS12,
 		ServerName: "gateway01.eu-central-1.prod.aws.tidbcloud.com",
 	})
+
+	// Both email tools return before the database is opened, exactly as the
+	// OpenAPI printer does. Neither needs one: preview renders templates, and
+	// send-test deliberately writes no email_send row because a test send is not
+	// a send to that user.
+	if isPreviewMode() || isSendTestMode() {
+		return
+	}
 
 	if isOpenAPIMode() {
 		application, err := app.NewApp(&common.Env{})
@@ -344,7 +366,11 @@ func handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.API
 }
 
 func main() {
-	if isOpenAPIMode() {
+	if isPreviewMode() {
+		runPreview()
+	} else if isSendTestMode() {
+		runSendTest()
+	} else if isOpenAPIMode() {
 		spec, err := openapiAPI.OpenAPI().YAML()
 		if err != nil {
 			panic(err.Error())

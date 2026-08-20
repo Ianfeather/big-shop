@@ -1,0 +1,47 @@
+{{ define "content" }}
+  {{/*
+    Day 3.
+
+    NON-PROMOTIONAL. See the warning in layout.html.
+
+    The known risk, recorded in specs/email.md: one tips email rather than two
+    means this can become a feature list nobody finishes. The spec is explicit
+    that this is "a copy problem to solve in the writing rather than a reason to
+    add a send" — so: three things, each one sentence of what and one of why,
+    ordered by how much time they save. Resist adding a fourth.
+
+    Every one of these has to be worth reading regardless of what the account
+    holds, because nothing checks — there is no behavioural targeting anywhere in
+    this sequence, by design.
+  */}}
+  <p style="margin:0 0 16px 0;">{{ if .Data.Name }}Hello {{ .Data.Name }},{{ else }}Hello,{{ end }}</p>
+
+  <p style="margin:0 0 20px 0;">
+    Three things Big Shop does that are easy to miss.
+  </p>
+
+  <p style="margin:0 0 6px 0;"><strong>1. Paste a link, get a recipe</strong></p>
+  <p style="margin:0 0 20px 0;">
+    Most recipe sites will import straight into Big Shop &mdash; paste the URL and the
+    ingredients, quantities and method come across. You can also photograph a page from a
+    cookbook, or paste text in by hand.
+  </p>
+
+  <p style="margin:0 0 6px 0;"><strong>2. The list adds up for you</strong></p>
+  <p style="margin:0 0 20px 0;">
+    Add three recipes that each want onions and you get one line for onions, not three.
+    Quantities that cannot be sensibly combined stay separate, so nothing is quietly
+    rounded or lost.
+  </p>
+
+  <p style="margin:0 0 6px 0;"><strong>3. Share the account, not the list</strong></p>
+  <p style="margin:0 0 24px 0;">
+    Invite someone and you share recipes and a single shopping list. Whoever is at the
+    shops sees what whoever planned the week put on it, as they put it on.
+  </p>
+
+  <p style="margin:0 0 24px 0;">
+    <a href="{{ .SiteURL }}/recipes?utm_source=email&amp;utm_medium=lifecycle&amp;utm_campaign={{ .Data.Campaign }}"
+       style="display:inline-block; padding:12px 20px; background-color:#1f7a4d; color:#ffffff; border-radius:6px; text-decoration:none; font-weight:600;">Open Big Shop</a>
+  </p>
+{{ end }}

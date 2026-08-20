@@ -4,8 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log"
 	"net/http"
+	"time"
+
 	"recipes/internal/pkg/common"
+	"recipes/internal/pkg/lifecycle"
 	"recipes/internal/pkg/service"
 	"recipes/internal/pkg/service/email"
 
@@ -26,7 +30,8 @@ func (a *App) addUser(ctx context.Context, input *UserInput) (*UserOutput, error
 	user := input.Body
 	user.ID = callerFrom(ctx).UserID
 
-	if err := service.AddUser(ctx, a.db, user); err != nil {
+	created, err := service.AddUser(ctx, a.db, user)
+	if err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("could not add new user"), err)
 	}
 
@@ -42,7 +47,74 @@ func (a *App) addUser(ctx context.Context, input *UserInput) (*UserOutput, error
 		return nil, fail(ctx, huma.Error500InternalServerError("Error fetching saved user"), err)
 	}
 
+	if created {
+		a.sendWelcomeEmail(ctx, *saved)
+	}
+
 	return &UserOutput{Body: *saved}, nil
+}
+
+// welcomeTimeout bounds the background send. Nothing waits on it, so an
+// unbounded request would only hold a goroutine open against an unresponsive
+// SendGrid.
+const welcomeTimeout = 20 * time.Second
+
+// sendWelcomeEmail sends the day 0 email, in the background, best effort.
+//
+// **It must never fail the request, and it must never delay it.** That is not a
+// preference: it is the exact mistake POST /invite makes today, where a send
+// failure returns 400 while the Invite row it already wrote survives - the user
+// sees an error for something that worked. specs/email.md is explicit that this
+// must not be rebuilt here: "The User is created; the email is a courtesy on
+// top."
+//
+// Sent inline rather than left to the ticker because a welcome email arriving
+// the next morning is a broken welcome. It is still Day 0 of the Sequence, so if
+// this fails - or finds nothing configured - the ticker retries it at 10:00 in
+// their own morning like any other email in the sequence. Nothing is recorded
+// unless it was genuinely sent, which is what makes that retry happen.
+//
+// Only called when AddUser reports it actually created the row. POST /user runs
+// on every login, so without that check this would send a welcome email every
+// time somebody signed in.
+func (a *App) sendWelcomeEmail(ctx context.Context, user common.User) {
+	// context.WithoutCancel, not the request context, and this is the subtle
+	// part: the request's context is cancelled the moment the response is
+	// written, so a goroutine holding it would have its HTTP call to SendGrid
+	// aborted almost immediately - intermittently, depending on which won the
+	// race. Trace and span context are preserved, so the send still appears
+	// under the request that caused it.
+	sendCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), welcomeTimeout)
+
+	welcome, err := lifecycle.EmailFor(lifecycle.KindWelcome)
+	if err != nil {
+		cancel()
+		log.Printf("welcome email: %v", err)
+		return
+	}
+
+	go func() {
+		defer cancel()
+
+		sent, err := email.SendLifecycle(sendCtx,
+			email.Recipient{Name: user.Name, Address: user.Email},
+			welcome.Subject,
+			welcome.Template,
+			lifecycle.TemplateData{Name: user.Name, Campaign: string(welcome.Kind)},
+		)
+		if err != nil {
+			log.Printf("welcome email to %s failed, the ticker will retry it: %v", user.ID, err)
+			return
+		}
+		if !sent {
+			// Nothing configured. The email package says why, once per process.
+			return
+		}
+
+		if err := lifecycle.RecordSend(sendCtx, a.db, user.ID, lifecycle.KindWelcome, time.Now()); err != nil {
+			log.Printf("welcome email: SENT to %s but could not record it, it may be sent again: %v", user.ID, err)
+		}
+	}()
 }
 
 // PreferencesInput carries the view preferences a user can change. Separate

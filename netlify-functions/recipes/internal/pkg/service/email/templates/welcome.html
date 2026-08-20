@@ -1,0 +1,36 @@
+{{ define "content" }}
+  {{/*
+    Day 0, sent inline on signup — a welcome arriving the next morning is a
+    broken welcome.
+
+    NON-PROMOTIONAL. See the warning in layout.html. This email says what the
+    product is for and names the one thing to do next. No referral pitch, no
+    upsell, nothing that turns a service message into direct marketing.
+
+    One call to action, deliberately. The whole job of this email is to get
+    somebody to add a first recipe; a second link competes with the first.
+  */}}
+  <p style="margin:0 0 16px 0;">{{ if .Data.Name }}Hello {{ .Data.Name }},{{ else }}Hello,{{ end }}</p>
+
+  <p style="margin:0 0 16px 0;">
+    Big Shop turns the recipes you actually cook into the shopping list you actually need.
+    Save a recipe once, add it to your list whenever you plan to cook it, and the
+    ingredients combine themselves &mdash; 200g of flour in one recipe and 150g in another
+    become one line reading 350g.
+  </p>
+
+  <p style="margin:0 0 8px 0;"><strong>Start with one recipe.</strong></p>
+  <p style="margin:0 0 24px 0;">
+    Not ten. Add something you cook most weeks, put it on your list, and you will see the
+    whole idea in about two minutes.
+  </p>
+
+  <p style="margin:0 0 24px 0;">
+    <a href="{{ .SiteURL }}/recipes?utm_source=email&amp;utm_medium=lifecycle&amp;utm_campaign={{ .Data.Campaign }}"
+       style="display:inline-block; padding:12px 20px; background-color:#1f7a4d; color:#ffffff; border-radius:6px; text-decoration:none; font-weight:600;">Add your first recipe</a>
+  </p>
+
+  <p style="margin:0; font-size:14px; color:#6b7178;">
+    Stuck, or it did something odd? Reply to this email &mdash; it comes to a real person.
+  </p>
+{{ end }}

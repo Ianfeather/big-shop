@@ -18,7 +18,7 @@
 // a sentence must not bump it, because bumping it is how the banner is put back
 // in front of people who have already decided, and re-asking for no reason is
 // how a consent prompt becomes something to click past without reading.
-export const POLICY_VERSION = '2026-08-16';
+export const POLICY_VERSION = '2026-08-20';
 
 // The same date, written for a reader rather than for a database column.
 //

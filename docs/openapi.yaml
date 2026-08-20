@@ -102,6 +102,21 @@ components:
         - status
         - id
       type: object
+    DeleteAccountOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /api/bigshop/schemas/DeleteAccountOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        accountDeleted:
+          type: boolean
+      required:
+        - accountDeleted
+      type: object
     DeleteRecipeInputBody:
       additionalProperties: false
       properties:
@@ -452,6 +467,8 @@ components:
         accountId:
           format: int64
           type: integer
+        analyticsId:
+          type: string
         consent:
           $ref: "#/components/schemas/Consent"
         email:
@@ -474,6 +491,25 @@ info:
 openapi: 3.1.0
 paths:
   /account:
+    delete:
+      description: "Erases the signed-in User everywhere: their Auth0 identity, their row, their consent history and every invite in either direction. If they are the last member of their Account, the Account and its Recipes go too; if the Account is shared, it and its Recipes stay with the remaining members. Takes no body - the subject is always the caller."
+      operationId: delete-account
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteAccountOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Delete the signed-in user, and their account if they are its last member
+      tags:
+        - Account
     get:
       operationId: get-account
       responses:

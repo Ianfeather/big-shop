@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"recipes/internal/pkg/common"
+	"recipes/internal/pkg/telemetry"
 )
 
 func AddUser(ctx context.Context, db *sql.DB, user common.User) error {
@@ -33,9 +34,11 @@ func GetUser(ctx context.Context, db *sql.DB, userID string) (u *common.User, e 
 	// phases removing. A LEFT JOIN keeps this one query.
 	//
 	// LEFT, not INNER: a user with no enabled account_user row still has to
-	// come back. That is a real state - the invite flow disables every row for
-	// a user who accepts an invite elsewhere (see DisableUserAccount) - and an
-	// INNER JOIN would turn it into "no such user" and blank their preferences.
+	// come back. That is a real state - the invite flow disables someone's old
+	// membership as they accept an invite elsewhere (see DisableUserAccount),
+	// so there is a moment with none enabled, and account deletion's soft gate
+	// leaves them that way on purpose - and an INNER JOIN would turn it into
+	// "no such user" and blank their preferences.
 	userQuery := `
 		SELECT u.id, u.name, u.email, u.onboarded, u.show_pantry_staples, au.account_id
 			FROM user u
@@ -56,6 +59,21 @@ func GetUser(ctx context.Context, db *sql.DB, userID string) (u *common.User, e 
 	if accountID.Valid {
 		id := int(accountID.Int64)
 		user.AccountID = &id
+
+		// The Account's Google Analytics identifier, minted on first read. Sent
+		// to Google in place of account.id - see the field's comment in
+		// common/types.go and migrations/036_ga_account_uuid.sql.
+		//
+		// **The error is deliberately swallowed**, which is the same rule
+		// ADR-0007 states for telemetry: analytics must never be the reason
+		// somebody cannot load their recipes. A failure leaves AnalyticsID nil,
+		// the browser names no Account to Google, and everything else on this
+		// page works exactly as it did.
+		if analyticsID, err := AccountAnalyticsID(ctx, db, id); err != nil {
+			telemetry.RecordWarning(ctx, "mint account analytics id", err)
+		} else {
+			user.AnalyticsID = &analyticsID
+		}
 	}
 
 	// The latest consent decision rides along on the User rather than costing a

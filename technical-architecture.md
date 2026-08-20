@@ -357,6 +357,30 @@ unproxied origin to every visitor and undo the same-origin property.
 - `OPENAI_API_KEY` — GPT-4 Vision + GPT-3.5-turbo
 - `SENDGRID_API_KEY` — Email invitations
 - `AUTH0_DOMAIN` / `AUTH0_AUDIENCE` — Go JWT validation
+- `AUTH0_TENANT_DOMAIN` — the **canonical** tenant domain
+  (`something.region.auth0.com`), used only for the Management API. Unset today,
+  because `AUTH0_DOMAIN` is still the canonical domain and the code falls back to it.
+  **It must be set the moment a custom domain is adopted**: Auth0 requires the
+  Management API `audience` to stay the canonical domain even behind a custom one,
+  while `AUTH0_DOMAIN` has to become the custom domain so the Go API can validate
+  the issuer of login tokens. Without this split the audience follows `AUTH0_DOMAIN`
+  somewhere Auth0 rejects, and account deletion starts failing in a way that reads
+  like an Auth0 outage. See `service.auth0TenantDomain`.
+- `AUTH0_MGMT_CLIENT_ID` / `AUTH0_MGMT_CLIENT_SECRET` — a machine-to-machine
+  application authorised for the Auth0 Management API, used by account deletion to
+  remove the identity a departing user logs in with. **Both unset means the Auth0 step
+  is skipped**, which is what lets deletion work in dev, e2e and CI where no tenant is
+  reachable — and, in production, would leave a working login for a deleted account.
+  The skip records a warning on the request's span naming what is missing. See
+  `service.DeleteAuth0User`.
+- `INVITE_EMAIL_PEPPER` — the HMAC key `service.HashEmail` digests `invite.email` with.
+  **Read server-side by the Go process, so it must never gain a `NEXT_PUBLIC_` prefix**;
+  publishing it to the browser bundle would hand every visitor the one secret that stops
+  a database dump being reversed by hashing a guessed address. Unset outside production,
+  which degrades to a plain (unpeppered) digest — the right trade for a local stack with
+  no real addresses in it, and it means no test needs a secret. Rotating it is not a
+  one-way door: `invite` is never more than ~30 days deep because expired rows are purged
+  lazily, so a rotation self-heals within a month. See `migrations/035_invite_email_hash.sql`.
 
 #### The DSN's query parameters
 
@@ -487,7 +511,8 @@ Two independent pipelines, one per deployable — an accepted consequence of
   check is never deployed
 - Config: `netlify-functions/recipes/fly.toml`; image:
   `netlify-functions/recipes/Dockerfile`
-- Needs a `FLY_API_TOKEN` repository secret; `DSN` and `SENDGRID_API_KEY` are Fly
+- Needs a `FLY_API_TOKEN` repository secret; `DSN`, `SENDGRID_API_KEY`,
+  `INVITE_EMAIL_PEPPER`, `AUTH0_MGMT_CLIENT_ID` and `AUTH0_MGMT_CLIENT_SECRET` are Fly
   secrets, `AUTH0_DOMAIN`/`AUTH0_AUDIENCE` are in `fly.toml`'s `[env]`
 - Reached from the browser through a Netlify `status = 200` rewrite, so it stays
   same-origin. Server-side callers address it directly

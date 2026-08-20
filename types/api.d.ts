@@ -15,7 +15,11 @@ export interface paths {
         get: operations["get-account"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete the signed-in user, and their account if they are its last member
+         * @description Erases the signed-in User everywhere: their Auth0 identity, their row, their consent history and every invite in either direction. If they are the last member of their Account, the Account and its Recipes go too; if the Account is shared, it and its Recipes stay with the remaining members. Takes no body - the subject is always the caller.
+         */
+        delete: operations["delete-account"];
         options?: never;
         head?: never;
         patch?: never;
@@ -463,6 +467,15 @@ export interface components {
             id: number;
             status: string;
         };
+        DeleteAccountOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/bigshop/schemas/DeleteAccountOutputBody.json
+             */
+            readonly $schema?: string;
+            accountDeleted: boolean;
+        };
         DeleteRecipeInputBody: {
             /**
              * Format: uri
@@ -645,6 +658,7 @@ export interface components {
             readonly $schema?: string;
             /** Format: int64 */
             accountId?: number;
+            analyticsId?: string;
             consent?: components["schemas"]["Consent"];
             email: string;
             id?: string;
@@ -677,6 +691,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Account"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteAccountOutputBody"];
                 };
             };
             /** @description Error */

@@ -16,11 +16,17 @@ import (
 // without needing a real database.
 type fakeExecer struct {
 	queries []string
-	failOn  string
+	// args[i] is what queries[i] was called with. Recorded because
+	// deleteRecipeData's whole safety property is in its arguments - that every
+	// statement is scoped to the account - and a test that only reads the SQL
+	// text would pass with the account id left off entirely.
+	args   [][]interface{}
+	failOn string
 }
 
 func (f *fakeExecer) ExecContext(_ context.Context, query string, args ...interface{}) (sql.Result, error) {
 	f.queries = append(f.queries, query)
+	f.args = append(f.args, args)
 	if f.failOn != "" && strings.Contains(query, f.failOn) {
 		return nil, errors.New("fake exec failure")
 	}
@@ -299,4 +305,119 @@ func TestWithCanonicalUnitsDoesNotMutateTheCaller(t *testing.T) {
 	if original.Ingredients[0].Unit != "g" {
 		t.Errorf("caller's recipe was mutated: %q", original.Ingredients[0].Unit)
 	}
+}
+
+// deleteRecipeData is the only place the delete order lives, so these tests are
+// what stop that order drifting. They assert the sequence and the scoping rather
+// than the exact SQL text - the tables and their order are the contract, the
+// whitespace is not.
+func TestDeleteRecipeData(t *testing.T) {
+	// The order migrations/015's foreign key forces: everything that references
+	// a recipe goes before the recipe itself.
+	wantOrder := []string{
+		"DELETE FROM part",
+		"DELETE FROM recipe_tag",
+		"DELETE FROM list",
+		"DELETE FROM shopping_list_event",
+		"DELETE FROM recipe",
+	}
+
+	assertOrder := func(t *testing.T, fake *fakeExecer) {
+		t.Helper()
+		if len(fake.queries) != len(wantOrder) {
+			t.Fatalf("expected %d statements, got %d: %v", len(wantOrder), len(fake.queries), fake.queries)
+		}
+		for i, want := range wantOrder {
+			if !strings.Contains(fake.queries[i], want) {
+				t.Errorf("statement %d = %q, want it to contain %q", i, fake.queries[i], want)
+			}
+		}
+	}
+
+	t.Run("nil recipeIDs deletes the whole account", func(t *testing.T) {
+		fake := &fakeExecer{}
+		if err := deleteRecipeData(context.Background(), fake, 7, nil); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		assertOrder(t, fake)
+
+		// Every statement carries the account id and nothing else - no recipe
+		// ids, because "every Recipe in the account" is expressed by their
+		// absence.
+		for i, args := range fake.args {
+			for _, arg := range args {
+				if arg != 7 {
+					t.Errorf("statement %d (%s) got argument %v, want only the account id 7", i, fake.queries[i], arg)
+				}
+			}
+		}
+		// The final DELETE must not select from `recipe` in a subquery: MySQL
+		// refuses to delete from a table it is reading in the same statement
+		// (error 1093), which is why this one states its scope directly.
+		if strings.Contains(fake.queries[4], "SELECT") {
+			t.Errorf("the recipe DELETE uses a subquery over its own table, which MySQL rejects: %s", fake.queries[4])
+		}
+	})
+
+	t.Run("explicit recipeIDs are still filtered through the account", func(t *testing.T) {
+		fake := &fakeExecer{}
+		if err := deleteRecipeData(context.Background(), fake, 7, []int{11, 12}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		assertOrder(t, fake)
+
+		// The point of the assertion: ids are never trusted on their own. Each
+		// statement scopes by account as well, so passing another Account's
+		// recipe ids reaches nothing.
+		for i, query := range fake.queries {
+			var sawAccount bool
+			for _, arg := range fake.args[i] {
+				if arg == 7 {
+					sawAccount = true
+				}
+			}
+			if !sawAccount {
+				t.Errorf("statement %d (%s) is not scoped to the account: args %v", i, query, fake.args[i])
+			}
+		}
+		// list and shopping_list_event carry their own account_id, so they get
+		// it twice - once directly, once through the subquery.
+		if got := len(fake.args[0]); got != 3 {
+			t.Errorf("part delete got %d args, want account + 2 ids", got)
+		}
+		if got := len(fake.args[2]); got != 4 {
+			t.Errorf("list delete got %d args, want account twice + 2 ids", got)
+		}
+	})
+
+	t.Run("an empty but non-nil slice deletes nothing", func(t *testing.T) {
+		fake := &fakeExecer{}
+		if err := deleteRecipeData(context.Background(), fake, 7, []int{}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// The distinction that matters: collapsing empty into nil would turn
+		// "no Recipes selected" into "wipe the account".
+		if len(fake.queries) != 0 {
+			t.Fatalf("expected no statements, got %v", fake.queries)
+		}
+	})
+
+	t.Run("a failure part-way through is propagated", func(t *testing.T) {
+		// Specifically the shopping_list_event step, because it is the one the
+		// foreign key made necessary and the one a rewrite is most likely to
+		// drop.
+		fake := &fakeExecer{failOn: "shopping_list_event"}
+		err := deleteRecipeData(context.Background(), fake, 7, nil)
+		if err == nil {
+			t.Fatal("expected an error")
+		}
+		if !strings.Contains(err.Error(), "shopping list events") {
+			t.Errorf("error does not name the failing step: %v", err)
+		}
+		// And it stops there rather than pressing on to delete the recipe,
+		// which is what the transaction then rolls back.
+		if len(fake.queries) != 4 {
+			t.Errorf("expected to stop after the failing statement, ran %d: %v", len(fake.queries), fake.queries)
+		}
+	})
 }

@@ -97,6 +97,6 @@ because it is the obvious thing to reach for and does not apply here.
 - Any future promotional email is a **new family** with a new basis, a new consent record,
   and its own decision. It does not inherit this one.
 - The suppression list becomes a permanent record that survives Account deletion. That is
-  already the position `specs/account-deletion.md` takes for its own reasons, and this
+  already the position `specs/completed/account-deletion.md` takes for its own reasons, and this
   decision depends on it: unsubscribe has to outlive the Account, or the guarantee offered
   in every send is not one.

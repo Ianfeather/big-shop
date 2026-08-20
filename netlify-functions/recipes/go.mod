@@ -9,6 +9,7 @@ require (
 	github.com/awslabs/aws-lambda-go-api-proxy v0.9.0
 	github.com/danielgtaylor/huma/v2 v2.39.1
 	github.com/go-sql-driver/mysql v1.10.0
+	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/rs/cors v1.7.0
 	github.com/sendgrid/sendgrid-go v3.10.4+incompatible
@@ -35,7 +36,6 @@ require (
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/nxadm/tail v1.4.6 // indirect
 	github.com/onsi/ginkgo v1.14.2 // indirect

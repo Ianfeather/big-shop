@@ -6,16 +6,16 @@
 # AFTER to prove the migration did not strand anything.
 #
 # Worth doing because TiDB does not have all the constraints a database built
-# from migrations/*.sql has. Production declares 7 foreign keys where local
-# MySQL declares 15, so a DELETE from a parent table that errors locally can
-# succeed against production and silently orphan its children. Migration 029 did
-# exactly that with `thyme sprig`, and the recipe holding that Ingredient Line
-# just lost it.
+# from migrations/*.sql has. Production declares far fewer of them, so a DELETE
+# from a parent table that errors locally can succeed against production and
+# silently orphan its children. Migration 029 did exactly that with
+# `thyme sprig`, and the recipe holding that Ingredient Line just lost it.
 #
 # That gap is also why this does not check declared constraints alone: doing so
 # would cover fewer than half the schema's relationships and still look clean.
 # scripts/check-orphans.sql adds every column named `<table>_id` whose table
-# exists, declared or not - 21 relationships against the 15 declared locally.
+# exists, declared or not. This run prints both counts below, for whichever
+# database it is pointed at.
 #
 # Runs in two steps rather than generating the checks in SQL. TiDB rejects
 # `SELECT ... INTO @var` outright, so the dynamic-SQL version of this failed

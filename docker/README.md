@@ -160,8 +160,8 @@ migration for a baseline, and after to prove nothing was stranded.
 **Production does not have the constraints local MySQL has**, and that
 difference is the whole reason this exists. Every constraint in
 `migrations/*.sql` is `NO ACTION`, so deleting a row that still has children
-errors out against a database built from those migrations. TiDB declares **7
-foreign keys where local MySQL declares 15**, so the same statement can succeed
+errors out against a database built from those migrations. TiDB declares **far
+fewer foreign keys than those migrations do**, so the same statement can succeed
 against production and leave the children dangling with no error at all.
 Migration `029` did this: it deleted `thyme sprig` while an Ingredient Line
 still referenced it, and Potato & Leek Soup silently lost its thyme. Nothing in
@@ -170,8 +170,10 @@ the test suite could catch it, because the tests run against MySQL.
 That gap is also why the check does not trust declared constraints alone -
 doing so would cover fewer than half the schema and still report clean.
 `scripts/check-orphans.sql` unions the declared foreign keys with every column
-named `<table>_id` whose table exists, giving 21 relationships against the 15
-declared locally. Expect "Relationships checked" to exceed `declared_fks`.
+named `<table>_id` whose table exists, so it covers relationships no constraint
+was ever declared for. A run prints both counts for whichever database it is
+pointed at - `declared_fks` and "Relationships checked" - and the second
+exceeding the first is expected, not a fault.
 
 It runs in two steps - introspect, then build and execute - rather than
 generating the checks in SQL, because **TiDB rejects `SELECT ... INTO @var`**

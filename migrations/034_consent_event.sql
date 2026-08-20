@@ -67,9 +67,95 @@
 -- all** - no dropped foreign key, no new column. Deleting children before the
 -- parent is what the constraint is for. See service.deleteAccountTx and
 -- specs/completed/account-deletion.md.
+--
+-- ## Why this file starts by rewriting three columns it did not create
+--
+-- `user.id` does not have the same collation in the two databases this file
+-- has to run against, and the foreign key at the bottom cannot be created
+-- until it does. Production TiDB holds it as `utf8` / `utf8_bin` (utf8mb3 -
+-- the server default on the day `008_user.sql` was applied by hand); a local
+-- MySQL 8 built from `migrations/*.sql` holds it as `utf8mb4` /
+-- `utf8mb4_0900_ai_ci`. InnoDB requires an *exact* charset-and-collation match
+-- on both sides of a string foreign key, so a `consent_event.user_id` that
+-- satisfies one database is rejected by the other with
+--
+--   ERROR 3780: Referencing column 'user_id' and referenced column 'id' in
+--   foreign key constraint 'fk_consent_event_user_id' are incompatible.
+--
+-- Both directions of that were tried before this. Declaring no charset (so the
+-- column inherits whatever the database default is) fails in production;
+-- pinning `utf8_bin` to match production fails locally. **There is no literal
+-- that works in both, because the parent column genuinely is two different
+-- things** - so the parent gets fixed rather than the child humoured.
+--
+-- `utf8mb4_bin` is the target because it is the only choice that is available
+-- on both engines *and* preserves the comparison semantics of the column being
+-- changed. `utf8_bin` is utf8mb3, which MySQL has deprecated. MySQL 8's own
+-- default, `utf8mb4_0900_ai_ci`, does not exist in TiDB before 7.4 and is
+-- accent- and case-insensitive - a bad property to introduce on the primary
+-- key of a table of Auth0 subject identifiers, where two ids differing only by
+-- case would newly collide. `utf8mb4_bin` keeps the byte-exact comparison
+-- `utf8_bin` already gave production.
+--
+-- **This file was applied to production once before, in a different form, and
+-- that run was undone rather than kept.** The first attempt pinned `utf8_bin`
+-- to match production and succeeded there, which is how production came to
+-- have a `consent_event` at all; the same text then failed against every local
+-- and CI database, silently, because `docker/mysql-init/01-migrate-and-seed.sh`
+-- applies migrations with `mysql --force` and simply skipped the failing
+-- `CREATE TABLE`. Two databases had run two different versions of one
+-- migration and reached two different schemas, and no edit to this file could
+-- have converged them.
+--
+-- So production's `consent_event` was dropped and this file re-run against it.
+-- That was only defensible because the table was **empty** - confirmed by
+-- `SELECT COUNT(*)` immediately before, not assumed. This table is evidence
+-- that consent was given, and the header above argues at length that a record
+-- which has been rewritten demonstrates nothing; an empty one had nothing to
+-- demonstrate and nothing to lose. **Do not repeat that shortcut once rows
+-- exist** - by then the answer is a new migration that alters the column in
+-- place, not a drop.
+--
+-- **This is deliberately not the whole clean-up.** Production's charsets are a
+-- patchwork accreted over years - `list` and `part` are `latin1_bin`, `tag` is
+-- `utf8mb4_bin`, `recipe` and `account` are `utf8_bin` - and normalising all
+-- of it is its own piece of work, not something to smuggle into the consent
+-- migration. What is here is the `user.id` key family and nothing else:
+-- the column, the one column that carries a foreign key to it, and
+-- `invite.admin_id`, which holds the same Auth0 id under a different name.
+--
+-- The `DROP FOREIGN KEY` below is the one statement that behaves differently
+-- on the two engines, and it is expected to fail in production. MySQL will not
+-- alter a column while a constraint points at it, so locally the constraint
+-- must come off and go back on around the change. Production never created it:
+-- TiDB declares only a fraction of the foreign keys `migrations/*.sql` does
+-- (see docker/README.md and scripts/check-orphans.sh, which counts both for a
+-- given database rather than quoting a number), and `account_user` there has
+-- a plain `KEY` where this repo declares a constraint. Dropping a constraint
+-- that does not exist is an error, not a no-op, so a production run skips this
+-- statement - the local seeding script passes `mysql --force` and skips it for
+-- the same reason on a database that has somehow already lost it.
+ALTER TABLE `account_user` DROP FOREIGN KEY `fk_account_user_user_id`;
+
+ALTER TABLE `user`
+  MODIFY `id` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT 'auth0 id';
+
+ALTER TABLE `account_user`
+  MODIFY `user_id` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT 'auth0 id';
+
+ALTER TABLE `invite`
+  MODIFY `admin_id` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT 'the user who invited them';
+
+-- Recreating the constraint is a local-only restoration of what the DROP above
+-- removed. In production it *adds* a foreign key that has never been there,
+-- which TiDB 6.6+ will genuinely enforce - so run scripts/check-orphans.sh
+-- first: it fails against existing orphan rows rather than skipping them.
+ALTER TABLE `account_user`
+  ADD CONSTRAINT `fk_account_user_user_id` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`);
+
 CREATE TABLE `consent_event` (
   `id` int NOT NULL AUTO_INCREMENT COMMENT 'primary key',
-  `user_id` varchar(255) NOT NULL COMMENT 'auth0 id; FK to user.id, the same key account_user.user_id uses',
+  `user_id` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT 'auth0 id; FK to user.id, the same key account_user.user_id uses',
   `analytics` boolean NOT NULL COMMENT 'TRUE = granted, FALSE = declined or withdrawn',
   -- The version of the privacy policy the decision was made against, as a date
   -- string (lib/consent.ts's POLICY_VERSION). This is what lets a future

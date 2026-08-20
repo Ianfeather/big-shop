@@ -13,8 +13,28 @@ import (
 
 	"recipes/internal/pkg/app"
 	"recipes/internal/pkg/common"
+	"recipes/internal/pkg/lifecycle"
 	"recipes/internal/pkg/service"
 	"recipes/internal/pkg/telemetry"
+
+	// The IANA timezone database, compiled into the binary.
+	//
+	// time.LoadLocation otherwise reads it from the operating system, and this
+	// binary ships on distroless/static - a base image with no shell, no package
+	// manager and nothing else. The Dockerfile asserts that image carries tzdata;
+	// this makes the program not care whether that stays true.
+	//
+	// It became load-bearing with the onboarding email programme
+	// (specs/completed/email.md), which sends at 10:00 in the *recipient's* morning and so
+	// resolves a stored zone name for every send. The failure it prevents is the
+	// quiet kind: with no database available LoadLocation fails for every zone,
+	// every user silently falls back to Europe/London, and the only symptom is
+	// mail arriving at the wrong hour on someone else's continent. Nothing errors
+	// and no test catches it, because tests run on an image that has tzdata.
+	//
+	// Costs about 450KB of binary. Cheap for removing a whole class of
+	// works-locally-wrong-in-production failure.
+	_ "time/tzdata"
 
 	"github.com/XSAM/otelsql"
 	"github.com/aws/aws-lambda-go/events"
@@ -31,6 +51,13 @@ import (
 var negroniLambda *negroniadapter.NegroniAdapter
 var router *negroni.Negroni
 var openapiAPI huma.API
+
+// db is the connection pool, held at package level so main can reach it.
+//
+// It was a local in init() until the onboarding email ticker needed it: the
+// ticker is started from the serve branch of main, deliberately and only there,
+// so the pool has to outlive the function that opened it.
+var db *sql.DB
 
 // purgeConfigured is captured at startup so main can report it. Held here
 // rather than read from the environment again so that what is logged is what
@@ -105,6 +132,20 @@ func isHashInviteEmailsMode() bool {
 	return len(os.Args) > 1 && os.Args[1] == "hash-invite-emails"
 }
 
+// isPreviewMode reports whether the process was invoked as `go run . preview`,
+// which serves the email templates in a browser and sends nothing. Like the
+// OpenAPI printer it needs no database.
+func isPreviewMode() bool {
+	return len(os.Args) > 1 && os.Args[1] == "preview"
+}
+
+// isSendTestMode reports whether the process was invoked as
+// `go run . send-test --to=... --kind=...`, which sends exactly one email to one
+// address and writes nothing to the send log. Needs no database either.
+func isSendTestMode() bool {
+	return len(os.Args) > 1 && os.Args[1] == "send-test"
+}
+
 // isServeMode reports whether the process should run as a plain HTTP server:
 // the production container on Fly, `npm run dev:full`, and the e2e stack.
 // `dev` is the name this mode had when it was only ever used locally; it is
@@ -128,6 +169,14 @@ func init() {
 		MinVersion: tls.VersionTLS12,
 		ServerName: "gateway01.eu-central-1.prod.aws.tidbcloud.com",
 	})
+
+	// Both email tools return before the database is opened, exactly as the
+	// OpenAPI printer does. Neither needs one: preview renders templates, and
+	// send-test deliberately writes no email_send row because a test send is not
+	// a send to that user.
+	if isPreviewMode() || isSendTestMode() {
+		return
+	}
 
 	if isOpenAPIMode() {
 		application, err := app.NewApp(&common.Env{})
@@ -161,7 +210,8 @@ func init() {
 	// without it.
 	shutdownTelemetry, _ = telemetry.Setup(context.Background())
 
-	db, err := otelsql.Open("mysql", os.Getenv("DSN"),
+	var err error
+	db, err = otelsql.Open("mysql", os.Getenv("DSN"),
 		otelsql.WithAttributes(semconv.DBSystemNameMySQL),
 		otelsql.WithSpanOptions(otelsql.SpanOptions{
 			// Emit a query span only when the caller passed a context that
@@ -316,7 +366,11 @@ func handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.API
 }
 
 func main() {
-	if isOpenAPIMode() {
+	if isPreviewMode() {
+		runPreview()
+	} else if isSendTestMode() {
+		runSendTest()
+	} else if isOpenAPIMode() {
 		spec, err := openapiAPI.OpenAPI().YAML()
 		if err != nil {
 			panic(err.Error())
@@ -367,6 +421,21 @@ func main() {
 		} else {
 			log.Println("telemetry disabled (set OTEL_EXPORTER_OTLP_ENDPOINT to enable)")
 		}
+
+		// The onboarding email sequence's hourly ticker.
+		//
+		// Started here and nowhere else, which is the point: this branch is the
+		// single always-on Fly machine, so there is exactly one ticker in
+		// existence. The Lambda branch below must never start one - it would
+		// start a fresh ticker on every invocation, each living as long as the
+		// invocation and none of them ever reaching the next hour.
+		//
+		// Given a database and nothing else. With no SendGrid key or no
+		// unsubscribe group configured it runs, finds who is due, declines to
+		// send, and writes nothing - so the sequence begins correctly whenever
+		// the configuration arrives rather than having marked everyone as
+		// already mailed. See internal/pkg/lifecycle.
+		lifecycle.Start(context.Background(), db)
 
 		server := http.Server{
 			Addr:         ":8080",

@@ -317,6 +317,50 @@ The Go API's telemetry is configured separately, as Fly secrets on the collector
 sidecar rather than on the app — `docs/adr/0007-observability-otel-grafana-cloud.md`
 and the Session 2 notes in the same state file.
 
+### Email variables, and what happens when they are absent
+
+Read by the Go API only (`internal/pkg/service/email`), so these are Fly
+configuration rather than Netlify's.
+
+| Variable | Read by | Secret? |
+|---|---|---|
+| `SENDGRID_API_KEY` | every send | **yes** |
+| `SENDGRID_ASM_GROUP_ID` | onboarding email only — the SendGrid unsubscribe group | no |
+| `SITE_URL` | link building in templates; defaults to `https://www.bigshop.life` | no |
+| `ONBOARDING_EMAIL_ENABLED` | the switch for the onboarding sequence — **off unless explicitly `true`** | no |
+
+**Their absence is the off switch, and it is a designed state rather than a
+broken one.** With no `SENDGRID_API_KEY` nothing sends, nothing errors, and no
+row is written to `email_send` — so the onboarding sequence begins correctly the
+moment a key lands rather than having silently marked everyone as already
+mailed. The key is read per call, never at startup, so the production image
+boots and answers `/health` without it. See `specs/completed/email.md`, "When there is no
+key".
+
+**`SENDGRID_ASM_GROUP_ID` is a hard requirement for onboarding email
+specifically.** Without it there is no unsubscribe link and no
+`List-Unsubscribe` header, and
+[ADR-0010](./docs/adr/0010-lifecycle-email-lawful-basis.md) rests the lawful
+basis for sending it on both being present — so `SendLifecycle` declines to send
+rather than delivering a message the basis does not cover. Transactional email
+(the Account invite) sets no group and is unaffected, because transactional
+email is deliberately not unsubscribable.
+
+**`ONBOARDING_EMAIL_ENABLED` is the switch, and it is off.** The key, the sender
+and the unsubscribe group are all live, so the sequence would otherwise start
+mailing real people the moment it deployed. It gates the hourly ticker and the
+welcome email sent on signup; it deliberately does not gate `send-test` (the
+point of merging it switched off is being able to test it) or the Account invite
+(transactional, and older than the programme). Before switching it on, see the
+note in `fly.toml` about moving `email_launch.launched_at` forward if the gap
+between deploying and enabling has grown long.
+
+**Both secrets are a two-part change on Fly.** Under `machine_config.json` a
+container receives only the secrets it declares, so `fly secrets set` alone
+leaves the value absent at runtime with nothing reporting a problem — it must
+also appear in the `api` container's `secrets` array. `fly.toml:36-46`
+documents the trap at length.
+
 ### `NEXT_PUBLIC_HOST` is a fallback, not the app's origin
 
 Every `NEXT_PUBLIC_*` value is inlined into the bundle at build time, so this one

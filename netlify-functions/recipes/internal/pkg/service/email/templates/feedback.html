@@ -1,0 +1,47 @@
+{{ define "content" }}
+  {{/*
+    Day 14, the last email in the sequence.
+
+    NON-PROMOTIONAL. See the warning in layout.html.
+
+    **This one asks for a reply, and that is a promise with an operational cost.**
+    specs/completed/email.md: "The Day 14 email asks for a reply; asking for one and
+    dropping it in a void is worse than not asking." Replies come to
+    hello@bigshop.life - the same address everything is sent from, one address in
+    both directions, and deliberately not a send-only alias.
+
+    No call-to-action button, deliberately. The action being asked for *is* the
+    reply, and a green button next to it would compete with the one thing this
+    email exists to do.
+
+    It also says plainly that the emails stop here. Someone who has been ignoring
+    them should know they are already over, and someone who liked them should not
+    be left waiting for a fifth.
+  */}}
+  <p style="margin:0 0 16px 0;">{{ if .Data.Name }}Hello {{ .Data.Name }},{{ else }}Hello,{{ end }}</p>
+
+  <p style="margin:0 0 16px 0;">
+    You have had Big Shop for a couple of weeks now. How is it going?
+  </p>
+
+  <p style="margin:0 0 16px 0;">
+    I would genuinely like to know &mdash; particularly the unflattering parts. What did you
+    expect it to do that it does not? What took more taps than it should have? Did importing
+    a recipe fail on a site you use?
+  </p>
+
+  <p style="margin:0 0 16px 0;">
+    Just reply to this email &mdash; it goes to hello@bigshop.life, which is a person rather
+    than a ticketing system. Big Shop is small enough that one reply genuinely changes what
+    gets built next.
+  </p>
+
+  <p style="margin:0 0 16px 0;">
+    This is the last of these &mdash; four emails over a fortnight and then they stop. You
+    will not hear from me again unless you write back.
+  </p>
+
+  <p style="margin:0;">
+    Thanks for trying it.
+  </p>
+{{ end }}

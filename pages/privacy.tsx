@@ -86,7 +86,8 @@ const processors = [
   },
   {
     name: 'SendGrid (Twilio)',
-    purpose: 'Sending an invite email when you share your account with someone.',
+    purpose:
+      'Sending the emails below \u2014 your first-fortnight emails, and an invite when you share your account. Also holds unsubscribes permanently.',
     where: 'United States',
   },
   ...(ANALYTICS_LIVE
@@ -226,6 +227,13 @@ export default function Privacy() {
                 <strong>A few preferences.</strong>{' '}Whether you have been shown the welcome screen,
                 and how you like the shopping list laid out.
               </li>
+              <li>
+                <strong>Your timezone.</strong>{' '}The name of the timezone your browser reported when
+                you signed up &mdash; &ldquo;Europe/London&rdquo;, for instance. It is recorded once,
+                never updated, and used for one thing: sending the emails below at a reasonable hour
+                where you are rather than where our servers are. It stays in our database and is not
+                sent to anyone else.
+              </li>
             </ul>
             <p>
               There is no advertising here, no profiling, and nothing is sold or shared with anyone
@@ -354,6 +362,42 @@ export default function Privacy() {
                 ? 'Everything above Google Analytics is needed for the site to work or to keep it working, is not used to track you anywhere else, and is not something you are asked to consent to. The Google Analytics row is the only one that depends on your answer, and it is absent entirely unless you accept.'
                 : 'All of it is needed for the site to work or to keep it working, none of it is used to track you anywhere else, and there is nothing here you are asked to consent to.'}{' '}
               Clearing your browser data for this site removes the lot.
+            </p>
+          </section>
+
+          <section className={styles.section}>
+            <h2 className={styles.heading}>Email we send you</h2>
+            <p>
+              When you sign up, you get four emails over your first fortnight: a welcome, some
+              things the app does that are easy to miss, a few recipe ideas, and a note two weeks
+              in asking how you are getting on. Then they stop. Everyone who signs up gets the
+              same four &mdash; nothing watches what you do in the app to decide what to send you.
+            </p>
+            <p>
+              We send these without asking first, on the basis of legitimate interests, because
+              they explain a service you actively signed up for rather than advertising anything.
+              They will never carry a promotion, a referral offer or anyone else&rsquo;s content
+              &mdash; if that ever changed, we would have to ask your permission first, and we
+              would.
+            </p>
+            <p>
+              Every one of them has an unsubscribe link, and it works immediately. Separately, we
+              may email you about things you have done &mdash; an invitation to share an account,
+              for example. Those are not marketing and cannot be unsubscribed from, though there
+              are very few of them.
+            </p>
+            <p>
+              <strong>One thing worth knowing about unsubscribing.</strong>{' '}If you unsubscribe, or
+              mark a message as spam, that decision is held by SendGrid, the company that sends our
+              email &mdash; not by us. It is kept permanently and deliberately, so that it survives
+              even if you later delete your Big Shop account and sign up again with the same
+              address. It is the one piece of information about you we will not delete on request:
+              deleting it would mean we could start emailing you again, which is the opposite of
+              what you asked for.
+            </p>
+            <p>
+              We do not track whether you open these emails, and we do not rewrite the links in
+              them to see what you click.
             </p>
           </section>
 

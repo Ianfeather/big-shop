@@ -86,6 +86,18 @@ func AddUserToAccount(ctx context.Context, db *sql.DB, accountID int, user commo
 	// Exec, not Query: these are writes, and Query returns an *sql.Rows that
 	// nothing closed - holding the connection until the garbage collector got
 	// to it. The first one's error was also being discarded entirely.
+	// This is the second path that can create a `user` row, and it writes no
+	// timezone. Combined with AddUser's insert-only rule - the zone is written
+	// on INSERT and never on UPDATE - a row born here can never acquire one:
+	// the next POST /user finds an existing row and takes the UPDATE branch,
+	// which does not touch the column. Such a user falls back to Europe/London
+	// for the onboarding sequence, which is the designed behaviour for an
+	// unknown zone rather than a failure.
+	//
+	// Not live today: both callers resolve an existing user first, so this
+	// INSERT is effectively a no-op guard. Recorded because "captured at
+	// signup" is only true while AddUser remains the only path that really
+	// creates users, and that is not enforced anywhere.
 	userQuery := `INSERT INTO user (id, name) VALUES (?,?) ON DUPLICATE KEY UPDATE id=id;`
 	if _, err := db.ExecContext(ctx, userQuery, user.ID, user.Name); err != nil {
 		return fmt.Errorf("adding user: %w", err)
@@ -294,6 +306,32 @@ func deleteAccountTx(ctx context.Context, tx execer, userID string, accountID in
 	// after erasure you process none of theirs.
 	if _, err := tx.ExecContext(ctx, "DELETE FROM consent_event WHERE user_id = ?;", userID); err != nil {
 		return fmt.Errorf("deleting the user's consent history: %w", err)
+	}
+
+	// The onboarding email send log goes too, and it needs deleting explicitly
+	// because nothing forces it: `email_send.user_id` deliberately carries no
+	// foreign key to `user` (see migrations/038_email_send.sql), so the `DELETE
+	// FROM user` below would succeed and leave these rows orphaned rather than
+	// failing.
+	//
+	// **They hold an Auth0 subject in plaintext**, which is precisely what the
+	// tombstone-row option was rejected for a few lines up: keeping one for
+	// somebody we have just told we erased. That the column is not a foreign key
+	// makes it easier to miss, not more acceptable to keep.
+	//
+	// The migration's own reasoning for retaining them does not survive contact
+	// with this. It argued that a cascade would let "a deleted user who signs up
+	// again with the same address start the whole sequence over, which is the
+	// opposite of what the suppression list is for" - conflating two different
+	// things. **The unsubscribe guarantee lives in SendGrid's suppression list**,
+	// which is permanent, keyed on the address, and untouched by anything here;
+	// that is exactly why specs/completed/email.md put it there rather than in a
+	// column of ours. This table only stops a *live* user being sent the same
+	// email twice. So someone who deletes and signs up again is a new Account
+	// and may reasonably be welcomed again - and if they had unsubscribed,
+	// SendGrid still silently drops it.
+	if _, err := tx.ExecContext(ctx, "DELETE FROM email_send WHERE user_id = ?;", userID); err != nil {
+		return fmt.Errorf("deleting the user's email history: %w", err)
 	}
 
 	// **Every membership this person holds, not just the one being deleted.**

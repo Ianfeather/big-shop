@@ -185,6 +185,27 @@ type User struct {
 	// deliberately swallowed, because analytics must never be why somebody
 	// cannot load their recipes.
 	AnalyticsID *string `json:"analyticsId,omitempty"`
+	// Timezone is the IANA zone name (e.g. "Europe/London") the browser reported
+	// when this User first signed up, or "" if it was never captured.
+	//
+	// It exists for the onboarding email sequence, which sends at 10:00 in the
+	// recipient's morning rather than ours - see specs/completed/email.md and
+	// migrations/037_user_timezone.sql. Nothing in the UI reads it.
+	//
+	// **Written once, on insert, and never updated.** service.AddUser leaves it
+	// out of the ON DUPLICATE KEY UPDATE clause that refreshes name, email and
+	// last_logged_in_at on every login, so a fortnight abroad cannot shift a
+	// fortnight-long sequence by nine hours. The empty case is normal, not an
+	// error: every row predating the column has none, and the sender falls back
+	// to Europe/London.
+	//
+	// omitempty for the reason Onboarded above gives: it is never sent as input
+	// on POST /invite, and Huma infers required-ness from JSON tags, so without
+	// it every invite body would be required to carry a timezone. Unlike
+	// ShowPantryStaples this is a plain string rather than a pointer, because
+	// there is no "explicitly empty" state that has to beat "absent" - both mean
+	// the same thing and both take the fallback.
+	Timezone string `json:"timezone,omitempty"`
 	// Consent is the User's most recent analytics-consent decision, or nil if
 	// they have never made one.
 	//

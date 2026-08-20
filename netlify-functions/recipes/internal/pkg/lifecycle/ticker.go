@@ -1,0 +1,187 @@
+package lifecycle
+
+import (
+	"context"
+	"database/sql"
+	"log"
+	"time"
+
+	"recipes/internal/pkg/service/email"
+)
+
+// tickInterval is how often the scheduler wakes up.
+//
+// Hourly rather than daily because sends are at 10:00 in the *recipient's*
+// timezone, so the ticker has to wake often enough to catch every zone's 10:00.
+// Exactly one hour matters: it guarantees precisely one tick lands inside each
+// day's 10:00-10:59 window per zone, whatever time the process happened to
+// start.
+const tickInterval = time.Hour
+
+// Sender is the slice of the email package the scheduler uses.
+//
+// An interface only so tests can observe what would be sent without a SendGrid
+// key or a network - the same reason app.cachePurger exists. The bool is
+// load-bearing rather than decorative: it distinguishes "delivered" from
+// "declined to send because nothing is configured", and only the first may
+// write an email_send row.
+type Sender interface {
+	SendLifecycle(ctx context.Context, to email.Recipient, subject, template string, data any) (bool, error)
+}
+
+// sendGridSender is the real one.
+type sendGridSender struct{}
+
+func (sendGridSender) SendLifecycle(ctx context.Context, to email.Recipient, subject, template string, data any) (bool, error) {
+	return email.SendLifecycle(ctx, to, subject, template, data)
+}
+
+// TemplateData is what an onboarding template renders against.
+//
+// A single shape for all four rather than one per email, because they want the
+// same things and a template that ignores a field costs nothing. Name is
+// frequently empty - it is whatever Auth0 gave us - so templates must not
+// assume it.
+type TemplateData struct {
+	Name string
+	// Campaign is the utm_campaign value for links in this email, so attribution
+	// is per-email without any template hardcoding its own name. Campaign-level
+	// only: **no user or account identifier ever goes in a link**, because that
+	// would rebuild in a third party's logs exactly the identifier linkage
+	// specs/account-deletion.md spends its GA4 section removing.
+	Campaign string
+}
+
+// Start runs the scheduler for the life of the process.
+//
+// **Called from the serve path only**, never from the Lambda handler, which
+// would start a ticker per invocation - hundreds of them, each outliving
+// nothing and each racing the others. There is exactly one always-on machine
+// (fly.toml's auto_stop_machines = false, chosen so cold starts could not
+// happen), so there is one ticker and no leader election: the entire
+// distributed-systems problem is absent by construction rather than by care. If
+// that ever stops being true, email_send's primary key is what stops a second
+// machine double-sending.
+//
+// Runs once immediately and then hourly. The immediate run is safe for the same
+// reason re-running by hand is safe - a duplicate is a primary key violation,
+// not a second email - and it means a restart during the send hour still
+// delivers that hour's mail rather than waiting until tomorrow.
+func Start(ctx context.Context, db *sql.DB) {
+	// Said once at startup, because both states are silent otherwise and they
+	// look identical from the outside: a switched-off programme and a broken one
+	// both send nothing. This is the line that tells them apart in the Fly logs.
+	if Enabled() {
+		log.Printf("lifecycle: onboarding email enabled, ticking every %s", tickInterval)
+	} else {
+		log.Printf("lifecycle: onboarding email disabled (set %s=true to enable); the ticker will send nothing", enabledVar)
+	}
+
+	go func() {
+		Run(ctx, db, sendGridSender{}, time.Now())
+
+		ticker := time.NewTicker(tickInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case now := <-ticker.C:
+				Run(ctx, db, sendGridSender{}, now)
+			}
+		}
+	}()
+}
+
+// store is the database underneath a tick.
+//
+// An interface so Run's decisions can be tested without a database. The
+// branches it protects are not decoration: "declined to send, so record
+// nothing" is the single thing standing between an unconfigured environment and
+// a send log claiming every user has already been mailed - which would silently
+// consume the whole sequence for everybody the moment a key was added.
+type store interface {
+	candidates(ctx context.Context) ([]Candidate, error)
+	record(ctx context.Context, userID string, kind Kind, sentAt time.Time) error
+}
+
+// dbStore is the real one.
+type dbStore struct{ db *sql.DB }
+
+func (s dbStore) candidates(ctx context.Context) ([]Candidate, error) {
+	return loadCandidates(ctx, s.db)
+}
+
+func (s dbStore) record(ctx context.Context, userID string, kind Kind, sentAt time.Time) error {
+	return RecordSend(ctx, s.db, userID, kind, sentAt)
+}
+
+// Run performs one tick against the database.
+//
+// Never returns an error, and that is deliberate. A tick is a background sweep
+// over many users; one bad row, one unloadable template or one SendGrid refusal
+// must not stop the other ninety-nine from getting their mail. Everything is
+// logged and the tick carries on, and because nothing is recorded unless it was
+// sent, whatever failed is retried on the next tick.
+//
+// `now` is a parameter rather than read from the clock inside, so tests can
+// place the tick at a precise local hour on a chosen date.
+func Run(ctx context.Context, db *sql.DB, sender Sender, now time.Time) {
+	run(ctx, dbStore{db}, sender, now)
+}
+
+// run is Run with the database abstracted away, which is the part worth testing.
+func run(ctx context.Context, st store, sender Sender, now time.Time) {
+	// Checked here rather than only at Start, so that turning the flag off is
+	// enough on its own - a ticker already running, or a Run invoked by hand,
+	// both stop sending. Cheap: one environment read an hour.
+	if !Enabled() {
+		return
+	}
+
+	candidates, err := st.candidates(ctx)
+	if err != nil {
+		log.Printf("lifecycle: could not load candidates: %v", err)
+		return
+	}
+
+	for _, candidate := range candidates {
+		next, ok := due(candidate, now)
+		if !ok {
+			continue
+		}
+
+		sent, err := sender.SendLifecycle(ctx,
+			email.Recipient{Name: candidate.Name, Address: candidate.Email},
+			next.Subject,
+			next.Template,
+			TemplateData{Name: candidate.Name, Campaign: string(next.Kind)},
+		)
+		if err != nil {
+			log.Printf("lifecycle: sending %s to %s failed: %v", next.Kind, candidate.UserID, err)
+			continue
+		}
+		if !sent {
+			// Nothing configured - no API key, or no unsubscribe group. Not a
+			// fault, and specifically not something to record: leaving the send
+			// log untouched is what makes the whole sequence begin correctly
+			// the moment the configuration lands, rather than having quietly
+			// marked everyone as already mailed. The email package logs the
+			// reason once per process, so this stays silent.
+			continue
+		}
+
+		if err := st.record(ctx, candidate.UserID, next.Kind, now); err != nil {
+			// The email has already gone. Failing to record it means it will be
+			// sent again on the next tick, which is the one duplicate this
+			// design cannot rule out - so it is logged loudly rather than
+			// swallowed.
+			log.Printf("lifecycle: SENT %s to %s but could not record it, it may be sent again: %v",
+				next.Kind, candidate.UserID, err)
+			continue
+		}
+
+		log.Printf("lifecycle: sent %s to %s", next.Kind, candidate.UserID)
+	}
+}

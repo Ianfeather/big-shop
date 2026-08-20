@@ -4,15 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
+	"log"
 	"net/http"
-	"os"
+	"time"
+
 	"recipes/internal/pkg/common"
+	"recipes/internal/pkg/lifecycle"
 	"recipes/internal/pkg/service"
+	"recipes/internal/pkg/service/email"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/sendgrid/sendgrid-go"
-	"github.com/sendgrid/sendgrid-go/helpers/mail"
 )
 
 // UserInput carries a user body, used to add a new user.
@@ -29,7 +30,8 @@ func (a *App) addUser(ctx context.Context, input *UserInput) (*UserOutput, error
 	user := input.Body
 	user.ID = callerFrom(ctx).UserID
 
-	if err := service.AddUser(ctx, a.db, user); err != nil {
+	created, err := service.AddUser(ctx, a.db, user)
+	if err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("could not add new user"), err)
 	}
 
@@ -45,7 +47,118 @@ func (a *App) addUser(ctx context.Context, input *UserInput) (*UserOutput, error
 		return nil, fail(ctx, huma.Error500InternalServerError("Error fetching saved user"), err)
 	}
 
+	if created {
+		a.sendWelcomeEmail(ctx, *saved)
+	}
+
 	return &UserOutput{Body: *saved}, nil
+}
+
+// welcomeTimeout bounds the background send. Nothing waits on it, so an
+// unbounded request would only hold a goroutine open against an unresponsive
+// SendGrid.
+const welcomeTimeout = 20 * time.Second
+
+// sendWelcomeEmail sends the day 0 email, in the background, best effort.
+//
+// **It must never fail the request, and it must never delay it.** That is not a
+// preference: it is the exact mistake POST /invite makes today, where a send
+// failure returns 400 while the Invite row it already wrote survives - the user
+// sees an error for something that worked. specs/completed/email.md is explicit that this
+// must not be rebuilt here: "The User is created; the email is a courtesy on
+// top."
+//
+// Sent inline rather than left to the ticker because a welcome email arriving
+// the next morning is a broken welcome. It is still Day 0 of the Sequence, so if
+// this fails - or finds nothing configured - the ticker retries it at 10:00 in
+// their own morning like any other email in the sequence. Nothing is recorded
+// unless it was genuinely sent, which is what makes that retry happen.
+//
+// Only called when AddUser reports it actually created the row. POST /user runs
+// on every login, so without that check this would send a welcome email every
+// time somebody signed in.
+func (a *App) sendWelcomeEmail(ctx context.Context, user common.User) {
+	// The feature flag, checked before anything else here. This is the one send
+	// that fires on a user's request rather than on a schedule, so it is the
+	// first thing that would reach a real person if the programme were switched
+	// on by accident.
+	//
+	// Nothing is recorded when it is off, so switching on later starts everyone
+	// cleanly rather than finding a log that says they were already mailed.
+	if !lifecycle.Enabled() {
+		return
+	}
+
+	// context.WithoutCancel, not the request context, and this is the subtle
+	// part: the request's context is cancelled the moment the response is
+	// written, so a goroutine holding it would have its HTTP call to SendGrid
+	// aborted almost immediately - intermittently, depending on which won the
+	// race. Trace and span context are preserved, so the send still appears
+	// under the request that caused it.
+	sendCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), welcomeTimeout)
+
+	welcome, err := lifecycle.EmailFor(lifecycle.KindWelcome)
+	if err != nil {
+		cancel()
+		log.Printf("welcome email: %v", err)
+		return
+	}
+
+	go func() {
+		defer cancel()
+
+		// **Claim the send log row before sending, not after.**
+		//
+		// Everywhere else in this programme the row is written only on success,
+		// which is what makes a failure retry rather than vanish. Here that is
+		// not sufficient on its own: this path and the ticker are two writers,
+		// and if both send-then-record then the primary key protects the log
+		// while two emails still reach the inbox. Claiming first makes the key
+		// decide who sends.
+		//
+		// It also makes this correct regardless of whether `created` was right.
+		// That flag comes from RowsAffected on an upsert, and a DSN gaining
+		// clientFoundRows - a change invisible from this file - would make every
+		// login look like an insert. With a claim, the worst that then happens
+		// is a wasted lookup; without one, it is a welcome email on every login.
+		claimed, err := lifecycle.ClaimSend(sendCtx, a.db, user.ID, lifecycle.KindWelcome, time.Now())
+		if err != nil {
+			log.Printf("welcome email: could not claim for %s, the ticker will pick it up: %v", user.ID, err)
+			return
+		}
+		if !claimed {
+			// Somebody already holds it - a concurrent login, or a retried
+			// request. Not a fault, and nothing to say about it.
+			return
+		}
+
+		sent, err := email.SendLifecycle(sendCtx,
+			email.Recipient{Name: user.Name, Address: user.Email},
+			welcome.Subject,
+			welcome.Template,
+			lifecycle.TemplateData{Name: user.Name, Campaign: string(welcome.Kind)},
+		)
+		if err == nil && sent {
+			return
+		}
+
+		// The send did not happen, so give the claim back or the ticker will
+		// treat this email as already delivered and never retry it. Uses a
+		// fresh context: the usual reason to be here is a timeout, and sendCtx
+		// is then already expired, so releasing on it would silently do nothing
+		// and strand the claim forever.
+		releaseCtx, releaseCancel := context.WithTimeout(context.WithoutCancel(ctx), welcomeTimeout)
+		defer releaseCancel()
+		if releaseErr := lifecycle.ReleaseSend(releaseCtx, a.db, user.ID, lifecycle.KindWelcome); releaseErr != nil {
+			log.Printf("welcome email: NOT sent to %s and could not release the claim, so it will never be retried: %v",
+				user.ID, releaseErr)
+		}
+		if err != nil {
+			log.Printf("welcome email to %s failed, the ticker will retry it: %v", user.ID, err)
+		}
+		// !sent with no error is the unconfigured case. The email package
+		// already says why, once per process, so this stays quiet.
+	}()
 }
 
 // PreferencesInput carries the view preferences a user can change. Separate
@@ -136,22 +249,42 @@ func (a *App) inviteUser(ctx context.Context, input *UserInput) (*struct{}, erro
 		return nil, fail(ctx, huma.Error500InternalServerError("Error creating Invite"), err)
 	}
 
-	// Send the email
-	from := mail.NewEmail("Ian Feather", "info@ianfeather.co.uk")
-	subject := "You have been invited to join a BigShop Account"
-	to := mail.NewEmail("BigShop User", userToInvite.Email)
-	htmlContent := `
-    <p>You have been invited to collaborate on a BigShop account by %s!</p>
-    <p>You can accept this by clicking below:</p>
-    <a href="https://pleeyu7yrd.execute-api.us-east-1.amazonaws.com/prod/invitation/%s">Accept invite</a>
-  `
-	message := mail.NewSingleEmail(from, subject, to, "", fmt.Sprintf(htmlContent, currentUser.Name, token))
-	client := sendgrid.NewSendClient(os.Getenv("SENDGRID_API_KEY"))
-	if _, err := client.Send(message); err != nil {
+	// Send the email through the one sending seam (internal/pkg/service/email)
+	// rather than building a SendGrid client here. The copy, the sender identity
+	// and the "no API key is a clean skip" behaviour all live there now; what is
+	// left at this call site is who to send to and what to put in it.
+	//
+	// Behaviour is deliberately unchanged in one respect that looks like a bug:
+	// a send failure still answers 400, even though the Invite row was already
+	// written and survives. That is board item #46's to fix - it is changing
+	// this handler's error handling for its own reasons, and
+	// specs/account-deletion.md degrades this call to 200 - so changing it here
+	// would be a second concurrent change to the same flow. The dead accept URL
+	// in the template is #46's for the same reason.
+	//
+	// Note the 400 now happens strictly less often than before: with no
+	// SENDGRID_API_KEY set - which is every environment today - the send is a
+	// clean skip rather than an error, so POST /invite creates the Invite and
+	// returns success instead of failing outright.
+	if _, err := email.SendTransactional(ctx,
+		email.Recipient{Name: "Big Shop User", Address: userToInvite.Email},
+		"You have been invited to join a Big Shop Account",
+		"invite",
+		inviteEmailData{InviterName: currentUser.Name, Token: token},
+	); err != nil {
 		return nil, fail(ctx, huma.Error400BadRequest("Error sending email"), err)
 	}
 
 	return nil, nil
+}
+
+// inviteEmailData is what templates/invite.html renders against. A named type
+// rather than an anonymous struct or a map so that a field renamed in Go and
+// not in the template fails to compile on one side and is caught by the golden
+// test on the other.
+type inviteEmailData struct {
+	InviterName string
+	Token       string
 }
 
 func (a *App) registerUserRoutes(api huma.API) {

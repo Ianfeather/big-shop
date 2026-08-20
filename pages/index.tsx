@@ -151,6 +151,30 @@ const PreviewItem = ({ name, amount, bought = false }: PreviewItemProps) => (
   </li>
 );
 
+// The browser's IANA timezone name, or undefined if it will not say.
+//
+// Sent on the POST /user the page already makes, rather than through a route or
+// a round trip of its own - it is one more field on a payload that exists.
+//
+// The server stores it on insert only and never updates it, so in practice this
+// value matters on a first login and is ignored on every subsequent one. It is
+// read by the onboarding email sequence, which sends at 10:00 in the recipient's
+// morning instead of ours (specs/completed/email.md); nothing in the UI uses it.
+//
+// Guarded rather than called directly because resolvedOptions().timeZone is
+// specified to return the runtime's zone but is not universally reliable, and
+// this runs inside the effect that creates the User - an exception here would
+// take the signup with it, which is a spectacularly bad trade for a nicety. An
+// absent zone is a supported state all the way down: the column is nullable and
+// the sender falls back to Europe/London.
+const browserTimezone = (): string | undefined => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const Index = () => {
   const { isAuthenticated, isLoading, user, getAccessTokenSilently } = useAuth0();
   const { logIn, signUp } = useLogin();
@@ -164,7 +188,11 @@ const Index = () => {
   // Neither mutation invalidates: no cached query reads User state, and on
   // first login there is nothing in the cache yet to be stale.
   const saveUserMutation = useMutation({
-    mutationFn: async (payload: { name?: string; email?: string }) => {
+    // Partial, not a bare Pick: `email` is required on the generated User (the
+    // server needs one) but Auth0 hands back `string | undefined`, and this
+    // call has always forwarded whatever it got. Derived from User rather than
+    // restated inline so a field added to the model cannot silently drift.
+    mutationFn: async (payload: Partial<Pick<User, 'name' | 'email' | 'timezone'>>) => {
       const token = await getAccessTokenSilently();
       return apiPost<User>('/user', token, payload);
     }
@@ -188,7 +216,9 @@ const Index = () => {
       // only caller in the app. It is an idempotent upsert, so running it on
       // an ordinary visit from an already-known user costs one request and
       // repairs the case where the original call failed.
-      const saved = await saveUserMutation.mutateAsync({ name, email }).catch(() => undefined);
+      const saved = await saveUserMutation
+        .mutateAsync({ name, email, timezone: browserTimezone() })
+        .catch(() => undefined);
       if (saved?.onboarded) {
         // The only surviving redirect. They clicked Log in, went to Auth0, and
         // came back here because that is where redirect_uri points - so send

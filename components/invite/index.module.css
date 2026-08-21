@@ -9,3 +9,15 @@
 .invite button {
   margin-left: var(--space-2);
 }
+
+/* The invitation an emailed link pointed at.
+   A left rule and a tinted ground rather than anything animated: this is a
+   pointer for someone who has just arrived from their inbox and needs to find
+   one row, not a state that needs celebrating. */
+.highlighted {
+  border-left: 3px solid var(--color-primary-border);
+  background: var(--color-primary-soft);
+  padding: var(--space-2);
+  border-radius: 4px;
+  width: calc(80% - var(--space-2));
+}

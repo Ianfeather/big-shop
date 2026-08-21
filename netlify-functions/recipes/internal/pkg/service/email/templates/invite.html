@@ -1,16 +1,25 @@
 {{ define "content" }}
   {{/*
-    The Account invite - the only email Big Shop sent before specs/completed/email.md, and
-    the only transactional one until Phase 2. Transactional, so no unsubscribe
-    footer: someone who was just invited to an Account has not opted into
-    anything they can opt out of, and telling them about it is not marketing.
+    The Account invite. Transactional, so no unsubscribe footer: someone who was
+    just invited to an Account has not opted into anything they can opt out of,
+    and telling them about it is not marketing.
 
-    The accept link below points at an API Gateway stack that no longer serves
-    anything, so this email is broken on arrival. That is deliberate here: this
-    change moves the send onto one seam without altering behaviour, and the
-    broken URL - along with POST /invite answering 400 when the send fails - is
-    owned by board item #46, which is changing that handler for its own reasons.
-    Fixing it here would be a second concurrent change to the same flow.
+    **The link goes to /account, not to the site root, and that is load-bearing
+    rather than tidy.** #46 rated the previously-dead link low-severity on the
+    grounds that "an invitee never actually needs the email - logging in is
+    enough for the card to appear". That stopped being true in the design
+    overhaul (b3a9c40): components/invite renders only on pages/account.tsx now,
+    so an invitee who logs in lands on / and sees nothing at all, with nothing
+    telling them where the invitation is. The email is the only thing that can
+    point them at it.
+
+    **The token in the URL is not a credential.** service.GetInvite matches on
+    the token AND the caller's hashed address, so this link opened by the wrong
+    logged-in person resolves to no invite. It carries the token because after
+    #59 hashed invite.email that is the only plaintext handle surviving the
+    request that created the row - not because it authorises anything. The page
+    deliberately does not auto-accept: accepting disables the invitee's existing
+    Account, which needs a click in the app rather than a click in a mail client.
   */}}
   <p style="margin:0 0 16px 0;">Hello,</p>
 
@@ -21,7 +30,7 @@
   </p>
 
   <p style="margin:0 0 24px 0;">
-    <a href="https://pleeyu7yrd.execute-api.us-east-1.amazonaws.com/prod/invitation/{{ .Data.Token }}"
+    <a href="{{ .SiteURL }}/account?invite={{ .Data.Token }}"
        style="display:inline-block; padding:12px 20px; background-color:#1f7a4d; color:#ffffff; border-radius:6px; text-decoration:none; font-weight:600;">Accept the invitation</a>
   </p>
 

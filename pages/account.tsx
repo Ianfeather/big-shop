@@ -1,12 +1,14 @@
 import styles from './account.module.css';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
 import Invite from '@components/invite';
 import useAuth0 from '@hooks/use-auth';
 import { apiDelete, apiGet, apiPost } from '../lib/api-client';
 import { queryKeys } from '../lib/query-keys';
 import Layout, { MainContent, Sidebar } from '@components/layout'
+import Toast from '@components/toast';
 import PageHeading from '@components/page-heading';
 import Button from '@components/button';
 import { useCookieSettings } from '@components/consent-banner';
@@ -20,6 +22,12 @@ const List = () => {
   // refetching from) the mutation's response.
   let [dismissedTokens, setDismissedTokens] = useState<string[]>([]);
   let [invitee, setInvitee] = useState('');
+  // The token from an emailed invite link, and the message that points at it.
+  // Two pieces of state rather than one derived value because the effect below
+  // strips ?invite from the URL immediately - deriving either from the router
+  // would make them vanish on the tick they appeared.
+  let [highlightedToken, setHighlightedToken] = useState<string | null>(null);
+  let [inviteMessage, setInviteMessage] = useState<string | null>(null);
   let [successMessage, setSuccessMessage] = useState<string | false>(false);
   // Whether the delete confirmation is open. Deliberately a second, explicit
   // step rather than a window.confirm(): the whole point of the panel is the
@@ -40,10 +48,11 @@ const List = () => {
   let [deletedOutcome, setDeletedOutcome] = useState<{ accountDeleted: boolean } | null>(null);
   const deleted = deletedOutcome !== null;
   const { user, getAccessTokenSilently, logout } = useAuth0();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const openCookieSettings = useCookieSettings();
 
-  const { data: fetchedInvites } = useQuery<InviteModel[]>({
+  const { data: fetchedInvites, isSuccess: invitesLoaded } = useQuery<InviteModel[]>({
     queryKey: queryKeys.invites,
     enabled: !deleted,
     queryFn: async () => {
@@ -59,6 +68,37 @@ const List = () => {
   const invites = (fetchedInvites ?? []).filter(
     invite => !dismissedTokens.includes(invite.token)
   );
+
+  // The emailed invite link lands here as /account?invite=<token>. Read it once,
+  // then strip it via router.replace so a reload or a shared link doesn't
+  // re-announce an invitation that has since been dealt with - the same shape
+  // pages/recipes/[id]/index.tsx uses for its one-time ?stored= toast.
+  //
+  // **Gated on the invites query having resolved, not just on the router.**
+  // Without that, the effect runs while fetchedInvites is still undefined and
+  // every arrival from an email is told the invitation no longer exists.
+  //
+  // It deliberately does not accept anything. Accepting moves this user into a
+  // different Account and disables their existing one; that needs a click on the
+  // card below, not a click in a mail client.
+  useEffect(() => {
+    if (!router.isReady || !invitesLoaded) return;
+    const token = router.query.invite;
+    if (typeof token !== 'string') return;
+
+    const match = invites.find(invite => invite.token === token);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHighlightedToken(match ? token : null);
+    setInviteMessage(match
+      ? `${match.account_holder} invited you to share their account. Accept or decline below.`
+      // Expired, already accepted, and addressed to somebody else are one case
+      // from here: GET /invites simply does not contain the token, and the
+      // server has no way to tell us which. One honest message covering all
+      // three beats guessing at the likeliest and being wrong.
+      : 'That invitation is no longer available \u2014 it may already have been accepted, declined, or expired. Ask whoever invited you to send a new one.');
+
+    router.replace('/account', undefined, { shallow: true });
+  }, [router.isReady, invitesLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The Account's other members, which is what decides whether deleting this
   // user also deletes the Recipes. Read from the route the page can already
@@ -197,7 +237,7 @@ const List = () => {
   }
 
   return (
-    <Layout>
+    <Layout toast={inviteMessage && <Toast message={inviteMessage} onDismiss={() => setInviteMessage(null)} />}>
       <MainContent name="Shopping List">
         {/* The old h1 was a whole sentence, which at masthead size would have
             been a paragraph in 40px serif - it reads as the subheading it
@@ -214,6 +254,7 @@ const List = () => {
                     invites.map(invite => (
                       <Invite {...invite}
                         key={invite.token}
+                        highlighted={invite.token === highlightedToken}
                         onAccept={() => handleAccept(invite.token)}
                         onReject={() => handleReject(invite.token)}
                       />

@@ -77,19 +77,36 @@ Family entry has a template that renders - the registry and the templates direct
 two lists nothing else makes agree).
 
 ## Session 5: Phase 4 — the deletion confirmation
-Status: pending
+Status: done
 Scope: template + golden; sent inside `DeleteUserAndAccount` between step 1 (soft gate) and
 step 2 (SendGrid erasure), as an injectable step var so the sequence test can pin its
 position. Copy confirms the request, not the outcome.
 Depends on: Session 1
-Commit:
-Notes:
+Commit: d4715c3
+Notes: go test ./... -race green, gofmt/vet clean, openapi in sync. The sequence test now
+pins the confirmation between soft-gate and sendgrid, with the reason recorded.
+DeleteUserAndAccount took `email string`; now takes `name, address` - the greeting needs
+the name, and the old name shadowed the package. Verified against the real stack: DELETE
+/account on a shared account sends account-deleted, returns 200 with accountDeleted
+false, account survives. Also lands the deferred TestEveryRegisteredEmailRenders.
 
 ## Session 6: Phase 5 — the Auth0 handover
-Status: pending
+Status: done
 Scope: no diff. A `backlog` board row carrying the tenant-audit checklist — connections
 enabled, whether the three Auth0 templates are still defaults, the shared dev mail
 provider, and the M2M client `account-deletion.md` Phase 3 needs.
 Depends on: none
-Commit:
-Notes:
+Commit: (no diff - the deliverable is a board row)
+Notes: Filed as "Audit the Auth0 tenant, and point it at SendGrid", backlog, tagged
+`needs answers` - nothing external has to happen first, somebody just has to open the
+dashboard. Verified the existing tag options (`blocked`, `future feature`) survived.
+https://app.notion.com/p/3c3c724ecda181d2b5ccc312a9de2a07
+
+## Not run locally: the e2e suite
+`e2e/env.ts` hardcodes COMPOSE_PROJECT_NAME = 'bigshop-e2e', and that project was live
+and bound to the *primary* worktree (/Users/ianfeather/Repositories/big-shop, up 14h).
+`test:e2e:stop` passes --volumes, so running it from here would have destroyed that
+stack - the hazard the board item "The e2e suite cannot be run from two worktrees"
+describes. CI runs the same suite on a fresh runner as a required check, so the gate is
+kept without taking the risk. Invites are not e2e-covered anyway (DISABLE_AUTH pins one
+fixed user; accept/reject needs two).

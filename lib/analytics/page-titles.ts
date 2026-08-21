@@ -32,6 +32,11 @@ const PAGE_TITLES: Record<string, string> = {
   '/recipes': 'Recipes',
   '/support': 'Support',
   '/recipes/new': 'Add recipe',
+  // The Day 8 onboarding email's landing route. Named for what the page does
+  // rather than for the dish, which it must never say: the slug is a Recipe
+  // name, and this map exists precisely so that a page title cannot carry
+  // content to Google. See the note at the top of this file.
+  '/recipes/add/[slug]': 'Add featured recipe',
   '/recipes/[id]': 'Recipe',
   '/recipes/[id]/edit': 'Edit recipe',
   '/dev/api-docs': 'Dev: API docs',

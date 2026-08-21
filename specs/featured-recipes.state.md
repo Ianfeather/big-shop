@@ -77,11 +77,21 @@ Still not e2e-testable: `NEXT_PUBLIC_DISABLE_AUTH` makes `useAuth` report `isAut
 Test gate GREEN: vitest 401/401 (52 files), typecheck and lint clean.
 
 ## Session 6: The landing page and the count
-Status: pending
+Status: done
 Scope: Spec Phases 5 and 7. `pages/recipes/add/[slug].tsx` with its three states, `page-titles.ts` entry, `'featured'` added to `RecipeSource` and fired on success, `e2e/featured-recipe.spec.ts`. Also corrects the spec's Testing section per Session 5's note.
 Depends on: Sessions 4, 5
-Commit:
-Notes: The e2e spec must not touch the Shopping List, so it can run alongside `shopping-list.spec.ts`.
+Commit: (see git log)
+Notes: **The e2e suite found a real race and it is now fixed in the schema.** `CopyFeaturedRecipe`'s check-then-insert is not atomic, so two simultaneous arrivals both find no copy and both insert — exactly the duplicate `featured_from` exists to prevent, and a link in an email is precisely the thing opened twice at once. Migration 042 gained `uniq_recipe_account_featured_from (account_id, featured_from)`; NULLs do not collide in a MySQL unique index, so ordinary Recipes are unaffected. The service turns a losing insert into `alreadyHad: true` rather than a 500.
+
+The race surfaced because `playwright.config.ts` sets `fullyParallel: true`, so tests *within* a file run at once and these four share one copy in one Account. The file now sets `test.describe.configure({ mode: 'serial' })`, like `shopping-list.spec.ts`. Worth separating the two findings: the race was real and is fixed; the tests deleting each other's fixture was the suite standing on itself.
+
+`lib/api-client.ts` gained an `ApiError` carrying the status. The landing page has to tell an unpublished slug (404, an accepted state per ADR-0011) from a fault, and reading a number back out of a message string keeps working until someone rewords the message.
+
+The `?stored=` toast convention (ADR-0003) was extended with `featured` and `already` rather than a new mechanism being invented.
+
+The spec's Testing section was corrected in-place: it claimed an e2e test of the logged-out journey that cannot exist under `NEXT_PUBLIC_DISABLE_AUTH`.
+
+Test gate GREEN: vitest 409/409 (53 files), **e2e 41/41**, typecheck/lint clean, Go suite green, OpenAPI in sync.
 
 ## Session 7: The email
 Status: pending

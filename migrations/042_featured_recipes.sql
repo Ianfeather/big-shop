@@ -1,7 +1,7 @@
 -- Featured Recipes: Big Shop's own content, published from an admin's Account.
 --
 -- See docs/adr/0011-featured-recipes-are-our-own-content.md and
--- specs/featured-recipes.md. A Featured Recipe is an ordinary Recipe, in an
+-- specs/completed/featured-recipes.md. A Featured Recipe is an ordinary Recipe, in an
 -- Account whose owner is an admin, that an admin has marked as eligible for any
 -- other Account to take a copy of. Nothing here makes a Recipe readable outside
 -- its Account by any other route.

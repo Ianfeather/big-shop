@@ -1,8 +1,8 @@
 ---
-spec: specs/featured-recipes.md
-status: in-progress
+spec: specs/completed/featured-recipes.md
+status: complete
 branch: implement/featured-recipes
-pr:
+pr: https://github.com/Ianfeather/big-shop/pull/133
 ---
 
 ## Session 1: Schema, seed, and the shape on the wire
@@ -68,7 +68,9 @@ Status: done
 Scope: Spec Phase 3. `pages/_app.tsx` gate records the attempted path, `hooks/use-login.ts` passes `appState: { returnTo }`, callback honours it, relative-path-only validation.
 Depends on: none (ordered here so Session 6 can use it)
 Commit: (see git log)
-Notes: **Built with sessionStorage rather than Auth0's `appState`, deviating from the spec's literal text.** `appState` is delivered through `Auth0Provider`'s `onRedirectCallback`, and this app already owns the post-login redirect in `pages/index.tsx` (`arrivedFromLogin` → `/list`, after `POST /user` resolves onboarding). Wiring `onRedirectCallback` would put two mechanisms on the same navigation, and `lib/auth-callback.ts` documents how delicate that moment already is. Storing the destination lets the existing redirect keep sole ownership and just pick a better target.
+Notes: **Built with sessionStorage rather than Auth0's `appState`, deviating from the spec's literal text.** `appState` is delivered through `Auth0Provider`'s `onRedirectCallback`, which would put a second mechanism on the same navigation as the post-login arrival logic in `pages/_app.tsx`'s `InnerApp` — and that has to wait for `POST /user` to create the account before routing anywhere (`hooks/use-account-setup.ts`). `lib/auth-callback.ts` documents how delicate that moment already is. Storing the destination keeps a single owner, which just picks a better target than `/list` when there is one.
+
+**Both halves live in `InnerApp`, and that changed during the rebase onto master.** As originally written this session consumed the value in `pages/index.tsx`, which was then the post-login landing page. #136 ("Open the installed PWA on /list") landed first and removed that redirect entirely: Auth0's callback now goes straight to `/list` (`lib/app-origin.ts`) and the account upsert moved into `hooks/use-account-setup.ts`, mounted in `InnerApp`. With no single page left on every arrival's path, the consume moved next to the `rememberReturnTo` that writes the value. It waits on the same `accountReady` gate the render does — navigating on before the row exists points the destination page's requests at an account the API 500s on.
 
 `lib/return-to.ts` is its own module because the validation is a security boundary: a `returnTo` that can express an absolute URL turns our login into an open redirect wearing our domain and our Auth0 tenant. It validates a *path* and never calls `new URL()` — parsing invites judging a host, and the safe answer is to refuse to have one.
 

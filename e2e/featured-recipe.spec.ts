@@ -31,7 +31,7 @@ const FEATURED_NAME = 'Store Cupboard Tomato Pasta';
 // alongside shopping-list.spec.ts - Playwright runs spec files in parallel, and
 // under DISABLE_AUTH the list is one mutable resource shared by the whole
 // account. It has no reason to: the feature deliberately does not put anything
-// on the list, which is the sharpest decision in specs/featured-recipes.md.
+// on the list, which is the sharpest decision in specs/completed/featured-recipes.md.
 test.describe('adding a Featured Recipe from a link', () => {
   // The copy is a real Recipe in the shared dev account and the DB is only
   // wiped between runs, not between tests.

@@ -17,7 +17,7 @@ whole time, untouched, which is what makes step 5 revertible.
 | You need | Why |
 | --- | --- |
 | A Fly.io account, `flyctl` installed (`brew install flyctl`), `fly auth login` | Steps 1–3 |
-| The production `DSN` (TiDB connection string) | Step 2 — it's in Netlify's env vars today |
+| The production TiDB password | Step 2 |
 | The production `SENDGRID_API_KEY` | Step 2 — same place |
 | Netlify dashboard access | Step 5 |
 | GitHub repo admin | Steps 4 and 6 |
@@ -55,9 +55,15 @@ together.
 
 ```bash
 fly secrets set \
-  DSN='<the production TiDB connection string>' \
+  TIDB_PASSWORD='<the production TiDB password>' \
   SENDGRID_API_KEY='<the production SendGrid key>'
 ```
+
+**Only the password.** The host, port, username and database name are public
+identifiers and are pinned in `fly.toml`'s `[env]`, and the driver's query
+parameters are literals in `dsn.go`. This used to be a single `DSN` string
+carrying all five, which is exactly how production lost `parseTime=true` and
+answered 500 on every `GET /user` for a day — see that file's header.
 
 `fly secrets set` normally triggers a release to roll the new values out; with no machines
 created yet it simply stores them.
@@ -129,7 +135,7 @@ so the deleted user can still log in, resolving to nothing. That is precisely th
 and CI, where no tenant is reachable) and it records a warning on the request's span
 saying exactly which variable is missing, but nothing refuses the deletion.
 
-Otherwise only `DSN`, `SENDGRID_API_KEY`, `INVITE_EMAIL_PEPPER`, `AUTH0_MGMT_CLIENT_ID` and `AUTH0_MGMT_CLIENT_SECRET`. `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` are public
+Otherwise only `TIDB_PASSWORD`, `SENDGRID_API_KEY`, `INVITE_EMAIL_PEPPER`, `AUTH0_MGMT_CLIENT_ID` and `AUTH0_MGMT_CLIENT_SECRET`. `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` are public
 identifiers and are already
 pinned in `fly.toml`'s `[env]` block — deliberately, because getting them wrong does not
 fail loudly: with `AUTH0_DOMAIN` unset the JWKS fetch goes to `https:///.well-known/jwks.json`

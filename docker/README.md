@@ -90,14 +90,13 @@ Missing `TIDB_HOST` or `TIDB_USER` is a hard error naming what is missing -
 they are deliberately not defaulted, because a script that silently connects
 somewhere you did not mean is worse than one that refuses.
 
-- **Host and username** can be read straight out of the production `DSN`
-  connection string, which lives in Netlify's environment variables UI (see the
-  Netlify Dashboard link in `CLAUDE.md`) rather than anywhere in this repo. The
-  `DSN` format is `user:password@tcp(host:port)/bigshop?...` (see `main.go`'s
-  `sql.Open("mysql", os.Getenv("DSN"))`). The query parameters after the `?`
-  are load-bearing rather than incidental - see
-  [technical-architecture.md](../technical-architecture.md#the-dsns-query-parameters)
-  before rewriting one.
+- **Host and username** are the same values the API itself uses, in
+  `netlify-functions/recipes/fly.toml`'s `[env]` block - `TIDB_HOST` and
+  `TIDB_USER`, under those exact names. They used to have to be dug out of a
+  `DSN` connection string in Netlify's environment UI; there is no such string
+  any more, because `dsn.go` assembles the connection from these components and
+  the `TIDB_PASSWORD` secret. See
+  [technical-architecture.md](../technical-architecture.md#the-connection-string-and-why-nobody-writes-one).
 - **Password** - never passed as an argument, never read from `.env.tidb` or
   from the environment, and stored nowhere. Each script prompts once, silently,
   and holds it in memory only for the container calls that need it, which
@@ -163,7 +162,7 @@ capability - a small/free-tier cluster (this app's likely tier) probably
 only exposes the web SQL Editor (fine for ad hoc queries, but row-limited
 and can't cascade across joined tables) or plain MySQL wire-protocol access.
 `mysqldump`/`mysql` CLI work over that same protocol regardless of tier -
-the same access the app's own `DSN` already relies on - so that's what this
+the same access the app's own connection already relies on - so that's what this
 script uses. Auth0 never comes into it either way: it gates the
 *application's* API, not direct database access.
 

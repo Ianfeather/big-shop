@@ -3,7 +3,7 @@
     {
       "name": "api",
       "secrets": [
-        { "env_var": "DSN" },
+        { "env_var": "TIDB_PASSWORD" },
         { "env_var": "SENDGRID_API_KEY" },
         { "env_var": "INVITE_EMAIL_PEPPER" }
       ],

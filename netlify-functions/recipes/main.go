@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 
 	"recipes/internal/pkg/app"
 	"recipes/internal/pkg/common"
+	"recipes/internal/pkg/dbconfig"
 	"recipes/internal/pkg/lifecycle"
 	"recipes/internal/pkg/service"
 	"recipes/internal/pkg/telemetry"
@@ -41,7 +41,6 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	negroniadapter "github.com/awslabs/aws-lambda-go-api-proxy/negroni"
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/go-sql-driver/mysql"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/urfave/negroni"
 	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
@@ -165,10 +164,11 @@ func routerBasePath() string {
 }
 
 func init() {
-	mysql.RegisterTLSConfig("tidb", &tls.Config{
-		MinVersion: tls.VersionTLS12,
-		ServerName: "gateway01.eu-central-1.prod.aws.tidbcloud.com",
-	})
+	// The TiDB TLS config is registered by dbconfig.DSN rather than here, so the
+	// certificate's ServerName can come from TIDB_HOST instead of being a
+	// second copy of the production hostname. That is also simply where it
+	// belongs: every mode returning early below does so before opening a
+	// database, so registering a TLS config for them was always wasted.
 
 	// Both email tools return before the database is opened, exactly as the
 	// OpenAPI printer does. Neither needs one: preview renders templates, and
@@ -210,8 +210,16 @@ func init() {
 	// without it.
 	shutdownTelemetry, _ = telemetry.Setup(context.Background())
 
-	var err error
-	db, err = otelsql.Open("mysql", os.Getenv("DSN"),
+	// Fatal, and deliberately so: there is nothing to serve without a database,
+	// and the failure this replaces was the opposite - a DSN missing one
+	// parameter, accepted silently, breaking a single route a day later. The
+	// error names every variable that is missing.
+	dsn, err := dbconfig.DSN()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	db, err = otelsql.Open("mysql", dsn,
 		otelsql.WithAttributes(semconv.DBSystemNameMySQL),
 		otelsql.WithSpanOptions(otelsql.SpanOptions{
 			// Emit a query span only when the caller passed a context that

@@ -1,0 +1,169 @@
+/* Support, on the same "Cookbook" furniture as the logged-out homepage and the
+   privacy policy. The chrome all three share - paper surface, grain, header
+   bar, footer - is composed from public-chrome.module.css rather than copied;
+   palette tokens live in pages/styles.css.
+
+   What is local here is the address panel, and it is the whole page: there is
+   one thing to do on it, so the layout's only job is to make that thing
+   impossible to miss. The prose measure matches privacy.module.css's 34em
+   rather than the homepage's 30em, so the two public text pages set at the same
+   width. */
+
+.page {
+  composes: page from './public-chrome.module.css';
+}
+
+.grain {
+  composes: grain from './public-chrome.module.css';
+}
+
+.header {
+  composes: header from './public-chrome.module.css';
+}
+
+.brand {
+  composes: brand from './public-chrome.module.css';
+}
+
+.mark {
+  composes: mark from './public-chrome.module.css';
+}
+
+.wordmark {
+  composes: wordmark from './public-chrome.module.css';
+}
+
+.back {
+  composes: headerAction from './public-chrome.module.css';
+}
+
+.footer {
+  composes: footer from './public-chrome.module.css';
+}
+
+.footerMark {
+  composes: footerMark from './public-chrome.module.css';
+  width: 28px;
+}
+
+.footerLinks {
+  composes: footerLinks from './public-chrome.module.css';
+}
+
+/* ---------- prose ---------- */
+
+.main {
+  position: relative;
+  z-index: 1;
+  max-width: 34em;
+  margin: 0 auto;
+  padding: clamp(var(--space-6), 8vw, 90px) clamp(var(--space-4), 5vw, 60px) var(--space-7);
+}
+
+.eyebrow {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--claret);
+  margin: 0 0 var(--space-3);
+}
+
+/* A step smaller than index.module.css's poster headline, for the same reason
+   privacy.module.css gives: somebody arriving here has a problem, and being
+   shouted at is not what they came for. */
+.display {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: clamp(32px, 5.5vw, 52px);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  margin: 0 0 var(--space-4);
+}
+
+.standfirst {
+  font-size: clamp(var(--text-md), 2.1vw, 20px);
+  line-height: 1.6;
+  color: var(--ink-soft);
+  margin: 0 0 var(--space-5);
+}
+
+/* ---------- the address ---------- */
+
+/* The one control on the page, so it is given the weight of one. A card rather
+   than an inline link because the page has a single action and burying it in a
+   sentence would make it look like a footnote to the prose above it. */
+.card {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  padding: clamp(var(--space-4), 4vw, var(--space-5));
+  margin: 0 0 var(--space-5);
+}
+
+.cardLabel {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 0 0 var(--space-2);
+}
+
+/* Wraps rather than overflows: the address is long enough to leave the card on
+   a narrow phone, and an address clipped at the edge of its own panel is the
+   one failure this page cannot afford. */
+.email {
+  display: inline-block;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: clamp(var(--text-lg), 4.5vw, 30px);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--spot);
+  text-underline-offset: 4px;
+  overflow-wrap: anywhere;
+}
+
+.email:focus-visible {
+  outline: 2px solid var(--spot);
+  outline-offset: 3px;
+}
+
+.section {
+  margin: 0 0 var(--space-5);
+}
+
+.section p {
+  font-size: var(--text-base);
+  line-height: 1.65;
+  margin: 0 0 var(--space-3);
+}
+
+.section a {
+  color: var(--spot);
+  text-underline-offset: 3px;
+}
+
+.section a:focus-visible {
+  outline: 2px solid var(--spot);
+  outline-offset: 3px;
+}
+
+.list {
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-4);
+}
+
+.list li {
+  font-size: var(--text-base);
+  line-height: 1.65;
+  margin-bottom: var(--space-2);
+}
+
+.note {
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+  border-left: 2px solid var(--rule);
+  padding-left: var(--space-3);
+}

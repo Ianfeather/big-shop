@@ -504,6 +504,7 @@ export default function Privacy() {
           <Logo className={styles.footerMark} />
           <p>Big Shop &mdash; recipes in, shopping list out.</p>
           <nav className={styles.footerLinks}>
+            <Link href="/support">Support</Link>
             <button type="button" onClick={openCookieSettings}>Cookie settings</button>
           </nav>
         </footer>

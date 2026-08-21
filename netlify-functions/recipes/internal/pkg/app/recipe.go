@@ -80,6 +80,15 @@ func (a *App) addRecipe(ctx context.Context, input *RecipeInput) (*AddRecipeOutp
 
 	id, err := service.AddRecipe(ctx, input.Body, caller, a.db)
 	if err != nil {
+		// 403 rather than 500: publishing a Recipe as Featured is an admin-only
+		// act (ADR-0011), and a caller asking for it without the permission has
+		// made a request we understood and refused, not one that broke us. The
+		// check lives in the service layer because that is where the stored
+		// value is known - a client-side check is a hidden checkbox, not a
+		// permission.
+		if errors.Is(err, service.ErrNotAdmin) {
+			return nil, huma.Error403Forbidden("Not permitted to publish a Recipe")
+		}
 		return nil, huma.Error500InternalServerError("could not insert ingredients")
 	}
 
@@ -96,6 +105,10 @@ func (a *App) editRecipe(ctx context.Context, input *RecipeInput) (*StatusOutput
 	}
 
 	if err := service.EditRecipe(ctx, input.Body, caller, a.db); err != nil {
+		// See addRecipe above.
+		if errors.Is(err, service.ErrNotAdmin) {
+			return nil, huma.Error403Forbidden("Not permitted to publish a Recipe")
+		}
 		return nil, huma.Error500InternalServerError("could not update recipe")
 	}
 

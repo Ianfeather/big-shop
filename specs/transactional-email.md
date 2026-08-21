@@ -14,12 +14,13 @@ here too, and why is argued in Phase 3.
 
 ## The family, and where its members live
 
-Six emails are transactional. Three are ours:
+Seven emails are transactional. Four are ours:
 
 | Email | Cause | Recipient | State |
 | --- | --- | --- | --- |
 | Invite | Somebody invites you to their Account | Invitee | Exists, broken on arrival |
 | Invite accepted | Your invitee joins | Inviter | Does not exist |
+| Invite rejected | Your invitee declines | Inviter | Does not exist |
 | Account deleted | You delete your Account | The deleted user | Does not exist |
 
 Three are Auth0's, configured in its dashboard and not in this repository at all: Change
@@ -156,10 +157,12 @@ so a leaked link accepted by the wrong logged-in user resolves to no invite. The
 carries the token because after #59's HMAC digest it is the only plaintext handle that
 survives the sending request — not because it authorises anything.
 
-**3. `POST /invite/reject` scopes to the caller.** Not email work, and carried here anyway
-because the alternative is worse: it is four lines in a file this spec already has open,
-and leaving a known authorisation hole in place to preserve a ticket boundary is not a
-trade worth making. `accept` already shows the shape — resolve the caller, then match the
+**3. `POST /invite/reject` scopes to the caller.** Carried here for two reasons. It is a
+known authorisation hole in a file this spec already has open, and leaving one in place to
+preserve a ticket boundary is not a trade worth making. It is also **a prerequisite for
+Phase 3's rejection email**: the current handler deletes blind by token and never reads the
+row, so there is no `admin_id` to notify. Fixing the scoping is what makes that email
+writable at all. `accept` already shows the shape — resolve the caller, then match the
 invite against their own address.
 
 `DeleteInviteByToken` is the wrong primitive for this path and its own doc comment says so
@@ -175,19 +178,63 @@ from the account holder to take effect.
 the emailed link lands on `/account` with that invitation visible; rejecting somebody
 else's invite by token fails; the pepper is declared.
 
-## Phase 3 — invite accepted, tell the inviter
+## Phase 3 — close the loop on the invite, either way
 
-Today somebody shares their Account, the invitee joins, and the inviter finds out by
-noticing. A two-line email closes the loop on the product's strongest retention feature.
+Today somebody shares their Account and then finds out what happened by noticing. Two
+emails, both to the inviter, covering the invite's two terminal states. They are one phase
+rather than two because they are the same event — *this invitation is now settled* — and
+splitting them is how you end up shipping only the pleasant one.
+
+### Invite accepted
 
 Sent from `acceptInvite` (`app/invites.go:24-59`) after the membership is written and the
 invite deleted — after, so a failed accept never sends a mail saying it succeeded.
 
-**It goes to the inviter, whose address is still plaintext on `user`.** The invite row
+Closes the loop on the product's strongest retention feature.
+
+### Invite rejected
+
+Sent from `rejectInvite` (`app/invites.go:75-81`), after the delete, for the same reason.
+
+**Its job is not to report a social outcome, and getting that wrong would make it a bad
+email.** "Anna declined your invitation" is at best awkward and at worst wrong, because a
+rejection is genuinely ambiguous between two very different things:
+
+- The invitee meant no.
+- **The address was mistyped**, so the invitation reached a stranger, who correctly
+  rejected an invitation to somebody else's shopping list.
+
+The inviter cannot tell those apart, and the second is the one they can act on. So the
+email's payload is *the invitation is closed, and here is how to send another* — which
+matters far more here than it would have before #59, because **the inviter cannot re-send
+the original.** `invite.email` is a digest, the row is now deleted, and nothing anywhere
+retains the address. Without this email the inviter waits indefinitely for something that
+has already definitively not happened, with no way to retry and nothing to retry from.
+
+That is the whole argument for it. An email that only said "they said no" would not be
+worth sending; one that hands back the ability to try again is.
+
+The copy must therefore avoid characterising the invitee's decision, and must name
+re-inviting as the next step without implying the recipient was rejected personally.
+
+**Phase 2's security fix is a prerequisite, not merely adjacent.** `rejectInvite` currently
+calls `DeleteInviteByToken`, which deletes blind and never reads the row — so there is no
+`admin_id` to send to and no way to write this email at all. Scoping reject to the caller
+(Phase 2, bullet 3) is what makes the row readable, and therefore what makes this possible.
+The security fix and this email are the same change to that handler.
+
+### Both emails
+
+**They go to the inviter, whose address is still plaintext on `user`.** The invite row
 holds `admin_id`, so the inviter is a lookup away; `GetInvite` currently returns only the
 account id, so it needs to return the admin's id too, or a second read.
 
-**This cannot be generalised into anything invite-shaped in the other direction.**
+No new information is disclosed to the inviter in either case: they typed the address, so
+they already know it. Both do confirm that the address belongs to somebody who logged in
+and acted — but acceptance discloses exactly the same thing, and neither is a probe, since
+both require the invitee to authenticate first.
+
+**Neither can be generalised into anything invite-shaped in the other direction.**
 `invite.email` is an HMAC digest with no plaintext retained past the request that created
 the row (`service/invite.go:17-54`), so **invites can never be resent**. If a general
 resend capability is ever wanted, invites are the permanent exception, and this is the note
@@ -301,13 +348,50 @@ means re-creating, since invites cannot be resent.
 - **No send log for transactional email.** One writer, no ticker, no double-send race.
 - **No Auth0 template work**, per Phase 5 — the checklist is the deliverable.
 
+### Considered and declined
+
+Enumerated during specing by walking every route that changes state, and left out
+deliberately. Recorded so they are not rediscovered as oversights.
+
+- **"Somebody left your shared Account."** `DELETE /account` on a shared Account removes the
+  departing member, returns `accountDeleted: false`, and the Account and its Recipes
+  survive — with the remaining members told nothing. This is the closest thing to a real
+  gap: it is the exact mirror of Phase 3's accepted email, the same event in the other
+  direction. Declined for now as a product call, not because it is wrong. It is the first
+  thing to reach for if the family grows, and it is the one that would force the preferences
+  question in Open Question 1.
+- **"You were removed from an Account."** `DELETE /account/remove` exists but no frontend
+  code calls it and the handler carries `// TODO: create the concept of admins`
+  (`app/account.go:76`). Nothing to notify about until that feature is real. **It becomes
+  mandatory the day admins land** — being silently ejected from a shared Account is the
+  worst event here to discover by noticing — so it is written down now rather than
+  rediscovered then.
+- **"Your data export is ready."** #59 built erasure (GDPR Art. 17); there is no access or
+  portability route (Art. 15/20). If one is ever built it needs a transactional email,
+  because the work is necessarily asynchronous. Noted alongside it: `/privacy` offers only
+  `info@ianfeather.co.uk` as its contact — a personal address, not `hello@bigshop.life` — so
+  a subject access request today arrives in a personal inbox and is served by hand.
+- **A co-member deleting a Recipe, or clearing the Shopping List.** Real events on shared
+  data, and email is the wrong channel: at shared-account frequency this is an in-app
+  activity feed, and as email it would be unbearable within a week.
+- **Recipe import failures.** The user is looking at the screen when it happens.
+
 ## Open questions
 
-1. **Does the inviter want the invite-accepted email at all?** It is the one email here
-   nobody asked for; the other two confirm an action its own recipient took. It is
-   transactional by cause, but it is the closest thing in the family to a notification, and
-   notifications are the category that grows preferences. Shipping one is fine. Shipping
-   the second without deciding where preferences live would not be.
+1. **Does the inviter want either notification, and is there a floor under this?** Phase
+   3's two emails are the only ones here nobody asked for — the other two confirm an action
+   their own recipient took. Transactional by cause, but the closest thing in the family to
+   notifications, and notifications are the category that grows preferences.
+
+   The pair is more defensible than one plus one would be: both concern a single invite and
+   report its two terminal states, so they are one loop closing rather than a surface
+   accumulating. A recipient who wants one almost certainly wants the other, which is also
+   why a preference over just these two would be a strange thing to offer.
+
+   **The question is therefore about the next one, not these.** Membership is the app's only
+   multi-user surface and it has more events than this — a member leaving a shared Account
+   is the obvious one, considered and declined below. Adding a third notification with no
+   preference story is where this stops being a family and starts being a feed.
 2. **What `/account?invite=` does when the token matches nothing** — expired, already
    accepted, or addressed to somebody else. All three are indistinguishable to the
    frontend, since `GET /invites` simply will not contain it. One honest message covering

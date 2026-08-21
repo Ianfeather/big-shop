@@ -53,15 +53,20 @@ primary_region = "fra"
 [build]
   dockerfile = "Dockerfile"
 
-# The Go process reads five environment variables (grep os.Getenv). Two are
-# public identifiers and live here, in version control, so a deploy cannot
-# forget them:
+# Three of the Go process's environment variables (grep os.Getenv) are public
+# identifiers and live here, in version control, so a deploy cannot forget them:
 #
 #   AUTH0_DOMAIN / AUTH0_AUDIENCE - both are already public in
 #     .env.development. Getting these wrong does not fail loudly: with
 #     AUTH0_DOMAIN unset the JWKS fetch goes to https:///.well-known/jwks.json
 #     and every authenticated route rejects, while /health stays green and the
 #     machine looks perfectly healthy.
+#
+#   AUTH0_TENANT_DOMAIN - the canonical tenant domain, needed only because
+#     AUTH0_DOMAIN is now a custom one. A domain name is not a secret, so it
+#     belongs here rather than in `fly secrets` - which is where
+#     docs/fly-migration-runbook.md used to imply it went. See the note by the
+#     value itself.
 #
 # Two are secrets, set out-of-band with `fly secrets set` (see
 # docs/fly-migration-runbook.md) and deliberately absent from this file:
@@ -84,8 +89,34 @@ primary_region = "fra"
 # holds more strongly than it reads: the API container need never be given a
 # Grafana credential at all, and the collector need never be given DSN.
 [env]
-  AUTH0_DOMAIN = "dev-x-n37k6b.eu.auth0.com"
+  # The custom domain, because it is the issuer of the login tokens this API
+  # validates: a token minted at auth.bigshop.life carries
+  # `iss: https://auth.bigshop.life/`, and newJWTMiddleware pins the validator to
+  # exactly one issuer string. It also fixes the JWKS origin, which is fine -
+  # Auth0 serves the same keys on both names.
+  #
+  # **This value and the browser's NEXT_PUBLIC_AUTH0_DOMAIN must agree.** They
+  # are deployed by two different systems - Netlify builds the site, and
+  # .github/workflows/deploy-api.yml ships this - so they can disagree for as
+  # long as one deploy outlives the other, and while they do, every
+  # authenticated request 401s. Change them in the same commit; expect a short
+  # window regardless.
+  AUTH0_DOMAIN = "auth.bigshop.life"
   AUTH0_AUDIENCE = "https://big-shop-api"
+
+  # The **canonical** tenant domain, for the Management API only, and the one
+  # value here whose absence is silent rather than loud.
+  #
+  # Auth0's rule behind a custom domain is asymmetric: the Management API
+  # audience must stay the canonical domain, while the token request and the API
+  # call must share a host. service.auth0TenantDomain falls back to AUTH0_DOMAIN
+  # when this is unset - correct only while the two were the same string, which
+  # stopped being true the line above. Without this, the audience follows the
+  # custom domain somewhere Auth0 rejects, and account deletion carries on
+  # deleting every database row while silently skipping the Auth0 identity: the
+  # deleted user can still log in, resolving to nothing. That is exactly the bug
+  # board item #59 existed to fix, reintroduced by a domain change.
+  AUTH0_TENANT_DOMAIN = "dev-x-n37k6b.eu.auth0.com"
 
   # Without this, production telemetry arrives labelled `development` (the
   # default in telemetry.environment()) and is indistinguishable from a laptop's

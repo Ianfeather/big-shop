@@ -263,6 +263,7 @@ DISABLE_AUTH=false
 ```
 NEXT_PUBLIC_API_HOST=/api/bigshop
 API_HOST_INTERNAL=https://big-shop-api.fly.dev/api/bigshop
+NEXT_PUBLIC_AUTH0_DOMAIN=auth.bigshop.life
 NEXT_PUBLIC_HOST=https://www.bigshop.life
 ```
 
@@ -424,16 +425,20 @@ unproxied origin to every visitor and undo the same-origin property.
   than incidental, and a third that must never be added — see below.
 - `OPENAI_API_KEY` — GPT-4 Vision + GPT-3.5-turbo
 - `SENDGRID_API_KEY` — Email invitations
-- `AUTH0_DOMAIN` / `AUTH0_AUDIENCE` — Go JWT validation
+- `AUTH0_DOMAIN` / `AUTH0_AUDIENCE` — Go JWT validation. `AUTH0_DOMAIN` is
+  `auth.bigshop.life`, the custom domain, because that is what issues the tokens;
+  it must match the browser's `NEXT_PUBLIC_AUTH0_DOMAIN` or every authenticated
+  request 401s. Both live in `fly.toml`'s `[env]`, not the Netlify UI.
 - `AUTH0_TENANT_DOMAIN` — the **canonical** tenant domain
-  (`something.region.auth0.com`), used only for the Management API. Unset today,
-  because `AUTH0_DOMAIN` is still the canonical domain and the code falls back to it.
-  **It must be set the moment a custom domain is adopted**: Auth0 requires the
-  Management API `audience` to stay the canonical domain even behind a custom one,
-  while `AUTH0_DOMAIN` has to become the custom domain so the Go API can validate
-  the issuer of login tokens. Without this split the audience follows `AUTH0_DOMAIN`
-  somewhere Auth0 rejects, and account deletion starts failing in a way that reads
-  like an Auth0 outage. See `service.auth0TenantDomain`.
+  (`dev-x-n37k6b.eu.auth0.com`), used only for the Management API. **Now set**, in
+  `netlify-functions/recipes/fly.toml`'s `[env]` rather than as a secret — a domain
+  name is not one. It became necessary when the tenant adopted the custom domain
+  `auth.bigshop.life`: Auth0 requires the Management API `audience` to stay the
+  canonical domain even behind a custom one, while `AUTH0_DOMAIN` has to become the
+  custom domain so the Go API can validate the issuer of login tokens. Without this
+  split the audience follows `AUTH0_DOMAIN` somewhere Auth0 rejects, and account
+  deletion silently skips removing the Auth0 identity while still deleting every
+  database row. See `service.auth0TenantDomain`.
 - `AUTH0_MGMT_CLIENT_ID` / `AUTH0_MGMT_CLIENT_SECRET` — a machine-to-machine
   application authorised for the Auth0 Management API, used by account deletion to
   remove the identity a departing user logs in with. **Both unset means the Auth0 step

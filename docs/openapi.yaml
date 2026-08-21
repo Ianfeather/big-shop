@@ -320,6 +320,8 @@ components:
           format: uri
           readOnly: true
           type: string
+        featured:
+          type: boolean
         id:
           format: int64
           type: integer
@@ -475,6 +477,8 @@ components:
           type: string
         id:
           type: string
+        isAdmin:
+          type: boolean
         name:
           type: string
         onboarded:

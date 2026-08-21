@@ -194,6 +194,47 @@ Account.
 
 ---
 
+## 4b. Curate the Day 8 recipes — **required before switching on**
+
+The Day 8 email links each dish at `/recipes/add/<slug>`, and each slug has to
+name a **Featured Recipe** that exists and is flagged in production. Nothing in
+CI can check this: the slugs are hand-picked in
+`internal/pkg/service/email/templates/recipes.html`, in the repo, and the flag
+lives in the database. See [ADR-0011](./adr/0011-featured-recipes-are-our-own-content.md).
+
+A dead link is not a crash — the landing page says the recipe is not available
+and that nothing changed in your collection, which is what that page is for —
+but it is still a bad send.
+
+The three slugs the template currently uses:
+
+- `pasta-e-ceci`
+- `roast-chicken-thighs-with-lemon-and-potatoes`
+- `dal-with-fried-onions`
+
+For each one, signed in to production as an admin:
+
+1. **Create the Recipe** with the name that produces that slug (`Slugify` on the
+   name — "Pasta e ceci" → `pasta-e-ceci`). Importing from a URL to get the
+   structure and the ingredient lines is fine and expected.
+2. **Write the method yourself.** This is the rule ADR-0011 exists to record and
+   the one most likely to be skipped under time pressure: flagging a Recipe is
+   *distribution*, not personal use, so the prose has to be ours. Ingredient
+   lists are statements of fact; a method is somebody's writing.
+3. **Check the ingredients are ones the catalog knows**, with Base Units and
+   Unit Sizes. This is not a code check and does not need to be, because the
+   Global Catalog is shared: tick the Recipe onto **your own** Shopping List and
+   look at it. What you see is what a brand-new user sees. If an ingredient
+   shows as two uncombined Amounts, fix the catalog before flagging — that list
+   is the first one they will ever generate, and it is where every claim the
+   marketing page makes has to be visible.
+4. **Tick Featured** on the recipe form and save.
+5. **Follow the link yourself**, logged in as somebody else if you can, and
+   confirm it lands on a copy.
+
+**Un-flagging a Recipe the live template links to breaks that link.** If you
+retire one, edit the template in the same change.
+
 ## 5. Switch it on
 
 Only after steps 1–4. Two things to do, in this order.

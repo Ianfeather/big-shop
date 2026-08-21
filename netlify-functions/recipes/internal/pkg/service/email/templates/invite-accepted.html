@@ -1,0 +1,31 @@
+{{ define "content" }}
+  {{/*
+    Sent to the inviter when somebody joins their Account. Transactional, so no
+    unsubscribe footer - though this is the one email in the family the
+    recipient did not themselves cause, which specs/completed/transactional-email.md's
+    open question 1 is about. If a preference story ever appears, it starts
+    here and with its sibling invite-rejected.html.
+
+    Carries no invitee name or address, and not for privacy reasons - the
+    inviter typed the address, so they already know it. It is that the useful
+    fact is "somebody is now in your Account", and the Account page lists who.
+    Naming them here would be a second place to keep that right.
+  */}}
+  <p style="margin:0 0 16px 0;">Hello {{ .Data.InviterName }},</p>
+
+  <p style="margin:0 0 16px 0;">
+    Your invitation was accepted, so you are now sharing a Big Shop account.
+    Your recipes and your shopping list are the same ones they see, and either of
+    you can add to them.
+  </p>
+
+  <p style="margin:0 0 24px 0;">
+    <a href="{{ .SiteURL }}/list"
+       style="display:inline-block; padding:12px 20px; background-color:#1f7a4d; color:#ffffff; border-radius:6px; text-decoration:none; font-weight:600;">Go to your shopping list</a>
+  </p>
+
+  <p style="margin:0; font-size:14px; color:#6b7178;">
+    You can see who is on your account, and invite anyone else, on your
+    <a href="{{ .SiteURL }}/account" style="color:#1f7a4d;">account page</a>.
+  </p>
+{{ end }}

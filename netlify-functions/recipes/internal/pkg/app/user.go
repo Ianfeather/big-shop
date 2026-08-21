@@ -249,42 +249,25 @@ func (a *App) inviteUser(ctx context.Context, input *UserInput) (*struct{}, erro
 		return nil, fail(ctx, huma.Error500InternalServerError("Error creating Invite"), err)
 	}
 
-	// Send the email through the one sending seam (internal/pkg/service/email)
-	// rather than building a SendGrid client here. The copy, the sender identity
-	// and the "no API key is a clean skip" behaviour all live there now; what is
-	// left at this call site is who to send to and what to put in it.
+	// **The Invite row is the durable artefact; the email is a courtesy on top.**
 	//
-	// Behaviour is deliberately unchanged in one respect that looks like a bug:
-	// a send failure still answers 400, even though the Invite row was already
-	// written and survives. That is board item #46's to fix - it is changing
-	// this handler's error handling for its own reasons, and
-	// specs/account-deletion.md degrades this call to 200 - so changing it here
-	// would be a second concurrent change to the same flow. The dead accept URL
-	// in the template is #46's for the same reason.
+	// This used to answer 400 when the send failed, having already written the
+	// row above with nothing to roll it back - so the inviter was told their
+	// invite had failed while it sat in the database working perfectly. The
+	// invitee could accept it; the inviter had been told not to expect that.
 	//
-	// Note the 400 now happens strictly less often than before: with no
-	// SENDGRID_API_KEY set - which is every environment today - the send is a
-	// clean skip rather than an error, so POST /invite creates the Invite and
-	// returns success instead of failing outright.
-	if _, err := email.SendTransactional(ctx,
+	// SendTransactionalAsync returns nothing, so there is no longer an error
+	// here to turn into a status code. That is the point of the helper rather
+	// than a convenience: specs/completed/account-deletion.md made the degrade
+	// mandatory when it hashed invite.email, because after that there is no
+	// address left to retry a send from. The row has to be authoritative.
+	email.SendTransactionalAsync(ctx,
 		email.Recipient{Name: "Big Shop User", Address: userToInvite.Email},
-		"You have been invited to join a Big Shop Account",
-		"invite",
-		inviteEmailData{InviterName: currentUser.Name, Token: token},
-	); err != nil {
-		return nil, fail(ctx, huma.Error400BadRequest("Error sending email"), err)
-	}
+		email.KindInvite,
+		email.InviteData{InviterName: currentUser.Name, Token: token},
+	)
 
 	return nil, nil
-}
-
-// inviteEmailData is what templates/invite.html renders against. A named type
-// rather than an anonymous struct or a map so that a field renamed in Go and
-// not in the template fails to compile on one side and is caught by the golden
-// test on the other.
-type inviteEmailData struct {
-	InviterName string
-	Token       string
 }
 
 func (a *App) registerUserRoutes(api huma.API) {

@@ -34,12 +34,30 @@ func previewData(campaign string) lifecycle.TemplateData {
 	return lifecycle.TemplateData{Name: "Ada", Campaign: campaign}
 }
 
-// inviteSample is the invite template's sample data. Its shape has to match
-// app.inviteEmailData, which is unexported, so it is restated here once rather
-// than in both of the callers below.
-type inviteSample struct {
-	InviterName string
-	Token       string
+// transactionalSample is the same idea for the transactional family: sample data
+// per Kind, so preview and send-test both render what really gets sent.
+//
+// A switch rather than a field on email.Email, so that sample copy stays in this
+// development-only command instead of shipping inside the package that does the
+// real sending.
+//
+// Note this changed what --name does for the invite in send-test: it used to be
+// the inviter's name as well as the recipient's, so `--name Bob` rendered "Bob
+// has invited you". It is now the recipient's alone, which is what it already
+// meant for every lifecycle email - previewData hardcodes "Ada" too. One
+// meaning for the flag, rather than one meaning and an exception.
+func transactionalSample(kind email.Kind) any {
+	switch kind {
+	case email.KindInvite:
+		return email.InviteData{InviterName: "Ada Lovelace", Token: "preview-token"}
+	case email.KindInviteAccepted:
+		return email.InviteAcceptedData{InviterName: "Ada Lovelace"}
+	case email.KindInviteRejected:
+		return email.InviteRejectedData{InviterName: "Ada Lovelace"}
+	case email.KindAccountDeleted:
+		return email.AccountDeletedData{Name: "Ada Lovelace"}
+	}
+	return nil
 }
 
 // runPreview serves every template in a browser, rendered, on localhost.
@@ -89,8 +107,11 @@ func runPreview() {
 		)
 		if entry, err := lifecycle.EmailFor(lifecycle.Kind(name)); err == nil {
 			data, unsubscribable = previewData(string(entry.Kind)), true
+		} else if entry, err := email.EmailFor(email.Kind(name)); err == nil {
+			data, unsubscribable = transactionalSample(entry.Kind), false
 		} else {
-			data, unsubscribable = inviteSample{"Ada Lovelace", "preview-token"}, false
+			http.Error(w, "no such email: "+name, http.StatusNotFound)
+			return
 		}
 
 		rendered, err := email.Render(name, data, unsubscribable)
@@ -113,7 +134,10 @@ func runPreview() {
 }
 
 func writePreviewIndex(w http.ResponseWriter) {
-	names := []string{"invite"}
+	var names []string
+	for _, entry := range email.Family {
+		names = append(names, entry.Template)
+	}
 	for _, entry := range lifecycle.Sequence {
 		names = append(names, entry.Template)
 	}
@@ -179,13 +203,13 @@ func runSendTest() {
 
 	recipient := email.Recipient{Name: *name, Address: *to}
 
-	// The invite is transactional and carries no unsubscribe group, so it goes
-	// down the other path deliberately - sending it as an onboarding email would
-	// preview something that is not what really gets sent.
-	if *kind == "invite" {
-		data := inviteSample{*name, "send-test-token"}
+	// Transactional mail carries no unsubscribe group, so it goes down the other
+	// path deliberately - sending it as an onboarding email would preview
+	// something that is not what really gets sent. The subject comes from the
+	// registry rather than being restated here, which is the point of having one.
+	if entry, err := email.EmailFor(email.Kind(*kind)); err == nil {
 		sent, err := email.SendTransactional(ctx, recipient,
-			"You have been invited to join a Big Shop Account", "invite", data)
+			entry.Subject, entry.Template, transactionalSample(entry.Kind))
 		reportSendTest(sent, err, *kind, *to)
 		return
 	}

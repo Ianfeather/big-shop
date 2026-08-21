@@ -1,0 +1,38 @@
+{{ define "content" }}
+  {{/*
+    Sent to the inviter when an invitation is declined.
+
+    **Its job is not to report that somebody said no.** A rejection is
+    ambiguous between two very different things, and the inviter cannot tell
+    them apart: the invitee meant no, or the address was mistyped and the
+    invitation reached a stranger who quite correctly declined an invitation to
+    somebody else's shopping list.
+
+    The second is the one they can act on, and after #59 hashed invite.email
+    there is no way to act on it without this email: the address is a digest,
+    the row is deleted, and nothing anywhere retains what was typed. So the
+    payload is "this invitation is closed, and here is how to send another",
+    which is also why the copy below leads with re-inviting rather than with
+    the refusal.
+
+    Deliberately does not name the invitee or characterise their decision.
+    "Anna declined your invitation" would be awkward when it is true and wrong
+    when it is a typo - and it is not information the inviter can use either way.
+  */}}
+  <p style="margin:0 0 16px 0;">Hello {{ .Data.InviterName }},</p>
+
+  <p style="margin:0 0 16px 0;">
+    Your Big Shop invitation was not accepted, so nobody has been added to your
+    account and nothing has changed.
+  </p>
+
+  <p style="margin:0 0 16px 0;">
+    If you meant to invite somebody else, or the address had a typo in it, you can
+    send a new invitation from your account page.
+  </p>
+
+  <p style="margin:0 0 24px 0;">
+    <a href="{{ .SiteURL }}/account"
+       style="display:inline-block; padding:12px 20px; background-color:#1f7a4d; color:#ffffff; border-radius:6px; text-decoration:none; font-weight:600;">Invite someone</a>
+  </p>
+{{ end }}

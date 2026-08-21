@@ -57,11 +57,6 @@ var update = flag.Bool("update", false, "rewrite golden files")
 // happens to be set.
 const fixedSiteURL = "https://www.bigshop.life"
 
-type inviteData struct {
-	InviterName string
-	Token       string
-}
-
 // lifecycleData mirrors lifecycle.TemplateData. Duplicated rather than imported
 // because lifecycle imports this package, and depending on it back would be a
 // cycle. The shapes are pinned together by TestLifecycleTemplatesRenderWithRealData
@@ -81,7 +76,25 @@ func TestRenderGolden(t *testing.T) {
 		{
 			name:           "invite",
 			template:       "invite",
-			data:           inviteData{InviterName: "Ian Feather", Token: "abc123"},
+			data:           InviteData{InviterName: "Ian Feather", Token: "abc123"},
+			unsubscribable: false,
+		},
+		{
+			name:           "invite-accepted",
+			template:       "invite-accepted",
+			data:           InviteAcceptedData{InviterName: "Ian Feather"},
+			unsubscribable: false,
+		},
+		{
+			name:           "invite-rejected",
+			template:       "invite-rejected",
+			data:           InviteRejectedData{InviterName: "Ian Feather"},
+			unsubscribable: false,
+		},
+		{
+			name:           "account-deleted",
+			template:       "account-deleted",
+			data:           AccountDeletedData{Name: "Ian Feather"},
 			unsubscribable: false,
 		},
 		// The four onboarding emails. Unsubscribable, so each golden file also
@@ -131,7 +144,7 @@ func TestRenderGolden(t *testing.T) {
 func TestLifecycleRenderCarriesUnsubscribeTag(t *testing.T) {
 	t.Setenv("SITE_URL", fixedSiteURL)
 
-	html, err := Render("invite", inviteData{InviterName: "Ian", Token: "t"}, true)
+	html, err := Render("invite", InviteData{InviterName: "Ian", Token: "t"}, true)
 	if err != nil {
 		t.Fatalf("Render returned an error: %v", err)
 	}
@@ -151,7 +164,7 @@ func TestLifecycleRenderCarriesUnsubscribeTag(t *testing.T) {
 func TestTransactionalRenderHasNoUnsubscribeTag(t *testing.T) {
 	t.Setenv("SITE_URL", fixedSiteURL)
 
-	html, err := Render("invite", inviteData{InviterName: "Ian", Token: "t"}, false)
+	html, err := Render("invite", InviteData{InviterName: "Ian", Token: "t"}, false)
 	if err != nil {
 		t.Fatalf("Render returned an error: %v", err)
 	}
@@ -174,7 +187,7 @@ func TestSendWithoutAPIKeyIsACleanSkip(t *testing.T) {
 	t.Setenv("SENDGRID_ASM_GROUP_ID", "42")
 
 	sent, err := SendTransactional(context.Background(),
-		Recipient{Name: "A", Address: "a@example.com"}, "Subject", "invite", inviteData{})
+		Recipient{Name: "A", Address: "a@example.com"}, "Subject", "invite", InviteData{})
 	if err != nil {
 		t.Fatalf("expected a clean skip, got error: %v", err)
 	}
@@ -183,7 +196,7 @@ func TestSendWithoutAPIKeyIsACleanSkip(t *testing.T) {
 	}
 
 	sent, err = SendLifecycle(context.Background(),
-		Recipient{Name: "A", Address: "a@example.com"}, "Subject", "invite", inviteData{})
+		Recipient{Name: "A", Address: "a@example.com"}, "Subject", "invite", InviteData{})
 	if err != nil {
 		t.Fatalf("expected a clean skip, got error: %v", err)
 	}
@@ -201,7 +214,7 @@ func TestLifecycleWithoutASMGroupDoesNotSend(t *testing.T) {
 	t.Setenv("SENDGRID_ASM_GROUP_ID", "")
 
 	sent, err := SendLifecycle(context.Background(),
-		Recipient{Name: "A", Address: "a@example.com"}, "Subject", "invite", inviteData{})
+		Recipient{Name: "A", Address: "a@example.com"}, "Subject", "invite", InviteData{})
 	if err != nil {
 		t.Fatalf("expected a clean skip, got error: %v", err)
 	}
@@ -214,7 +227,7 @@ func TestSendWithoutAddressIsACleanSkip(t *testing.T) {
 	t.Setenv("SENDGRID_API_KEY", "SG.not-a-real-key")
 
 	sent, err := SendTransactional(context.Background(),
-		Recipient{Name: "No Address"}, "Subject", "invite", inviteData{})
+		Recipient{Name: "No Address"}, "Subject", "invite", InviteData{})
 	if err != nil {
 		t.Fatalf("a missing address should be a skip, not an error: %v", err)
 	}
@@ -312,7 +325,7 @@ func TestLifecycleWithUnusableASMGroupDoesNotSend(t *testing.T) {
 			t.Setenv("SENDGRID_ASM_GROUP_ID", raw)
 
 			sent, err := SendLifecycle(context.Background(),
-				Recipient{Name: "A", Address: "a@example.com"}, "Subject", "invite", inviteData{})
+				Recipient{Name: "A", Address: "a@example.com"}, "Subject", "invite", InviteData{})
 			if err != nil {
 				t.Fatalf("expected a clean skip, got error: %v", err)
 			}
@@ -344,7 +357,7 @@ func TestSendReportsSuccess(t *testing.T) {
 	})
 
 	sent, err := SendTransactional(context.Background(),
-		Recipient{Name: "A", Address: "a@example.com"}, "Subject", "invite", inviteData{})
+		Recipient{Name: "A", Address: "a@example.com"}, "Subject", "invite", InviteData{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -366,7 +379,7 @@ func TestSendTreatsNon2xxAsAFailure(t *testing.T) {
 	})
 
 	sent, err := SendTransactional(context.Background(),
-		Recipient{Name: "A", Address: "a@example.com"}, "Subject", "invite", inviteData{})
+		Recipient{Name: "A", Address: "a@example.com"}, "Subject", "invite", InviteData{})
 	if err == nil {
 		t.Fatal("a 400 from SendGrid was not reported as an error")
 	}

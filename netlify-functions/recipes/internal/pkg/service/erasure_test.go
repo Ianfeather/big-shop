@@ -352,9 +352,18 @@ func TestDeleteAuth0User(t *testing.T) {
 func swapSteps(t *testing.T, order *[]string, softGateErr, auth0Err, hardDeleteErr error) {
 	t.Helper()
 	origSoft, origSendGrid, origAuth0, origHard, origRestore := softGateStep, sendGridStep, auth0Step, hardDeleteStep, restoreStep
+	origConfirmation := confirmationStep
 	t.Cleanup(func() {
 		softGateStep, sendGridStep, auth0Step, hardDeleteStep, restoreStep = origSoft, origSendGrid, origAuth0, origHard, origRestore
+		confirmationStep = origConfirmation
 	})
+
+	// Swapped out rather than left real, for the reason the real one exists:
+	// SendTransactionalAsync spawns a goroutine, so leaving it in would race
+	// the test's own recording of the order.
+	confirmationStep = func(_ context.Context, _, _ string) {
+		*order = append(*order, "confirmation")
+	}
 
 	softGateStep = func(_ context.Context, _ execer, _ string, _ int) error {
 		*order = append(*order, "soft-gate")
@@ -387,14 +396,20 @@ func TestDeleteUserAndAccountSequence(t *testing.T) {
 		var order []string
 		swapSteps(t, &order, nil, nil, nil)
 
-		deleted, err := DeleteUserAndAccount(context.Background(), nil, "auth0|1", 7, "bob@example.com")
+		deleted, err := DeleteUserAndAccount(context.Background(), nil, "auth0|1", 7, "Bob", "bob@example.com")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if !deleted {
 			t.Error("did not report the account as deleted")
 		}
-		want := []string{"soft-gate", "sendgrid", "auth0", "hard-delete"}
+		// "confirmation" sits between the gate and SendGrid, and that is the
+		// assertion doing real work here. After the gate because that is when
+		// the request is honoured; **before the erasure because the erasure
+		// deletes everything SendGrid holds about the address**, so a
+		// confirmation sent afterwards would re-create the recipient record it
+		// had just removed.
+		want := []string{"soft-gate", "confirmation", "sendgrid", "auth0", "hard-delete"}
 		if strings.Join(order, ",") != strings.Join(want, ",") {
 			t.Errorf("sequence = %v, want %v", order, want)
 		}
@@ -409,7 +424,7 @@ func TestDeleteUserAndAccountSequence(t *testing.T) {
 		var order []string
 		swapSteps(t, &order, nil, errors.New("tenant said no"), nil)
 
-		deleted, err := DeleteUserAndAccount(context.Background(), nil, "auth0|1", 7, "bob@example.com")
+		deleted, err := DeleteUserAndAccount(context.Background(), nil, "auth0|1", 7, "Bob", "bob@example.com")
 		if err == nil {
 			t.Fatal("expected the hard gate to abort the sequence")
 		}
@@ -433,7 +448,7 @@ func TestDeleteUserAndAccountSequence(t *testing.T) {
 		var order []string
 		swapSteps(t, &order, errors.New("database down"), nil, nil)
 
-		if _, err := DeleteUserAndAccount(context.Background(), nil, "auth0|1", 7, "bob@example.com"); err == nil {
+		if _, err := DeleteUserAndAccount(context.Background(), nil, "auth0|1", 7, "Bob", "bob@example.com"); err == nil {
 			t.Fatal("expected an error")
 		}
 		if strings.Join(order, ",") != "soft-gate" {
@@ -459,7 +474,7 @@ func TestDeleteUserAndAccountSequence(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // the client has already gone away
 
-		if _, err := DeleteUserAndAccount(ctx, nil, "auth0|1", 7, "bob@example.com"); err != nil {
+		if _, err := DeleteUserAndAccount(ctx, nil, "auth0|1", 7, "Bob", "bob@example.com"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if cascadeCtxErr != nil {
@@ -487,7 +502,7 @@ func TestFailedDeletionLeavesTheAccountReachable(t *testing.T) {
 		var order []string
 		swapSteps(t, &order, nil, errors.New("tenant said no"), nil)
 
-		if _, err := DeleteUserAndAccount(context.Background(), nil, "auth0|1", 7, "bob@example.com"); err == nil {
+		if _, err := DeleteUserAndAccount(context.Background(), nil, "auth0|1", 7, "Bob", "bob@example.com"); err == nil {
 			t.Fatal("expected an error")
 		}
 		if !contains(order, "un-gate") {
@@ -504,7 +519,7 @@ func TestFailedDeletionLeavesTheAccountReachable(t *testing.T) {
 		var order []string
 		swapSteps(t, &order, nil, nil, errors.New("database down"))
 
-		if _, err := DeleteUserAndAccount(context.Background(), nil, "auth0|1", 7, "bob@example.com"); err == nil {
+		if _, err := DeleteUserAndAccount(context.Background(), nil, "auth0|1", 7, "Bob", "bob@example.com"); err == nil {
 			t.Fatal("expected an error")
 		}
 		if !contains(order, "un-gate") {
@@ -519,7 +534,7 @@ func TestFailedDeletionLeavesTheAccountReachable(t *testing.T) {
 		var order []string
 		swapSteps(t, &order, nil, nil, nil)
 
-		if _, err := DeleteUserAndAccount(context.Background(), nil, "auth0|1", 7, "bob@example.com"); err != nil {
+		if _, err := DeleteUserAndAccount(context.Background(), nil, "auth0|1", 7, "Bob", "bob@example.com"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if contains(order, "un-gate") {

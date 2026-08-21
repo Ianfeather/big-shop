@@ -44,6 +44,19 @@ primary_region = "fra"
 # machine_config.json. Doing only the first would have left it absent at runtime
 # with nothing reporting a problem - a feature that fails only when exercised.
 #
+# **And it caught the very next secret anyway**, which is worth recording here
+# rather than treating the trap as closed. #59 added INVITE_EMAIL_PEPPER; #50
+# edited machine_config.json days later and declared only SENDGRID_API_KEY. So
+# the pepper was absent at runtime and service.HashEmail silently degraded to a
+# plain SHA-256 - invites kept working, because the digest is deterministic
+# either way, which is exactly why nobody noticed. It is declared as of
+# specs/transactional-email.md.
+#
+# The lesson generalises past both: this failure has no symptom. A missing
+# credential that only weakens a security property, rather than breaking a
+# request, will not announce itself. Adding a secret means editing two files,
+# and the second one is this repository's.
+#
 # `[experimental]` is Fly's own naming for this block, not a comment on how
 # settled the approach is.
 [experimental]

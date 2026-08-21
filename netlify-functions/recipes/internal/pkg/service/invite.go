@@ -35,9 +35,17 @@ import (
 // secret in production), which turns that offline check into one that needs the
 // secret too.
 //
-// It defaults to empty in dev, e2e and CI, which degrades to a plain digest -
-// deterministically, and per environment. That is the right trade for a local
-// stack with no real addresses in it, and it means no test needs a secret.
+// It defaults to empty in dev, e2e and CI, which degrades to an unpeppered
+// digest - deterministically, and per environment. That is the right trade for a
+// local stack with no real addresses in it, and it means no test needs a secret.
+//
+// "Unpeppered" rather than "a plain SHA-256", which this comment used to say and
+// which is wrong in a way that costs an hour if you believe it: an empty HMAC key
+// is not the same thing as no HMAC, so HashEmail("x") with no pepper is
+// HMAC-SHA256(key="", "x"), not SHA256("x"). Anyone reproducing a digest by hand -
+// to seed a fixture, or to check a row - has to use HMAC either way. It makes no
+// difference to the security argument, since an empty key is as computable by an
+// attacker as no key at all.
 //
 // Read from the environment on each call rather than captured once, following
 // `SENDGRID_API_KEY`'s precedent in app/user.go - the process is long-lived on
@@ -122,32 +130,37 @@ func GetInvites(ctx context.Context, db *sql.DB, email string) (i []common.Invit
 
 }
 
-func GetInvite(ctx context.Context, db *sql.DB, token string, email string) (a *int, e error) {
-	var accountID int
-	inviteQuery := `SELECT account from invite WHERE email = ? and token = ?;`
-	if err := db.QueryRowContext(ctx, inviteQuery, HashEmail(email), token).Scan(&accountID); err != nil {
+// Invitation is one invite row, resolved for a caller who has proved it is
+// addressed to them.
+//
+// AdminID is the User who sent it. Returned alongside the account rather than
+// left to a second query because both callers need it: accepting and rejecting
+// each notify the inviter, and neither has any other handle on who that is.
+type Invitation struct {
+	AccountID int
+	AdminID   string
+}
+
+// GetInvite resolves an invite by token, **scoped to the address it was sent
+// to**.
+//
+// The email is half the lookup, not a courtesy check. A token alone identifies
+// a row, so matching on the token by itself would let anybody holding one act
+// on an invitation addressed to somebody else. Both callers pass the caller's
+// own address, so a mismatched pair resolves to no rows and the handler fails.
+func GetInvite(ctx context.Context, db *sql.DB, token string, email string) (*Invitation, error) {
+	var invitation Invitation
+	inviteQuery := `SELECT account, admin_id from invite WHERE email = ? and token = ?;`
+	if err := db.QueryRowContext(ctx, inviteQuery, HashEmail(email), token).
+		Scan(&invitation.AccountID, &invitation.AdminID); err != nil {
 		return nil, fmt.Errorf("querying invite: %w", err)
 	}
-	return &accountID, nil
+	return &invitation, nil
 }
 
 func DeleteInvite(ctx context.Context, db *sql.DB, accountID int, email string) error {
 	inviteQuery := `DELETE from invite WHERE account = ? and email = ?;`
 	_, err := db.ExecContext(ctx, inviteQuery, accountID, HashEmail(email))
-	if err != nil {
-		return fmt.Errorf("deleting invite: %w", err)
-	}
-	return nil
-}
-
-// DeleteInviteByToken removes an invite by its token.
-//
-// No HashEmail call, and that is correct rather than an oversight: the token is
-// already the row's other unique handle, so this path never touches the email
-// column at all.
-func DeleteInviteByToken(ctx context.Context, db *sql.DB, token string) error {
-	inviteQuery := `DELETE from invite WHERE token = ?;`
-	_, err := db.ExecContext(ctx, inviteQuery, token)
 	if err != nil {
 		return fmt.Errorf("deleting invite: %w", err)
 	}

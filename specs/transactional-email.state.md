@@ -22,13 +22,23 @@ Known-untidy until Session 5: the preview index lists all four transactional
 templates but only `invite` exists, so the other three 404 until their phases land.
 
 ## Session 2: Phase 2a — invite repairs (backend)
-Status: pending
+Status: done
 Scope: `inviteUser` onto the async helper (the 400 disappears); `GetInvite` returns
 `admin_id` as well as account; `rejectInvite` scoped to the caller's own invite;
 `INVITE_EMAIL_PEPPER` declared in `machine_config.json`.
 Depends on: Session 1
-Commit:
-Notes:
+Commit: 39cf562
+Notes: go test ./... -race green, gofmt/vet clean, openapi.yaml in sync. Verified
+against the real stack rather than by unit test, because GetInvite/DeleteInvite take
+*sql.DB and there is no DB-backed harness (board item #52):
+  - reject someone else's invite by token -> 400, row intact; own invite -> 204, deleted
+  - POST /invite with an invalid SendGrid key -> SendGrid 401, request 204, row written,
+    failure logged in the background (on master this request is a 400)
+Removed DeleteInviteByToken outright rather than leaving it unused, so no future path
+can reach for the blind delete.
+Hit the stale-volume trap on the way: this worktree's db volume predated migration 034,
+so consent_event/email_send were missing and GET /user 500'd. `docker compose down -v`
+and re-up fixed it - worth knowing the symptom looks like an application bug.
 
 ## Session 3: Phase 2b — the deep link
 Status: pending

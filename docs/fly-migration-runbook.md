@@ -110,11 +110,17 @@ fly secrets set \
   AUTH0_MGMT_CLIENT_SECRET='<its client secret>'
 ```
 
-**If the tenant ever gets a custom domain, set `AUTH0_TENANT_DOMAIN` too**, to the
-canonical `something.region.auth0.com` name. Auth0 requires the Management API
-audience to remain the canonical domain even behind a custom one, while `AUTH0_DOMAIN`
-must become the custom domain for login-token validation. The code falls back to
-`AUTH0_DOMAIN` while the two are the same, which is why it is unset today.
+**The tenant now has a custom domain (`auth.bigshop.life`), so `AUTH0_TENANT_DOMAIN`
+is set** to the canonical `dev-x-n37k6b.eu.auth0.com` name. Auth0 requires the
+Management API audience to remain the canonical domain even behind a custom one,
+while `AUTH0_DOMAIN` must become the custom domain for login-token validation. The
+code falls back to `AUTH0_DOMAIN` while the two are the same, which is why it was
+unset until then.
+
+**It is not a `fly secrets` value, despite appearing in this section.** A domain name
+is a public identifier, so it lives in `fly.toml`'s `[env]` alongside `AUTH0_DOMAIN`
+and `AUTH0_AUDIENCE` — in version control, where a deploy cannot forget it. It is
+described here because this is where its consequences are, not because it is a secret.
 
 **Leaving these unset is not a clean degradation, and this one matters.** Deletion still
 runs and still deletes every database row, but it *skips* removing the Auth0 identity —

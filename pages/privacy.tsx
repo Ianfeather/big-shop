@@ -448,13 +448,27 @@ export default function Privacy() {
               Under UK data protection law you can ask for a copy of your data, ask for it to be
               corrected, ask for it to be deleted, or object to how it is used.
             </p>
+            {/* The login clause is the one sentence on this page that cannot
+                be keyed to a switch the way ANALYTICS_LIVE is: whether Auth0's
+                identity is really destroyed depends on AUTH0_MGMT_CLIENT_ID
+                and AUTH0_MGMT_CLIENT_SECRET, which are read server-side by the
+                Go API and are deliberately absent in dev, e2e and CI, where
+                service.DeleteAuth0User skips instead of failing. It is
+                asserted here because it was *verified against production* on
+                2026-08-21 - a throwaway account deleted through /account, and
+                gone from the Auth0 dashboard afterwards - not because the code
+                path exists. An earlier draft made this claim while the
+                credentials were unset and it was false; if they are ever
+                unset again, this sentence is wrong the same day. See the board
+                item this shipped from. */}
             <p>
               <strong>Deletion has a button.</strong> It is on your{' '}
               <Link href="/account">account page</Link>, and it deletes rather than deactivates:
-              your name and email address, your cookie choices, every invite you have sent or
-              received, and &mdash; if the account is yours alone &mdash; the recipes, the shopping
-              list and its history. Signing in again afterwards would start a brand new, empty
-              account; there is nothing left to go back to.
+              your login, your name and email address, your cookie choices, every invite you have
+              sent or received, and &mdash; if the account is yours alone &mdash; the recipes, the
+              shopping list and its history. The login record itself is removed from Auth0, so the
+              account cannot be signed back into; signing up again would start a brand new, empty
+              one.
             </p>
             <p>
               If we have ever emailed you, we also ask SendGrid to erase what it holds about your

@@ -51,9 +51,11 @@ Commit: 09908a1
 Notes: vitest 372 passed, lint/typecheck clean, invite.golden.html regenerated.
 Verified in the browser against the real stack: the accessibility tree shows the toast
 (role=status, "Ian Feather invited you to share their account"), the invite card, and
-?invite stripped from the URL. **Screenshot evidence still to capture** - React Query
-resolves after the navigation settles, so a capture taken immediately shows the empty
-pre-query state. Wait for the card before capturing.
+?invite stripped from the URL. Evidence committed in 320e943 under
+specs/evidence/transactional-email/ - the rendered email, the matched arrival, and the
+no-match arrival. Note for whoever captures next: claude-in-chrome returns a stale frame
+after a navigation, so a screenshot can show the pre-query empty state while read_page
+shows the settled DOM. A scroll forces the repaint; `wait` alone does not.
 Settles spec open question 2 — the no-match copy covers expired/accepted/not-yours
 together, because the frontend cannot distinguish them.
 

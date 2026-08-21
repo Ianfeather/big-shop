@@ -126,6 +126,28 @@ func SetAccountID(ctx context.Context, accountID int) {
 	trace.SpanFromContext(ctx).SetAttributes(attribute.Int("account.id", accountID))
 }
 
+// SetAuthFailureReason records why the auth chain refused a request, on the
+// span the request already has.
+//
+// This exists because a 401 is the one outcome the rest of this file cannot
+// describe. Middleware runs *after* the auth pair (see app.GetRouter), and a
+// refused request never reaches it - so a 401 span carries the otelhttp
+// attributes and nothing else: no user.sub to say who was refused, and nothing
+// at all to say why. The distinction the API does draw, "JWT is missing."
+// against "JWT is invalid.", lives only in the response body, and the two
+// bodies are both exactly 29 bytes, so not even http.response.body.size can
+// separate them from outside.
+//
+// A classification, not an identifier and emphatically not the token: ADR-0008
+// §1 excludes content, and the values are a closed set of constants declared in
+// package app. On the span only, never on a metric - the set is small enough
+// that a label would be safe, but "why was this refused" is not a property of
+// the duration histogram, and ADR-0008 §2's rule is that a span is where a fact
+// about one request belongs.
+func SetAuthFailureReason(ctx context.Context, reason string) {
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("auth.failure_reason", reason))
+}
+
 // isTracedRoute reports whether a request should produce a server span. Every
 // route does, except the health check - see healthRoute.
 //

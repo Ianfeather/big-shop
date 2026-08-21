@@ -60,13 +60,21 @@ Settles spec open question 2 — the no-match copy covers expired/accepted/not-y
 together, because the frontend cannot distinguish them.
 
 ## Session 4: Phase 3 — close the loop on the invite
-Status: pending
+Status: done
 Scope: invite-accepted and invite-rejected emails, both to the inviter via `admin_id` →
 `service.GetUser`. Two templates + goldens. Rejected copy hands back the ability to
 re-invite rather than reporting a refusal.
 Depends on: Session 2 (the scoping fix is what makes the row readable), Session 1
-Commit:
-Notes:
+Commit: 669947f
+Notes: go test ./... -race green, gofmt/vet clean, openapi in sync. Both goldens added.
+Verified against the real stack with an invalid SendGrid key - reject sends
+invite-rejected (204), accept into a *different* account moves the membership and sends
+invite-accepted (204); both reached SendGrid and were refused, so the request outcome is
+independent of the send. Evidence: specs/evidence/transactional-email/email-invite-*.jpg.
+Deferred to Session 5, because they cannot pass until account-deleted.html exists:
+the account-deleted golden case, and TestEveryRegisteredEmailRenders (asserts every
+Family entry has a template that renders - the registry and the templates directory are
+two lists nothing else makes agree).
 
 ## Session 5: Phase 4 — the deletion confirmation
 Status: pending

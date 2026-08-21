@@ -22,6 +22,11 @@ const PAGE_TITLES: Record<string, string> = {
   '/': 'Home',
   '/account': 'Account',
   '/dave': 'Dave',
+  // Distinct from BUILT_IN_TITLES' '/_error': 'Error'. That is Next's own crash
+  // boundary; this is the page Auth0 and anything else hands people when it has
+  // nowhere better to send them, and a report that could not tell the two apart
+  // would be reading a crash rate off the wrong row.
+  '/error': 'Error page',
   '/list': 'Shopping list',
   '/privacy': 'Privacy policy',
   '/recipes': 'Recipes',

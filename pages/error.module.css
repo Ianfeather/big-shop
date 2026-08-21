@@ -1,0 +1,121 @@
+/* The generic error page, on the same "Cookbook" furniture as the homepage,
+   /privacy and /support. Chrome is composed from public-chrome.module.css;
+   palette tokens live in pages/styles.css.
+
+   Much shorter than support.module.css because the page is: one apology, one
+   address, one way back. The shared type rules are copied rather than pulled
+   into public-chrome.module.css - that file is deliberately the *chrome*, and
+   its own header note says page-specific type stays with the page. Three
+   near-identical `.display`/`.standfirst` blocks across three pages is the
+   point at which that would be worth revisiting, and this is the third; noted
+   rather than done, because the sizes are not actually required to agree and
+   pretending they are is how a shared file becomes a dumping ground. */
+
+/* A column, unlike the other three public pages, so the footer is pinned to the
+   bottom of the viewport rather than following the content. Those pages are long
+   enough that the distinction never arises; this one is two sentences, so
+   without it the footer lands halfway up a desktop viewport with a field of
+   blank paper beneath it - which reads as a page that failed to finish
+   rendering. On an error page that is precisely the wrong impression. */
+.page {
+  composes: page from './public-chrome.module.css';
+  display: flex;
+  flex-direction: column;
+}
+
+.grain {
+  composes: grain from './public-chrome.module.css';
+}
+
+.header {
+  composes: header from './public-chrome.module.css';
+}
+
+.brand {
+  composes: brand from './public-chrome.module.css';
+}
+
+.mark {
+  composes: mark from './public-chrome.module.css';
+}
+
+.wordmark {
+  composes: wordmark from './public-chrome.module.css';
+}
+
+.back {
+  composes: headerAction from './public-chrome.module.css';
+}
+
+.footer {
+  composes: footer from './public-chrome.module.css';
+}
+
+.footerMark {
+  composes: footerMark from './public-chrome.module.css';
+  width: 28px;
+}
+
+.footerLinks {
+  composes: footerLinks from './public-chrome.module.css';
+}
+
+/* ---------- prose ---------- */
+
+/* Centred rather than the 34em left-aligned measure /privacy and /support use.
+   There is no continuous prose here to set - two sentences and a link - and a
+   short block hanging off the left of a wide viewport reads as a page that
+   failed to load, which is the one impression this page must not give. */
+.main {
+  position: relative;
+  z-index: 1;
+  flex: 1 0 auto;
+  width: 100%;
+  max-width: 30em;
+  margin: 0 auto;
+  padding: clamp(var(--space-7), 14vh, 160px) clamp(var(--space-4), 5vw, 60px) var(--space-7);
+  text-align: center;
+}
+
+.eyebrow {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--claret);
+  margin: 0 0 var(--space-3);
+}
+
+.display {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: clamp(32px, 5.5vw, 52px);
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+  margin: 0 0 var(--space-4);
+}
+
+.body {
+  font-size: clamp(var(--text-md), 2.1vw, 20px);
+  line-height: 1.6;
+  color: var(--ink-soft);
+  margin: 0 0 var(--space-5);
+}
+
+.body a {
+  color: var(--spot);
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+
+.body a:focus-visible {
+  outline: 2px solid var(--spot);
+  outline-offset: 3px;
+}
+
+/* The way back, given the same weight as the header's pill because on this page
+   it is the thing to do rather than a secondary route. */
+.action {
+  composes: headerAction from './public-chrome.module.css';
+  display: inline-block;
+}

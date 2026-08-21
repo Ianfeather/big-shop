@@ -1,19 +1,25 @@
 ---
 spec: specs/transactional-email.md
-status: planned
+status: in-progress
 branch: implement/transactional-email
 pr:
 ---
 
 ## Session 1: Phase 1 — the family seam
-Status: pending
+Status: done
 Scope: `service/email/transactional.go` — a `Kind` per transactional email, a registry of
 subject+template mirroring `lifecycle.Sequence`, exported per-email data types, and
 `SendTransactionalAsync` (background, `context.WithoutCancel`, bounded, never returns an
 error). No behaviour change.
 Depends on: none
-Commit:
-Notes:
+Commit: 0d51d5d
+Notes: go test ./... -race green, gofmt/vet clean, openapi.yaml in sync. Review gate
+run inline rather than via the code-review skill (this session is under instructions
+not to spawn subagents); it found a no-op `if !sent` branch, now removed, and one
+behaviour change to the send-test dev command worth documenting (`--name` is now the
+recipient's name only, matching what it already meant for lifecycle mail).
+Known-untidy until Session 5: the preview index lists all four transactional
+templates but only `invite` exists, so the other three 404 until their phases land.
 
 ## Session 2: Phase 2a — invite repairs (backend)
 Status: pending

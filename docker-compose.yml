@@ -107,15 +107,24 @@ services:
       db:
         condition: service_healthy
     environment:
-      # interpolateParams=true makes the driver interpolate arguments
-      # client-side instead of preparing server-side, which halves the blocking
-      # round trips of every parameterised query (measured: GET /shopping-list
-      # 15.2 -> 9.1). collation is pinned *because of* it, not incidentally:
-      # the driver's guard against the multibyte escape-bypass charsets is
-      # `Collation != "" && unsafeCollations[Collation]`, so leaving the
-      # collation unset disarms it. Keep them together, and never add
-      # multiStatements - see specs/completed/request-model-optimisations.md.
-      DSN: "root:root@tcp(db:3306)/bigshop?parseTime=true&interpolateParams=true&collation=utf8mb4_general_ci"
+      # The connection, by component. There is no DSN string here any more:
+      # parseTime, interpolateParams and collation are literals in
+      # netlify-functions/recipes/dsn.go, because not one of them ever differed
+      # between this stack and production - and a hand-written string is exactly
+      # how production came to lose parseTime and answer 500 on GET /user for a
+      # day. See that file for the reasoning, and never add multiStatements.
+      #
+      # TIDB_* rather than DB_*, matching .env.tidb, even though this particular
+      # database is a MySQL container rather than TiDB. One name for one thing
+      # beats two conventions.
+      #
+      # TIDB_TLS is deliberately absent: this speaks to a container over the
+      # compose network. Production sets it in fly.toml.
+      TIDB_HOST: "db"
+      TIDB_PORT: "3306"
+      TIDB_USER: "root"
+      TIDB_PASSWORD: "root"
+      TIDB_DB: "bigshop"
       DISABLE_AUTH: "true"
       DEV_USER_ID: "local-dev-user"
       # Read by the OTel SDK's own env handling (telemetry.Setup passes no

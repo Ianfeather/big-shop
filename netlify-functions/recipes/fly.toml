@@ -8,7 +8,7 @@
 #   fly deploy ./netlify-functions/recipes
 # (this file sits next to the Dockerfile so the build context is the Go module
 # and nothing else - not the whole repo). docs/fly-migration-runbook.md has the
-# first-time setup, including the DSN secret.
+# first-time setup, including the TIDB_PASSWORD secret.
 
 app = "big-shop-api"
 
@@ -25,7 +25,7 @@ primary_region = "fra"
 #
 # **Why machine_config and not [build.compose].** A compose deploy was tried
 # first and failed outright: no `fly secrets` reached either container, so the
-# API fell back to an empty DSN and died on
+# API fell back to an empty connection string and died on
 # `dial tcp 127.0.0.1:3306: connect: connection refused` before serving
 # anything. The cause is not a platform bug - in a multi-container Machine a
 # container receives ONLY the secrets it declares, and the compose path gives no
@@ -66,8 +66,14 @@ primary_region = "fra"
 [build]
   dockerfile = "Dockerfile"
 
-# Three of the Go process's environment variables (grep os.Getenv) are public
+# Most of the Go process's environment variables (grep os.Getenv) are public
 # identifiers and live here, in version control, so a deploy cannot forget them:
+#
+#   TIDB_HOST / TIDB_PORT / TIDB_USER / TIDB_DB / TIDB_TLS - where the database
+#     is and who connects to it. These used to be inside the DSN secret, which
+#     meant four values that grant nothing on their own were being hand-pasted
+#     alongside the one that does. .env.tidb has always tracked the same four in
+#     git and says why; this is the API agreeing with it. See dsn.go.
 #
 #   AUTH0_DOMAIN / AUTH0_AUDIENCE - both are already public in
 #     .env.development. Getting these wrong does not fail loudly: with
@@ -81,27 +87,59 @@ primary_region = "fra"
 #     docs/fly-migration-runbook.md used to imply it went. See the note by the
 #     value itself.
 #
-# Two are secrets, set out-of-band with `fly secrets set` (see
+# Three are secrets, set out-of-band with `fly secrets set` (see
 # docs/fly-migration-runbook.md) and deliberately absent from this file:
 #
-#   DSN               - TiDB connection string
+#   TIDB_PASSWORD     - the database password, and now the *only* part of the
+#                       connection that is secret. It is declared in the `api`
+#                       container's `secrets` array in machine_config.json;
+#                       renaming it here without renaming it there means the
+#                       process starts with no password and cannot connect.
 #   SENDGRID_API_KEY  - every email Big Shop sends (internal/pkg/service/email).
 #                       Now genuinely set, and correspondingly declared in the
 #                       `api` container's `secrets` array in machine_config.json.
 #                       Both halves are required; see the trap above.
+#   INVITE_EMAIL_PEPPER - the HMAC pepper for invite address digests. Declared
+#                       as of specs/completed/transactional-email.md; before
+#                       that it was set but undeclared, and HashEmail quietly
+#                       degraded to a plain SHA-256. The worked example of the
+#                       trap above.
 #
-# The fifth, DISABLE_AUTH, must never be set here. It is a local-development
+# DISABLE_AUTH must never be set here. It is a local-development
 # switch that makes the API resolve every request to DEV_USER_ID without
 # validating a token; docker-compose.yml is the only place it belongs.
 # These reach *every* container in the Machine. `fly secrets` do not: under
 # machine_config each container receives only the secrets it names, which was
 # measured, not assumed - a probe container declaring only
-# GRAFANA_CLOUD_OTLP_ENDPOINT saw that and could not see DSN.
+# GRAFANA_CLOUD_OTLP_ENDPOINT saw that and could not see the API's database
+# secret (then named DSN, now TIDB_PASSWORD).
 #
 # So ADR-0007's "credentials live in collector config, not application code"
 # holds more strongly than it reads: the API container need never be given a
-# Grafana credential at all, and the collector need never be given DSN.
+# Grafana credential at all, and the collector need never be given
+# TIDB_PASSWORD.
 [env]
+  # Where the database is and who connects to it. The same four values
+  # .env.tidb holds for the scripts, which is the point - one description of one
+  # instance, and the password (TIDB_PASSWORD, a Fly secret) the only part that
+  # grants anything.
+  #
+  # The query parameters that used to travel with these inside the DSN string
+  # are gone from configuration entirely; they are literals in dsn.go. Read that
+  # file before changing anything here.
+  TIDB_HOST = "gateway01.eu-central-1.prod.aws.tidbcloud.com"
+  # 4000 is TiDB Cloud's protocol port, not MySQL's usual 3306.
+  TIDB_PORT = "4000"
+  TIDB_USER = "3of82tmdiXMHzuo.root"
+  TIDB_DB = "bigshop"
+
+  # TLS is on because TiDB Cloud requires it, and it is stated rather than
+  # inferred from the hostname: a guess would mean that the day the host stops
+  # looking like TiDB Cloud, the connection quietly stops being encrypted.
+  # dsn.go builds the certificate's ServerName from TIDB_HOST above, so this
+  # file names the production host exactly once.
+  TIDB_TLS = "true"
+
   # The custom domain, because it is the issuer of the login tokens this API
   # validates: a token minted at auth.bigshop.life carries
   # `iss: https://auth.bigshop.life/`, and newJWTMiddleware pins the validator to

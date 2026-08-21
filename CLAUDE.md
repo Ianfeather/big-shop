@@ -149,7 +149,11 @@ Routes are registered under
 `/api/bigshop` (`main.go`'s `basePath`, passed to `GetRouter`), so
 `NEXT_PUBLIC_API_HOST` must include that suffix, e.g.
 `http://localhost:8080/api/bigshop` (already the case in
-`.env.development`). It needs a live DB via `DSN`, and `DISABLE_AUTH=true`
+`.env.development`). It needs a live DB via `TIDB_HOST`, `TIDB_PORT`,
+`TIDB_USER`, `TIDB_PASSWORD` and `TIDB_DB` — `dsn.go` builds the connection
+string from those, and refuses to start naming any that are missing rather than
+connecting somewhere half-configured (leave `TIDB_TLS` unset for a local
+database; it is `true` only for TiDB Cloud). It also needs `DISABLE_AUTH=true`
 (no `NEXT_PUBLIC_` prefix — read server-side by the Go process) to skip real
 Auth0 JWT validation; the router then injects a fixed `DEV_USER_ID` (default
 `local-dev-user`) as the request's user ID, which must exist in `account_user`

@@ -280,7 +280,7 @@ application reads them — `@next/env` loads `.env`, `.env.local` and
 
 | Variable | Default | Notes |
 |---|---|---|
-| `TIDB_HOST` | none — required | From the production `DSN` in the Netlify UI |
+| `TIDB_HOST` | none — required | The same value `fly.toml`'s `[env]` gives the API |
 | `TIDB_USER` | none — required | Same place |
 | `TIDB_PORT` | `4000` | TiDB Cloud's protocol port, not MySQL's `3306` |
 | `TIDB_DB` | `bigshop` | |
@@ -421,8 +421,10 @@ local development and e2e working, where the public value is absolute anyway).
 unproxied origin to every visitor and undo the same-origin property.
 
 **Server-side secrets (set in Netlify UI / local `.env.local`):**
-- `DSN` — TiDB connection string. Carries two query parameters that are load-bearing rather
-  than incidental, and a third that must never be added — see below.
+- `TIDB_PASSWORD` — the database password, and the only part of the connection that is a
+  secret. Host, port, username and database name are public identifiers and live in
+  `fly.toml`'s `[env]`; the driver's query parameters are not configuration at all. See
+  below.
 - `OPENAI_API_KEY` — GPT-4 Vision + GPT-3.5-turbo
 - `SENDGRID_API_KEY` — Email invitations
 - `AUTH0_DOMAIN` / `AUTH0_AUDIENCE` — Go JWT validation. `AUTH0_DOMAIN` is
@@ -455,11 +457,26 @@ unproxied origin to every visitor and undo the same-origin property.
   one-way door: `invite` is never more than ~30 days deep because expired rows are purged
   lazily, so a rotation self-heals within a month. See `migrations/035_invite_email_hash.sql`.
 
-#### The DSN's query parameters
+#### The connection string, and why nobody writes one
 
-The DSN is set in exactly two places — `docker-compose.yml`'s `api` service (which covers
-local development *and* e2e) and a Fly secret for production. There is no `.env` copy by
-design (`docker/README.md`). Anyone rewriting it needs all three of these:
+**There is no `DSN` variable any more.** `netlify-functions/recipes/dsn.go` builds the
+connection string from components: `TIDB_HOST`, `TIDB_PORT`, `TIDB_USER`, `TIDB_DB` and
+`TIDB_TLS` from `fly.toml`'s `[env]` (and `docker-compose.yml` locally), plus the
+`TIDB_PASSWORD` secret. The three query parameters below are **literals in that file**, not
+configuration — none of them ever differed between the local stack and production, so
+neither environment was ever choosing them.
+
+That is a direct consequence of this section's previous form. It described the parameters as
+load-bearing and left them in a hand-pasted secret, which is how production came to lose
+`parseTime` on 2026-08-21 and answer 500 on every `GET /user` — `service.GetLatestConsent`
+holds the codebase's only `time.Time` scan on a request path, so one route broke and nothing
+else did. This table now documents what the program does rather than what an operator must
+remember.
+
+It also used to omit `tls=tidb`, which `main.go` required, so following it to rebuild the
+DSN would have taken the API down rather than fixed it. TLS is now `TIDB_TLS`, and the
+certificate's `ServerName` derives from `TIDB_HOST` instead of being a second copy of the
+hostname.
 
 | Parameter | Why |
 | --- | --- |
@@ -584,7 +601,7 @@ Two independent pipelines, one per deployable — an accepted consequence of
   check is never deployed
 - Config: `netlify-functions/recipes/fly.toml`; image:
   `netlify-functions/recipes/Dockerfile`
-- Needs a `FLY_API_TOKEN` repository secret; `DSN`, `SENDGRID_API_KEY`,
+- Needs a `FLY_API_TOKEN` repository secret; `TIDB_PASSWORD`, `SENDGRID_API_KEY`,
   `INVITE_EMAIL_PEPPER`, `AUTH0_MGMT_CLIENT_ID` and `AUTH0_MGMT_CLIENT_SECRET` are Fly
   secrets, `AUTH0_DOMAIN`/`AUTH0_AUDIENCE` are in `fly.toml`'s `[env]`
 - Reached from the browser through a Netlify `status = 200` rewrite, so it stays

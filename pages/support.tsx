@@ -3,6 +3,7 @@ import Link from 'next/link';
 import styles from './support.module.css';
 import Logo from '@components/svg/logo';
 import { useCookieSettings } from '@components/consent-banner';
+import { SUPPORT_EMAIL } from '../lib/contact';
 
 // Support. A public page, reachable logged-out from the marketing footer, so it
 // is built on the same "Cookbook" furniture as pages/index.tsx and
@@ -20,8 +21,6 @@ import { useCookieSettings } from '@components/consent-banner';
 // needs an endpoint, spam handling, and somewhere for the message to land -
 // three things to keep working - to arrive at the same inbox a mailto: reaches
 // directly. It also strands anyone whose problem is that the app is broken.
-
-const SUPPORT_EMAIL = 'hello@bigshop.life';
 
 export default function Support() {
   const openCookieSettings = useCookieSettings();

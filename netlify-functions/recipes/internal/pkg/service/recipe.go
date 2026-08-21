@@ -1063,10 +1063,7 @@ func CopyFeaturedRecipe(ctx context.Context, slug string, caller *common.Caller,
 		return 0, false, err
 	}
 
-	var existing int
-	err = db.QueryRowContext(ctx,
-		`SELECT id FROM recipe WHERE account_id = ? AND featured_from = ? LIMIT 1;`,
-		accountID, source.ID).Scan(&existing)
+	existing, err := findCopy(ctx, db, accountID, source.ID)
 	if err == nil {
 		return existing, true, nil
 	}
@@ -1085,11 +1082,36 @@ func CopyFeaturedRecipe(ctx context.Context, slug string, caller *common.Caller,
 	// let alone revoke - and every copy of it would go on to publish itself.
 	copyID, err := insertRecipeTx(ctx, tx, *source, accountID, false, &source.ID)
 	if err != nil {
+		// The check above is not atomic, so two requests arriving together can
+		// both find nothing and both try to insert. uniq_recipe_account_featured_from
+		// is what stops the second one, and this is what turns being stopped
+		// into the right answer rather than a 500: whoever won made the copy
+		// the caller was going to get anyway.
+		//
+		// A link in an email is exactly the thing that gets opened twice at
+		// once - a phone and a laptop, or a client that retries - so this path
+		// is ordinary rather than exotic.
+		if existingID, lookupErr := findCopy(ctx, db, accountID, source.ID); lookupErr == nil {
+			return existingID, true, nil
+		}
 		return 0, false, err
 	}
 
 	if err = tx.Commit(); err != nil {
+		if existingID, lookupErr := findCopy(ctx, db, accountID, source.ID); lookupErr == nil {
+			return existingID, true, nil
+		}
 		return 0, false, err
 	}
 	return copyID, false, nil
+}
+
+// findCopy returns the caller's existing copy of a Featured Recipe, or
+// sql.ErrNoRows if they have none.
+func findCopy(ctx context.Context, db *sql.DB, accountID, sourceID int) (int, error) {
+	var id int
+	err := db.QueryRowContext(ctx,
+		`SELECT id FROM recipe WHERE account_id = ? AND featured_from = ? LIMIT 1;`,
+		accountID, sourceID).Scan(&id)
+	return id, err
 }

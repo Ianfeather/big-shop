@@ -61,3 +61,18 @@ ALTER TABLE `recipe`
 -- `featured` alone, which is two-valued and overwhelmingly one of them.
 ALTER TABLE `recipe`
   ADD KEY `idx_recipe_featured_slug` (`featured`, `slug`);
+
+-- One copy of a given Featured Recipe per Account, enforced rather than
+-- checked.
+--
+-- CopyFeaturedRecipe looks for an existing copy before inserting, and that
+-- check is not atomic: two requests arriving together both find nothing and
+-- both insert. That is not a hypothetical - it showed up in the e2e suite as a
+-- second Recipe appearing from one visit, which is precisely the duplicate
+-- `featured_from` exists to prevent. A link in an email is exactly the thing
+-- that gets opened twice at once, on a phone and a laptop.
+--
+-- NULLs do not collide in a MySQL unique index, so every ordinary Recipe -
+-- which has no provenance - is unaffected, however many an Account holds.
+ALTER TABLE `recipe`
+  ADD UNIQUE KEY `uniq_recipe_account_featured_from` (`account_id`, `featured_from`);

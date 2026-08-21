@@ -24,14 +24,24 @@ const Recipes = () => {
   // router.replace so a reload/back-nav/shared link doesn't re-show the toast.
   useEffect(() => {
     if (!router.isReady || !id) return;
-    if (router.query.stored === 'new' || router.query.stored === 'updated') {
+    // 'featured' and 'already' come from pages/recipes/add/[slug].tsx rather
+    // than from Form.tsx, and they say different things: one recipe has just
+    // arrived from an email link, the other was already here. The second is the
+    // one worth having - arriving somewhere you did not navigate to, with no
+    // explanation, reads as the link having done nothing.
+    const stored = router.query.stored;
+    const message = stored === 'featured' ? 'Recipe added to your collection'
+      : stored === 'already' ? 'You already had this recipe'
+      : stored === 'new' || stored === 'updated' ? 'Recipe saved'
+      : null;
+    if (message) {
       // Copied into state on purpose: the router.replace below strips the
       // param immediately, so the toast cannot be derived from the URL - it
       // would vanish on the same tick it appeared. Deriving it instead would
       // mean leaving ?stored= in the address bar, which is what this is
       // avoiding. (follow-ups.md #32)
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setToastMessage('Recipe saved');
+      setToastMessage(message);
       router.replace(`/recipes/${id}`, undefined, { shallow: true });
     }
   }, [router.isReady, id]); // eslint-disable-line react-hooks/exhaustive-deps

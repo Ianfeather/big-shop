@@ -220,10 +220,20 @@ links" from our own database, and ADR-0010 forbids click tracking in these email
   carried and dropped, provenance set), the already-taken no-op, and the admin gate —
   including the case that must *not* 403, a non-admin submitting `featured` unchanged.
 - **Vitest**: the admin checkbox renders only for an admin; the landing page's three states.
-- **Playwright**, in a new `e2e/featured-recipe.spec.ts`: the logged-out journey end to end —
-  hit a featured link while signed out, come back through login, land on the copy — plus the
-  second-click no-op. This is the only thing that exercises Phase 3, which is the whole reason
-  return-to is built here rather than separately.
+- **Playwright**, in a new `e2e/featured-recipe.spec.ts`: arriving at a featured link, the
+  second-visit no-op, the unpublished-slug page, and a Recipe the caller owns but which is
+  not Featured.
+
+  **Corrected during implementation.** This originally claimed the logged-out journey —
+  click while signed out, come back through login, land on the copy — and said that was the
+  whole reason return-to belonged in this work. **It cannot be tested here.**
+  `.env.development` sets `NEXT_PUBLIC_DISABLE_AUTH=true`, so `hooks/use-auth.ts` returns a
+  mock reporting `isAuthenticated: true` unconditionally and `loginWithRedirect` as a no-op;
+  `pages/_app.tsx`'s gate therefore never fires under e2e and the logged-out path is
+  unreachable. It is the same trap CLAUDE.md records for `/privacy`. Return-to is still
+  required — a logged-out click is the hard case the whole row was parked on — but its
+  coverage is `lib/return-to.test.ts`, which is the coverage rather than a supplement to it,
+  and a manual pass against a real Auth0 tenant.
 
   **It must not touch the Shopping List**, so it can run alongside `shopping-list.spec.ts`.
   It has no reason to, since the feature deliberately doesn't.

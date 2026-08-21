@@ -47,7 +47,22 @@ import { trackEvent } from './ga';
 // Enter Manually and then pasted their ingredient list in one lump had the list
 // read for them, which is a different act from typing eleven rows, and the
 // distinction is exactly what "should we make paste more prominent" turns on.
-export type RecipeSource = 'url' | 'photo' | 'text' | 'manual';
+//
+// `featured` is a fifth way a Recipe arrives and not a fourth Import Source -
+// CONTEXT.md defines those as "chosen via one of three Import Sources on the
+// New Recipe page", and this one is a link in an email with nothing chosen and
+// no extractor run. So this set now diverges from Import Source as well as from
+// metrics.ts's ImportSource, which is worth stating because the three names
+// look interchangeable and are not.
+//
+// It is counted at all for a reason that is about the other four rather than
+// about itself: they are currently a *total*, and leaving a fifth route out
+// would make "what share of Recipes arrive by URL" drift downwards as featured
+// adds grow, with nothing in the data explaining why. `recipe.featured_from`
+// answers the featured-specific question better, from our own database and
+// without a fourth-party transfer - see ADR-0008 §1 - so this is here for the
+// denominator, not for the numerator.
+export type RecipeSource = 'url' | 'photo' | 'text' | 'manual' | 'featured';
 
 export function recipeImported(source: RecipeSource): void {
   trackEvent('recipe_imported', { source });

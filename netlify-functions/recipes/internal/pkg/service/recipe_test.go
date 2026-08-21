@@ -421,3 +421,147 @@ func TestDeleteRecipeData(t *testing.T) {
 		}
 	})
 }
+
+// The permission rule behind Featured Recipes, in the only place it is decided.
+//
+// specs/completed/featured-recipes.md names getting this backwards as the trap: a check
+// on whether the field is *present* rather than whether it *changed* would 403
+// every ordinary user editing their own Recipe, because the client round-trips
+// the whole object. So the unchanged cases are the ones worth most here, not
+// the refusal.
+func TestResolveFeatured(t *testing.T) {
+	ptr := func(b bool) *bool { return &b }
+	adminErr := errors.New("lookup failed")
+
+	newCaller := func(admin bool, err error) *common.Caller {
+		return common.NewCaller("auth0|someone",
+			func() (int, error) { return 1, nil },
+			func() (bool, error) { return admin, err },
+		)
+	}
+
+	tests := []struct {
+		name      string
+		submitted *bool
+		stored    bool
+		admin     bool
+		adminErr  error
+		want      bool
+		wantErr   error
+	}{
+		// The two that must never 403. A non-admin saving their own Recipe
+		// sends the value back exactly as they received it.
+		{name: "non-admin echoes false", submitted: ptr(false), stored: false, admin: false, want: false},
+		{name: "non-admin echoes true", submitted: ptr(true), stored: true, admin: false, want: true},
+
+		// Silence means "no opinion", which is what every write path predating
+		// the field means. It must not be read as false, or an older client
+		// would un-publish a Featured Recipe on an unrelated edit.
+		{name: "absent leaves a featured recipe featured", submitted: nil, stored: true, admin: false, want: true},
+		{name: "absent leaves an ordinary recipe ordinary", submitted: nil, stored: false, admin: false, want: false},
+
+		// Changing it is the admin-only act.
+		{name: "non-admin publishing is refused", submitted: ptr(true), stored: false, admin: false, wantErr: ErrNotAdmin},
+		{name: "non-admin un-publishing is refused", submitted: ptr(false), stored: true, admin: false, wantErr: ErrNotAdmin},
+		{name: "admin publishes", submitted: ptr(true), stored: false, admin: true, want: true},
+		{name: "admin un-publishes", submitted: ptr(false), stored: true, admin: true, want: false},
+
+		// A failed lookup is not a refusal - it must not be mistaken for one,
+		// or a database blip would read to the caller as "you are not allowed".
+		{name: "a failed admin lookup surfaces", submitted: ptr(true), stored: false, adminErr: adminErr, wantErr: adminErr},
+
+		// ...and it is never consulted at all when nothing changed, which is
+		// what keeps the query off every ordinary recipe save.
+		{name: "no lookup when unchanged", submitted: ptr(false), stored: false, adminErr: adminErr, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := resolveFeatured(tt.submitted, tt.stored, newCaller(tt.admin, tt.adminErr))
+
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("error = %v, want %v", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error = %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("resolveFeatured() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// The two things a copy must get right, pinned on the INSERT's arguments rather
+// than on its SQL text - a test reading only the statement would pass with both
+// values left off entirely.
+//
+// Both are in specs/completed/featured-recipes.md's traps list, and both fail silently:
+// a copy that arrived Featured would republish itself out of an Account whose
+// owner cannot see the flag, and a copy committed without its provenance is
+// invisible to the already-taken check, so the next click on the same email
+// link makes a second one.
+func TestInsertRecipeTxCarriesFeaturedAndProvenance(t *testing.T) {
+	source := 3
+	recipe := common.Recipe{
+		Name:        "Store Cupboard Tomato Pasta",
+		Ingredients: []common.Ingredient{{Name: "flour", Quantity: "200", Unit: "gram"}},
+	}
+
+	findInsert := func(f *fakeExecer) []interface{} {
+		t.Helper()
+		for i, q := range f.queries {
+			if strings.Contains(q, "INSERT INTO recipe (") {
+				return f.args[i]
+			}
+		}
+		t.Fatal("no recipe insert was issued")
+		return nil
+	}
+
+	t.Run("a copy is never itself featured, and records where it came from", func(t *testing.T) {
+		fake := &fakeExecer{}
+		if _, err := insertRecipeTx(context.Background(), fake, recipe, 1, false, &source); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		args := findInsert(fake)
+		// (name, slug, remote_url, notes, method, account_id, featured, featured_from)
+		if len(args) != 8 {
+			t.Fatalf("insert took %d args, want 8", len(args))
+		}
+		if featured, ok := args[6].(bool); !ok || featured {
+			t.Errorf("featured = %v, want false", args[6])
+		}
+		got, ok := args[7].(*int)
+		if !ok || got == nil || *got != source {
+			t.Errorf("featured_from = %v, want a pointer to %d", args[7], source)
+		}
+	})
+
+	t.Run("an ordinary create records no provenance", func(t *testing.T) {
+		fake := &fakeExecer{}
+		if _, err := insertRecipeTx(context.Background(), fake, recipe, 1, false, nil); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if got := findInsert(fake)[7]; got != (*int)(nil) {
+			t.Errorf("featured_from = %v, want nil", got)
+		}
+	})
+
+	// The admin path still has to be able to publish one.
+	t.Run("an admin creating a Featured Recipe sets the flag", func(t *testing.T) {
+		fake := &fakeExecer{}
+		if _, err := insertRecipeTx(context.Background(), fake, recipe, 1, true, nil); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if featured, ok := findInsert(fake)[6].(bool); !ok || !featured {
+			t.Errorf("featured = %v, want true", findInsert(fake)[6])
+		}
+	})
+}

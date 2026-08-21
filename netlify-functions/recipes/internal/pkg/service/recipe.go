@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"database/sql"
+	"errors"
 	"fmt"
 )
 
@@ -78,7 +79,7 @@ func GetRecipeBySlug(ctx context.Context, slug string, caller *common.Caller, db
 	}
 	recipe := &common.Recipe{Ingredients: []common.Ingredient{}, Tags: []string{}}
 	query := `
-		SELECT recipe.id, name, remote_url, notes, method, tag_name
+		SELECT recipe.id, name, remote_url, notes, method, featured, tag_name
 			FROM recipe
 			LEFT JOIN recipe_tag on recipe.id = recipe_tag.recipe_id
 			WHERE slug = ? AND account_id = ?;`
@@ -94,9 +95,10 @@ func GetRecipeBySlug(ctx context.Context, slug string, caller *common.Caller, db
 		var notes sql.NullString
 		var method sql.NullString
 		var tag sql.NullString
+		var featured bool
 		var id int
 
-		err = results.Scan(&id, &recipe.Name, &remoteURL, &notes, &method, &tag)
+		err = results.Scan(&id, &recipe.Name, &remoteURL, &notes, &method, &featured, &tag)
 		if err != nil {
 			return nil, err
 		}
@@ -108,6 +110,13 @@ func GetRecipeBySlug(ctx context.Context, slug string, caller *common.Caller, db
 		}
 
 		recipe.ID = id
+		// Copied before its address is taken: `featured` is a fresh variable per
+		// iteration and only this one ever reaches here, but a read of a Recipe
+		// should state the answer rather than alias a loop local. Always set, so
+		// `false` arrives as false rather than as silence - which for this field
+		// means something different. See common.Recipe.Featured.
+		isFeatured := featured
+		recipe.Featured = &isFeatured
 
 		if remoteURL.Valid {
 			recipe.RemoteURL = remoteURL.String
@@ -147,7 +156,7 @@ func GetRecipeByID(ctx context.Context, id int, caller *common.Caller, db *sql.D
 	}
 	recipe := &common.Recipe{Ingredients: []common.Ingredient{}, Tags: []string{}}
 	query := `
-		SELECT recipe.id, name, remote_url, notes, method, tag_name
+		SELECT recipe.id, name, remote_url, notes, method, featured, tag_name
 			FROM recipe
 			LEFT JOIN recipe_tag on recipe.id = recipe_tag.recipe_id
 			WHERE recipe.id = ? AND account_id = ?;`
@@ -164,9 +173,10 @@ func GetRecipeByID(ctx context.Context, id int, caller *common.Caller, db *sql.D
 		var notes sql.NullString
 		var method sql.NullString
 		var tag sql.NullString
+		var featured bool
 		var id int
 
-		err = results.Scan(&id, &recipe.Name, &remoteURL, &notes, &method, &tag)
+		err = results.Scan(&id, &recipe.Name, &remoteURL, &notes, &method, &featured, &tag)
 		if err != nil {
 			return nil, err
 		}
@@ -178,6 +188,13 @@ func GetRecipeByID(ctx context.Context, id int, caller *common.Caller, db *sql.D
 		}
 
 		recipe.ID = id
+		// Copied before its address is taken: `featured` is a fresh variable per
+		// iteration and only this one ever reaches here, but a read of a Recipe
+		// should state the answer rather than alias a loop local. Always set, so
+		// `false` arrives as false rather than as silence - which for this field
+		// means something different. See common.Recipe.Featured.
+		isFeatured := featured
+		recipe.Featured = &isFeatured
 
 		if remoteURL.Valid {
 			recipe.RemoteURL = remoteURL.String
@@ -322,6 +339,38 @@ func GetRecipeIngredientsByIDs(ctx context.Context, ids []int, caller *common.Ca
 	return recipes, nil
 }
 
+// ErrNotAdmin is returned when a write would change a Recipe's Featured state
+// and the caller may not do that. A sentinel so the handler can map it to 403
+// without string-matching; see app/recipe.go.
+var ErrNotAdmin = errors.New("not permitted to publish a Recipe")
+
+// resolveFeatured decides what `featured` should be after a write, and whether
+// the caller is allowed to make it so.
+//
+// The rule, from specs/completed/featured-recipes.md: **a request that changes the value
+// needs admin; a request that merely submits the value it already has does
+// not.** Getting that backwards is the trap the spec calls out by name - an
+// "is the field present" check would 403 every ordinary user editing their own
+// Recipe, because the client round-trips the whole object.
+//
+// nil `submitted` means the caller expressed no opinion, which is what every
+// write path predating this field means, so the stored value stands and no
+// permission is needed. That is the case that stops an older client silently
+// un-publishing a Featured Recipe on an unrelated edit.
+func resolveFeatured(submitted *bool, stored bool, caller *common.Caller) (bool, error) {
+	if submitted == nil || *submitted == stored {
+		return stored, nil
+	}
+	admin, err := caller.IsAdmin()
+	if err != nil {
+		return false, fmt.Errorf("resolving admin: %w", err)
+	}
+	if !admin {
+		return false, ErrNotAdmin
+	}
+	return *submitted, nil
+}
+
 // AddRecipe inserts recipe, ingredients into the DB. The recipe row and all of its
 // ingredient/unit/part/tag rows are written in one transaction, so a failure partway
 // through (e.g. a bad unit) doesn't leave an orphaned recipe with no Ingredient Lines.
@@ -335,14 +384,49 @@ func AddRecipe(ctx context.Context, recipe common.Recipe, caller *common.Caller,
 		return 0, err
 	}
 
+	// Resolved before the transaction opens, matching EditRecipe: a refusal
+	// should not have started one. A brand new Recipe has no stored value, so
+	// `false` is what is being compared against - creating one already Featured
+	// is a change and needs the permission; creating an ordinary one does not.
+	featured, err := resolveFeatured(recipe.Featured, false, caller)
+	if err != nil {
+		return 0, err
+	}
+
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
 	defer tx.Rollback()
 
-	query := "INSERT INTO recipe (name, slug, remote_url, notes, method, account_id) VALUES (?, ?, ?, ?, ?, ?);"
-	res, err := tx.ExecContext(ctx, query, recipe.Name, common.Slugify(recipe.Name), recipe.RemoteURL, recipe.Notes, recipe.Method, accountID)
+	id, err := insertRecipeTx(ctx, tx, recipe, accountID, featured, nil)
+	if err != nil {
+		return 0, err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+// insertRecipeTx writes a Recipe and everything hanging off it - its Ingredient
+// Lines, the Units and Ingredients they reference, and its Tags - inside a
+// transaction the caller owns.
+//
+// Extracted so that AddRecipe and CopyFeaturedRecipe are the same write. They
+// differ in exactly two values, which is why both are parameters rather than
+// read off the Recipe: whether the new row is itself Featured (a copy never is
+// - see ADR-0011) and which Featured Recipe it came from (only a copy has one).
+//
+// featuredFrom is written here, in the same statement as the row itself, and
+// that is the point of passing it down rather than updating afterwards. A copy
+// that committed without its provenance would be invisible to the
+// already-taken check, so the next click on the same email link would silently
+// make a second one - the exact duplicate the column exists to prevent.
+func insertRecipeTx(ctx context.Context, tx execer, recipe common.Recipe, accountID int, featured bool, featuredFrom *int) (int, error) {
+	query := "INSERT INTO recipe (name, slug, remote_url, notes, method, account_id, featured, featured_from) VALUES (?, ?, ?, ?, ?, ?, ?, ?);"
+	res, err := tx.ExecContext(ctx, query, recipe.Name, common.Slugify(recipe.Name), recipe.RemoteURL, recipe.Notes, recipe.Method, accountID, featured, featuredFrom)
 	if err != nil {
 		return 0, fmt.Errorf("insert recipe: %w", err)
 	}
@@ -366,9 +450,6 @@ func AddRecipe(ctx context.Context, recipe common.Recipe, caller *common.Caller,
 	if err = insertTags(ctx, recipe, tx); err != nil {
 		return 0, err
 	}
-	if err = tx.Commit(); err != nil {
-		return 0, err
-	}
 	return recipe.ID, nil
 }
 
@@ -385,8 +466,14 @@ func EditRecipe(ctx context.Context, recipe common.Recipe, caller *common.Caller
 		return fmt.Errorf("resolving account: %w", err)
 	}
 	var id string
-	// Checking to see if this recipe exists for this user
-	if err := db.QueryRowContext(ctx, "SELECT id FROM recipe WHERE id=? AND account_id = ?;", recipe.ID, accountID).Scan(&id); err == sql.ErrNoRows {
+	var storedFeatured bool
+	// Checking to see if this recipe exists for this user.
+	//
+	// `featured` is read here rather than in a query of its own precisely
+	// because this row is already being fetched: the permission rule needs the
+	// stored value to know whether the caller is changing anything, and asking
+	// separately would add a round trip to every recipe edit.
+	if err := db.QueryRowContext(ctx, "SELECT id, featured FROM recipe WHERE id=? AND account_id = ?;", recipe.ID, accountID).Scan(&id, &storedFeatured); err == sql.ErrNoRows {
 		// Returned unwrapped: it is a sentinel, and its identity is the whole
 		// message. Wrapping it would add "no results:" to an error that already
 		// says exactly that, and break any caller comparing against it.
@@ -395,14 +482,21 @@ func EditRecipe(ctx context.Context, recipe common.Recipe, caller *common.Caller
 		return fmt.Errorf("checking the recipe exists: %w", err)
 	}
 
+	// Resolved as a precondition, alongside the ownership check above and for
+	// the same reason: a refusal should not have opened a transaction.
+	featured, err := resolveFeatured(recipe.Featured, storedFeatured, caller)
+	if err != nil {
+		return err
+	}
+
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("starting transaction: %w", err)
 	}
 	defer tx.Rollback()
 
-	updateQuery := "UPDATE recipe SET name=?, remote_url=?, notes=?, method=? WHERE id=? AND account_id=?"
-	if _, err := tx.ExecContext(ctx, updateQuery, recipe.Name, recipe.RemoteURL, recipe.Notes, recipe.Method, recipe.ID, accountID); err != nil {
+	updateQuery := "UPDATE recipe SET name=?, remote_url=?, notes=?, method=?, featured=? WHERE id=? AND account_id=?"
+	if _, err := tx.ExecContext(ctx, updateQuery, recipe.Name, recipe.RemoteURL, recipe.Notes, recipe.Method, featured, recipe.ID, accountID); err != nil {
 		return fmt.Errorf("updating recipe %d: %w", recipe.ID, err)
 	}
 
@@ -858,4 +952,166 @@ func withCanonicalUnits(recipe common.Recipe) common.Recipe {
 	}
 	recipe.Ingredients = ingredients
 	return recipe
+}
+
+// ErrAmbiguousFeaturedSlug is returned when more than one Featured Recipe
+// answers to a slug.
+//
+// Loud rather than "pick the first", because slugs are only ever unique within
+// an Account (GetRecipeBySlug scopes them that way) and Featured Recipes are
+// resolved across all of them. Two sharing a name is a curation mistake, and
+// quietly serving whichever the database listed first would send some readers
+// of one email link to a different dish than others.
+var ErrAmbiguousFeaturedSlug = errors.New("more than one Featured Recipe has this slug")
+
+// GetFeaturedRecipeBySlug loads a Featured Recipe, with everything a copy of it
+// needs.
+//
+// Resolution is **by the flag, never by the identifier** - the slug in the URL
+// selects among Featured Recipes rather than among all Recipes, so a link
+// cannot be edited into a request for a Recipe nobody published. There is
+// deliberately no account scoping here, unlike every other read in this file:
+// the whole point of a Featured Recipe is that it is readable by an Account
+// that does not own it. That difference is the thing most likely to be
+// "corrected" by someone matching the surrounding code, so it is stated here
+// and the dev seed puts its fixture in a second Account to make the mistake
+// fail a test.
+func GetFeaturedRecipeBySlug(ctx context.Context, slug string, db *sql.DB) (*common.Recipe, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT id, name, notes, method FROM recipe WHERE slug = ? AND featured = 1;`, slug)
+	if err != nil {
+		return nil, fmt.Errorf("querying featured recipe: %w", err)
+	}
+	defer rows.Close()
+
+	recipe := &common.Recipe{Ingredients: []common.Ingredient{}, Tags: []string{}}
+	found := 0
+	for rows.Next() {
+		found++
+		if found > 1 {
+			return nil, ErrAmbiguousFeaturedSlug
+		}
+		var notes, method sql.NullString
+		if err := rows.Scan(&recipe.ID, &recipe.Name, &notes, &method); err != nil {
+			return nil, fmt.Errorf("scanning featured recipe: %w", err)
+		}
+		recipe.Notes = notes.String
+		recipe.Method = method.String
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("reading featured recipe: %w", err)
+	}
+	if found == 0 {
+		return nil, sql.ErrNoRows
+	}
+
+	// RemoteURL is deliberately not selected. ADR-0011: the Method is ours and
+	// rewritten, so a link labelled as the recipe's source would sit next to a
+	// method that differs from what is at the other end of it. It stays on the
+	// Featured Recipe as the curator's own provenance record and travels no
+	// further.
+
+	if recipe.Ingredients, err = getIngredientsByRecipeID(ctx, recipe.ID, db); err != nil {
+		return nil, fmt.Errorf("loading featured recipe's ingredients: %w", err)
+	}
+	if recipe.Tags, err = getTagsByRecipeID(ctx, recipe.ID, db); err != nil {
+		return nil, fmt.Errorf("loading featured recipe's tags: %w", err)
+	}
+	return recipe, nil
+}
+
+func getTagsByRecipeID(ctx context.Context, id int, db *sql.DB) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT tag_name FROM recipe_tag WHERE recipe_id = ?;`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	tags := []string{}
+	for rows.Next() {
+		var tag string
+		if err := rows.Scan(&tag); err != nil {
+			return nil, err
+		}
+		tags = append(tags, tag)
+	}
+	return tags, rows.Err()
+}
+
+// CopyFeaturedRecipe puts a copy of a Featured Recipe into the caller's
+// Account, and reports whether they already had one.
+//
+// Idempotent by design rather than by luck. The same email link is tapped on a
+// phone at breakfast and a laptop later, and an inbox is revisited - so a
+// second arrival returns the copy the first made instead of quietly producing a
+// duplicate the reader never asked for and would read as a bug. Deleting the
+// copy and clicking again correctly gives a fresh one, because the provenance
+// went with it.
+//
+// It does not touch the Shopping List, and that is a decision rather than an
+// omission: the List is one mutable resource shared by the whole Account, and a
+// link tapped over coffee must not change what somebody else is holding in the
+// shop. See specs/completed/featured-recipes.md.
+func CopyFeaturedRecipe(ctx context.Context, slug string, caller *common.Caller, db *sql.DB) (id int, alreadyHad bool, err error) {
+	accountID, err := caller.AccountID()
+	if err != nil {
+		return 0, false, fmt.Errorf("resolving account: %w", err)
+	}
+
+	source, err := GetFeaturedRecipeBySlug(ctx, slug, db)
+	if err != nil {
+		return 0, false, err
+	}
+
+	existing, err := findCopy(ctx, db, accountID, source.ID)
+	if err == nil {
+		return existing, true, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return 0, false, fmt.Errorf("checking for an existing copy: %w", err)
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, false, err
+	}
+	defer tx.Rollback()
+
+	// featured false, and never source.Featured: the taker is not an admin, so a
+	// copy that arrived Featured would be a privilege they have no way to see,
+	// let alone revoke - and every copy of it would go on to publish itself.
+	copyID, err := insertRecipeTx(ctx, tx, *source, accountID, false, &source.ID)
+	if err != nil {
+		// The check above is not atomic, so two requests arriving together can
+		// both find nothing and both try to insert. uniq_recipe_account_featured_from
+		// is what stops the second one, and this is what turns being stopped
+		// into the right answer rather than a 500: whoever won made the copy
+		// the caller was going to get anyway.
+		//
+		// A link in an email is exactly the thing that gets opened twice at
+		// once - a phone and a laptop, or a client that retries - so this path
+		// is ordinary rather than exotic.
+		if existingID, lookupErr := findCopy(ctx, db, accountID, source.ID); lookupErr == nil {
+			return existingID, true, nil
+		}
+		return 0, false, err
+	}
+
+	if err = tx.Commit(); err != nil {
+		if existingID, lookupErr := findCopy(ctx, db, accountID, source.ID); lookupErr == nil {
+			return existingID, true, nil
+		}
+		return 0, false, err
+	}
+	return copyID, false, nil
+}
+
+// findCopy returns the caller's existing copy of a Featured Recipe, or
+// sql.ErrNoRows if they have none.
+func findCopy(ctx context.Context, db *sql.DB, accountID, sourceID int) (int, error) {
+	var id int
+	err := db.QueryRowContext(ctx,
+		`SELECT id FROM recipe WHERE account_id = ? AND featured_from = ? LIMIT 1;`,
+		accountID, sourceID).Scan(&id)
+	return id, err
 }

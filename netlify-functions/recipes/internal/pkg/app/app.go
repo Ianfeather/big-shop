@@ -238,6 +238,8 @@ func (a *App) userMiddleware(w http.ResponseWriter, r *http.Request, next http.H
 func (a *App) withCaller(ctx context.Context, userID string) context.Context {
 	caller := common.NewCaller(userID, func() (int, error) {
 		return service.GetAccountID(ctx, a.db, userID)
+	}, func() (bool, error) {
+		return service.IsAdmin(ctx, a.db, userID)
 	})
 	return context.WithValue(ctx, contextKey("caller"), caller)
 }

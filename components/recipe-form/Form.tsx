@@ -9,6 +9,7 @@ import Spinner from './spinner';
 import useUnits from '@hooks/use-units';
 import useTags from '@hooks/use-tags';
 import useAuth from '@hooks/use-auth';
+import useUser from '@hooks/use-user';
 import { apiPost, apiPut, apiDelete, nextApiPost } from '../../lib/api-client';
 import { queryKeys } from '../../lib/query-keys';
 import type { Recipe as RecipeModel, Ingredient, CreatedResponse } from '../../types/models';
@@ -30,6 +31,12 @@ interface FormRecipe {
   method: string;
   ingredients: Ingredient[];
   tags: string[];
+  // Whether this Recipe is published for any Account to copy (CONTEXT.md's
+  // Featured Recipe). Optional, and the undefined case is load-bearing: the API
+  // reads a missing `featured` as "no opinion, leave it as it is", so a form
+  // that never learned about the field cannot un-publish one. See
+  // common.Recipe.Featured in the Go API.
+  featured?: boolean;
 }
 
 // units carries both real, fetched Units (numeric id) and ones synthesized
@@ -77,6 +84,12 @@ export default function Form({initialRecipe = {}, mode = 'new', focusSection, im
   let [recipe, setRecipe] = useState<FormRecipe>(useInitialRecipe ? normalizeInitialRecipe(initialRecipe, bareRecipe) : bareRecipe);
   const fetchedUnits = useUnits();
   const tags = useTags();
+  // Whether to offer the Featured checkbox at all. This is presentation and
+  // nothing more - the permission is enforced by the API against the *stored*
+  // value (service.resolveFeatured), because a client can send whatever it
+  // likes and a hidden control is not a permission. Undefined while GET /user
+  // is in flight, which reads as "not an admin" and simply hides the control.
+  const isAdmin = useUser()?.isAdmin ?? false;
   let [deleted, setDeleted] = useState(false);
   let [bulkText, setBulkText] = useState('');
   let [bulkError, setBulkError] = useState<string | null>(null);
@@ -350,6 +363,26 @@ export default function Form({initialRecipe = {}, mode = 'new', focusSection, im
             }
           </div>
         </div>
+
+        {isAdmin && (
+          <div className={styles.gridCell}>
+            <div className={styles.group}>
+              <label htmlFor="recipe-featured">Featured</label>
+              <div className={styles.tagContainer}>
+                <input
+                  type="checkbox"
+                  id="recipe-featured"
+                  checked={recipe.featured ?? false}
+                  onChange={(e) => updateRecipe('featured', e.target.checked)}
+                  className={styles.tagCheckbox}
+                  />
+                <label htmlFor="recipe-featured" className={styles.tagLabel}>
+                  Anyone can add this recipe to their own collection
+                </label>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className={styles.gridCell}>
           <div className={styles.group}>

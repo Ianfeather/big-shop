@@ -14,7 +14,7 @@ they only make sense together: **where the content lives** (ordinary Recipe rows
 admin's own Account, behind a flag) and **where the content comes from** (we write the
 method ourselves; we never republish someone else's).
 
-The implementation is specced in [`specs/featured-recipes.md`](../../specs/featured-recipes.md).
+The implementation is specced in [`specs/completed/featured-recipes.md`](../../specs/completed/featured-recipes.md).
 
 ## The vocabulary
 

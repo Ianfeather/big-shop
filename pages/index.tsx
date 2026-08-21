@@ -10,6 +10,7 @@ import useLogin from '@hooks/use-login';
 import { useCookieSettings } from '@components/consent-banner';
 import { apiPost, apiPatch } from '../lib/api-client';
 import { arrivedFromLogin } from '../lib/auth-callback';
+import { consumeReturnTo } from '../lib/return-to';
 import type { User } from '../types/models';
 
 // The logged-out homepage: a marketing page for someone who has never heard of
@@ -226,7 +227,11 @@ const Index = () => {
         // not ask to go anywhere, and stays.
         if (arrivedFromLogin) {
           setStatus('redirecting');
-          router.replace('/list');
+          // /list unless they were interrupted on the way somewhere else - a
+          // deep link they clicked while logged out, which pages/_app.tsx's
+          // gate remembered before bouncing them here. Consumed on read, so a
+          // later login in the same tab is not sent somewhere stale.
+          router.replace(consumeReturnTo() ?? '/list');
         }
         return;
       }

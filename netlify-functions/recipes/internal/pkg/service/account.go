@@ -45,6 +45,25 @@ func GetAccountID(ctx context.Context, db dbConn, userID string) (int, error) {
 	return accountID, nil
 }
 
+// IsAdmin reports whether a User may publish a Recipe as Featured.
+//
+// A missing row is not an error here. Only two write paths ask, and both want
+// the same answer for "this user does not exist" as for "this user is not an
+// admin" - no. Returning sql.ErrNoRows instead would turn a 403 into a 500 for
+// a caller whose row has gone, which is a real state (erasure's soft gate
+// leaves a session alive briefly) and is not a server fault.
+func IsAdmin(ctx context.Context, db dbConn, userID string) (bool, error) {
+	var isAdmin bool
+	query := `SELECT is_admin FROM user WHERE id = ?;`
+	if err := db.QueryRowContext(ctx, query, userID).Scan(&isAdmin); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("resolving admin: %w", err)
+	}
+	return isAdmin, nil
+}
+
 func GetAccount(ctx context.Context, db *sql.DB, caller *common.Caller) (a *common.Account, e error) {
 	accountID, err := caller.AccountID()
 

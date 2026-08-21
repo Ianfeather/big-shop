@@ -17,6 +17,11 @@ const ingredientsMock = [{ name: 'egg' }, { name: 'flour' }];
 vi.mock('@hooks/use-units', () => ({ default: () => unitsMock }));
 vi.mock('@hooks/use-tags', () => ({ default: () => tagsMock }));
 vi.mock('@hooks/use-auth', () => ({ default: vi.fn() }));
+// GET /user, which the form consults only to decide whether to offer the
+// Featured checkbox. Returns undefined by default - the same thing the real
+// hook returns while the request is in flight, and for a user who has none
+// recorded - so every test that is not about admin sees no checkbox.
+vi.mock('@hooks/use-user', () => ({ default: vi.fn() }));
 
 // POST/PUT/DELETE /recipe and POST /api/parse-recipe-text go through
 // useMutation now, wired to these - mocked at the transport boundary so the
@@ -33,10 +38,12 @@ vi.mock('../../lib/api-client', () => ({
 }));
 
 import useAuth from '@hooks/use-auth';
+import useUser from '@hooks/use-user';
 import { apiPost, apiPut, apiDelete, nextApiPost } from '../../lib/api-client';
 import Form from './Form';
 
 const mockedUseAuth = useAuth as unknown as Mock;
+const mockedUseUser = useUser as unknown as Mock;
 const mockedApiPost = apiPost as unknown as Mock;
 const mockedApiPut = apiPut as unknown as Mock;
 const mockedApiDelete = apiDelete as unknown as Mock;
@@ -46,6 +53,7 @@ beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_API_HOST', 'http://api.test');
   pushMock.mockClear();
   mockedUseAuth.mockReturnValue({ getAccessTokenSilently: vi.fn(async () => 'test-token') });
+  mockedUseUser.mockReturnValue(undefined);
   mockedApiPost.mockResolvedValue({ status: 'ok', id: 42 });
   mockedApiPut.mockResolvedValue({});
   mockedApiDelete.mockResolvedValue({});
@@ -331,5 +339,63 @@ describe('Form', () => {
       await waitFor(() => expect(isInvalidated(queryClient, queryKeys.recipes)).toBe(true));
       expect(isInvalidated(queryClient, queryKeys.tags)).toBe(false);
     });
+  });
+});
+
+// Publishing a Recipe for any Account to copy is admin-only (ADR-0011). The
+// checkbox is the *presentation* of that, and these tests only pin the
+// presentation - the permission itself is enforced by the API against the
+// stored value, and is tested in Go (service.TestResolveFeatured). A control
+// hidden in the browser is not a permission, so the two are tested apart on
+// purpose.
+describe('the Featured checkbox', () => {
+  const featured = () => screen.queryByLabelText(/anyone can add this recipe/i);
+
+  it('is not offered to an ordinary user', async () => {
+    await renderForm({ mode: 'edit', initialRecipe: { id: 7, name: 'Dal' } });
+
+    expect(featured()).toBeNull();
+  });
+
+  it('is not offered while GET /user is still in flight', async () => {
+    // The real hook returns undefined until the request resolves. Rendering the
+    // control optimistically and removing it would flash an admin-only
+    // affordance at everybody.
+    mockedUseUser.mockReturnValue(undefined);
+    await renderForm({ mode: 'edit', initialRecipe: { id: 7, name: 'Dal' } });
+
+    expect(featured()).toBeNull();
+  });
+
+  it('is offered to an admin, reflecting the stored value', async () => {
+    mockedUseUser.mockReturnValue({ isAdmin: true });
+    await renderForm({ mode: 'edit', initialRecipe: { id: 7, name: 'Dal', featured: true } });
+
+    expect(featured()).toBeChecked();
+  });
+
+  it('sends the new value when an admin publishes a Recipe', async () => {
+    mockedUseUser.mockReturnValue({ isAdmin: true });
+    await renderForm({ mode: 'edit', initialRecipe: { id: 7, name: 'Dal', featured: false } });
+
+    await userEvent.click(featured()!);
+    await userEvent.click(screen.getByRole('button', { name: 'Update Recipe' }));
+
+    await waitFor(() => expect(mockedApiPut).toHaveBeenCalled());
+    expect(mockedApiPut.mock.lastCall![2]).toMatchObject({ featured: true });
+  });
+
+  // The half that stops an ordinary edit un-publishing something. A form that
+  // never showed the control must not assert a value for it: the API reads a
+  // missing `featured` as "leave it alone", and a `false` here would travel as
+  // an un-publish request and be refused with a 403 - turning every ordinary
+  // save of a Featured Recipe into an error.
+  it('sends no featured value at all when the user is not an admin', async () => {
+    await renderForm({ mode: 'edit', initialRecipe: { id: 7, name: 'Dal' } });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Update Recipe' }));
+
+    await waitFor(() => expect(mockedApiPut).toHaveBeenCalled());
+    expect(mockedApiPut.mock.lastCall![2]).not.toHaveProperty('featured');
   });
 });

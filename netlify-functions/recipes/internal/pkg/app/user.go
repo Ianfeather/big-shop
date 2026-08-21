@@ -270,21 +270,12 @@ func (a *App) inviteUser(ctx context.Context, input *UserInput) (*struct{}, erro
 		email.Recipient{Name: "Big Shop User", Address: userToInvite.Email},
 		"You have been invited to join a Big Shop Account",
 		"invite",
-		inviteEmailData{InviterName: currentUser.Name, Token: token},
+		email.InviteData{InviterName: currentUser.Name, Token: token},
 	); err != nil {
 		return nil, fail(ctx, huma.Error400BadRequest("Error sending email"), err)
 	}
 
 	return nil, nil
-}
-
-// inviteEmailData is what templates/invite.html renders against. A named type
-// rather than an anonymous struct or a map so that a field renamed in Go and
-// not in the template fails to compile on one side and is caught by the golden
-// test on the other.
-type inviteEmailData struct {
-	InviterName string
-	Token       string
 }
 
 func (a *App) registerUserRoutes(api huma.API) {

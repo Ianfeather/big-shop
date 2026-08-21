@@ -142,7 +142,7 @@ func jwtHandler() negroni.HandlerFunc {
 			// Deliberately the same body a bad token gets. Whether this API is
 			// misconfigured is not something an unauthenticated caller should
 			// be able to read off the response.
-			unauthorized(w, "JWT is invalid.")
+			unauthorized(w, r, reasonUnconfigured, "JWT is invalid.")
 		}
 	}
 
@@ -197,10 +197,14 @@ func newJWTMiddleware() (*jwtmiddleware.JWTMiddleware, error) {
 func authErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, jwtmiddleware.ErrJWTMissing):
-		unauthorized(w, "JWT is missing.")
+		unauthorized(w, r, reasonTokenMissing, "JWT is missing.")
 	case errors.Is(err, jwtmiddleware.ErrJWTInvalid):
-		unauthorized(w, "JWT is invalid.")
+		unauthorized(w, r, reasonTokenInvalid, "JWT is invalid.")
 	default:
+		// Stamped before delegating, because DefaultErrorHandler writes the
+		// response itself and this is the last point that still knows the
+		// refusal happened here.
+		telemetry.SetAuthFailureReason(r.Context(), reasonOther)
 		jwtmiddleware.DefaultErrorHandler(w, r, err)
 	}
 }
@@ -218,7 +222,7 @@ func authErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
 func (a *App) userMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	claims, ok := r.Context().Value(jwtmiddleware.ContextKey{}).(*validator.ValidatedClaims)
 	if !ok || claims.RegisteredClaims.Subject == "" {
-		unauthorized(w, "JWT is invalid.")
+		unauthorized(w, r, reasonClaimsMissing, "JWT is invalid.")
 		return
 	}
 
@@ -277,9 +281,55 @@ func userSub(r *http.Request) string {
 	return caller.UserID
 }
 
+// The closed set of values for the auth.failure_reason span attribute.
+//
+// Constants rather than literals at the call sites because the point of the
+// attribute is to be queryable: a fifth spelling invented in passing is not a
+// new fact in Grafana, it is a filter that silently matches nothing. Declared
+// here, in the package that does the refusing, rather than in telemetry, which
+// should not know what the auth chain's failure modes are.
+//
+// Deliberately coarser than the message sent to the caller. tokenInvalid covers
+// every way a present token can be refused - expired, wrong audience, wrong
+// issuer, bad signature, unknown kid - because go-jwt-middleware collapses them
+// all into ErrJWTInvalid before this code sees them, and inventing a
+// distinction the library does not draw would put a value on the span that
+// nothing can be trusted to set correctly.
+const (
+	// No Authorization header, or one the library could not read a token from.
+	reasonTokenMissing = "token_missing"
+	// A token was present and was refused. See above for why this is one value.
+	reasonTokenInvalid = "token_invalid"
+	// The token validated, but carried no usable subject. Distinct from
+	// tokenInvalid because it means the tenant and this API disagree about the
+	// shape of a valid token, which is a configuration fault rather than a
+	// caller's.
+	reasonClaimsMissing = "claims_missing"
+	// This deployment has no Auth0 environment, so *every* request is refused.
+	// One span with this on it is worth more than any amount of staring at a
+	// 100% error rate, which is what it otherwise looks like.
+	reasonUnconfigured = "auth_unconfigured"
+	// go-jwt-middleware returned an error that is neither of its two exported
+	// sentinels. Nothing produces this today; it exists so that if something
+	// starts to, the span says "unclassified" rather than saying nothing.
+	reasonOther = "other"
+)
+
 // unauthorized writes the 401 body shape go-jwt-middleware itself uses, so a
-// refusal looks the same wherever in the auth chain it came from.
-func unauthorized(w http.ResponseWriter, message string) {
+// refusal looks the same wherever in the auth chain it came from, and records
+// on the request's span which way that was.
+//
+// The two happen together, in one function, on purpose. The span attribute is
+// the only account of a 401 that survives the request - telemetry.Middleware
+// never runs on this path - so a refusal path added later that wrote the body
+// without stamping the span would be invisible in exactly the way this change
+// exists to fix. Taking the reason as a parameter alongside the message makes
+// that omission impossible rather than merely discouraged.
+//
+// The request is here only to reach the span through its context; nothing about
+// the response depends on it.
+func unauthorized(w http.ResponseWriter, r *http.Request, reason, message string) {
+	telemetry.SetAuthFailureReason(r.Context(), reason)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
 	_, _ = w.Write([]byte(`{"message":"` + message + `"}`))

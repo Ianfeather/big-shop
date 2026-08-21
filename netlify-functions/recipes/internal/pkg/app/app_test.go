@@ -15,6 +15,12 @@ import (
 	"time"
 
 	"recipes/internal/pkg/common"
+	"recipes/internal/pkg/telemetry"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/danielgtaylor/huma/v2"
 	// Registered for its side effect only, so sql.Open("mysql", ...) above has
@@ -578,4 +584,107 @@ func TestTheSpanTolerantlyHasNoSubjectBeforeAuth(t *testing.T) {
 	if got := userSub(httptest.NewRequest(http.MethodGet, testBase+"/health", nil)); got != "" {
 		t.Errorf("userSub with no Caller = %q, want empty", got)
 	}
+}
+
+// A refused request must say on its span *why* it was refused.
+//
+// The gap this closes: telemetry.Middleware, which puts user.sub on the span,
+// runs after the auth pair and so never runs on a 401 at all. That left a
+// refusal as a span with the otelhttp attributes and nothing else - and since
+// `{"message":"JWT is missing."}` and `{"message":"JWT is invalid."}` are both
+// exactly 29 bytes, http.response.body.size could not separate them either. In
+// Grafana a 401 was legible as having happened and illegible as to why, which
+// is the state that made an actual production incident - a phone refused on
+// every route while the same account worked on the desktop - undiagnosable from
+// traces.
+//
+// Driven through the whole stack rather than by calling
+// telemetry.SetAuthFailureReason directly, because the assertion worth making
+// is not "the setter sets" - it is that the span is still *reachable* from
+// inside the auth chain. That is the coupling that broke for user.sub twice
+// before (see TestTheSpanCarriesTheAuthenticatedSubject), and it fails silently
+// both times: an attribute nothing sets is indistinguishable from a request
+// that had nothing to say.
+func TestARefusalRecordsItsReasonOnTheSpan(t *testing.T) {
+	t.Run("a missing token", func(t *testing.T) {
+		handler, spans := newTracedRouter(t, func(t *testing.T) {
+			t.Setenv("DISABLE_AUTH", "")
+			t.Setenv("AUTH0_DOMAIN", "tenant.invalid")
+			t.Setenv("AUTH0_AUDIENCE", testAudience)
+		})
+
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testBase+"/shopping-list", nil))
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401", rec.Code)
+		}
+		assertOneSpanWithReason(t, spans, reasonTokenMissing)
+	})
+
+	// The fail-closed path, and the one where the attribute earns the most: an
+	// API with no Auth0 environment refuses every request, which from a
+	// dashboard is indistinguishable from every caller suddenly being wrong.
+	t.Run("an unconfigured deployment", func(t *testing.T) {
+		handler, spans := newTracedRouter(t, func(t *testing.T) {
+			t.Setenv("DISABLE_AUTH", "")
+			t.Setenv("AUTH0_DOMAIN", "")
+			t.Setenv("AUTH0_AUDIENCE", "")
+		})
+
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testBase+"/shopping-list", nil))
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401", rec.Code)
+		}
+		assertOneSpanWithReason(t, spans, reasonUnconfigured)
+	})
+}
+
+// newTracedRouter builds the real negroni stack wrapped in the same
+// telemetry.Handler main.go wraps it in, over a recording TracerProvider.
+//
+// The provider is installed globally and restored afterwards because
+// otelhttp.NewHandler resolves it through otel.GetTracerProvider() at
+// construction time and telemetry.Handler exposes no way to pass one in.
+// Registered before the handler is built, for the same reason.
+func newTracedRouter(t *testing.T, env func(*testing.T)) (http.Handler, *tracetest.SpanRecorder) {
+	t.Helper()
+	env(t)
+
+	spans := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() { otel.SetTracerProvider(previous) })
+
+	application, err := NewApp(&common.Env{})
+	if err != nil {
+		t.Fatalf("NewApp() error = %v", err)
+	}
+	router, api, err := application.GetRouter(testBase)
+	if err != nil {
+		t.Fatalf("GetRouter() error = %v", err)
+	}
+	return telemetry.Handler(router, testBase, RouteTemplates(api)), spans
+}
+
+func assertOneSpanWithReason(t *testing.T, spans *tracetest.SpanRecorder, want string) {
+	t.Helper()
+
+	ended := spans.Ended()
+	if len(ended) != 1 {
+		t.Fatalf("recorded %d spans, want exactly 1", len(ended))
+	}
+
+	for _, attr := range ended[0].Attributes() {
+		if attr.Key == attribute.Key("auth.failure_reason") {
+			if got := attr.Value.AsString(); got != want {
+				t.Errorf("auth.failure_reason = %q, want %q", got, want)
+			}
+			return
+		}
+	}
+	t.Errorf("span carries no auth.failure_reason; a 401 is illegible without it")
 }

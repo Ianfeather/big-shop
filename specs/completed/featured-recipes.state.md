@@ -1,8 +1,8 @@
 ---
-spec: specs/featured-recipes.md
-status: in-progress
+spec: specs/completed/featured-recipes.md
+status: complete
 branch: implement/featured-recipes
-pr:
+pr: https://github.com/Ianfeather/big-shop/pull/133
 ---
 
 ## Session 1: Schema, seed, and the shape on the wire

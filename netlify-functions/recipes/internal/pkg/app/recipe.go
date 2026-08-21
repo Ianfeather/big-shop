@@ -208,7 +208,7 @@ type AddFeaturedRecipeOutput struct {
 // and none is needed: what the URL names is a Recipe Big Shop published, not a
 // person, so identity comes from the session exactly as it does everywhere
 // else - and nothing identifying anybody passes through a mail provider's logs.
-// See specs/featured-recipes.md.
+// See specs/completed/featured-recipes.md.
 func (a *App) addFeaturedRecipe(ctx context.Context, input *FeaturedRecipeInput) (*AddFeaturedRecipeOutput, error) {
 	caller := callerFrom(ctx)
 

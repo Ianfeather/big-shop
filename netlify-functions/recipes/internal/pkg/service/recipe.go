@@ -347,7 +347,7 @@ var ErrNotAdmin = errors.New("not permitted to publish a Recipe")
 // resolveFeatured decides what `featured` should be after a write, and whether
 // the caller is allowed to make it so.
 //
-// The rule, from specs/featured-recipes.md: **a request that changes the value
+// The rule, from specs/completed/featured-recipes.md: **a request that changes the value
 // needs admin; a request that merely submits the value it already has does
 // not.** Getting that backwards is the trap the spec calls out by name - an
 // "is the field present" check would 403 every ordinary user editing their own
@@ -1051,7 +1051,7 @@ func getTagsByRecipeID(ctx context.Context, id int, db *sql.DB) ([]string, error
 // It does not touch the Shopping List, and that is a decision rather than an
 // omission: the List is one mutable resource shared by the whole Account, and a
 // link tapped over coffee must not change what somebody else is holding in the
-// shop. See specs/featured-recipes.md.
+// shop. See specs/completed/featured-recipes.md.
 func CopyFeaturedRecipe(ctx context.Context, slug string, caller *common.Caller, db *sql.DB) (id int, alreadyHad bool, err error) {
 	accountID, err := caller.AccountID()
 	if err != nil {

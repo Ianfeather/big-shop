@@ -424,7 +424,7 @@ func TestDeleteRecipeData(t *testing.T) {
 
 // The permission rule behind Featured Recipes, in the only place it is decided.
 //
-// specs/featured-recipes.md names getting this backwards as the trap: a check
+// specs/completed/featured-recipes.md names getting this backwards as the trap: a check
 // on whether the field is *present* rather than whether it *changed* would 403
 // every ordinary user editing their own Recipe, because the client round-trips
 // the whole object. So the unchanged cases are the ones worth most here, not
@@ -499,7 +499,7 @@ func TestResolveFeatured(t *testing.T) {
 // than on its SQL text - a test reading only the statement would pass with both
 // values left off entirely.
 //
-// Both are in specs/featured-recipes.md's traps list, and both fail silently:
+// Both are in specs/completed/featured-recipes.md's traps list, and both fail silently:
 // a copy that arrived Featured would republish itself out of an Account whose
 // owner cannot see the flag, and a copy committed without its provenance is
 // invisible to the already-taken check, so the next click on the same email

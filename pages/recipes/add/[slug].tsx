@@ -13,7 +13,7 @@ import { recipeImported } from '../../../lib/analytics/events';
 //
 // The whole page is a redirect with a waiting room: it copies the Featured
 // Recipe into your Account and then replaces itself with your copy. There is
-// deliberately no preview and no confirm step - see specs/featured-recipes.md.
+// deliberately no preview and no confirm step - see specs/completed/featured-recipes.md.
 // An unwanted Recipe is one delete away, and the Recipe page it lands on is
 // already the structured view that makes the case for the product better than
 // this page could.

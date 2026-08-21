@@ -31,6 +31,11 @@ type Caller struct {
 	once      sync.Once
 	accountID int
 	err       error
+
+	resolveAdmin func() (bool, error)
+	adminOnce    sync.Once
+	isAdmin      bool
+	adminErr     error
 }
 
 // NewCaller builds a Caller for one request.
@@ -39,8 +44,8 @@ type Caller struct {
 // that this package does not depend on `service`, which depends on this one.
 // It also keeps the query itself in exactly one place: service.GetAccountID,
 // whose only caller this becomes.
-func NewCaller(userID string, resolve func() (int, error)) *Caller {
-	return &Caller{UserID: userID, resolve: resolve}
+func NewCaller(userID string, resolve func() (int, error), resolveAdmin func() (bool, error)) *Caller {
+	return &Caller{UserID: userID, resolve: resolve, resolveAdmin: resolveAdmin}
 }
 
 // AccountID returns the Account this Caller belongs to, resolving it on first
@@ -62,4 +67,26 @@ func (c *Caller) AccountID() (int, error) {
 		c.accountID, c.err = c.resolve()
 	})
 	return c.accountID, c.err
+}
+
+// IsAdmin reports whether this Caller may publish a Recipe as Featured,
+// resolving it on first use and returning the same answer - including the same
+// error - to every later call within the request.
+//
+// Lazy and memoised for exactly the reason AccountID is, and the arithmetic is
+// even more one-sided: two write paths care whether the caller is an admin, and
+// every other route in the API does not. Resolving eagerly in the auth
+// middleware would add a query to all of them to serve those two.
+//
+// It is a *permission*, not a view preference. common.User also carries an
+// IsAdmin, populated by GetUser and sent to the browser so the recipe form
+// knows whether to render the Featured checkbox - that one is a hint for
+// drawing a UI. This one is the thing writes are actually checked against, and
+// the two must not be confused: a client can send whatever it likes, so a
+// permission read from the request body is not a permission at all.
+func (c *Caller) IsAdmin() (bool, error) {
+	c.adminOnce.Do(func() {
+		c.isAdmin, c.adminErr = c.resolveAdmin()
+	})
+	return c.isAdmin, c.adminErr
 }

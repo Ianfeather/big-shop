@@ -13,7 +13,7 @@ func TestAccountIDResolvesOnce(t *testing.T) {
 	caller := NewCaller("auth0|someone", func() (int, error) {
 		calls++
 		return 42, nil
-	})
+	}, noAdmin)
 
 	for i := 0; i < 9; i++ {
 		id, err := caller.AccountID()
@@ -38,7 +38,7 @@ func TestAccountIDIsNotResolvedUntilAsked(t *testing.T) {
 	caller := NewCaller("auth0|someone", func() (int, error) {
 		calls++
 		return 42, nil
-	})
+	}, noAdmin)
 
 	if caller.UserID != "auth0|someone" {
 		t.Errorf("UserID = %q", caller.UserID)
@@ -57,7 +57,7 @@ func TestAccountIDMemoisesTheError(t *testing.T) {
 	caller := NewCaller("auth0|nobody", func() (int, error) {
 		calls++
 		return 0, sql.ErrNoRows
-	})
+	}, noAdmin)
 
 	for i := 0; i < 3; i++ {
 		id, err := caller.AccountID()
@@ -84,7 +84,7 @@ func TestAccountIDIsSafeUnderConcurrentFirstUse(t *testing.T) {
 		calls++
 		mu.Unlock()
 		return 7, nil
-	})
+	}, noAdmin)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
@@ -100,5 +100,65 @@ func TestAccountIDIsSafeUnderConcurrentFirstUse(t *testing.T) {
 
 	if calls != 1 {
 		t.Errorf("resolved %d times under concurrency, want 1", calls)
+	}
+}
+
+// noAdmin is the admin resolver for tests that are not about admin at all -
+// which is all of the ones above. Its presence is the point: NewCaller now
+// takes two resolvers, and every one of these tests is asserting something
+// about the *first* being called exactly once and not before it is needed.
+func noAdmin() (bool, error) { return false, nil }
+
+// IsAdmin resolves lazily and memoises, for the same reason AccountID does:
+// two write paths ask, and every other route in the API does not.
+func TestIsAdminResolvesOnceAndNotUntilAsked(t *testing.T) {
+	calls := 0
+	caller := NewCaller("auth0|someone", func() (int, error) {
+		return 42, nil
+	}, func() (bool, error) {
+		calls++
+		return true, nil
+	})
+
+	if calls != 0 {
+		t.Fatalf("resolved before being asked (%d calls)", calls)
+	}
+
+	for i := 0; i < 5; i++ {
+		admin, err := caller.IsAdmin()
+		if err != nil {
+			t.Fatalf("IsAdmin() error = %v", err)
+		}
+		if !admin {
+			t.Error("IsAdmin() = false, want true")
+		}
+	}
+
+	if calls != 1 {
+		t.Errorf("resolved %d times, want 1", calls)
+	}
+}
+
+// The error is memoised as deliberately as the value - the same reasoning as
+// AccountID's, and the same failure if it were not: a second caller within one
+// request would re-run a lookup that has already failed.
+func TestIsAdminMemoisesItsError(t *testing.T) {
+	calls := 0
+	boom := errors.New("boom")
+	caller := NewCaller("auth0|someone", func() (int, error) {
+		return 42, nil
+	}, func() (bool, error) {
+		calls++
+		return false, boom
+	})
+
+	for i := 0; i < 3; i++ {
+		if _, err := caller.IsAdmin(); !errors.Is(err, boom) {
+			t.Fatalf("IsAdmin() error = %v, want %v", err, boom)
+		}
+	}
+
+	if calls != 1 {
+		t.Errorf("resolved %d times, want 1", calls)
 	}
 }

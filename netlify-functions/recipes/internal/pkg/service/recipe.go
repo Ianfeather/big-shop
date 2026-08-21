@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"database/sql"
+	"errors"
 	"fmt"
 )
 
@@ -338,6 +339,38 @@ func GetRecipeIngredientsByIDs(ctx context.Context, ids []int, caller *common.Ca
 	return recipes, nil
 }
 
+// ErrNotAdmin is returned when a write would change a Recipe's Featured state
+// and the caller may not do that. A sentinel so the handler can map it to 403
+// without string-matching; see app/recipe.go.
+var ErrNotAdmin = errors.New("not permitted to publish a Recipe")
+
+// resolveFeatured decides what `featured` should be after a write, and whether
+// the caller is allowed to make it so.
+//
+// The rule, from specs/featured-recipes.md: **a request that changes the value
+// needs admin; a request that merely submits the value it already has does
+// not.** Getting that backwards is the trap the spec calls out by name - an
+// "is the field present" check would 403 every ordinary user editing their own
+// Recipe, because the client round-trips the whole object.
+//
+// nil `submitted` means the caller expressed no opinion, which is what every
+// write path predating this field means, so the stored value stands and no
+// permission is needed. That is the case that stops an older client silently
+// un-publishing a Featured Recipe on an unrelated edit.
+func resolveFeatured(submitted *bool, stored bool, caller *common.Caller) (bool, error) {
+	if submitted == nil || *submitted == stored {
+		return stored, nil
+	}
+	admin, err := caller.IsAdmin()
+	if err != nil {
+		return false, fmt.Errorf("resolving admin: %w", err)
+	}
+	if !admin {
+		return false, ErrNotAdmin
+	}
+	return *submitted, nil
+}
+
 // AddRecipe inserts recipe, ingredients into the DB. The recipe row and all of its
 // ingredient/unit/part/tag rows are written in one transaction, so a failure partway
 // through (e.g. a bad unit) doesn't leave an orphaned recipe with no Ingredient Lines.
@@ -357,8 +390,16 @@ func AddRecipe(ctx context.Context, recipe common.Recipe, caller *common.Caller,
 	}
 	defer tx.Rollback()
 
-	query := "INSERT INTO recipe (name, slug, remote_url, notes, method, account_id) VALUES (?, ?, ?, ?, ?, ?);"
-	res, err := tx.ExecContext(ctx, query, recipe.Name, common.Slugify(recipe.Name), recipe.RemoteURL, recipe.Notes, recipe.Method, accountID)
+	// A brand new Recipe has no stored value, so `false` is what it is being
+	// compared against: creating one already Featured is a change, and needs
+	// the permission. Creating an ordinary one is not, and does not.
+	featured, err := resolveFeatured(recipe.Featured, false, caller)
+	if err != nil {
+		return 0, err
+	}
+
+	query := "INSERT INTO recipe (name, slug, remote_url, notes, method, account_id, featured) VALUES (?, ?, ?, ?, ?, ?, ?);"
+	res, err := tx.ExecContext(ctx, query, recipe.Name, common.Slugify(recipe.Name), recipe.RemoteURL, recipe.Notes, recipe.Method, accountID, featured)
 	if err != nil {
 		return 0, fmt.Errorf("insert recipe: %w", err)
 	}
@@ -401,8 +442,14 @@ func EditRecipe(ctx context.Context, recipe common.Recipe, caller *common.Caller
 		return fmt.Errorf("resolving account: %w", err)
 	}
 	var id string
-	// Checking to see if this recipe exists for this user
-	if err := db.QueryRowContext(ctx, "SELECT id FROM recipe WHERE id=? AND account_id = ?;", recipe.ID, accountID).Scan(&id); err == sql.ErrNoRows {
+	var storedFeatured bool
+	// Checking to see if this recipe exists for this user.
+	//
+	// `featured` is read here rather than in a query of its own precisely
+	// because this row is already being fetched: the permission rule needs the
+	// stored value to know whether the caller is changing anything, and asking
+	// separately would add a round trip to every recipe edit.
+	if err := db.QueryRowContext(ctx, "SELECT id, featured FROM recipe WHERE id=? AND account_id = ?;", recipe.ID, accountID).Scan(&id, &storedFeatured); err == sql.ErrNoRows {
 		// Returned unwrapped: it is a sentinel, and its identity is the whole
 		// message. Wrapping it would add "no results:" to an error that already
 		// says exactly that, and break any caller comparing against it.
@@ -411,14 +458,21 @@ func EditRecipe(ctx context.Context, recipe common.Recipe, caller *common.Caller
 		return fmt.Errorf("checking the recipe exists: %w", err)
 	}
 
+	// Resolved as a precondition, alongside the ownership check above and for
+	// the same reason: a refusal should not have opened a transaction.
+	featured, err := resolveFeatured(recipe.Featured, storedFeatured, caller)
+	if err != nil {
+		return err
+	}
+
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("starting transaction: %w", err)
 	}
 	defer tx.Rollback()
 
-	updateQuery := "UPDATE recipe SET name=?, remote_url=?, notes=?, method=? WHERE id=? AND account_id=?"
-	if _, err := tx.ExecContext(ctx, updateQuery, recipe.Name, recipe.RemoteURL, recipe.Notes, recipe.Method, recipe.ID, accountID); err != nil {
+	updateQuery := "UPDATE recipe SET name=?, remote_url=?, notes=?, method=?, featured=? WHERE id=? AND account_id=?"
+	if _, err := tx.ExecContext(ctx, updateQuery, recipe.Name, recipe.RemoteURL, recipe.Notes, recipe.Method, featured, recipe.ID, accountID); err != nil {
 		return fmt.Errorf("updating recipe %d: %w", recipe.ID, err)
 	}
 

@@ -19,11 +19,19 @@ Test gate GREEN: `go build`/`gofmt -l`/`go vet` clean, `go test ./... -race` all
 REVIEW GATE OUTSTANDING — both code-review agents terminated on a session limit without reporting. Re-run `/code-review` against `fbf95b2` before treating Session 1 as closed; the work is committed as 58adc61 either way.
 
 ## Session 2: The admin gate (backend)
-Status: pending
+Status: done
 Scope: Spec Phase 2, server side. `Caller.IsAdmin()` lazily resolved and memoised like `AccountID()`; `AddRecipe`/`EditRecipe` honour `Featured` with 403 when the value changes and the caller is not an admin.
 Depends on: Session 1
-Commit:
-Notes: The must-not-403 case (ordinary user round-tripping an unchanged value) needs its own test — the spec calls getting this backwards out as the main trap.
+Commit: (see git log)
+Notes: The rule lives in one pure function, `service.resolveFeatured(submitted, stored, caller)`, so it is testable without a database and there is one place to read it. `service.ErrNotAdmin` is the sentinel; `app/recipe.go` maps it to 403 on both write paths.
+
+`EditRecipe` reads `featured` in the ownership check it already runs, so the rule costs no extra round trip. Resolution happens *before* `BeginTx` in both paths — a refusal should not have opened a transaction.
+
+`NewCaller` now takes a second resolver; the four existing `caller_test.go` call sites pass a `noAdmin` helper, and two new tests pin that `IsAdmin()` is lazy and memoises both its value and its error.
+
+Test gate GREEN: `gofmt`/`vet` clean, `go test ./... -race` all packages ok, OpenAPI in sync. `TestResolveFeatured` covers all ten cases including the two that must never 403 and the "no lookup when unchanged" case that keeps the query off every ordinary save.
+
+REVIEW GATE OUTSTANDING for the same reason as Session 1 — re-run `/code-review` against `fbf95b2`.
 
 ## Session 3: The admin UI
 Status: pending

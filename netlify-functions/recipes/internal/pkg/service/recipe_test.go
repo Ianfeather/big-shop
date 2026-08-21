@@ -421,3 +421,76 @@ func TestDeleteRecipeData(t *testing.T) {
 		}
 	})
 }
+
+// The permission rule behind Featured Recipes, in the only place it is decided.
+//
+// specs/featured-recipes.md names getting this backwards as the trap: a check
+// on whether the field is *present* rather than whether it *changed* would 403
+// every ordinary user editing their own Recipe, because the client round-trips
+// the whole object. So the unchanged cases are the ones worth most here, not
+// the refusal.
+func TestResolveFeatured(t *testing.T) {
+	ptr := func(b bool) *bool { return &b }
+	adminErr := errors.New("lookup failed")
+
+	newCaller := func(admin bool, err error) *common.Caller {
+		return common.NewCaller("auth0|someone",
+			func() (int, error) { return 1, nil },
+			func() (bool, error) { return admin, err },
+		)
+	}
+
+	tests := []struct {
+		name      string
+		submitted *bool
+		stored    bool
+		admin     bool
+		adminErr  error
+		want      bool
+		wantErr   error
+	}{
+		// The two that must never 403. A non-admin saving their own Recipe
+		// sends the value back exactly as they received it.
+		{name: "non-admin echoes false", submitted: ptr(false), stored: false, admin: false, want: false},
+		{name: "non-admin echoes true", submitted: ptr(true), stored: true, admin: false, want: true},
+
+		// Silence means "no opinion", which is what every write path predating
+		// the field means. It must not be read as false, or an older client
+		// would un-publish a Featured Recipe on an unrelated edit.
+		{name: "absent leaves a featured recipe featured", submitted: nil, stored: true, admin: false, want: true},
+		{name: "absent leaves an ordinary recipe ordinary", submitted: nil, stored: false, admin: false, want: false},
+
+		// Changing it is the admin-only act.
+		{name: "non-admin publishing is refused", submitted: ptr(true), stored: false, admin: false, wantErr: ErrNotAdmin},
+		{name: "non-admin un-publishing is refused", submitted: ptr(false), stored: true, admin: false, wantErr: ErrNotAdmin},
+		{name: "admin publishes", submitted: ptr(true), stored: false, admin: true, want: true},
+		{name: "admin un-publishes", submitted: ptr(false), stored: true, admin: true, want: false},
+
+		// A failed lookup is not a refusal - it must not be mistaken for one,
+		// or a database blip would read to the caller as "you are not allowed".
+		{name: "a failed admin lookup surfaces", submitted: ptr(true), stored: false, adminErr: adminErr, wantErr: adminErr},
+
+		// ...and it is never consulted at all when nothing changed, which is
+		// what keeps the query off every ordinary recipe save.
+		{name: "no lookup when unchanged", submitted: ptr(false), stored: false, adminErr: adminErr, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := resolveFeatured(tt.submitted, tt.stored, newCaller(tt.admin, tt.adminErr))
+
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("error = %v, want %v", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error = %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("resolveFeatured() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

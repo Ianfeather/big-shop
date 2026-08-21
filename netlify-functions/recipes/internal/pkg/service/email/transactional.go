@@ -12,7 +12,7 @@ import (
 // scheduled onboarding sequence in internal/pkg/lifecycle.
 //
 // **It exists to state one rule mechanically, because stating it in prose did
-// not work.** specs/transactional-email.md:
+// not work.** specs/completed/transactional-email.md:
 //
 //	A transactional send must never fail the action that caused it, and must
 //	never delay it.
@@ -67,7 +67,7 @@ type Email struct {
 
 // Family is every transactional email Big Shop sends.
 //
-// Three of the four did not exist before specs/transactional-email.md; the
+// Three of the four did not exist before specs/completed/transactional-email.md; the
 // fourth, the invite, had been broken since the API Gateway stack its link
 // pointed at was decommissioned.
 var Family = []Email{
@@ -132,7 +132,7 @@ type (
 	// inviter when an invitation is declined.
 	//
 	// Carries no invitee identity, deliberately: see the template, and
-	// specs/transactional-email.md Phase 3 - the email's job is handing back the
+	// specs/completed/transactional-email.md Phase 3 - the email's job is handing back the
 	// ability to invite again, not reporting who said no.
 	InviteRejectedData struct {
 		InviterName string

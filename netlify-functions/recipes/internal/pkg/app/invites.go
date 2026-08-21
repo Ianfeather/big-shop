@@ -77,7 +77,7 @@ func (a *App) acceptInvite(ctx context.Context, input *InviteTokenInput) (*struc
 // inviter is swallowed here rather than returned: the invitation has already
 // been accepted or rejected by the time this runs, and failing the request
 // afterwards would report a failure for work that succeeded - which is the bug
-// specs/transactional-email.md exists to remove, rebuilt one level up.
+// specs/completed/transactional-email.md exists to remove, rebuilt one level up.
 //
 // The inviter's address is still plaintext on `user`. Only invite.email is a
 // digest, so this direction works and the other never can.

@@ -50,7 +50,7 @@ primary_region = "fra"
 # the pepper was absent at runtime and service.HashEmail silently degraded to a
 # plain SHA-256 - invites kept working, because the digest is deterministic
 # either way, which is exactly why nobody noticed. It is declared as of
-# specs/transactional-email.md.
+# specs/completed/transactional-email.md.
 #
 # The lesson generalises past both: this failure has no symptom. A missing
 # credential that only weakens a security property, rather than breaking a

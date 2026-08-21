@@ -1,8 +1,8 @@
 ---
 spec: specs/transactional-email.md
-status: in-progress
+status: complete
 branch: implement/transactional-email
-pr:
+pr: https://github.com/Ianfeather/big-shop/pull/132
 ---
 
 ## Session 1: Phase 1 — the family seam

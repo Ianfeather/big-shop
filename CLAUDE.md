@@ -381,20 +381,25 @@ Each row has three properties: **Item** (the title), **State**, and **Tags**.
 | `in development` | **Claimed.** Someone is actively building it, and its title is prefixed `WIP `. Don't start it — see "Claim an item before you touch it" below. |
 | `done` | Shipped. |
 
-**Tags** is a multi-select, currently `blocked` and `needs answers`. It answers
-a different question from State, and the distinction is the whole point of
-having both: **State says how far an item has got; a tag says why it is not
-moving.** A tagged item is almost always still `backlog` — the tag is not a
-fifth state and must never be used as one.
+**Tags** is a multi-select, currently `blocked`, `needs answers` and
+`future feature`. It answers a different question from State, and the
+distinction is the whole point of having both: **State says how far an item has
+got; a tag says why it is not moving.** A tagged item is almost always still
+`backlog` — the tag is not a fifth state and must never be used as one.
 
 | Tag | Meaning | What clears it |
 | --- | --- | --- |
 | `blocked` | Cannot be started until something *outside the item* happens: a fact must be established, or another item must land first. | The external thing happening. Nobody can clear it by deciding harder. |
 | `needs answers` | Cannot be designed until a person decides something — a product call, a policy choice, a trade-off that isn't the implementer's to make. | Somebody answering. The work is a conversation, not an investigation. |
+| `future feature` | Nothing is being waited on. Wanted, understood well enough to file, and deliberately not scheduled — usually because it was split off a smaller piece of work that shipped first. | Somebody choosing to do it. |
 
-The two are not interchangeable, and picking the wrong one sends the next agent
-down the wrong path. `blocked` says *go and find something out, or wait*;
-`needs answers` says *go and ask someone*. They can legitimately co-exist on
+The first two are not interchangeable, and picking the wrong one sends the next
+agent down the wrong path. `blocked` says *go and find something out, or wait*;
+`needs answers` says *go and ask someone*. `future feature` is the odd one of
+the three and is worth naming as such: it is the only tag that does **not**
+report an obstruction. It says *this is fine, it is simply not now* — so read it
+as a note to a planner rather than as a warning to an implementer, and do not
+reach for it when what you mean is that something is stuck. They can legitimately co-exist on
 one row, and an item can move from one to the other — #59 was `needs answers`
 because the shared-Account erasure question was a product decision, and once
 that was answered it acquired a dependency on #50 instead.

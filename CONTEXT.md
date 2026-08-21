@@ -34,6 +34,17 @@ _Avoid_: List Item (ambiguous with Extra Item specifically — always say which 
 **Recipe**:
 A named dish a User has added to their Account, with Ingredient Lines, Method (instructions), and Tags. Belongs to an Account, not to an individual User.
 
+**Featured Recipe**:
+A Recipe in an Account belonging to an Admin, which an Admin has marked as eligible for any other Account to take a copy of. Big Shop's own content, used to give someone recipes before they have written any — today via a link in the Day 8 onboarding email, in future to seed a new Account.
+
+Two boundaries the word does not draw on its own. It is **not world-readable**: reading one still requires a signed-in caller, and being Featured confers eligibility to be copied and nothing else. And it is **not a selection**: which Featured Recipes appear in an email is an editorial choice made when that email is written, not a consequence of the flag. A Recipe belonging to one Account has never been visible to another and still isn't — what a Featured Recipe permits is a *copy*, which becomes an ordinary independent Recipe in the taker's Account, unaffected by later edits to the original and not itself Featured.
+
+Because it is published rather than merely stored, its Method is written by us rather than taken from anywhere (see [ADR-0011](./docs/adr/0011-featured-recipes-are-our-own-content.md)).
+_Avoid_: Public Recipe, Published Recipe (both read as world-readable, which this is not), Sample Recipe, Starter Recipe (both tie it to onboarding, which is only its first use)
+
+**Admin**:
+A User permitted to mark a Recipe as Featured. Currently one person; there is no self-service way to become one, and it grants nothing else — an Admin has no access to another Account's data.
+
 **Tag**:
 A closed-vocabulary label attached to a Recipe (e.g. "Vegetarian", "Batch Cook") for filtering/browsing. Not user-extensible — see Global Catalog.
 

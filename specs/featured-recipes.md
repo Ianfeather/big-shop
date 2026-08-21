@@ -306,7 +306,7 @@ links" from our own database, and ADR-0010 forbids click tracking in these email
 2. **What happens to a copy when the Featured Recipe it came from is edited.** Nothing, by
    design — a copy is a snapshot. Recorded because it will be asked, and because the
    alternative (propagating edits) is a different feature with a different name.
-3. **Whether the runbook line lives with the email runbook or on its own.** Curating a
-   Featured Recipe is not email testing, but it is currently only ever done for an email.
-   `docs/email-testing-runbook.md` is the pragmatic home until #42's seeding gives it a
-   second caller.
+3. ~~**Whether the runbook line lives with the email runbook or on its own.**~~ Resolved:
+   `docs/email-testing-runbook.md` §4b, positioned before "Switch it on" because curating
+   the three Recipes is a precondition of switching on rather than a follow-up. Move it when
+   #42's seeding gives it a second caller.

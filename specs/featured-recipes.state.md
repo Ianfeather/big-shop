@@ -94,8 +94,14 @@ The spec's Testing section was corrected in-place: it claimed an e2e test of the
 Test gate GREEN: vitest 409/409 (53 files), **e2e 41/41**, typecheck/lint clean, Go suite green, OpenAPI in sync.
 
 ## Session 7: The email
-Status: pending
+Status: done (with a hand-off — see below)
 Scope: Spec Phase 6. `templates/recipes.html` linking each dish at `/recipes/add/<slug>`, regenerated `testdata/recipes.golden.html`, curation runbook section in `docs/email-testing-runbook.md`.
 Depends on: Session 6
-Commit:
-Notes: Carries a hand-off — creating the three real Featured Recipes is content work in the production database (production access plus a human-written method per ADR-0011). Template is written against the slugs the current dish names produce; `ONBOARDING_EMAIL_ENABLED` is off, so nothing breaks in the interim.
+Commit: (see git log)
+Notes: **HAND-OFF, not done and not doable here.** The three dishes still need to exist as real Featured Recipes in the production database, and that is content work: it needs production access, and per ADR-0011 the method must be *written by a person*. The template is written against the slugs the existing dish names produce — `pasta-e-ceci`, `roast-chicken-thighs-with-lemon-and-potatoes`, `dal-with-fried-onions` — so creating Recipes with those names in an admin's Account and ticking Featured is all that remains. `docs/email-testing-runbook.md` §4b is the step-by-step, placed before "Switch it on" because it is a precondition of switching on.
+
+Nothing breaks in the interim: `ONBOARDING_EMAIL_ENABLED` is off, and an unpublished slug gets the landing page's "not available" state by design.
+
+Open question 3 resolved in the spec: the runbook line lives in the email runbook until #42's seeding gives it a second caller.
+
+Original note: carries a hand-off — creating the three real Featured Recipes is content work in the production database (production access plus a human-written method per ADR-0011). Template is written against the slugs the current dish names produce; `ONBOARDING_EMAIL_ENABLED` is off, so nothing breaks in the interim.

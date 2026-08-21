@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"recipes/internal/pkg/common"
 	"recipes/internal/pkg/service"
+	"recipes/internal/pkg/service/email"
+	"recipes/internal/pkg/telemetry"
 
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -55,7 +57,47 @@ func (a *App) acceptInvite(ctx context.Context, input *InviteTokenInput) (*struc
 		return nil, huma.Error500InternalServerError("Error deleting invite")
 	}
 
+	// Told after the membership is written and the invite removed, so a failure
+	// anywhere above can never send a mail announcing something that did not
+	// happen.
+	a.tellInviter(ctx, invitation.AdminID, email.KindInviteAccepted)
+
 	return nil, nil
+}
+
+// tellInviter sends one of the two invite-outcome emails to whoever sent the
+// invitation.
+//
+// **Both outcomes go through here, and that is deliberate.** They are the same
+// event - an invitation reaching a terminal state - and keeping them on one
+// path is what stops the pleasant one shipping alone.
+//
+// Best-effort in two senses. The send itself cannot fail the request, because
+// SendTransactionalAsync returns nothing. And a failure to *look up* the
+// inviter is swallowed here rather than returned: the invitation has already
+// been accepted or rejected by the time this runs, and failing the request
+// afterwards would report a failure for work that succeeded - which is the bug
+// specs/transactional-email.md exists to remove, rebuilt one level up.
+//
+// The inviter's address is still plaintext on `user`. Only invite.email is a
+// digest, so this direction works and the other never can.
+func (a *App) tellInviter(ctx context.Context, adminID string, kind email.Kind) {
+	inviter, err := service.GetUser(ctx, a.db, adminID)
+	if err != nil {
+		telemetry.RecordWarning(ctx, "looking up the inviter to tell them about an invitation", err)
+		return
+	}
+
+	var data any
+	switch kind {
+	case email.KindInviteAccepted:
+		data = email.InviteAcceptedData{InviterName: inviter.Name}
+	case email.KindInviteRejected:
+		data = email.InviteRejectedData{InviterName: inviter.Name}
+	}
+
+	email.SendTransactionalAsync(ctx,
+		email.Recipient{Name: inviter.Name, Address: inviter.Email}, kind, data)
 }
 
 func (a *App) getInvites(ctx context.Context, _ *struct{}) (*InvitesOutput, error) {
@@ -96,6 +138,9 @@ func (a *App) rejectInvite(ctx context.Context, input *InviteTokenInput) (*struc
 	if err := service.DeleteInvite(ctx, a.db, invitation.AccountID, currentUser.Email); err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("Error deleting invite"), err)
 	}
+
+	// After the delete, for the same reason accept sends after its writes.
+	a.tellInviter(ctx, invitation.AdminID, email.KindInviteRejected)
 
 	return nil, nil
 }

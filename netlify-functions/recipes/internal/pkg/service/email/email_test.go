@@ -79,6 +79,18 @@ func TestRenderGolden(t *testing.T) {
 			data:           InviteData{InviterName: "Ian Feather", Token: "abc123"},
 			unsubscribable: false,
 		},
+		{
+			name:           "invite-accepted",
+			template:       "invite-accepted",
+			data:           InviteAcceptedData{InviterName: "Ian Feather"},
+			unsubscribable: false,
+		},
+		{
+			name:           "invite-rejected",
+			template:       "invite-rejected",
+			data:           InviteRejectedData{InviterName: "Ian Feather"},
+			unsubscribable: false,
+		},
 		// The four onboarding emails. Unsubscribable, so each golden file also
 		// pins that the footer link is present - the condition ADR-0010's whole
 		// lawful basis rests on.

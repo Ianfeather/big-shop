@@ -6,6 +6,12 @@
 # in use (e.g. another checkout/worktree running dev:full), the next free port
 # is used automatically. Set the env vars yourself to pin specific ports:
 #   DB_PORT=3309 API_PORT=8081 WEB_PORT=3002 npm run dev:full
+#
+# Set PIN_PORTS=true to turn that fallback off for the DB/API/web ports, so a
+# port already in use is a hard error instead. The e2e suite does this: its
+# caller has already told Playwright which ports to talk to, and drifting to a
+# different one there does not degrade gracefully - it produces a stack nothing
+# is connected to and a health check that times out for no visible reason.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -21,6 +27,41 @@ find_available_port() {
   echo "$port"
 }
 
+PIN_PORTS="${PIN_PORTS:-false}"
+
+# The three ports a caller can be holding a fixed expectation about. Grafana and
+# OTLP below are deliberately left on the auto-increment path either way: they
+# are only bound when START_LGTM is true, and nothing outside this script is
+# told where they landed.
+resolve_pinnable_port() {
+  local requested="$1" service="$2"
+  if ! port_in_use "$requested"; then
+    echo "$requested"
+    return
+  fi
+  if [ "$PIN_PORTS" = "true" ]; then
+    cat >&2 <<MSG
+
+Port ${requested} (${service}) is already in use, and PIN_PORTS is set, so this
+script will not quietly move to another one - whoever started it is expecting
+the stack on exactly that port.
+
+If this is the e2e suite, the likely cause is either a stale stack from this
+worktree:
+
+    npm run test:e2e:stop
+
+or another worktree whose derived port offset collides with this one (see
+e2e/instance.cjs). Break the tie by naming this instance explicitly:
+
+    E2E_INSTANCE=<something-unique> npm run test:e2e
+
+MSG
+    exit 1
+  fi
+  find_available_port "$requested"
+}
+
 requested_db_port="${DB_PORT:-3308}"
 requested_api_port="${API_PORT:-8080}"
 requested_web_port="${WEB_PORT:-3000}"
@@ -31,9 +72,9 @@ requested_web_port="${WEB_PORT:-3000}"
 requested_grafana_port="${GRAFANA_PORT:-3200}"
 requested_otlp_port="${OTLP_HTTP_PORT:-4318}"
 
-DB_PORT="$(find_available_port "$requested_db_port")"
-API_PORT="$(find_available_port "$requested_api_port")"
-WEB_PORT="$(find_available_port "$requested_web_port")"
+DB_PORT="$(resolve_pinnable_port "$requested_db_port" MySQL)"
+API_PORT="$(resolve_pinnable_port "$requested_api_port" "the Go API")"
+WEB_PORT="$(resolve_pinnable_port "$requested_web_port" "Next.js")"
 GRAFANA_PORT="$(find_available_port "$requested_grafana_port")"
 OTLP_HTTP_PORT="$(find_available_port "$requested_otlp_port")"
 

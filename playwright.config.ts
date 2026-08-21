@@ -49,7 +49,8 @@ export default defineConfig({
     // starting. A measured failing run spent ~110s of its 120s budget before
     // MySQL had even been asked to start: pulling mysql:8.0 (129MB) and
     // building the Go API image from scratch, with `docker compose up`
-    // reporting "Container bigshop-e2e-db-1 Waiting" as the clock ran out.
+    // reporting "Container bigshop-e2e-<instance>-db-1 Waiting" as the clock
+    // ran out.
     // Locally both are cached and the whole thing is up in seconds, which is
     // why this only ever failed in CI - and it did so on unrelated branches
     // too, at roughly one run in four.
@@ -73,6 +74,12 @@ export default defineConfig({
       // collector that was never started. See scripts/dev-full.sh.
       START_LGTM: 'false',
       OTEL_EXPORTER_OTLP_ENDPOINT: '',
+      // dev-full.sh moves to the next free port when a requested one is taken,
+      // which is right for `npm run dev:full` and wrong here: baseURL and the
+      // health-check url above are already fixed, so a drifting stack is one
+      // nothing is connected to. Fail loudly instead - scripts/dev-full.sh's
+      // message says how to get out of it.
+      PIN_PORTS: 'true',
     },
   },
 });

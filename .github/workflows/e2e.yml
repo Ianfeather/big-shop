@@ -27,11 +27,11 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       # playwright.config.ts's webServer runs `npm run dev:full`, which
-      # brings up MySQL + the Go API via docker compose (pinned to ports
-      # from e2e/env.ts, project name `bigshop-e2e`) and Next.js natively -
-      # same stack used for `npm run test:e2e` locally, just without the
-      # dev-only auto-increment-on-collision port fallback ever kicking in
-      # on a fresh runner.
+      # brings up MySQL + the Go API via docker compose (on the ports and
+      # project name e2e/instance.cjs derives from the checkout path) and
+      # Next.js natively - the same stack `npm run test:e2e` uses locally.
+      # A runner has one checkout, so the per-worktree derivation is a no-op
+      # here; it exists for the several worktrees on a development machine.
       - name: Run e2e tests
         run: npm run test:e2e
 
@@ -55,11 +55,12 @@ jobs:
 
       # Only useful signal we have when "API did not become healthy in time"
       # fires (see follow-ups.md #21) - dumps whatever db/api logged before
-      # the stack gets torn down below. COMPOSE_PROJECT_NAME must match what
-      # e2e/env.ts pins Playwright's webServer to, or this targets nothing.
+      # the stack gets torn down below. e2e-compose.sh derives the project name
+      # from e2e/instance.cjs, the same module Playwright's webServer reads, so
+      # this can't drift out of sync and target nothing.
       - name: Dump docker compose logs
         if: failure()
-        run: COMPOSE_PROJECT_NAME=bigshop-e2e docker compose logs db api > docker-compose.log 2>&1 || true
+        run: ./scripts/e2e-compose.sh logs db api > docker-compose.log 2>&1 || true
 
       - name: Upload docker compose logs
         if: failure()

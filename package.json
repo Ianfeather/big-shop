@@ -15,7 +15,7 @@
     "test:watch": "vitest",
     "test:e2e": "npm run test:e2e:stop && playwright test",
     "test:e2e:debug": "npm run test:e2e:stop && E2E_SLOWMO=800 playwright test --headed --workers=1",
-    "test:e2e:stop": "COMPOSE_PROJECT_NAME=bigshop-e2e docker compose down --remove-orphans --volumes >/dev/null 2>&1 || true",
+    "test:e2e:stop": "./scripts/e2e-compose.sh down --remove-orphans --volumes >/dev/null 2>&1 || true",
     "test:evals": "./evals/run-evals.sh",
     "test:evals:shopping": "./evals/run-evals.sh shopping",
     "test:dave": "node evals/test-runner.js"

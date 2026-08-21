@@ -34,11 +34,17 @@ Test gate GREEN: `gofmt`/`vet` clean, `go test ./... -race` all packages ok, Ope
 REVIEW GATE OUTSTANDING for the same reason as Session 1 — re-run `/code-review` against `fbf95b2`.
 
 ## Session 3: The admin UI
-Status: pending
+Status: done
 Scope: Spec Phase 2, client side. `isAdmin` through `GET /user` and `hooks/use-user`; admin-only checkbox in `components/recipe-form/Form.tsx`; Featured made legible on the Recipe view.
 Depends on: Session 2
-Commit:
-Notes:
+Commit: (see git log)
+Notes: The Featured note on the Recipe is shown to anyone who can see the Recipe rather than gated on admin — only an admin's own Account holds one, and ADR-0011 accepts that ordinary edits there change what new users receive, so the curator has to see it without opening the edit form.
+
+`FormRecipe.featured` is optional and the form omits it entirely for a non-admin, which is what stops an ordinary save being read as an un-publish and 403'd. There is a test for exactly that.
+
+Two test-authoring notes worth keeping: the save button reads "Update Recipe" in edit mode, and `Form.test.tsx`'s `beforeEach` does not clear `apiPut`, so assertions must use `mock.lastCall` — `calls[0]` silently belongs to whichever test ran first, and one of these tests passed spuriously until that was fixed.
+
+Test gate GREEN: vitest 378/378 (up from 370), typecheck and lint clean.
 
 ## Session 4: The copy and its route
 Status: pending

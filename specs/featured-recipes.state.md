@@ -64,11 +64,17 @@ Unit tests pin the two silent-failure traps on the INSERT's *arguments* rather t
 Test gate GREEN: `go test ./... -race` all packages, gofmt/vet clean, OpenAPI + api.d.ts regenerated, vitest 378/378, typecheck and lint clean.
 
 ## Session 5: Return-to through Auth0
-Status: pending
+Status: done
 Scope: Spec Phase 3. `pages/_app.tsx` gate records the attempted path, `hooks/use-login.ts` passes `appState: { returnTo }`, callback honours it, relative-path-only validation.
 Depends on: none (ordered here so Session 6 can use it)
-Commit:
-Notes: Not e2e-testable — `NEXT_PUBLIC_DISABLE_AUTH` makes `useAuth` report `isAuthenticated: true` unconditionally, so the gate never fires under e2e. Unit tests incl. open-redirect cases; full round trip verified by hand.
+Commit: (see git log)
+Notes: **Built with sessionStorage rather than Auth0's `appState`, deviating from the spec's literal text.** `appState` is delivered through `Auth0Provider`'s `onRedirectCallback`, and this app already owns the post-login redirect in `pages/index.tsx` (`arrivedFromLogin` → `/list`, after `POST /user` resolves onboarding). Wiring `onRedirectCallback` would put two mechanisms on the same navigation, and `lib/auth-callback.ts` documents how delicate that moment already is. Storing the destination lets the existing redirect keep sole ownership and just pick a better target.
+
+`lib/return-to.ts` is its own module because the validation is a security boundary: a `returnTo` that can express an absolute URL turns our login into an open redirect wearing our domain and our Auth0 tenant. It validates a *path* and never calls `new URL()` — parsing invites judging a host, and the safe answer is to refuse to have one.
+
+Still not e2e-testable: `NEXT_PUBLIC_DISABLE_AUTH` makes `useAuth` report `isAuthenticated: true` unconditionally, so the gate never fires. The 23 unit tests are the coverage rather than a supplement to it, and they lead with `//evil.example` and the backslash variants — the cases a naive "starts with /" check lets through.
+
+Test gate GREEN: vitest 401/401 (52 files), typecheck and lint clean.
 
 ## Session 6: The landing page and the count
 Status: pending

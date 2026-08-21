@@ -130,6 +130,10 @@ when done — don't run bare `docker compose down`/migrations/`exec` against
 whatever project happens to already be running unless you've confirmed via
 `docker inspect` that it's actually this worktree's stack.
 
+This applies to the **dev** stack only. The e2e stack derives its own
+per-worktree project name and ports and needs none of it — see "End-to-end
+tests" below.
+
 **There is no mocks mode.** `NEXT_PUBLIC_USE_MOCKS` and `mocks/*.json` are gone
 — `npm run dev:full` made them redundant, and they had started to mislead: the
 mock Shopping List reimplemented ingredient combining, incorrectly and by its
@@ -230,13 +234,46 @@ npm run test:e2e:debug   # headed, slowed down (E2E_SLOWMO) - for stepping throu
 Config is `playwright.config.ts`; specs live in `e2e/` (`recipe.spec.ts`,
 `shopping-list.spec.ts`), with its own scoped `e2e/tsconfig.json` separate
 from the root `tsconfig.json`.
-Requires Docker: `webServer` in the config auto-starts `npm run dev:full`
-against pinned ports with its own `COMPOSE_PROJECT_NAME=bigshop-e2e`, so it
-won't collide with another worktree's stack; `test:e2e`/`test:e2e:debug` both
-run `test:e2e:stop` first to tear down any containers left over from an
-interrupted previous run (otherwise `dev-full.sh`'s own auto-increment-on-
-collision port logic silently drifts to different ports than the ones pinned
-in `e2e/env.ts`).
+Requires Docker: `webServer` in the config auto-starts `npm run dev:full` on a
+stack whose identity — compose project name and all three ports — is derived
+per worktree by `e2e/instance.cjs`. `test:e2e`/`test:e2e:debug` both run
+`test:e2e:stop` first to tear down any containers left over from an interrupted
+previous run.
+
+**Every e2e stack is per-worktree, and that is load-bearing rather than tidy.**
+This section used to say the pinned `COMPOSE_PROJECT_NAME=bigshop-e2e` stopped
+the e2e stack colliding with another worktree's. It stopped it colliding with a
+*dev* stack, and did the exact opposite for a second e2e run: every worktree
+resolved to the same project, so the same containers and the same volumes. And
+because `test:e2e` *begins* with `test:e2e:stop` — `docker compose down
+--remove-orphans --volumes` — starting a run in one worktree tore another
+worktree's in-flight run down mid-suite, database included. From the other side
+that is invisible: containers vanish and specs fail in ways that read exactly
+like application bugs, which quietly falsified the "a flaky-looking e2e failure
+gets investigated, not re-run-until-green" rule below whenever a second
+worktree existed.
+
+So `e2e/instance.cjs` hashes the worktree path into a project name
+(`bigshop-e2e-4-big-shop-442f25` — the slug is readable, the digest is what
+makes it unique) and a 0–99 offset picking one port from each of three blocks:
+web `3900+`, DB `4200+`, API `8980+`. It is automatic on purpose; the failure it
+prevents was silent, so a convention to remember would not have held. Nothing
+reads a hardcoded name any more — `e2e/env.ts` imports the module,
+`test:e2e:stop` and `.github/workflows/e2e.yml`'s log dump both go through
+`scripts/e2e-compose.sh`, which asks it for the project name. **Adding another
+`docker compose` call against the e2e stack means calling that wrapper, not
+writing the name out.** CI is unaffected either way: one checkout per runner.
+
+The two escape hatches, for the rare case where two worktrees hash to the same
+offset:
+- `E2E_INSTANCE=<name>` overrides the derived identity for both the project
+  name and the ports.
+- `PIN_PORTS=true` (which `playwright.config.ts` sets) makes `dev-full.sh` fail
+  loudly on a port already in use instead of auto-incrementing to the next free
+  one. That fallback is right for `npm run dev:full` and wrong here: Playwright's
+  `baseURL` and health-check URL are already fixed, so a drifting stack is one
+  nothing is connected to, and the symptom is an unexplained health-check
+  timeout. The failure message names both hatches.
 
 **The e2e stack deliberately runs without telemetry.** `playwright.config.ts`
 passes `START_LGTM=false` and an empty `OTEL_EXPORTER_OTLP_ENDPOINT`, so

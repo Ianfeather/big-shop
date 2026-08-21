@@ -12,6 +12,7 @@ import (
 	"os"
 	"time"
 
+	"recipes/internal/pkg/service/email"
 	"recipes/internal/pkg/telemetry"
 )
 
@@ -278,20 +279,33 @@ func DeleteAuth0User(ctx context.Context, userID string) (called bool, err error
 //
 // It returns whether the Account itself was deleted, so the caller can tell the
 // user which of the two outcomes happened.
-// The four steps, held in variables so a test can assert the sequence's one
+// sendDeletionConfirmation tells somebody their deletion request was received.
+//
+// Separate from the send so that the sequence's ordering can be tested without
+// a SendGrid stub, and so this file states the one thing about the email that
+// is this file's business: **where in the sequence it goes.**
+func sendDeletionConfirmation(ctx context.Context, name, address string) {
+	email.SendTransactionalAsync(ctx,
+		email.Recipient{Name: name, Address: address},
+		email.KindAccountDeleted,
+		email.AccountDeletedData{Name: name})
+}
+
+// The five steps, held in variables so a test can assert the sequence's one
 // load-bearing property - that a failing hard gate never reaches the
 // irreversible step - without a database or a live tenant. Nothing but a test
 // ever assigns to them.
 var (
 	softGateStep     = DisableUserAccount
 	restoreStep      = DisableUserAccountRestore
+	confirmationStep = sendDeletionConfirmation
 	sendGridStep     = EraseSendGridRecipient
 	auth0Step        = DeleteAuth0User
 	hardDeleteStep   = DeleteAccount
 	externalsTimeout = 20 * time.Second
 )
 
-func DeleteUserAndAccount(ctx context.Context, db *sql.DB, userID string, accountID int, email string) (accountDeleted bool, err error) {
+func DeleteUserAndAccount(ctx context.Context, db *sql.DB, userID string, accountID int, name, address string) (accountDeleted bool, err error) {
 	// 1. The soft gate. Deliberately an UPDATE: it is the only step before the
 	//    hard delete that changes anything, and it is reversible.
 	if err := softGateStep(ctx, db, userID, accountID); err != nil {
@@ -317,6 +331,25 @@ func DeleteUserAndAccount(ctx context.Context, db *sql.DB, userID string, accoun
 		}
 	}
 
+	// **1a. The confirmation, and this position is the only correct one.**
+	//
+	// After the gate, because that is the moment the request is actually
+	// honoured rather than merely received. Before SendGrid's erasure below,
+	// because that call deletes everything SendGrid holds about this address -
+	// so sending afterwards would re-create, as a fresh recipient record, the
+	// very data the erasure had just removed. An email that undoes the erasure
+	// it is confirming.
+	//
+	// It also has to read the address before the hard delete destroys the row
+	// holding it, which is why the caller loads the User up front and passes it
+	// in rather than this reading it here.
+	//
+	// Best-effort, like everything between the gate and the hard delete: the
+	// helper returns nothing, so a failed confirmation cannot abort a deletion.
+	// The copy confirms the *request* rather than the outcome, because the
+	// steps below can still fail and un-gate.
+	confirmationStep(ctx, name, address)
+
 	// Steps 2 and 3 are two sequential network calls at ten seconds each,
 	// inside a request somebody is watching. Bounded together so the worst case
 	// is one wait rather than the sum of them.
@@ -325,7 +358,7 @@ func DeleteUserAndAccount(ctx context.Context, db *sql.DB, userID string, accoun
 
 	// 2. SendGrid, best-effort, using the address read before step 4 destroys
 	//    the row holding it.
-	if called, err := sendGridStep(externalsCtx, email); err != nil {
+	if called, err := sendGridStep(externalsCtx, address); err != nil {
 		telemetry.RecordWarning(ctx, "sendgrid recipient erasure", err)
 	} else if !called {
 		telemetry.RecordWarning(ctx, "sendgrid recipient erasure skipped",
@@ -357,7 +390,7 @@ func DeleteUserAndAccount(ctx context.Context, db *sql.DB, userID string, accoun
 	// exact state this ordering exists to prevent, rows intact for somebody who
 	// can no longer log in to retry. Past this line the work is finished on the
 	// server's terms.
-	accountDeleted, err = hardDeleteStep(context.WithoutCancel(ctx), db, userID, accountID, email)
+	accountDeleted, err = hardDeleteStep(context.WithoutCancel(ctx), db, userID, accountID, address)
 	if err != nil {
 		// The cascade is one transaction, so nothing of it has applied. Put the
 		// Account back within reach so the person can try again.

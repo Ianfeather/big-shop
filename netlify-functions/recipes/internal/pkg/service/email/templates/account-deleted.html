@@ -1,0 +1,37 @@
+{{ define "content" }}
+  {{/*
+    Sent when somebody deletes their Big Shop account. Transactional, and
+    pointedly not unsubscribable: ADR-0010's unsubscribe covers the onboarding
+    sequence, and somebody who opted out of that has said nothing about whether
+    they want to be told their account is being deleted.
+
+    **It confirms the request, not the outcome, and the tense is load-bearing.**
+    It is sent between step 1 (the soft gate) and step 2 (the SendGrid erasure)
+    of service.DeleteUserAndAccount, and the steps after it can still fail - in
+    which case the sequence un-gates and the account is deliberately left
+    intact and retryable. "Your account has been deleted" would then be a lie
+    told by the system to the one person guaranteed to notice.
+
+    It also cannot promise the Recipes are gone: whether they go depends on
+    whether this was the account's last member, which the sequence decides
+    inside a transaction that has not run yet when this is sent.
+
+    No link back into the app. Every account-scoped route stops resolving the
+    moment the gate closes, so a button here would lead somewhere broken.
+  */}}
+  <p style="margin:0 0 16px 0;">Hello {{ .Data.Name }},</p>
+
+  <p style="margin:0 0 16px 0;">
+    We have received your request to delete your Big Shop account, and your access
+    has already been switched off. Removing your data from our systems is under way.
+  </p>
+
+  <p style="margin:0 0 16px 0;">
+    If the account was shared with somebody else, their copy of your shared recipes
+    and shopping list stays with them.
+  </p>
+
+  <p style="margin:0; font-size:14px; color:#6b7178;">
+    If you did not ask for this, reply to this email and we will look into it.
+  </p>
+{{ end }}

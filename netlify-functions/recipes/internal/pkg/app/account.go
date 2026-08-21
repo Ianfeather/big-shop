@@ -126,7 +126,7 @@ func (a *App) deleteAccount(ctx context.Context, _ *struct{}) (*DeleteAccountOut
 		return nil, fail(ctx, huma.Error500InternalServerError("Could not read the current user"), err)
 	}
 
-	accountDeleted, err := service.DeleteUserAndAccount(ctx, a.db, caller.UserID, accountID, user.Email)
+	accountDeleted, err := service.DeleteUserAndAccount(ctx, a.db, caller.UserID, accountID, user.Name, user.Email)
 	if err != nil {
 		// The sequence leaves a gated, retryable Account behind on any failure,
 		// so a 500 here genuinely means "try again" rather than "some of your

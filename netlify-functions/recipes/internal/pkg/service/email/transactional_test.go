@@ -119,3 +119,32 @@ func TestSendTransactionalAsyncToleratesAnUnknownKind(t *testing.T) {
 	SendTransactionalAsync(context.Background(),
 		Recipient{Name: "A", Address: "a@example.com"}, Kind("not-an-email"), nil)
 }
+
+// Every registered email must have a template that actually renders.
+//
+// The registry and the templates directory are two lists that have to agree,
+// and nothing but this test makes them. A Kind registered against a template
+// that does not exist fails at send time, inside a goroutine, on a path that
+// deliberately swallows its errors - so the first sign would be an email that
+// silently never arrives.
+func TestEveryRegisteredEmailRenders(t *testing.T) {
+	samples := map[Kind]any{
+		KindInvite:         InviteData{InviterName: "Ada", Token: "t"},
+		KindInviteAccepted: InviteAcceptedData{InviterName: "Ada"},
+		KindInviteRejected: InviteRejectedData{InviterName: "Ada"},
+		KindAccountDeleted: AccountDeletedData{Name: "Ada"},
+	}
+
+	for _, entry := range Family {
+		sample, ok := samples[entry.Kind]
+		if !ok {
+			t.Errorf("%q is registered but this test has no sample data for it", entry.Kind)
+			continue
+		}
+		// unsubscribable is false throughout: transactional mail carries no ASM
+		// group, and TestTransactionalRenderHasNoUnsubscribeTag pins that.
+		if _, err := Render(entry.Template, sample, false); err != nil {
+			t.Errorf("%q does not render: %v", entry.Kind, err)
+		}
+	}
+}

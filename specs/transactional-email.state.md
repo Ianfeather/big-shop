@@ -41,14 +41,20 @@ so consent_event/email_send were missing and GET /user 500'd. `docker compose do
 and re-up fixed it - worth knowing the symptom looks like an application bug.
 
 ## Session 3: Phase 2b — the deep link
-Status: pending
+Status: done
 Scope: `templates/invite.html` → `{{ .SiteURL }}/account?invite={{ .Data.Token }}` + golden
 regen; `pages/account.tsx` reads and strips `?invite` (mirroring the `?stored=` pattern in
 `pages/recipes/[id]/index.tsx`); Toast naming the inviter; `highlighted` variant on
 `components/invite`. No auto-accept.
 Depends on: Session 2
-Commit:
-Notes: Settles spec open question 2 — the no-match copy covers expired/accepted/not-yours
+Commit: 09908a1
+Notes: vitest 372 passed, lint/typecheck clean, invite.golden.html regenerated.
+Verified in the browser against the real stack: the accessibility tree shows the toast
+(role=status, "Ian Feather invited you to share their account"), the invite card, and
+?invite stripped from the URL. **Screenshot evidence still to capture** - React Query
+resolves after the navigation settles, so a capture taken immediately shows the empty
+pre-query state. Wait for the card before capturing.
+Settles spec open question 2 — the no-match copy covers expired/accepted/not-yours
 together, because the frontend cannot distinguish them.
 
 ## Session 4: Phase 3 — close the loop on the invite

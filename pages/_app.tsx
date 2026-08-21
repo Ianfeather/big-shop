@@ -9,6 +9,7 @@ import useAuth0, { authDisabled } from '@hooks/use-auth';
 import { requireEnv } from '../lib/env';
 import { appOrigin } from '../lib/app-origin';
 import { identifyUser, setupFaro, setView } from '../lib/telemetry/faro';
+import { rememberReturnTo } from '../lib/return-to';
 import { ConsentProvider } from '@components/consent-banner';
 import ConsentSync from '@components/consent-sync';
 import Analytics from '@components/analytics';
@@ -32,6 +33,12 @@ const InnerApp = ({ Component, pageProps }: Pick<AppProps, 'Component' | 'pagePr
 
   useEffect(() => {
     if (!isAuthenticated && !isLoading) {
+      // Remember where they were trying to go before throwing it away. Without
+      // this the bounce is total: a logged-out click on a deep link - which the
+      // Day 8 email now sends - lands on the marketing page with no login
+      // prompt and no way back to what they clicked. pages/index.tsx picks this
+      // up once the login completes. See lib/return-to.ts.
+      rememberReturnTo(router.asPath);
       router.push('/');
     }
   }, [isAuthenticated, router, isLoading]);

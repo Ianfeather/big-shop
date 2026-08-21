@@ -139,3 +139,50 @@ JOIN `unit` u ON u.name = x.unit_name;
 
 INSERT INTO `recipe_tag` (recipe_id, tag_name) VALUES (@chilli_id, 'Vegetarian');
 INSERT INTO `recipe_tag` (recipe_id, tag_name) VALUES (@chilli_id, 'Batch Cook');
+
+-- Featured Recipes (migrations/042_featured_recipes.sql, ADR-0011).
+--
+-- `local-dev-user` is an admin, so the Featured checkbox on the recipe form is
+-- reachable locally and in e2e. Under NEXT_PUBLIC_DISABLE_AUTH the mock user in
+-- hooks/use-auth.ts *is* this row, which means the dev/e2e user is an admin -
+-- deliberate, and the reason the flow is testable at all. It is also exactly
+-- what must never be true of a real environment.
+UPDATE `user` SET is_admin = TRUE WHERE id = 'local-dev-user';
+
+-- The Featured Recipe itself lives in a SECOND Account, with no members.
+--
+-- Production's arrangement is different - ADR-0011 puts Featured Recipes in an
+-- admin's own Account and rejects a member-less curated one - so this is a
+-- deliberate divergence, for one reason: a fixture in account 1 cannot prove
+-- the thing most likely to be got wrong. Every other read of `recipe` in this
+-- codebase is scoped by account_id, so a featured lookup that copied that habit
+-- would be wrong in production and still pass every test, because the caller
+-- and the Featured Recipe would share an Account. Here they do not, so it
+-- fails. Nothing in the application cares which Account a Featured Recipe sits
+-- in; resolution is by the flag alone.
+INSERT INTO `account` (id) VALUES (2);
+
+INSERT INTO `recipe` (name, slug, account_id, featured, method) VALUES
+  ('Store Cupboard Tomato Pasta', 'store-cupboard-tomato-pasta', 2, TRUE,
+   'Soften the onion and garlic in the oil, add the tomatoes and simmer while the pasta cooks. Combine, and season well.');
+SET @featured_id = LAST_INSERT_ID();
+
+-- Built only from Ingredients this seed has already curated - Chopped Tomatoes
+-- carries a `tin` Unit Size and a `tin` Display Unit, Onion and Garlic Clove
+-- have Unit Sizes and count Display Units. That is ADR-0011's catalog rule made
+-- concrete: a Featured Recipe is the first thing a new Account generates a
+-- Shopping List from, so its Ingredients have to be ones that actually combine.
+-- Introducing a new Ingredient here would produce a first list showing
+-- uncombined Amounts, which is the one place that hurts most.
+INSERT INTO `part` (recipe_id, ingredient_id, unit_id, quantity)
+SELECT @featured_id, i.id, u.id, x.quantity FROM (
+  SELECT 'Spaghetti' AS ingredient_name, 'gram' AS unit_name, '200' AS quantity
+  UNION ALL SELECT 'Chopped Tomatoes', 'gram', '400'
+  UNION ALL SELECT 'Onion', 'whole', '1'
+  UNION ALL SELECT 'Garlic Clove', 'clove', '2'
+  UNION ALL SELECT 'Olive Oil', 'tablespoon', '2'
+) x
+JOIN `ingredient` i ON i.name = x.ingredient_name
+JOIN `unit` u ON u.name = x.unit_name;
+
+INSERT INTO `recipe_tag` (recipe_id, tag_name) VALUES (@featured_id, 'Vegetarian');

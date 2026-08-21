@@ -595,6 +595,7 @@ export interface components {
              * @example /api/bigshop/schemas/Recipe.json
              */
             readonly $schema?: string;
+            featured?: boolean;
             /** Format: int64 */
             id?: number;
             ingredients: components["schemas"]["Ingredient"][] | null;
@@ -662,6 +663,7 @@ export interface components {
             consent?: components["schemas"]["Consent"];
             email: string;
             id?: string;
+            isAdmin?: boolean;
             name?: string;
             onboarded?: boolean;
             showPantryStaples?: boolean;

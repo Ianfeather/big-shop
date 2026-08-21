@@ -82,6 +82,22 @@ type Recipe struct {
 	Method      string       `json:"method"`
 	Ingredients []Ingredient `json:"ingredients"`
 	Tags        []string     `json:"tags"`
+	// Featured is whether this Recipe is published for any Account to copy.
+	// See CONTEXT.md's Featured Recipe and ADR-0011.
+	//
+	// A pointer, and the nil case is the reason. Setting this requires admin,
+	// and the rule is that a request *changing* the value needs the permission
+	// while a request merely echoing it back does not - so "changed" has to be
+	// answerable, and it is not if absent and false look the same. With a plain
+	// bool plus omitempty, any client that does not know this field exists would
+	// send nothing, the server would read false, and an ordinary edit would
+	// quietly un-publish a Featured Recipe.
+	//
+	// So: nil means "no opinion, leave it as it is", which is what every write
+	// path that predates this field means. Same reason Ingredient.DisplayUnit
+	// and User.ShowPantryStaples are pointers - "false" is a real answer that
+	// has to be distinguishable from silence.
+	Featured *bool `json:"featured,omitempty"`
 }
 
 // Amount is a quantity paired with a Unit ("400" + "gram"). Quantity is a
@@ -152,6 +168,21 @@ type User struct {
 	// sets it, so it is always present on output. Same reason Ingredient's
 	// DisplayUnit is a *string.
 	ShowPantryStaples *bool `json:"showPantryStaples,omitempty"`
+	// IsAdmin is whether this User may publish a Recipe as Featured - the only
+	// thing being an admin permits. See ADR-0011.
+	//
+	// A plain bool with omitempty, following Onboarded rather than
+	// ShowPantryStaples: it is server-managed, never sent as input, and the
+	// client only ever checks it for truthiness (to decide whether to render the
+	// Featured checkbox), so "false" and "absent" genuinely are the same answer
+	// here. There is no cache to reconcile against, which is the thing that
+	// forced ShowPantryStaples to be a pointer.
+	//
+	// Sending it at all is a convenience for the UI and nothing more. The
+	// decision that matters is enforced server-side on the write - see
+	// service.AddRecipe/EditRecipe - because a client-side check is a hidden
+	// checkbox, not a permission.
+	IsAdmin bool `json:"isAdmin,omitempty"`
 	// AccountID is the Account this User currently belongs to, or nil if they
 	// belong to none.
 	//

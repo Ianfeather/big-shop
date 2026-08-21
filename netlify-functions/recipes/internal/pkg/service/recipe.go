@@ -78,7 +78,7 @@ func GetRecipeBySlug(ctx context.Context, slug string, caller *common.Caller, db
 	}
 	recipe := &common.Recipe{Ingredients: []common.Ingredient{}, Tags: []string{}}
 	query := `
-		SELECT recipe.id, name, remote_url, notes, method, tag_name
+		SELECT recipe.id, name, remote_url, notes, method, featured, tag_name
 			FROM recipe
 			LEFT JOIN recipe_tag on recipe.id = recipe_tag.recipe_id
 			WHERE slug = ? AND account_id = ?;`
@@ -94,9 +94,10 @@ func GetRecipeBySlug(ctx context.Context, slug string, caller *common.Caller, db
 		var notes sql.NullString
 		var method sql.NullString
 		var tag sql.NullString
+		var featured bool
 		var id int
 
-		err = results.Scan(&id, &recipe.Name, &remoteURL, &notes, &method, &tag)
+		err = results.Scan(&id, &recipe.Name, &remoteURL, &notes, &method, &featured, &tag)
 		if err != nil {
 			return nil, err
 		}
@@ -108,6 +109,13 @@ func GetRecipeBySlug(ctx context.Context, slug string, caller *common.Caller, db
 		}
 
 		recipe.ID = id
+		// Copied before its address is taken: `featured` is a fresh variable per
+		// iteration and only this one ever reaches here, but a read of a Recipe
+		// should state the answer rather than alias a loop local. Always set, so
+		// `false` arrives as false rather than as silence - which for this field
+		// means something different. See common.Recipe.Featured.
+		isFeatured := featured
+		recipe.Featured = &isFeatured
 
 		if remoteURL.Valid {
 			recipe.RemoteURL = remoteURL.String
@@ -147,7 +155,7 @@ func GetRecipeByID(ctx context.Context, id int, caller *common.Caller, db *sql.D
 	}
 	recipe := &common.Recipe{Ingredients: []common.Ingredient{}, Tags: []string{}}
 	query := `
-		SELECT recipe.id, name, remote_url, notes, method, tag_name
+		SELECT recipe.id, name, remote_url, notes, method, featured, tag_name
 			FROM recipe
 			LEFT JOIN recipe_tag on recipe.id = recipe_tag.recipe_id
 			WHERE recipe.id = ? AND account_id = ?;`
@@ -164,9 +172,10 @@ func GetRecipeByID(ctx context.Context, id int, caller *common.Caller, db *sql.D
 		var notes sql.NullString
 		var method sql.NullString
 		var tag sql.NullString
+		var featured bool
 		var id int
 
-		err = results.Scan(&id, &recipe.Name, &remoteURL, &notes, &method, &tag)
+		err = results.Scan(&id, &recipe.Name, &remoteURL, &notes, &method, &featured, &tag)
 		if err != nil {
 			return nil, err
 		}
@@ -178,6 +187,13 @@ func GetRecipeByID(ctx context.Context, id int, caller *common.Caller, db *sql.D
 		}
 
 		recipe.ID = id
+		// Copied before its address is taken: `featured` is a fresh variable per
+		// iteration and only this one ever reaches here, but a read of a Recipe
+		// should state the answer rather than alias a loop local. Always set, so
+		// `false` arrives as false rather than as silence - which for this field
+		// means something different. See common.Recipe.Featured.
+		isFeatured := featured
+		recipe.Featured = &isFeatured
 
 		if remoteURL.Valid {
 			recipe.RemoteURL = remoteURL.String

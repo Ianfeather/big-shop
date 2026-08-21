@@ -47,11 +47,21 @@ Two test-authoring notes worth keeping: the save button reads "Update Recipe" in
 Test gate GREEN: vitest 378/378 (up from 370), typecheck and lint clean.
 
 ## Session 4: The copy and its route
-Status: pending
+Status: done
 Scope: Spec Phase 4. `POST /recipe/featured/{slug}`, resolution by flag, loud error on ambiguous slug, copy with `featured_from` written in the insert's transaction, no-op when already taken.
 Depends on: Session 2
-Commit:
-Notes: `RemoteURL` blanked and `featured` not copied — both are in the spec's traps list.
+Commit: (see git log)
+Notes: `AddRecipe`'s body was extracted into `insertRecipeTx(ctx, tx, recipe, accountID, featured, featuredFrom)` so a create and a copy are literally the same write, differing in the two values that actually differ. That is what puts `featured_from` in the same statement as the row — the spec's trap — rather than in an update after it.
+
+`GetFeaturedRecipeBySlug` resolves `WHERE slug = ? AND featured = 1` with **no account scoping**, which is the one read in the file that does not scope, and the thing most likely to be "corrected" by someone matching the surrounding code. The dev seed's second Account is what makes that mistake fail rather than pass.
+
+An unpublished slug is 404, not 403: a Recipe that was never Featured and one that never existed are the same answer here, and drift between the template's slugs and the flag is expected rather than exceptional.
+
+Verified against the running API and a real database, not just compiled: copying returns `alreadyHad: false` then `true` for the same id; an unknown slug 404s; and `veggie-chilli` — which exists **in the caller's own Account** but is not Featured — also 404s, which is what proves resolution is by the flag rather than the identifier. The copied row lands in account 1 from a source in account 2 with `featured = 0`, `featured_from = 3`, blank `remote_url`, all five Ingredient Lines and its Tag.
+
+Unit tests pin the two silent-failure traps on the INSERT's *arguments* rather than its SQL text. There is no query-mocking infrastructure in this repo (no sqlmock), so the lookup and idempotency paths are covered by the manual run above and by Session 6's e2e rather than by Go unit tests.
+
+Test gate GREEN: `go test ./... -race` all packages, gofmt/vet clean, OpenAPI + api.d.ts regenerated, vitest 378/378, typecheck and lint clean.
 
 ## Session 5: Return-to through Auth0
 Status: pending

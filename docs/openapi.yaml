@@ -23,6 +23,28 @@ components:
         - id
         - users
       type: object
+    AddFeaturedRecipeOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /api/bigshop/schemas/AddFeaturedRecipeOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        alreadyHad:
+          type: boolean
+        id:
+          format: int64
+          type: integer
+        status:
+          type: string
+      required:
+        - status
+        - id
+        - alreadyHad
+      type: object
     Amount:
       additionalProperties: false
       properties:
@@ -799,6 +821,34 @@ paths:
                 $ref: "#/components/schemas/ErrorModel"
           description: Error
       summary: Edit a recipe
+      tags:
+        - Recipes
+  /recipe/featured/{slug}:
+    post:
+      description: "Idempotent: a second call returns the copy the first made rather than duplicating it."
+      operationId: add-featured-recipe
+      parameters:
+        - description: URL slug of the Featured Recipe to copy
+          in: path
+          name: slug
+          required: true
+          schema:
+            description: URL slug of the Featured Recipe to copy
+            type: string
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AddFeaturedRecipeOutputBody"
+          description: Created
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Copy a Featured Recipe into the caller's Account
       tags:
         - Recipes
   /recipe/{id}:

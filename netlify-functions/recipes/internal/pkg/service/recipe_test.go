@@ -494,3 +494,74 @@ func TestResolveFeatured(t *testing.T) {
 		})
 	}
 }
+
+// The two things a copy must get right, pinned on the INSERT's arguments rather
+// than on its SQL text - a test reading only the statement would pass with both
+// values left off entirely.
+//
+// Both are in specs/featured-recipes.md's traps list, and both fail silently:
+// a copy that arrived Featured would republish itself out of an Account whose
+// owner cannot see the flag, and a copy committed without its provenance is
+// invisible to the already-taken check, so the next click on the same email
+// link makes a second one.
+func TestInsertRecipeTxCarriesFeaturedAndProvenance(t *testing.T) {
+	source := 3
+	recipe := common.Recipe{
+		Name:        "Store Cupboard Tomato Pasta",
+		Ingredients: []common.Ingredient{{Name: "flour", Quantity: "200", Unit: "gram"}},
+	}
+
+	findInsert := func(f *fakeExecer) []interface{} {
+		t.Helper()
+		for i, q := range f.queries {
+			if strings.Contains(q, "INSERT INTO recipe (") {
+				return f.args[i]
+			}
+		}
+		t.Fatal("no recipe insert was issued")
+		return nil
+	}
+
+	t.Run("a copy is never itself featured, and records where it came from", func(t *testing.T) {
+		fake := &fakeExecer{}
+		if _, err := insertRecipeTx(context.Background(), fake, recipe, 1, false, &source); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		args := findInsert(fake)
+		// (name, slug, remote_url, notes, method, account_id, featured, featured_from)
+		if len(args) != 8 {
+			t.Fatalf("insert took %d args, want 8", len(args))
+		}
+		if featured, ok := args[6].(bool); !ok || featured {
+			t.Errorf("featured = %v, want false", args[6])
+		}
+		got, ok := args[7].(*int)
+		if !ok || got == nil || *got != source {
+			t.Errorf("featured_from = %v, want a pointer to %d", args[7], source)
+		}
+	})
+
+	t.Run("an ordinary create records no provenance", func(t *testing.T) {
+		fake := &fakeExecer{}
+		if _, err := insertRecipeTx(context.Background(), fake, recipe, 1, false, nil); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if got := findInsert(fake)[7]; got != (*int)(nil) {
+			t.Errorf("featured_from = %v, want nil", got)
+		}
+	})
+
+	// The admin path still has to be able to publish one.
+	t.Run("an admin creating a Featured Recipe sets the flag", func(t *testing.T) {
+		fake := &fakeExecer{}
+		if _, err := insertRecipeTx(context.Background(), fake, recipe, 1, true, nil); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if featured, ok := findInsert(fake)[6].(bool); !ok || !featured {
+			t.Errorf("featured = %v, want true", findInsert(fake)[6])
+		}
+	})
+}

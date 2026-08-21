@@ -384,22 +384,49 @@ func AddRecipe(ctx context.Context, recipe common.Recipe, caller *common.Caller,
 		return 0, err
 	}
 
+	// Resolved before the transaction opens, matching EditRecipe: a refusal
+	// should not have started one. A brand new Recipe has no stored value, so
+	// `false` is what is being compared against - creating one already Featured
+	// is a change and needs the permission; creating an ordinary one does not.
+	featured, err := resolveFeatured(recipe.Featured, false, caller)
+	if err != nil {
+		return 0, err
+	}
+
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
 	defer tx.Rollback()
 
-	// A brand new Recipe has no stored value, so `false` is what it is being
-	// compared against: creating one already Featured is a change, and needs
-	// the permission. Creating an ordinary one is not, and does not.
-	featured, err := resolveFeatured(recipe.Featured, false, caller)
+	id, err := insertRecipeTx(ctx, tx, recipe, accountID, featured, nil)
 	if err != nil {
 		return 0, err
 	}
 
-	query := "INSERT INTO recipe (name, slug, remote_url, notes, method, account_id, featured) VALUES (?, ?, ?, ?, ?, ?, ?);"
-	res, err := tx.ExecContext(ctx, query, recipe.Name, common.Slugify(recipe.Name), recipe.RemoteURL, recipe.Notes, recipe.Method, accountID, featured)
+	if err = tx.Commit(); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+// insertRecipeTx writes a Recipe and everything hanging off it - its Ingredient
+// Lines, the Units and Ingredients they reference, and its Tags - inside a
+// transaction the caller owns.
+//
+// Extracted so that AddRecipe and CopyFeaturedRecipe are the same write. They
+// differ in exactly two values, which is why both are parameters rather than
+// read off the Recipe: whether the new row is itself Featured (a copy never is
+// - see ADR-0011) and which Featured Recipe it came from (only a copy has one).
+//
+// featuredFrom is written here, in the same statement as the row itself, and
+// that is the point of passing it down rather than updating afterwards. A copy
+// that committed without its provenance would be invisible to the
+// already-taken check, so the next click on the same email link would silently
+// make a second one - the exact duplicate the column exists to prevent.
+func insertRecipeTx(ctx context.Context, tx execer, recipe common.Recipe, accountID int, featured bool, featuredFrom *int) (int, error) {
+	query := "INSERT INTO recipe (name, slug, remote_url, notes, method, account_id, featured, featured_from) VALUES (?, ?, ?, ?, ?, ?, ?, ?);"
+	res, err := tx.ExecContext(ctx, query, recipe.Name, common.Slugify(recipe.Name), recipe.RemoteURL, recipe.Notes, recipe.Method, accountID, featured, featuredFrom)
 	if err != nil {
 		return 0, fmt.Errorf("insert recipe: %w", err)
 	}
@@ -421,9 +448,6 @@ func AddRecipe(ctx context.Context, recipe common.Recipe, caller *common.Caller,
 		return 0, err
 	}
 	if err = insertTags(ctx, recipe, tx); err != nil {
-		return 0, err
-	}
-	if err = tx.Commit(); err != nil {
 		return 0, err
 	}
 	return recipe.ID, nil
@@ -928,4 +952,144 @@ func withCanonicalUnits(recipe common.Recipe) common.Recipe {
 	}
 	recipe.Ingredients = ingredients
 	return recipe
+}
+
+// ErrAmbiguousFeaturedSlug is returned when more than one Featured Recipe
+// answers to a slug.
+//
+// Loud rather than "pick the first", because slugs are only ever unique within
+// an Account (GetRecipeBySlug scopes them that way) and Featured Recipes are
+// resolved across all of them. Two sharing a name is a curation mistake, and
+// quietly serving whichever the database listed first would send some readers
+// of one email link to a different dish than others.
+var ErrAmbiguousFeaturedSlug = errors.New("more than one Featured Recipe has this slug")
+
+// GetFeaturedRecipeBySlug loads a Featured Recipe, with everything a copy of it
+// needs.
+//
+// Resolution is **by the flag, never by the identifier** - the slug in the URL
+// selects among Featured Recipes rather than among all Recipes, so a link
+// cannot be edited into a request for a Recipe nobody published. There is
+// deliberately no account scoping here, unlike every other read in this file:
+// the whole point of a Featured Recipe is that it is readable by an Account
+// that does not own it. That difference is the thing most likely to be
+// "corrected" by someone matching the surrounding code, so it is stated here
+// and the dev seed puts its fixture in a second Account to make the mistake
+// fail a test.
+func GetFeaturedRecipeBySlug(ctx context.Context, slug string, db *sql.DB) (*common.Recipe, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT id, name, notes, method FROM recipe WHERE slug = ? AND featured = 1;`, slug)
+	if err != nil {
+		return nil, fmt.Errorf("querying featured recipe: %w", err)
+	}
+	defer rows.Close()
+
+	recipe := &common.Recipe{Ingredients: []common.Ingredient{}, Tags: []string{}}
+	found := 0
+	for rows.Next() {
+		found++
+		if found > 1 {
+			return nil, ErrAmbiguousFeaturedSlug
+		}
+		var notes, method sql.NullString
+		if err := rows.Scan(&recipe.ID, &recipe.Name, &notes, &method); err != nil {
+			return nil, fmt.Errorf("scanning featured recipe: %w", err)
+		}
+		recipe.Notes = notes.String
+		recipe.Method = method.String
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("reading featured recipe: %w", err)
+	}
+	if found == 0 {
+		return nil, sql.ErrNoRows
+	}
+
+	// RemoteURL is deliberately not selected. ADR-0011: the Method is ours and
+	// rewritten, so a link labelled as the recipe's source would sit next to a
+	// method that differs from what is at the other end of it. It stays on the
+	// Featured Recipe as the curator's own provenance record and travels no
+	// further.
+
+	if recipe.Ingredients, err = getIngredientsByRecipeID(ctx, recipe.ID, db); err != nil {
+		return nil, fmt.Errorf("loading featured recipe's ingredients: %w", err)
+	}
+	if recipe.Tags, err = getTagsByRecipeID(ctx, recipe.ID, db); err != nil {
+		return nil, fmt.Errorf("loading featured recipe's tags: %w", err)
+	}
+	return recipe, nil
+}
+
+func getTagsByRecipeID(ctx context.Context, id int, db *sql.DB) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT tag_name FROM recipe_tag WHERE recipe_id = ?;`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	tags := []string{}
+	for rows.Next() {
+		var tag string
+		if err := rows.Scan(&tag); err != nil {
+			return nil, err
+		}
+		tags = append(tags, tag)
+	}
+	return tags, rows.Err()
+}
+
+// CopyFeaturedRecipe puts a copy of a Featured Recipe into the caller's
+// Account, and reports whether they already had one.
+//
+// Idempotent by design rather than by luck. The same email link is tapped on a
+// phone at breakfast and a laptop later, and an inbox is revisited - so a
+// second arrival returns the copy the first made instead of quietly producing a
+// duplicate the reader never asked for and would read as a bug. Deleting the
+// copy and clicking again correctly gives a fresh one, because the provenance
+// went with it.
+//
+// It does not touch the Shopping List, and that is a decision rather than an
+// omission: the List is one mutable resource shared by the whole Account, and a
+// link tapped over coffee must not change what somebody else is holding in the
+// shop. See specs/featured-recipes.md.
+func CopyFeaturedRecipe(ctx context.Context, slug string, caller *common.Caller, db *sql.DB) (id int, alreadyHad bool, err error) {
+	accountID, err := caller.AccountID()
+	if err != nil {
+		return 0, false, fmt.Errorf("resolving account: %w", err)
+	}
+
+	source, err := GetFeaturedRecipeBySlug(ctx, slug, db)
+	if err != nil {
+		return 0, false, err
+	}
+
+	var existing int
+	err = db.QueryRowContext(ctx,
+		`SELECT id FROM recipe WHERE account_id = ? AND featured_from = ? LIMIT 1;`,
+		accountID, source.ID).Scan(&existing)
+	if err == nil {
+		return existing, true, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return 0, false, fmt.Errorf("checking for an existing copy: %w", err)
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, false, err
+	}
+	defer tx.Rollback()
+
+	// featured false, and never source.Featured: the taker is not an admin, so a
+	// copy that arrived Featured would be a privilege they have no way to see,
+	// let alone revoke - and every copy of it would go on to publish itself.
+	copyID, err := insertRecipeTx(ctx, tx, *source, accountID, false, &source.ID)
+	if err != nil {
+		return 0, false, err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return 0, false, err
+	}
+	return copyID, false, nil
 }

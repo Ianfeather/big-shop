@@ -117,17 +117,26 @@ compose_up_failed() {
   cat >&2 <<'MSG'
 
 docker compose could not bring the stack up. If it reported the db as
-unhealthy, the most likely cause is a migration that failed to apply:
+unhealthy, the cause is a migration that failed to apply - a volume that is
+merely out of date is repaired by scripts/ensure-db-current.sh above, so by
+this point it has been ruled out. The replay says which migration:
 
     docker compose logs db | grep -A20 'not in expected-migration-errors'
 
-Fix the migration, then recreate the volume - the MySQL entrypoint only
-replays migrations when the data directory is empty:
-
-    docker compose down -v && npm run dev:full
+Fix the migration, then run this again. Recreating the volume is handled for
+you: the MySQL entrypoint only replays migrations when the data directory is
+empty, and ensure-db-current.sh is what empties it.
 MSG
   exit 1
 }
+
+# Bring the database's schema up to date before anything waits on it being
+# healthy - the healthcheck now fails on a volume that is behind migrations/,
+# and this is what clears that. Near-instant and silent when there is nothing to
+# do, which is the normal case; see the script's header for what it does when
+# there is. It brings `db` up itself, so it has to run before the compose up
+# below rather than after.
+scripts/ensure-db-current.sh
 
 if [ "$START_LGTM" = "true" ]; then
   echo "Starting local MySQL + Go API + LGTM (docker compose)..."

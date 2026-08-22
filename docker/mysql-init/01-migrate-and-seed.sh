@@ -26,12 +26,28 @@ sql bigshop -e "
     \`id\` tinyint NOT NULL,
     \`ok\` tinyint(1) NOT NULL COMMENT '1 only if every migration applied as expected and the seed loaded',
     \`detail\` text COMMENT 'the unexpected errors, when ok = 0',
+    \`applied\` text COMMENT 'the migration basenames this replay applied, sorted, newline-separated',
     \`applied_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (\`id\`)
   ) COLLATE=utf8mb4_bin
     COMMENT 'set by docker/mysql-init/01-migrate-and-seed.sh; read by the db healthcheck';
   REPLACE INTO \`_migration_status\` (id, ok, detail) VALUES (1, 0, 'migrations did not finish');
 "
+
+# The set of migrations this replay is about to apply, recorded so that a later
+# start can tell whether the volume has fallen behind the repo.
+#
+# This is the half of the check that could not exist before: the entrypoint only
+# runs this script when the data directory is empty, so everything above runs
+# exactly once in a volume's life and `ok = 1` is a statement about the day the
+# volume was created. Add a migration and every existing volume is silently
+# behind, with a green healthcheck asserting the opposite. Recording *what* was
+# applied is what lets the healthcheck (and scripts/ensure-db-current.sh) notice.
+#
+# Basenames rather than a checksum, because the comparison has to be able to
+# name the missing files - "11 migrations missing, starting at 034_consent_event"
+# is actionable and "digest mismatch" is not.
+APPLIED="$(cd "$MIGRATIONS" && ls -1 *.sql | sort | tr '\n' '@')"
 
 for f in "$MIGRATIONS"/*.sql; do
   base="$(basename "$f")"
@@ -118,5 +134,7 @@ fi
 echo "Applying dev seed data"
 sql bigshop < /seed/dev-seed.sql
 
-sql bigshop -e "REPLACE INTO \`_migration_status\` (id, ok, detail) VALUES (1, 1, NULL);"
+# ok = 1 and the applied set land in the same statement, deliberately: a volume
+# must never be able to report a migration set it did not finish applying.
+sql bigshop -e "REPLACE INTO \`_migration_status\` (id, ok, detail, applied) VALUES (1, 1, NULL, REPLACE('$APPLIED', '@', CHAR(10)));"
 echo "Migrations and seed applied; _migration_status.ok = 1"

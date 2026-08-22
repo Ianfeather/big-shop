@@ -32,21 +32,15 @@ import { authDisabled } from '@hooks/use-auth';
 //               off, if the SDK changes where it stores things, this is what
 //               happens, and it is exactly today's behaviour.
 //   in          Show "Your shopping list" instead.
-//   returning   Mid-flight back from Auth0's login page, on the way to /list.
-//               Show nothing rather than a pitch to someone who has just
-//               proved they are a customer.
+//
+// There used to be a third, 'returning', for the moment between Auth0's
+// callback and the redirect onward to /list. Auth0 now returns straight to
+// /list (lib/app-origin.ts), so nobody is ever mid-flight on this page and the
+// state had nothing left to describe.
 const authHintScript = (clientId: string) => `
 (function () {
   try {
     var el = document.documentElement;
-    var params = new URLSearchParams(window.location.search);
-    // Kept in step with lib/auth-callback.ts, which makes the same judgement
-    // for React. Two implementations of one predicate is the price of needing
-    // it before the bundle exists; it is three lines and both are commented.
-    if (params.has('code') && params.has('state')) {
-      el.setAttribute('data-auth', 'returning');
-      return;
-    }
     var id = ${JSON.stringify(clientId)};
     // Both signals below are Auth0's own storage, read rather than relied on.
     // The cookie is the cheaper check and the more stable name - the SDK

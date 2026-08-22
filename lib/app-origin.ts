@@ -23,3 +23,25 @@ export function appOrigin(): string | undefined {
   }
   return process.env.NEXT_PUBLIC_HOST;
 }
+
+// Where Auth0 sends someone once they have logged in.
+//
+// `/list` rather than the origin root, and that is the whole of "the installed
+// app opens on the list". `start_url` in public/manifest.json already launches
+// the PWA there, but a launch with no live session is bounced to `/` by
+// pages/_app.tsx's InnerApp - so before this, finishing a login returned you to
+// the marketing homepage, inside a standalone window with no address bar, and
+// the homepage had to forward you on. It only sometimes did (see the note in
+// pages/index.tsx about what `onboarded` used to gate), and even when it did it
+// cost a second navigation to show a page nobody had asked for.
+//
+// Landing here directly means the callback and the manifest agree, so a first
+// login and every later launch end up in the same place by the same route.
+//
+// `/list` must be registered in the Auth0 tenant's Allowed Callback URLs for
+// every origin this resolves to - see docs/deploy-previews.md, which is the
+// same requirement the bare origin already had.
+export function loginRedirectUri(): string | undefined {
+  const origin = appOrigin();
+  return origin && `${origin}/list`;
+}

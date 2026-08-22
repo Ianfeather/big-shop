@@ -2,6 +2,7 @@
   "name": "Big Shop",
   "short_name": "Big Shop",
   "start_url": "/list",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#b870eb",

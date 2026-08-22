@@ -110,6 +110,35 @@ describe('useAccountSetup', () => {
     await waitFor(() => expect(result.current.accountReady).toBe(true));
   });
 
+  // The whole point of the collision guard on the server. A 409 means this is
+  // an existing customer arriving through a second login provider, and letting
+  // the app render behind it shows them a working, empty account - which is
+  // indistinguishable from Big Shop having lost every recipe they own.
+  it('reports an identity conflict when the server refuses a second provider', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 409, text: async () => '' })));
+
+    const useAccountSetup = await loadHook(AUTH0_CALLBACK);
+    const { result } = renderHook(() => useAccountSetup());
+
+    await waitFor(() => expect(result.current.identityConflict).toBe(true));
+    // The gate still releases: the upsert has finished, it finished by
+    // refusing, and InnerApp decides what to do about that.
+    expect(result.current.accountReady).toBe(true);
+  });
+
+  // The 409 is singled out deliberately, and the reason every *other* failure
+  // stays swallowed is that a transient one must not put this wall in front of
+  // somebody whose account is perfectly fine.
+  it('does not report a conflict for any other failure', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, text: async () => '' })));
+
+    const useAccountSetup = await loadHook(AUTH0_CALLBACK);
+    const { result } = renderHook(() => useAccountSetup());
+
+    await waitFor(() => expect(result.current.accountReady).toBe(true));
+    expect(result.current.identityConflict).toBe(false);
+  });
+
   it('leaves an already-onboarded user alone', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ id: 'local-dev-user', onboarded: true }));
     vi.stubGlobal('fetch', fetchMock);

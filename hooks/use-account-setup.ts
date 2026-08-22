@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import useAuth0 from '@hooks/use-auth';
-import { apiPost, apiPatch } from '../lib/api-client';
+import { ApiError, apiPost, apiPatch } from '../lib/api-client';
 import { arrivedFromLogin } from '../lib/auth-callback';
 import type { User } from '../types/models';
 
@@ -57,9 +57,10 @@ const browserTimezone = (): string | undefined => {
 // A failure resolves the gate rather than holding it. Stranding someone on a
 // blank screen because an upsert 500'd is worse than letting the page load and
 // fail visibly, and the next launch runs the repair again.
-export default function useAccountSetup(): { accountReady: boolean } {
+export default function useAccountSetup(): { accountReady: boolean; identityConflict: boolean } {
   const { isAuthenticated, isLoading, user, getAccessTokenSilently } = useAuth0();
   const [settled, setSettled] = useState(false);
+  const [identityConflict, setIdentityConflict] = useState(false);
   // Runs once per app load, not once per render or per route change. InnerApp
   // is mounted by _app.tsx and survives client-side navigation, so moving
   // between pages costs nothing.
@@ -96,13 +97,35 @@ export default function useAccountSetup(): { accountReady: boolean } {
         if (!saved?.onboarded) {
           await apiPatch('/user/onboarding', token).catch(() => undefined);
         }
-      } catch {
-        // Deliberately swallowed - see the note above on why a failure must
-        // release the gate rather than hold it.
+      } catch (err) {
+        // **The one failure that is not swallowed.** A 409 from POST /user
+        // means the signed-in Auth0 subject is new, but the email address on it
+        // already belongs to a different subject - so this is the same human
+        // arriving through a second login provider, and the server has refused
+        // to hand them the brand-new empty Account they would otherwise get
+        // (netlify-functions/recipes/internal/pkg/service/user.go's
+        // ConflictingUserID).
+        //
+        // Swallowing it the way everything else here is swallowed would deliver
+        // precisely the experience the guard exists to prevent: the page loads,
+        // no account resolves behind it, and somebody who has used Big Shop for
+        // a year concludes their recipes are gone. It has to be said out loud,
+        // so it is raised to InnerApp and rendered instead of the app.
+        //
+        // Every other failure keeps the old behaviour for the reason given
+        // above - a transient upsert failure must release the gate rather than
+        // put a wall in front of a user whose account is perfectly fine.
+        if (err instanceof ApiError && err.status === 409) {
+          setIdentityConflict(true);
+        }
       }
       setSettled(true);
     })();
   }, [isLoading, isAuthenticated, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { accountReady: settled || !arrivedFromLogin };
+  // `accountReady` is deliberately unchanged by a conflict: the gate answers
+  // "has the upsert finished", and it has - it finished by refusing. InnerApp
+  // reads the two separately and lets the conflict win, which keeps this hook
+  // from having to encode that precedence.
+  return { accountReady: settled || !arrivedFromLogin, identityConflict };
 }

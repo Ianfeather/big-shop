@@ -12,6 +12,7 @@ import { loginRedirectUri } from '../lib/app-origin';
 import { identifyUser, setupFaro, setView } from '../lib/telemetry/faro';
 import { ConsentProvider } from '@components/consent-banner';
 import ConsentSync from '@components/consent-sync';
+import IdentityConflict from '@components/identity/conflict';
 import Analytics from '@components/analytics';
 
 // Started here rather than at module scope so it runs in the browser only, and
@@ -34,7 +35,7 @@ const InnerApp = ({ Component, pageProps }: Pick<AppProps, 'Component' | 'pagePr
   // that reads them may render. Mounted here rather than on a page because the
   // Auth0 callback now lands on /list, so there is no longer one page every new
   // user is guaranteed to pass through - see hooks/use-account-setup.ts.
-  const { accountReady } = useAccountSetup();
+  const { accountReady, identityConflict } = useAccountSetup();
 
   useEffect(() => {
     if (!isAuthenticated && !isLoading) {
@@ -56,6 +57,21 @@ const InnerApp = ({ Component, pageProps }: Pick<AppProps, 'Component' | 'pagePr
   // an ordinary launch waits on exactly what it waited on before.
   if (isLoading || !isAuthenticated || !accountReady) {
     return false;
+  }
+
+  // **Ahead of the app, and after the auth gate.** This person is properly
+  // signed in - the check that produced this is about which *identity* they
+  // signed in as, not whether they may be here - so it cannot live in the gate
+  // above, and it must win over rendering the page, because the page it would
+  // render is a working-looking empty account. See the component for why that
+  // is the outcome worth interrupting for.
+  //
+  // Rendered rather than redirected: a route would need to be public (this user
+  // has no Account, so nothing behind the gate can load), would be reachable by
+  // people it does not apply to, and would drop the reason on the way. There is
+  // no state here worth a URL.
+  if (identityConflict) {
+    return <IdentityConflict />;
   }
 
   return (

@@ -3,9 +3,11 @@ package service
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"recipes/internal/pkg/common"
 	"recipes/internal/pkg/telemetry"
+	"strings"
 	"time"
 )
 
@@ -211,4 +213,92 @@ func SetOnboarded(ctx context.Context, db *sql.DB, userID string) error {
 		return fmt.Errorf("setting user onboarded: %w", err)
 	}
 	return nil
+}
+
+// conflictingUserQuery is held apart from the function for the same reason
+// otherMembersQuery is in account.go: every property that matters lives in the
+// predicate, and dbConn hands back an *sql.Row, which has no exported
+// constructor and therefore cannot be faked. Asserting on the statement is the
+// only way to reach the behaviour without a database.
+//
+// Three things have to hold at once, and dropping any one of them silently
+// turns the guard off rather than breaking it: LOWER() on **both** sides (the
+// column is utf8mb4_bin), `id != ?` so a returning user does not collide with
+// themselves on every single login, and LIMIT 1 because the answer is "is there
+// one" and historic data may hold more than one.
+const conflictingUserQuery = `SELECT id FROM user WHERE LOWER(email) = LOWER(?) AND id != ? LIMIT 1;`
+
+// ConflictingUserID reports an existing User who already holds this email
+// address under a *different* Auth0 subject, or "" if there is none.
+//
+// **This exists because adding a second login provider can silently destroy
+// somebody's data, and nothing else in the system would notice.** `user.id` is
+// the raw Auth0 subject and there is no foreign key to Auth0, so an unrecognised
+// subject is indistinguishable from a new person: AddUser inserts a row and
+// CreateAccount hands them a brand-new, empty Account. When the same human signs
+// in with Apple instead of Google, Auth0 mints a different subject for them and
+// that is exactly the path they take - same person, same address, no recipes.
+// No error is raised anywhere, and from their side it looks like Big Shop lost
+// everything.
+//
+// So this is a **net, not the fix**. The fix is account linking configured in
+// Auth0, which makes both providers resolve to one subject and stops this ever
+// returning a match. Until that is in place - and as a guard for the day its
+// configuration is changed or a new connection is added without it - a match
+// here turns silent data loss into a 409 the person can act on.
+//
+// **The address is not trusted, and does not need to be.** It arrives in the
+// POST /user body, which the caller controls; app/app.go only ever lifts `sub`
+// out of the validated JWT, so nothing server-side has seen a verified email.
+// That rules out the tempting next step - linking the two subjects here, which
+// would be an account-takeover primitive: claim someone's address at a provider
+// that does not verify it and inherit their Account. Refusing is safe in a way
+// linking is not, because the worst a forged address achieves is locking the
+// forger's own signup.
+//
+// LOWER() on both sides rather than a plain comparison: migrations/040 puts the
+// column in utf8mb4_bin, where `A` and `a` are different characters, and
+// providers do not agree on the case they hand back. A missed match here is a
+// wiped account, which is worth more than the index this costs - `user` is
+// small enough that the scan is irrelevant, and if it ever is not, the answer is
+// a functional index on LOWER(email) rather than a case-sensitive query.
+//
+// An empty address matches nothing, deliberately: `user.email` is nullable and
+// several rows predate it being collected, so matching on the empty string would
+// collide every one of them with each other.
+//
+// (Phrased without an inline SQL literal on purpose: gofmt rewrites a pair of
+// straight single quotes in a doc comment into a typographic one, so the
+// statement it would have shown is not the statement anybody could run.)
+func ConflictingUserID(ctx context.Context, db dbConn, email, userID string) (string, error) {
+	if email == "" {
+		return "", nil
+	}
+	var existing string
+	err := db.QueryRowContext(ctx, conflictingUserQuery, email, userID).Scan(&existing)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("looking for an existing user with this email: %w", err)
+	}
+	return existing, nil
+}
+
+// IdentityProvider reduces an Auth0 subject to the connection that issued it -
+// "google-oauth2" from "google-oauth2|100337785987015262344".
+//
+// For telemetry only, and shaped for it: the result is a closed, low-cardinality
+// set of connection names, and never the subject itself, which ADR-0008 §1 keeps
+// off metrics. It is what makes an identity collision readable in Grafana as
+// "an apple login hit a google-oauth2 account" without any personal data.
+//
+// A subject with no separator returns "unknown" rather than the whole string,
+// so a malformed or unexpected `sub` cannot turn a span attribute into an
+// identifier.
+func IdentityProvider(subject string) string {
+	if i := strings.Index(subject, "|"); i > 0 {
+		return subject[:i]
+	}
+	return "unknown"
 }

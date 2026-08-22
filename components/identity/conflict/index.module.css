@@ -1,0 +1,73 @@
+/* Deliberately standalone rather than reusing the app shell's page styles:
+   this renders *instead of* InnerApp's children, so there is no header, no
+   nav and no surrounding layout to sit inside. It is the same situation
+   pages/error.tsx is in, and it is styled from the same tokens for the same
+   reason - somebody who lands here is mid-login and should not feel like they
+   have been thrown out of the product. */
+.page {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.card {
+  max-width: 34rem;
+  padding: var(--space-6) var(--space-5);
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+}
+
+.eyebrow {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.heading {
+  margin: 0 0 var(--space-4);
+  font-family: var(--font-heading);
+  font-size: var(--text-xl);
+  line-height: 1.15;
+  color: var(--ink);
+}
+
+.body {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+/* Sign out is the only way off this screen, so it is styled as the primary
+   action rather than as the incidental link it is in the header. */
+.action {
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-5);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--spot);
+  color: var(--card);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+}
+
+.footnote {
+  margin: var(--space-5) 0 0;
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.footnote a {
+  color: var(--claret);
+}

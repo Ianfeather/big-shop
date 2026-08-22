@@ -26,12 +26,37 @@ async function parseBody(res: Response): Promise<unknown> {
   return text ? JSON.parse(text) : undefined;
 }
 
+// A failed call to the Go API, carrying the status that caused it.
+//
+// The helpers below used to throw a bare Error whose only account of what
+// happened was the status interpolated into its *message*, so a caller wanting
+// to treat one status differently from the rest had to match on a string it did
+// not own. Nobody needed to until now: hooks/use-account-setup.ts has to tell
+// the 409 that means "this address already has an account under another login
+// provider" apart from every other way POST /user can fail, because the two want
+// opposite handling - one is a screen the user must read, the other is
+// deliberately swallowed so a broken upsert cannot strand them on a blank page.
+//
+// Deliberately not extended to the nextApi* family below. Those routes are
+// error-shaped as `{ error: string }` and their callers render that message;
+// none of them branches on a status, so giving them a status too would be
+// inventing a contract nothing asks for.
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 export async function apiGet<T>(path: string, token: string): Promise<T> {
   const res = await fetch(`${process.env.NEXT_PUBLIC_API_HOST}${path}`, {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!res.ok) {
-    throw new Error(`GET ${path} failed with status ${res.status}`);
+    throw new ApiError(`GET ${path} failed with status ${res.status}`, res.status);
   }
   return parseBody(res) as Promise<T>;
 }
@@ -46,7 +71,7 @@ async function apiMutate<T>(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: s
     body: body !== undefined ? JSON.stringify(body) : undefined
   });
   if (!res.ok) {
-    throw new Error(`${method} ${path} failed with status ${res.status}`);
+    throw new ApiError(`${method} ${path} failed with status ${res.status}`, res.status);
   }
   return parseBody(res) as Promise<T>;
 }

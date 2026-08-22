@@ -125,8 +125,9 @@ func TestConflictingUserQuery(t *testing.T) {
 }
 
 // An empty address must not reach the database at all. `user.email` is nullable
-// and rows predate it being collected, so `LOWER(email) = LOWER('')` would match
-// every one of them and lock a new signup out on somebody else's blank row.
+// and rows predate it being collected, so lowering the empty string and matching
+// on it would find every one of them and lock a new signup out on somebody
+// else's blank row.
 func TestConflictingUserIDIgnoresAnEmptyEmail(t *testing.T) {
 	// A nil dbConn is the assertion: reaching the database panics, so this
 	// passing means the short-circuit ran.

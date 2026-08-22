@@ -264,8 +264,12 @@ const conflictingUserQuery = `SELECT id FROM user WHERE LOWER(email) = LOWER(?) 
 // a functional index on LOWER(email) rather than a case-sensitive query.
 //
 // An empty address matches nothing, deliberately: `user.email` is nullable and
-// several rows predate it being collected, so `WHERE LOWER(email) = ''` would
+// several rows predate it being collected, so matching on the empty string would
 // collide every one of them with each other.
+//
+// (Phrased without an inline SQL literal on purpose: gofmt rewrites a pair of
+// straight single quotes in a doc comment into a typographic one, so the
+// statement it would have shown is not the statement anybody could run.)
 func ConflictingUserID(ctx context.Context, db dbConn, email, userID string) (string, error) {
 	if email == "" {
 		return "", nil

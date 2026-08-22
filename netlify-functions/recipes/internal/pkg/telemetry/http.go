@@ -257,3 +257,26 @@ func RecordWarning(ctx context.Context, what string, err error) {
 		attribute.String("warning.error", err.Error()),
 	))
 }
+
+// SetIdentityCollision records that a login arrived under a subject nobody has
+// seen before, carrying an email address that already belongs to a different
+// one - the signal that somebody has just tried a second login provider and
+// would have been handed an empty Account.
+//
+// Both values are connection names ("google-oauth2", "apple", "windowslive"),
+// never subjects and never the address: ADR-0008 §1 keeps identifiers and
+// content off telemetry, and the pair of connection names is the whole of what
+// makes this readable. `arriving` is what they just used and `existing` is what
+// their Account was made with, which together say which direction of the pair
+// is actually happening in the wild - the thing that decides whether Auth0's
+// linking rules are working.
+//
+// On the span only, not a metric. It is a fact about one request, and the
+// per-request context - which Account, when, from where - is exactly what makes
+// a report of one useful; a counter would say it happened and nothing more.
+func SetIdentityCollision(ctx context.Context, arriving, existing string) {
+	trace.SpanFromContext(ctx).SetAttributes(
+		attribute.String("identity.collision.arriving_provider", arriving),
+		attribute.String("identity.collision.existing_provider", existing),
+	)
+}

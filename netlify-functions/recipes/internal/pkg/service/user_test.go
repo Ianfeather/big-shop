@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -94,4 +95,69 @@ func TestNormaliseTimezone(t *testing.T) {
 			t.Fatal("a valid IANA zone was refused; the timezone database is not loadable in this build")
 		}
 	})
+}
+
+// The collision guard is the only thing standing between a second login
+// provider and somebody's recipes disappearing, and all of it is in this one
+// predicate - so each clause gets its own assertion, named for what its absence
+// would do rather than for the SQL it looks for.
+func TestConflictingUserQuery(t *testing.T) {
+	q := conflictingUserQuery
+
+	// Both sides lowered, not one. Lowering only the parameter still misses
+	// `Ada@Example.com` in the column, which is a wiped account.
+	if strings.Count(q, "LOWER(") != 2 {
+		t.Errorf("the comparison is not case-insensitive on both sides, so a provider returning a differently-cased address would be treated as a new person:\n%s", q)
+	}
+
+	// Without this every returning user matches their own row on every login,
+	// and POST /user - which runs on *every* login - starts answering 409 to
+	// the entire userbase.
+	if !strings.Contains(q, "id != ?") {
+		t.Errorf("the query does not exclude the caller's own row, so an existing user would collide with themselves on every login:\n%s", q)
+	}
+
+	// The question is "does one exist", and `user.email` carries no unique
+	// constraint, so rows predating this guard may already be duplicated.
+	if !strings.Contains(q, "LIMIT 1") {
+		t.Errorf("the query is not bounded, and user.email has no unique constraint:\n%s", q)
+	}
+}
+
+// An empty address must not reach the database at all. `user.email` is nullable
+// and rows predate it being collected, so `LOWER(email) = LOWER('')` would match
+// every one of them and lock a new signup out on somebody else's blank row.
+func TestConflictingUserIDIgnoresAnEmptyEmail(t *testing.T) {
+	// A nil dbConn is the assertion: reaching the database panics, so this
+	// passing means the short-circuit ran.
+	existing, err := ConflictingUserID(context.Background(), nil, "", "auth0|new")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if existing != "" {
+		t.Errorf("an empty email reported a conflict with %q", existing)
+	}
+}
+
+// IdentityProvider's output is a span attribute, so the property under test is
+// as much "it is never an identifier" as "it names the connection".
+func TestIdentityProvider(t *testing.T) {
+	cases := map[string]string{
+		"google-oauth2|100337785987015262344": "google-oauth2",
+		"apple|001234.abcdef":                 "apple",
+		"windowslive|1a2b3c":                  "windowslive",
+		"auth0|65f0c0ffee":                    "auth0",
+		// No separator: the whole string could be anything, including something
+		// that identifies a person, so it must not be echoed onto a span.
+		"local-dev-user": "unknown",
+		"":               "unknown",
+		// A leading separator would make the prefix empty, which is not a
+		// connection name either.
+		"|nothing": "unknown",
+	}
+	for subject, want := range cases {
+		if got := IdentityProvider(subject); got != want {
+			t.Errorf("IdentityProvider(%q) = %q, want %q", subject, got, want)
+		}
+	}
 }

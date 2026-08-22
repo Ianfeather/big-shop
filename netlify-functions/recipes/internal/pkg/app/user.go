@@ -12,6 +12,7 @@ import (
 	"recipes/internal/pkg/lifecycle"
 	"recipes/internal/pkg/service"
 	"recipes/internal/pkg/service/email"
+	"recipes/internal/pkg/telemetry"
 
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -29,6 +30,38 @@ type UserOutput struct {
 func (a *App) addUser(ctx context.Context, input *UserInput) (*UserOutput, error) {
 	user := input.Body
 	user.ID = callerFrom(ctx).UserID
+
+	// **Before anything is written.** Everything below this point is
+	// irreversible from the caller's point of view: AddUser inserts the `user`
+	// row, CreateAccount mints an Account, and sendWelcomeEmail puts something
+	// in an inbox. Once a row exists the collision is no longer detectable -
+	// the address now belongs to two subjects and neither is obviously the
+	// newcomer - so the check has to run first or not at all.
+	//
+	// See service.ConflictingUserID for why this is a net rather than the fix,
+	// and why it refuses instead of linking the two identities.
+	existing, err := service.ConflictingUserID(ctx, a.db, user.Email, user.ID)
+	if err != nil {
+		return nil, fail(ctx, huma.Error500InternalServerError("could not add new user"), err)
+	}
+	if existing != "" {
+		telemetry.SetIdentityCollision(ctx, service.IdentityProvider(user.ID), service.IdentityProvider(existing))
+		// Not routed through fail(): the cause *is* this, there is no inner
+		// error to record, and 409 is the API working rather than failing. Let
+		// register() record it at its own status, which leaves the span
+		// unmarked and keeps a person picking the wrong button out of the
+		// error rate.
+		//
+		// **The message deliberately does not name the provider they used
+		// before**, though IdentityProvider has just worked it out for the
+		// span. The address is caller-supplied (see ConflictingUserID), so
+		// anyone with a valid token could POST an arbitrary one and be told
+		// whether it has an account and how it was made - a plain account
+		// enumeration oracle. Naming it becomes safe, and would be a real
+		// improvement to this screen, once the address is verified
+		// server-side rather than taken from the body.
+		return nil, huma.Error409Conflict("This email address already has a Big Shop account, created with a different sign-in method.")
+	}
 
 	created, err := service.AddUser(ctx, a.db, user)
 	if err != nil {

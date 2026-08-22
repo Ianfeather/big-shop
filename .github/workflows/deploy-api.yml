@@ -90,3 +90,30 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
           SERVICE_VERSION: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      # The step above exiting 0 does not mean anything was deployed. flyctl
+      # creates a release and hands it to flyd; flyd can fail to apply it and
+      # revert the machine to its last working config, after which flyctl sees a
+      # started, healthy machine and reports success. That is not hypothetical -
+      # it froze production for a day in August 2026 while eleven consecutive
+      # runs of this workflow reported success. The script says how, and why no
+      # field on the release record can be read instead.
+      #
+      # A step in *this* job rather than a separate workflow, for three reasons.
+      # A run's conclusion is per-run, so only a step here can make Deploy API
+      # itself red - a second workflow would leave this one green, which is the
+      # exact failure being fixed. The `concurrency` group above serialises
+      # deploys, and a separate workflow would sit outside it, free to verify
+      # against a release a queued deploy had already superseded. And this job
+      # is deliberately the only holder of FLY_API_TOKEN.
+      #
+      # Distinct from the deploy step, though, because the two failures want
+      # different responses: a red Deploy is flyctl failing (build, token,
+      # timeout), a red Verify is flyctl succeeding while the machines refuse
+      # the config.
+      # No working-directory: the script cd's to the module holding fly.toml
+      # itself, so it behaves the same run from a workflow, a laptop or a hook.
+      - name: Verify the machines took the release
+        run: ./scripts/verify-fly-release.sh
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

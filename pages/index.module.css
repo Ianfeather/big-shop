@@ -61,14 +61,6 @@
   display: none;
 }
 
-/* Mid-flight back from Auth0's login page, with /list already on its way.
-   `visibility` rather than `display` so the page keeps its layout and the
-   paper background stays - a blank sheet for a moment, not a white flash and
-   a reflow. */
-:global(html[data-auth='returning']) .page {
-  visibility: hidden;
-}
-
 .primary:focus-visible {
   outline: 2px solid var(--spot);
   outline-offset: 3px;

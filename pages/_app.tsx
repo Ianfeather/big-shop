@@ -6,8 +6,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import useAuth0, { authDisabled } from '@hooks/use-auth';
+import useAccountSetup from '@hooks/use-account-setup';
 import { requireEnv } from '../lib/env';
-import { appOrigin } from '../lib/app-origin';
+import { loginRedirectUri } from '../lib/app-origin';
 import { identifyUser, setupFaro, setView } from '../lib/telemetry/faro';
 import { ConsentProvider } from '@components/consent-banner';
 import ConsentSync from '@components/consent-sync';
@@ -29,6 +30,11 @@ if (typeof window !== 'undefined') {
 const InnerApp = ({ Component, pageProps }: Pick<AppProps, 'Component' | 'pageProps'>) => {
   const { isAuthenticated, isLoading, user } = useAuth0();
   const router = useRouter();
+  // Creates the User row and Account on a first login, and says when a page
+  // that reads them may render. Mounted here rather than on a page because the
+  // Auth0 callback now lands on /list, so there is no longer one page every new
+  // user is guaranteed to pass through - see hooks/use-account-setup.ts.
+  const { accountReady } = useAccountSetup();
 
   useEffect(() => {
     if (!isAuthenticated && !isLoading) {
@@ -44,7 +50,11 @@ const InnerApp = ({ Component, pageProps }: Pick<AppProps, 'Component' | 'pagePr
     identifyUser(user?.sub);
   }, [user?.sub]);
 
-  if (isLoading || !isAuthenticated) {
+  // accountReady joins the same gate rather than getting one of its own: both
+  // answer "is there enough for this page to fetch anything?", and both render
+  // nothing until they do. It is only ever false on the return from Auth0, so
+  // an ordinary launch waits on exactly what it waited on before.
+  if (isLoading || !isAuthenticated || !accountReady) {
     return false;
   }
 
@@ -152,14 +162,16 @@ export default function App({ Component, pageProps, router }: AppProps) {
       // to match the wire format. domain/clientId/useRefreshTokens/
       // cacheLocation stay top-level - they configure the client, not the
       // authorize request.
-      // redirect_uri is the origin we are actually being served from, not the
-      // build-time NEXT_PUBLIC_HOST - otherwise a deploy preview sends the user
-      // to production to finish logging in (follow-ups.md #48). Auth0 still has
-      // to allow whatever origin this resolves to; see lib/app-origin.ts and
-      // docs/deploy-previews.md.
+      // redirect_uri is built from the origin we are actually being served
+      // from, not the build-time NEXT_PUBLIC_HOST - otherwise a deploy preview
+      // sends the user to production to finish logging in (follow-ups.md #48).
+      // It points at /list rather than the origin root so that finishing a
+      // login lands where the installed PWA launches; see loginRedirectUri.
+      // Auth0 still has to allow whatever this resolves to; see
+      // lib/app-origin.ts and docs/deploy-previews.md.
       authorizationParams={{
         audience,
-        redirect_uri: appOrigin()
+        redirect_uri: loginRedirectUri()
       }}
       useRefreshTokens={true}
       cacheLocation="localstorage"

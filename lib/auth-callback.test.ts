@@ -24,9 +24,10 @@ describe('arrivedFromLogin', () => {
     expect(await loadWith('')).toBe(false);
   });
 
-  // The distinction the homepage now hangs its only redirect on. A visitor who
-  // did not come from Auth0 stays on `/`, so anything that reads as a callback
-  // when it is not would put the flash straight back.
+  // The distinction hooks/use-account-setup.ts hangs its render gate on. A
+  // false positive here would hold every ordinary launch of the app behind a
+  // round trip it does not need - the blank first frame this change exists to
+  // remove.
   it('is false for an unrelated query string', async () => {
     expect(await loadWith('?utm_source=newsletter&ref=twitter')).toBe(false);
   });

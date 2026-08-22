@@ -1,16 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import { useRouter } from 'next/router';
-import { useMutation } from '@tanstack/react-query';
 import styles from './index.module.css';
 import Logo from '@components/svg/logo';
 import useAuth0 from '@hooks/use-auth';
 import useLogin from '@hooks/use-login';
 import { useCookieSettings } from '@components/consent-banner';
-import { apiPost, apiPatch } from '../lib/api-client';
-import { arrivedFromLogin } from '../lib/auth-callback';
-import type { User } from '../types/models';
 
 // The logged-out homepage: a marketing page for someone who has never heard of
 // Big Shop. Editorial/print direction - warm paper, ink, one claret accent,
@@ -23,8 +18,10 @@ import type { User } from '../types/models';
 // should be one (follow-ups.md #58). The redirect is gone; `/` now does one
 // job, and the header is what tells a logged-in visitor where their list is.
 //
-// One arrival is still sent onward: coming back from Auth0's login page, where
-// staying put would make the Log in button look broken. See lib/auth-callback.ts.
+// It now redirects nobody at all. Coming back from Auth0 used to land here and
+// be forwarded on; that callback goes straight to /list (lib/app-origin.ts), so
+// this page has one job and no navigation of its own. What is left is the
+// `data-auth` stamp, which only decides which CTAs a logged-in visitor sees.
 
 // The two human needs underneath the mechanics: the deciding, and the buying
 // twice. Both are written as a concession followed by the real claim - saying
@@ -151,92 +148,11 @@ const PreviewItem = ({ name, amount, bought = false }: PreviewItemProps) => (
   </li>
 );
 
-// The browser's IANA timezone name, or undefined if it will not say.
-//
-// Sent on the POST /user the page already makes, rather than through a route or
-// a round trip of its own - it is one more field on a payload that exists.
-//
-// The server stores it on insert only and never updates it, so in practice this
-// value matters on a first login and is ignored on every subsequent one. It is
-// read by the onboarding email sequence, which sends at 10:00 in the recipient's
-// morning instead of ours (specs/completed/email.md); nothing in the UI uses it.
-//
-// Guarded rather than called directly because resolvedOptions().timeZone is
-// specified to return the runtime's zone but is not universally reliable, and
-// this runs inside the effect that creates the User - an exception here would
-// take the signup with it, which is a spectacularly bad trade for a nicety. An
-// absent zone is a supported state all the way down: the column is nullable and
-// the sender falls back to Europe/London.
-const browserTimezone = (): string | undefined => {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
-  } catch {
-    return undefined;
-  }
-};
-
 const Index = () => {
-  const { isAuthenticated, isLoading, user, getAccessTokenSilently } = useAuth0();
+  const { isAuthenticated, isLoading } = useAuth0();
   const { logIn, signUp } = useLogin();
   const openCookieSettings = useCookieSettings();
-  const router = useRouter();
-  // null until POST /user has come back and said which of the two this is.
-  // Neither state hides the page any more - 'onboarding' swaps the CTAs, and
-  // 'redirecting' only ever happens on the way out to /list.
-  const [status, setStatus] = useState<'onboarding' | 'redirecting' | null>(null);
 
-  // Neither mutation invalidates: no cached query reads User state, and on
-  // first login there is nothing in the cache yet to be stale.
-  const saveUserMutation = useMutation({
-    // Partial, not a bare Pick: `email` is required on the generated User (the
-    // server needs one) but Auth0 hands back `string | undefined`, and this
-    // call has always forwarded whatever it got. Derived from User rather than
-    // restated inline so a field added to the model cannot silently drift.
-    mutationFn: async (payload: Partial<Pick<User, 'name' | 'email' | 'timezone'>>) => {
-      const token = await getAccessTokenSilently();
-      return apiPost<User>('/user', token, payload);
-    }
-  });
-
-  const completeOnboardingMutation = useMutation({
-    mutationFn: async () => {
-      const token = await getAccessTokenSilently();
-      return apiPatch('/user/onboarding', token);
-    }
-  });
-
-  useEffect(() => {
-    if (isLoading || !isAuthenticated) return;
-
-    async function resolveOnboarding() {
-      if (!user) return;
-      const { name, email } = user;
-      // Still unconditional, and still on this page only: POST /user is what
-      // creates the User row and its Account on a first login, and `/` is its
-      // only caller in the app. It is an idempotent upsert, so running it on
-      // an ordinary visit from an already-known user costs one request and
-      // repairs the case where the original call failed.
-      const saved = await saveUserMutation
-        .mutateAsync({ name, email, timezone: browserTimezone() })
-        .catch(() => undefined);
-      if (saved?.onboarded) {
-        // The only surviving redirect. They clicked Log in, went to Auth0, and
-        // came back here because that is where redirect_uri points - so send
-        // them into the product. Someone who simply typed the bare domain did
-        // not ask to go anywhere, and stays.
-        if (arrivedFromLogin) {
-          setStatus('redirecting');
-          router.replace('/list');
-        }
-        return;
-      }
-      // First-time user: show the onboarding screen once, and mark them
-      // onboarded in the background so their next login skips straight to /list.
-      setStatus('onboarding');
-      completeOnboardingMutation.mutate();
-    }
-    resolveOnboarding();
-  }, [isLoading, isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Both CTAs come in two versions - "sign up" and "go to your list" - and,
   // like the header, which one shows is decided in CSS from the `data-auth`
@@ -268,19 +184,18 @@ const Index = () => {
     // that this whole mechanism exists to remove.
     if (isLoading) return;
 
-    // Hold the page veiled only while an authenticated arrival is genuinely
-    // still on its way to /list. Every other outcome reveals it - including a
-    // login that failed, which is what stops a bad callback stranding someone
-    // on a blank screen.
-    const leaving = isAuthenticated && arrivedFromLogin && status !== 'onboarding';
-    el.dataset.auth = leaving ? 'returning' : isAuthenticated ? 'in' : 'out';
+    // Two answers now, not three. There used to be a 'returning' state that
+    // veiled the page while an authenticated arrival was on its way to /list -
+    // necessary when Auth0's callback landed here and this page had to forward
+    // it on. The callback goes straight to /list now (lib/app-origin.ts), so
+    // nobody passes through mid-login and there is nothing to veil: everyone
+    // who reaches `/` meant to.
+    el.dataset.auth = isAuthenticated ? 'in' : 'out';
 
-    // <html> outlives this page. Left alone, a client-side navigation to /list
-    // would carry 'returning' with it - harmless, since every rule keyed off it
-    // is scoped to this page's styles, but a stale attribute that only looks
-    // harmless is the kind of thing the next person has to re-derive.
+    // <html> outlives this page, so clear the stamp on the way out rather than
+    // letting a client-side navigation carry it to a page that never set it.
     return () => { delete el.dataset.auth; };
-  }, [isLoading, isAuthenticated, status]);
+  }, [isLoading, isAuthenticated]);
 
   return (
     <>

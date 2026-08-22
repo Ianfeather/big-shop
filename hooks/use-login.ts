@@ -1,5 +1,5 @@
 import useAuth0 from '@hooks/use-auth';
-import { appOrigin } from '../lib/app-origin';
+import { loginRedirectUri } from '../lib/app-origin';
 
 // The redirect params behind the Log In / Get started buttons, in one place so
 // the marketing pages can style their own buttons without each re-deriving
@@ -11,14 +11,14 @@ export default function useLogin() {
 
   const logIn = () => loginWithRedirect({
     authorizationParams: {
-      redirect_uri: appOrigin()
+      redirect_uri: loginRedirectUri()
     }
   });
 
   const signUp = () => loginWithRedirect({
     authorizationParams: {
       screen_hint: 'signup',
-      redirect_uri: appOrigin()
+      redirect_uri: loginRedirectUri()
     }
   });
 

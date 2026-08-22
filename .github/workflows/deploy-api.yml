@@ -58,6 +58,24 @@ jobs:
       # surfaced it. Re-check this tag whenever a runner deprecation lands.
       - uses: superfly/flyctl-actions/setup-flyctl@1.6
 
+      # Before the deploy, because a machine_config.json naming a secret that
+      # does not exist produces a config flyd cannot apply - it reverts the
+      # machine, and flyctl reports success over the top of it. The Verify step
+      # at the end catches that, but only after a full remote build and only by
+      # its symptom. This catches the cause, in seconds, and says which name is
+      # wrong. It also catches the opposite drift, which Verify cannot see at
+      # all: a secret that exists and reaches no container is simply empty at
+      # runtime, and has twice meant a security property silently not holding.
+      #
+      # It lives here rather than in ci.yml because it needs FLY_API_TOKEN, and
+      # this job is deliberately the only holder of it. The cost is that the
+      # check runs on master rather than on the pull request that introduced the
+      # drift - acceptable, since it still runs before anything is deployed.
+      - name: Check the declared secrets against the app's
+        run: ./scripts/check-fly-secrets.sh
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
       # --remote-only builds on Fly's builder rather than this runner. It is
       # already flyctl's default (--local-only is the opt-out), so this is
       # explicit rather than necessary - worth keeping so the intent survives a

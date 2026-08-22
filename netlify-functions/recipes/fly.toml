@@ -37,6 +37,13 @@ primary_region = "fra"
 # which for a credential means a feature that fails only when exercised. Adding
 # a secret is now a two-part change: set it, and declare it.
 #
+# **This is now checked rather than only written down.** After four instances,
+# three of which are recorded below, scripts/check-fly-secrets.sh reconciles the
+# names in machine_config.json against the names in `fly secrets` and fails the
+# deploy on drift in either direction. That does not make the rest of this
+# comment redundant - the check tells you a name is wrong, and the paragraphs
+# below are what tell you what goes wrong when it is.
+#
 # Live example, now resolved and left here as the worked one: SENDGRID_API_KEY
 # was read by the API for invitation emails while not being set on this app at
 # all, so that flow was broken independently of any of this. It is now set with

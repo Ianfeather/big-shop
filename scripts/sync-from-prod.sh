@@ -95,13 +95,14 @@ run_mysqldump "$TIDB_DB" recipe_tag \
 
 echo "Saved to ${DUMP_FILE}"
 
-echo "Bringing up the local db container..."
-docker compose up -d db
-
-echo "Waiting for MySQL to be ready..."
-until docker compose exec -T db mysqladmin ping -uroot -proot --silent 2>/dev/null; do
-  sleep 1
-done
+# Bring the local schema up to date first. This script imports data only
+# (--no-create-info), into whatever schema the volume happens to have - so a
+# volume that is behind migrations/ silently lands production's rows in the
+# wrong shape, or fails on a column it does not have yet. ensure-db-current.sh
+# brings `db` up and waits for it, which is why there is no separate up/ping
+# here any more.
+echo "Checking the local schema is up to date..."
+scripts/ensure-db-current.sh
 
 echo "Clearing existing recipe-related tables locally..."
 echo "(any local-only test data in these tables will be lost)"

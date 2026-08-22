@@ -78,7 +78,43 @@ This runs `scripts/dev-full.sh`, which:
   directory is no longer empty — producing a Healthy container with exactly
   the broken schema the check rejected. **Fixing the migration is not enough
   on its own for the same reason: the replay only runs against an empty data
-  directory, so recreate the volume** (`docker compose down -v`).
+  directory, so the volume has to be recreated** — which `npm run dev:full`
+  now does for you (below).
+
+  **A volume that is merely *behind* is repaired automatically, and you should
+  never need to run `docker compose down -v` by hand.** The replay above runs
+  exactly once in a volume's life, so it could not catch this: `ok = 1` is a
+  statement about the day the volume was created and stays 1 forever, meaning
+  a volume that predates a migration reported Healthy while serving a schema
+  with holes in it. The symptom was an application-looking 500, not a schema
+  error.
+
+  Two things now close that. The init script records *which* migrations it
+  replayed on `_migration_status`, and the healthcheck compares that set
+  against `./migrations` (bind-mounted into the container) on every check, so
+  `api` refuses to start against a stale schema through the same mechanism
+  that already protects it from a broken one. And `scripts/ensure-db-current.sh`
+  — run by `dev-full.sh` before anything waits on health, and by
+  `sync-from-prod.sh` before it imports — *repairs* the drift rather than
+  reporting it: it dumps the volume's data out of the running container, drops
+  the volume, lets the init path replay and seed, and restores the data. On a
+  volume that is already current it is one `SELECT` and prints nothing.
+
+  The premise is that **the dev database volume is a cache, not a store of
+  record**: everything in it is reconstructible from `migrations/*.sql`,
+  `docker/mysql-seed/dev-seed.sql` and a dump on the host. `sync-from-prod.sh`
+  already worked this way — it truncates and reimports on every run, and its
+  `--no-create-info --complete-insert` exists precisely so production's rows
+  can land in a *local* schema that is ahead of production.
+
+  **The one case that still needs you** is a migration that rewrites rows
+  rather than schema (`022`, `023`, `029`, `031` are of this kind). The
+  restore puts your old rows back as they were, so a fixup that migration
+  would have applied stays unapplied locally. The script warns when it sees
+  one, and the fix is `scripts/sync-from-prod.sh` — production has had the
+  migration applied properly. If the restore fails outright (a new column or
+  constraint the old rows cannot satisfy) the database is rebuilt clean, and
+  the dump is kept and named so nothing is lost.
 - Brings up `lgtm` (`grafana/otel-lgtm` — Collector, Tempo, Loki, Prometheus
   and Grafana in one image), the local stand-in for the Grafana Cloud stack.
   Grafana is on **3200**, not 3000 — the web app keeps 3000. The API exports

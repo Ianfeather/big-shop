@@ -39,24 +39,67 @@ services:
       #
       # Unhealthy here means: `docker compose logs db`, then
       # `docker compose down -v && docker compose up -d db` once fixed.
-      # 3. A data directory created before _migration_status existed is not a
-      #    failure. The script creates that table before it applies anything,
-      #    so on any volume it has ever run, the table is there - absence means
-      #    the volume predates this check entirely. The entrypoint will never
-      #    re-run migrations on it (non-empty data directory), so there is
-      #    nothing for the check to check, and it falls back to the plain ping
-      #    this healthcheck used to be. Without that, upgrading turned every
-      #    existing developer's database unhealthy and the only way out was
-      #    `down -v`, which throws away a synced copy of production.
+      # 3. The migrations that applied are the ones the repo has. (2) only ever
+      #    spoke about the day the volume was created: the entrypoint runs
+      #    docker-entrypoint-initdb.d exactly once, when the data directory is
+      #    empty, so `ok = 1` is frozen from then on. Add a migration and every
+      #    existing volume is silently behind, with this healthcheck asserting
+      #    the opposite - the check cannot run, precisely because the volume is
+      #    stale. So the script now also records the basenames it replayed, and
+      #    this compares them against ./migrations, which is already bind-mounted
+      #    here read-only. `api` therefore refuses to start against a schema that
+      #    is merely out of date, through the same mechanism that already
+      #    protects it from one a migration failed to build.
+      #
+      #    A volume with no _migration_status row, no `applied` column or a NULL
+      #    value fails too. This reverses the earlier version of this comment,
+      #    which fell back to a plain ping on an unrecorded volume so that
+      #    upgrading would not turn every existing database unhealthy - the cost
+      #    of the only remedy then available being a `down -v` that "throws away
+      #    a synced copy of production". scripts/ensure-db-current.sh has since
+      #    made the remedy automatic and non-destructive, so that cost is gone;
+      #    and an unrecorded volume is exactly the one most likely to be stale,
+      #    so trusting it was blind in the worst possible place.
+      #
+      #    This detects and refuses; it never repairs. A healthcheck must be
+      #    side-effect-free, and it has nowhere to put a dump. The repair lives
+      #    in ensure-db-current.sh, which dev-full.sh runs *before* anything
+      #    waits on this. Keeping the check here as well is what covers someone
+      #    running a bare `docker compose up -d db api` around the wrapper.
+      #
+      # Unhealthy here means: `npm run dev:full`, which repairs both cases (or
+      # tells you which migration is broken). `docker compose logs db` for why.
       test:
         - CMD-SHELL
         - >-
-          if mysql -h 127.0.0.1 -uroot -proot -N -B -e "SELECT ok FROM bigshop._migration_status WHERE id = 1" 2>/dev/null | grep -qx 1; then exit 0; fi;
-          if mysql -h 127.0.0.1 -uroot -proot -N -B -e "SELECT 1 FROM bigshop._migration_status LIMIT 0" >/dev/null 2>&1; then exit 1; fi;
-          mysqladmin ping -h 127.0.0.1 -uroot -proot
+          expected="$$(cd /migrations && ls -1 *.sql | sort | tr '\n' '@')";
+          mysql -h 127.0.0.1 -uroot -proot -N -B
+          -e "SELECT 1 FROM bigshop._migration_status WHERE id = 1 AND ok = 1
+          AND REPLACE(applied, CHAR(10), '@') = '$$expected'"
+          2>/dev/null | grep -qx 1
       interval: 5s
       timeout: 5s
-      retries: 20
+      # 20 before start_period existed, because the retry budget was doubling as
+      # the window for the initial replay. That is what start_period is for, and
+      # once the check has succeeded once, retries only ever delays *noticing*.
+      # 5 keeps a transient hiccup from flapping the container while still
+      # reporting drift within half a minute.
+      retries: 5
+      # The replay of every migration plus the seed happens inside this window on
+      # a fresh volume, and it is longer than retries x interval. Failures during
+      # it are expected and must not count towards `retries`. Docker ends the
+      # period early on the first success, so this costs nothing on a volume that
+      # is already good - a fresh one here reports healthy in about 12 seconds,
+      # and this is 5x that for a slower machine.
+      #
+      # Sized down rather than up, because it is also how long a *stale* volume
+      # sits in `starting` before it admits to being unhealthy: the two cases are
+      # indistinguishable to a healthcheck, which has only pass and fail to say
+      # it with. That delay is only ever paid by someone running a bare
+      # `docker compose up -d db api` - through dev-full.sh or sync-from-prod.sh,
+      # ensure-db-current.sh has already repaired the drift before anything waits
+      # on health at all.
+      start_period: 60s
 
   # Collector, Tempo, Loki, Prometheus and Grafana in one image - the local
   # stand-in for the Grafana Cloud stack, so no cloud credentials exist outside

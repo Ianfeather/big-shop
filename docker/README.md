@@ -7,6 +7,15 @@ runs everything in `mysql-init/` automatically, which applies
 synthetic recipes, just enough to exercise every page. That happens once per
 volume - it doesn't re-run on every `docker compose up` (see `CLAUDE.md`).
 
+Because it happens once per volume, a volume created before a migration was
+added would otherwise go on serving a schema without it. `dev:full` therefore
+runs `../scripts/ensure-db-current.sh` first, which notices and repairs that:
+it dumps the volume's data (to `prod-dumps/pre-rebuild-<timestamp>.sql`),
+recreates the volume so the init path replays every migration, and restores
+the data on top. Silent and instant when there is nothing to do. **You should
+not need to run `docker compose down -v` by hand**, and the sync described
+below goes through the same check before it imports.
+
 This doc covers the alternative: pulling in your own real recipes from
 production instead of the two made-up ones.
 
@@ -41,6 +50,12 @@ script, only the recipe-related tables.
 **Heads up**: importing replaces the local `recipe`, `part`, `recipe_tag`,
 `ingredient`, `unit`, `tag`, and `department` tables entirely. Any test
 recipes you'd added locally through the app are gone after this runs.
+
+This is also why a rebuild by `ensure-db-current.sh` is not the data loss it
+sounds like: this script already treats the local copy as disposable and
+reproducible, and step 3 leaves a replayable dump on the host, outside the
+volume. What a rebuild preserves that this script does not is local-only data
+you made through the app.
 
 ## Before running it: find your account id
 

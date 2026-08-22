@@ -87,7 +87,7 @@ primary_region = "fra"
 #     docs/fly-migration-runbook.md used to imply it went. See the note by the
 #     value itself.
 #
-# Three are secrets, set out-of-band with `fly secrets set` (see
+# Five are secrets, set out-of-band with `fly secrets set` (see
 # docs/fly-migration-runbook.md) and deliberately absent from this file:
 #
 #   TIDB_PASSWORD     - the database password, and now the *only* part of the
@@ -104,6 +104,21 @@ primary_region = "fra"
 #                       that it was set but undeclared, and HashEmail quietly
 #                       degraded to a plain SHA-256. The worked example of the
 #                       trap above.
+#   AUTH0_MGMT_CLIENT_ID / AUTH0_MGMT_CLIENT_SECRET - the machine-to-machine
+#                       credentials erasure.go exchanges for a Management API
+#                       token, to delete the Auth0 identity when an Account is
+#                       deleted. Set when #59 shipped (a705081, 2026-08-20) and
+#                       declared by nobody, so for the two days between that and
+#                       this line auth0Configured() (erasure.go) saw two empty
+#                       strings and returned false in production. Deletion went
+#                       on removing every database row while silently skipping
+#                       the identity - the precise bug #59 existed to fix, so a
+#                       deleted user could still log in, resolving to nothing.
+#
+#                       Note the irony of the dates: a705081 is also the config
+#                       the machines were frozen on while the deploys reverted,
+#                       so this is one gap the freeze did not cause and did not
+#                       hide. It was undeclared from the first minute it ran.
 #
 # DISABLE_AUTH must never be set here. It is a local-development
 # switch that makes the API resolve every request to DEV_USER_ID without

@@ -417,3 +417,30 @@ func TestSoleMemberDecision(t *testing.T) {
 		}
 	}
 }
+
+// TestHasAccountQuery pins the two properties of CreateAccount's lookup that are
+// invisible by inspection and were both wrong before.
+//
+// Asserted against the query constant the function runs, rather than a copy of
+// it, for the same reason TestOtherAccountMembersQuery is: the behaviour lives
+// entirely in the predicate, and there is no way to fake *sql.Row to reach it.
+func TestHasAccountQuery(t *testing.T) {
+	// EXISTS is what makes sql.ErrNoRows impossible, which is what lets
+	// CreateAccount treat every scan error as a real failure instead of having to
+	// tell "no account yet" apart from "the query broke". Selecting account_id
+	// instead reintroduces that distinction - and it was getting it wrong that
+	// made the function correct only by accident.
+	if !strings.Contains(hasAccountQuery, "EXISTS") {
+		t.Errorf("the lookup can return no rows, so a broken query is indistinguishable from a new user: %s", hasAccountQuery)
+	}
+	// The deliberate disagreement with GetAccountID. Adding this filter mints a
+	// second Account for a user sitting between the deletion sequence's soft gate
+	// and its cascade, undoing the gate and orphaning an `account` row. See
+	// hasAccountQuery's comment for the full argument.
+	if strings.Contains(hasAccountQuery, "enabled") {
+		t.Errorf("filtering on enabled makes a mid-deletion user look accountless, so POST /user mints them a second Account: %s", hasAccountQuery)
+	}
+	if !strings.Contains(hasAccountQuery, "user_id = ?") {
+		t.Errorf("the lookup is not scoped to one user: %s", hasAccountQuery)
+	}
+}

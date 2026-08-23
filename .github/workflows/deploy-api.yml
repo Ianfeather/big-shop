@@ -30,12 +30,115 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  # Decides whether this run should deploy at all, and says so out loud.
+  #
+  # **The workflow definition and the tree it operates on are two different
+  # commits, and nothing used to reconcile them.** For `workflow_run` GitHub
+  # takes the workflow file from the default branch's tip, while the checkout
+  # below deliberately pins the triggering commit. Both halves are right on
+  # their own; together they mean a run can execute master's newest steps
+  # against a checkout that predates them.
+  #
+  # That is observed, not theorised. Run 32585058437, 2026-08-22: PR #139 merged,
+  # then PR #137 - which added scripts/verify-fly-release.sh and the step calling
+  # it - merged moments later. The deploy triggered by #139's CI ran with
+  # github.sha = 5ec3e82 (#137, already carrying the new step) against a checkout
+  # of 9369bb5 (#139), which predates the script:
+  #
+  #   ./scripts/verify-fly-release.sh: No such file or directory
+  #   ##[error]Process completed with exit code 127
+  #
+  # That failure was loud. The same mechanism running the other way is silent: a
+  # step *deleted* from the workflow still runs when the trigger is old, and a
+  # step that reads a config file which has since changed shape reads it wrongly
+  # with nothing to report.
+  #
+  # **The fix is to deploy only master's tip, rather than to reconcile the two
+  # halves after the fact.** `github.sha` on a `workflow_run` event is the last
+  # commit on the default branch - which is exactly the commit the workflow
+  # definition was taken from - so requiring it to equal the commit being checked
+  # out collapses workflow, tree and tip into one commit. Both directions of the
+  # problem then cannot arise, rather than being detected.
+  #
+  # It also fixes a second hazard that had nothing to do with missing scripts.
+  # `concurrency` above queues deploys rather than superseding them, and nothing
+  # ordered the queue by commit. Two commits landing close together, the newer
+  # one's CI finishing first, would deploy the newer and then the older on top -
+  # a silent rollback of whatever the newer one changed, lasting until the next
+  # push. An older commit's run now skips instead.
+  #
+  # **What this gives up**, deliberately: if master's tip goes red, the previous
+  # green commit no longer ships. Its run skips because it is not the tip, and
+  # the tip's own run never happens because CI failed. Nothing is lost, and the
+  # next green commit carries everything - but a red master now blocks deploys
+  # rather than quietly shipping the commit before it. A red master is already
+  # the thing to fix first.
+  #
+  # A separate job rather than a condition on `deploy` itself so the decision is
+  # *visible*. Both values are plain contexts, so this could have been an
+  # expression in the job-level `if` below - but a job that reports "skipped"
+  # with no reason is the same genre of silence as the bug it fixes.
+  guard:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
+    # The conclusion gate stays at job level, where it was, so a red CI costs no
+    # runner at all - it is by far the most common reason not to deploy, and a
+    # skipped Deploy API after a failed CI needs no explaining. The decision this
+    # job exists to narrate is the surprising one below.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
+    outputs:
+      deploy: ${{ steps.decide.outputs.deploy }}
+    steps:
+      - id: decide
+        env:
+          # The commit CI passed on, and the one the deploy would check out.
+          TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
+          # The default branch's tip, and the commit this very file came from.
+          TIP_SHA: ${{ github.sha }}
+          EVENT: ${{ github.event_name }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: |
+          set -euo pipefail
+
+          # workflow_dispatch checks out a hard 'master', so it is the tip by
+          # construction and there is nothing to compare.
+          if [ "$EVENT" = workflow_dispatch ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Manual dispatch: deploying master."
+            exit 0
+          fi
+
+          # Belt and braces. The job-level `if` above already screens this out,
+          # so reaching here means that condition and this one have drifted
+          # apart - which should fail closed rather than deploy. `completed`
+          # includes failure and cancelled.
+          if [ "$CONCLUSION" != success ]; then
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::CI concluded '$CONCLUSION', not 'success'. Not deploying."
+            exit 0
+          fi
+
+          if [ "$TRIGGER_SHA" != "$TIP_SHA" ]; then
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping: $TRIGGER_SHA is no longer master's tip ($TIP_SHA)."
+            echo "::notice::This workflow file came from $TIP_SHA, so its steps and the"
+            echo "::notice::checkout would be different commits - see the comment in"
+            echo "::notice::deploy-api.yml. Deploying anyway could also put an older"
+            echo "::notice::commit on top of a newer one that already shipped."
+            echo "::notice::$TIP_SHA deploys via its own CI run. Nothing to do here."
+            exit 0
+          fi
+
+          echo "deploy=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::$TRIGGER_SHA is master's tip and passed CI. Deploying."
+
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: guard
+    if: needs.guard.outputs.deploy == 'true'
     steps:
       # Two things this ref is doing. For workflow_run, checkout would otherwise
       # take the default branch's tip rather than the commit CI actually ran
@@ -44,6 +147,14 @@ jobs:
       # not github.ref: dispatching from a feature branch would otherwise push
       # that branch straight onto the production machine, and per-branch API
       # deploys are explicitly out of scope for this migration.
+      #
+      # The `guard` job above has already established that this ref *is* the
+      # default branch's tip, so the pin is no longer the only thing keeping the
+      # deployed image and the tested commit together - it is now also the same
+      # commit this workflow file was read from. Keep the pin regardless: it is
+      # what makes that equality checkable rather than assumed, and dropping it
+      # would silently reintroduce "deploy whatever master is now" on a run
+      # triggered by an older commit.
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha || 'master' }}

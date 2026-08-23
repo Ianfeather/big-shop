@@ -197,6 +197,15 @@ A deploy token is scoped to this one app — do not use a personal access token.
 Test it: Actions → Deploy API → Run workflow. It always deploys `master`, whatever branch
 you dispatch from.
 
+**Run workflow is also how you force a redeploy — re-running an old CI run is not.**
+Deploy API only proceeds when the commit that triggered it is still `master`'s tip, so
+re-running CI for an older commit now skips with a notice explaining why, instead of
+deploying. That is deliberate: the workflow definition always comes from `master`'s tip
+while the checkout is pinned to the triggering commit, so an older trigger runs today's
+steps against a tree that predates them (it once called a script that did not exist yet,
+and failed at exit 127), and it can also put an older commit on top of a newer one that
+has already shipped. See the comment on the `guard` job in `deploy-api.yml`.
+
 ## 5. Cut over
 
 This is the only step users can notice.

@@ -10,26 +10,66 @@ import (
 	"github.com/google/uuid"
 )
 
-// CreateAccount creates a new account for a user
+// hasAccountQuery asks whether a User holds *any* membership row - not which
+// Account they can currently reach, which is GetAccountID's different question.
+//
+// **The absence of `enabled = true` is deliberate, and it is the one place these
+// two functions are allowed to disagree.** GetAccountID filters it because it
+// answers "where do this person's recipes live right now", and a disabled row is
+// a membership somebody has left. This answers "should a fresh Account be minted
+// for them", and there the disabled row still counts: the only way to hold
+// nothing but disabled memberships is to be sitting between the deletion
+// sequence's soft gate and its cascade (DisableUserAccount, and see
+// DeleteAccount). Filtering them out would mint a second Account for someone
+// mid-deletion - re-granting the access the gate just took away, and leaving an
+// orphan `account` row behind when the cascade deletes every membership by
+// user_id but only the original Account by id.
+//
+// So POST /user for a gated user creates nothing and the request then fails
+// downstream where GetAccountID finds no reachable Account. That is a worse
+// error message than it deserves, but it is the correct outcome: the gate holds.
+// Unreachable in practice today - the cascade deletes the rows outright - but
+// the reasoning is what stops a future edit "fixing" the inconsistency.
+//
+// EXISTS rather than a SELECT of the id, because existence is the entire
+// question. A user can hold two membership rows (the invite flow disables the
+// old one and inserts a new one), so selecting account_id returns an arbitrary
+// one of them, and having a variable in scope that looks like "their account id"
+// but is only meaningful on the branch that just wrote it is how this function
+// came to be correct by accident. There is now no such variable to misread.
+const hasAccountQuery = `SELECT EXISTS(SELECT 1 FROM account_user WHERE user_id = ?)`
+
+// CreateAccount gives a User an Account if they do not already have one.
+//
+// A no-op for everyone but a genuinely new user, which is almost every call: it
+// hangs off POST /user, and that runs on every login.
 func CreateAccount(ctx context.Context, db *sql.DB, user common.User) error {
-	var accountID int
-	accountQuery := `SELECT account_id FROM account_user WHERE user_id = ?`
-	err := db.QueryRowContext(ctx, accountQuery, user.ID).Scan(accountID)
-	if err != nil && err == sql.ErrNoRows {
-		// create a new account
-		res, err := db.ExecContext(ctx, `INSERT INTO account (id) VALUES (null)`)
-		if err != nil {
-			return fmt.Errorf("creating account: %w", err)
-		}
-		id, err := res.LastInsertId()
-		if err != nil {
-			return fmt.Errorf("reading new account id: %w", err)
-		}
-		accountID = int(id)
-		accountUserQuery := `INSERT INTO account_user (user_id, account_id) VALUES (?, ?)`
-		if _, err := db.ExecContext(ctx, accountUserQuery, user.ID, accountID); err != nil {
-			return fmt.Errorf("linking user to new account: %w", err)
-		}
+	// EXISTS always returns exactly one row, so sql.ErrNoRows cannot happen here
+	// and every error is a real one. That is the point of the shape: this used to
+	// scan into a non-pointer `int`, which made `Scan` fail with "destination not
+	// a pointer" for every returning user - and because that error is not
+	// ErrNoRows, the create branch was skipped and the error discarded. The right
+	// behaviour, reached by declining to create an Account for a reason that had
+	// nothing to do with whether one existed.
+	var exists bool
+	if err := db.QueryRowContext(ctx, hasAccountQuery, user.ID).Scan(&exists); err != nil {
+		return fmt.Errorf("checking whether the user already has an account: %w", err)
+	}
+	if exists {
+		return nil
+	}
+
+	res, err := db.ExecContext(ctx, `INSERT INTO account (id) VALUES (null)`)
+	if err != nil {
+		return fmt.Errorf("creating account: %w", err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("reading new account id: %w", err)
+	}
+	accountUserQuery := `INSERT INTO account_user (user_id, account_id) VALUES (?, ?)`
+	if _, err := db.ExecContext(ctx, accountUserQuery, user.ID, int(id)); err != nil {
+		return fmt.Errorf("linking user to new account: %w", err)
 	}
 	return nil
 }

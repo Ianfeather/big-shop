@@ -119,3 +119,13 @@
   font-size: var(--text-sm);
   font-weight: bold;
 }
+
+/* Deliberately a quiet note rather than a badge among the Tags. A Tag
+   describes the dish; this describes its publication, which is a different
+   kind of fact and should not read as another label on the food. */
+.featured {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  font-style: italic;
+  color: var(--ink-soft);
+}

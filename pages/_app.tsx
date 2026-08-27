@@ -10,6 +10,7 @@ import useAccountSetup from '@hooks/use-account-setup';
 import { requireEnv } from '../lib/env';
 import { loginRedirectUri } from '../lib/app-origin';
 import { identifyUser, setupFaro, setView } from '../lib/telemetry/faro';
+import { rememberReturnTo, consumeReturnTo } from '../lib/return-to';
 import { ConsentProvider } from '@components/consent-banner';
 import ConsentSync from '@components/consent-sync';
 import Analytics from '@components/analytics';
@@ -38,9 +39,42 @@ const InnerApp = ({ Component, pageProps }: Pick<AppProps, 'Component' | 'pagePr
 
   useEffect(() => {
     if (!isAuthenticated && !isLoading) {
+      // Remember where they were trying to go before throwing it away. Without
+      // this the bounce is total: a logged-out click on a deep link - which the
+      // Day 8 email now sends - lands on the marketing page with no login
+      // prompt and no way back to what they clicked. The effect below picks it
+      // up once the login completes. See lib/return-to.ts.
+      rememberReturnTo(router.asPath);
       router.push('/');
     }
   }, [isAuthenticated, router, isLoading]);
+
+  // The other half of that bounce: finish the journey it interrupted.
+  //
+  // Both halves live here because there is no longer one page every arrival
+  // passes through. This used to be pages/index.tsx's job, back when Auth0's
+  // callback landed on `/` and that page forwarded an authenticated visitor on
+  // once POST /user had resolved their onboarding. The callback now goes
+  // straight to /list (lib/app-origin.ts) and index.tsx redirects nobody, so
+  // the consume moved to the one component every gated route renders through -
+  // next to the rememberReturnTo that wrote the value.
+  //
+  // Waiting on accountReady rather than racing it: a brand new user's row is
+  // still being created at this point, and navigating on before it exists sends
+  // the destination page's requests at an account the API will 500 on. That is
+  // the same gate the render below uses, for the same reason.
+  //
+  // No-op on an ordinary login, which is most of them - consumeReturnTo returns
+  // null unless a bounce actually stored something, and rememberReturnTo
+  // refuses to store '/'. So the common path stays on /list with no second
+  // navigation.
+  useEffect(() => {
+    if (isLoading || !isAuthenticated || !accountReady) return;
+    const target = consumeReturnTo();
+    // replace, not push: the interrupted login is not a step anyone wants to
+    // arrive back at by pressing Back.
+    if (target) router.replace(target);
+  }, [isAuthenticated, isLoading, accountReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The join ADR-0007 picks Faro for: this is the same Auth0 subject the Go API
   // puts on its spans as `user.sub`, so a browser session and the backend work

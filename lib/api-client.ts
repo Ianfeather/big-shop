@@ -21,6 +21,26 @@
 // they are served by this same Next.js app. lib/app-origin.ts covers the cases
 // that genuinely need an origin.
 
+// A failed API call, carrying the status alongside the message.
+//
+// The message is unchanged from the plain Error it replaces, so nothing that
+// matched on the text has to care. What the status buys is one caller being
+// able to tell an *expected* refusal from a fault: pages/recipes/add/[slug].tsx
+// has to distinguish "this Featured Recipe is not published" - a state
+// ADR-0011 explicitly accepts, since the email's hand-picked slugs can drift
+// from the flag - from "something broke", and the two want different pages.
+// Reading a number back out of a message string is the alternative, and it is
+// the kind of thing that keeps working until someone rewords the message.
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 async function parseBody(res: Response): Promise<unknown> {
   const text = await res.text();
   return text ? JSON.parse(text) : undefined;
@@ -31,7 +51,7 @@ export async function apiGet<T>(path: string, token: string): Promise<T> {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!res.ok) {
-    throw new Error(`GET ${path} failed with status ${res.status}`);
+    throw new ApiError(`GET ${path} failed with status ${res.status}`, res.status);
   }
   return parseBody(res) as Promise<T>;
 }
@@ -46,7 +66,7 @@ async function apiMutate<T>(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: s
     body: body !== undefined ? JSON.stringify(body) : undefined
   });
   if (!res.ok) {
-    throw new Error(`${method} ${path} failed with status ${res.status}`);
+    throw new ApiError(`${method} ${path} failed with status ${res.status}`, res.status);
   }
   return parseBody(res) as Promise<T>;
 }

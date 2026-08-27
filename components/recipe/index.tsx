@@ -106,6 +106,18 @@ const Recipe = ({ recipe }: { recipe: Partial<RecipeModel> }) => {
           ))
         }
       </div>
+      {/* Shown to everyone who can see this Recipe, not gated on being an
+          admin, and that is the point rather than an oversight. Only an admin's
+          own Account holds a Featured Recipe, so nobody else will ever see this
+          - and ADR-0011 accepts that ordinary edits to these rows change what
+          every new user receives. The curator therefore has to be able to tell,
+          from the Recipe itself, that they are editing something published.
+          Hiding it behind the edit form is where that goes wrong. */}
+      { recipe.featured && (
+        <p className={styles.featured}>
+          Featured &mdash; anyone can add this recipe to their own collection.
+        </p>
+      )}
       <div className={styles.section}>
         <SectionHeading addLabel="Add ingredients" editHref={ingredients.length ? undefined : editHref}>
           Ingredients

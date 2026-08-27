@@ -129,7 +129,7 @@ func GetUser(ctx context.Context, db *sql.DB, userID string) (u *common.User, e 
 	// leaves them that way on purpose - and an INNER JOIN would turn it into
 	// "no such user" and blank their preferences.
 	userQuery := `
-		SELECT u.id, u.name, u.email, u.onboarded, u.show_pantry_staples, au.account_id
+		SELECT u.id, u.name, u.email, u.onboarded, u.show_pantry_staples, u.is_admin, au.account_id
 			FROM user u
 			LEFT JOIN account_user au ON au.user_id = u.id AND au.enabled = true
 			WHERE u.id = ?
@@ -152,7 +152,7 @@ func GetUser(ctx context.Context, db *sql.DB, userID string) (u *common.User, e 
 	// "it goes no further than our database", so shipping it to the client by
 	// default would quietly weaken the claim that made storing it acceptable.
 	// Add it here when something actually needs it.
-	if err := db.QueryRowContext(ctx, userQuery, userID).Scan(&user.ID, &user.Name, &user.Email, &user.Onboarded, &showPantryStaples, &accountID); err != nil {
+	if err := db.QueryRowContext(ctx, userQuery, userID).Scan(&user.ID, &user.Name, &user.Email, &user.Onboarded, &showPantryStaples, &user.IsAdmin, &accountID); err != nil {
 		return nil, err
 	}
 	user.ShowPantryStaples = &showPantryStaples

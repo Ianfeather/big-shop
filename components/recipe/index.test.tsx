@@ -69,3 +69,30 @@ describe('Recipe field escaping', () => {
     expect(screen.getByText(payload)).toBeInTheDocument();
   });
 });
+
+// ADR-0011 accepts that ordinary edits to a Featured Recipe change what every
+// new user receives. That only works if the curator can tell, from the Recipe
+// itself, that they are editing something published - so this is shown on the
+// Recipe rather than only inside the edit form.
+describe('the Featured note', () => {
+  it('is shown for a Featured Recipe', () => {
+    render(<Recipe recipe={{ name: 'Dal', featured: true }} />);
+
+    expect(screen.getByText(/anyone can add this recipe/i)).toBeInTheDocument();
+  });
+
+  it('is absent for an ordinary Recipe', () => {
+    render(<Recipe recipe={{ name: 'Dal', featured: false }} />);
+
+    expect(screen.queryByText(/anyone can add this recipe/i)).toBeNull();
+  });
+
+  // `featured` is optional on the wire - a Recipe read by a client that predates
+  // the field, or any response where it was omitted, must not render as
+  // published.
+  it('is absent when the field is missing entirely', () => {
+    render(<Recipe recipe={{ name: 'Dal' }} />);
+
+    expect(screen.queryByText(/anyone can add this recipe/i)).toBeNull();
+  });
+});

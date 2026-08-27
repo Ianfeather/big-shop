@@ -189,6 +189,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/recipe/featured/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy a Featured Recipe into the caller's Account
+         * @description Idempotent: a second call returns the copy the first made rather than duplicating it.
+         */
+        post: operations["add-featured-recipe"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/recipe/{id}": {
         parameters: {
             query?: never;
@@ -428,6 +448,18 @@ export interface components {
             id: number;
             users: components["schemas"]["User"][] | null;
         };
+        AddFeaturedRecipeOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/bigshop/schemas/AddFeaturedRecipeOutputBody.json
+             */
+            readonly $schema?: string;
+            alreadyHad: boolean;
+            /** Format: int64 */
+            id: number;
+            status: string;
+        };
         Amount: {
             baseQuantity?: string;
             baseUnit?: string;
@@ -595,6 +627,7 @@ export interface components {
              * @example /api/bigshop/schemas/Recipe.json
              */
             readonly $schema?: string;
+            featured?: boolean;
             /** Format: int64 */
             id?: number;
             ingredients: components["schemas"]["Ingredient"][] | null;
@@ -662,6 +695,7 @@ export interface components {
             consent?: components["schemas"]["Consent"];
             email: string;
             id?: string;
+            isAdmin?: boolean;
             name?: string;
             onboarded?: boolean;
             showPantryStaples?: boolean;
@@ -1072,6 +1106,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SimpleResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "add-featured-recipe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description URL slug of the Featured Recipe to copy */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddFeaturedRecipeOutputBody"];
                 };
             };
             /** @description Error */

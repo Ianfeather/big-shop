@@ -80,6 +80,15 @@ func (a *App) addRecipe(ctx context.Context, input *RecipeInput) (*AddRecipeOutp
 
 	id, err := service.AddRecipe(ctx, input.Body, caller, a.db)
 	if err != nil {
+		// 403 rather than 500: publishing a Recipe as Featured is an admin-only
+		// act (ADR-0011), and a caller asking for it without the permission has
+		// made a request we understood and refused, not one that broke us. The
+		// check lives in the service layer because that is where the stored
+		// value is known - a client-side check is a hidden checkbox, not a
+		// permission.
+		if errors.Is(err, service.ErrNotAdmin) {
+			return nil, huma.Error403Forbidden("Not permitted to publish a Recipe")
+		}
 		return nil, huma.Error500InternalServerError("could not insert ingredients")
 	}
 
@@ -96,6 +105,10 @@ func (a *App) editRecipe(ctx context.Context, input *RecipeInput) (*StatusOutput
 	}
 
 	if err := service.EditRecipe(ctx, input.Body, caller, a.db); err != nil {
+		// See addRecipe above.
+		if errors.Is(err, service.ErrNotAdmin) {
+			return nil, huma.Error403Forbidden("Not permitted to publish a Recipe")
+		}
 		return nil, huma.Error500InternalServerError("could not update recipe")
 	}
 
@@ -170,6 +183,65 @@ func (a *App) deleteRecipe(ctx context.Context, input *DeleteRecipeInput) (*Stat
 	return &StatusOutput{Body: common.SimpleResponse{Status: "ok"}}, nil
 }
 
+// FeaturedRecipeInput identifies a Featured Recipe by its slug.
+type FeaturedRecipeInput struct {
+	Slug string `path:"slug" doc:"URL slug of the Featured Recipe to copy"`
+}
+
+// AddFeaturedRecipeOutput carries the caller's copy, and whether they already
+// had one.
+//
+// AlreadyHad is not a courtesy: the landing page uses it to say so. Arriving at
+// a Recipe you already own with no explanation reads as the link having done
+// nothing.
+type AddFeaturedRecipeOutput struct {
+	Body struct {
+		Status     string `json:"status"`
+		ID         int    `json:"id"`
+		AlreadyHad bool   `json:"alreadyHad"`
+	}
+}
+
+// addFeaturedRecipe copies a Featured Recipe into the caller's Account.
+//
+// Authenticated like every other route. There is no token in the email link
+// and none is needed: what the URL names is a Recipe Big Shop published, not a
+// person, so identity comes from the session exactly as it does everywhere
+// else - and nothing identifying anybody passes through a mail provider's logs.
+// See specs/completed/featured-recipes.md.
+func (a *App) addFeaturedRecipe(ctx context.Context, input *FeaturedRecipeInput) (*AddFeaturedRecipeOutput, error) {
+	caller := callerFrom(ctx)
+
+	id, alreadyHad, err := service.CopyFeaturedRecipe(ctx, input.Slug, caller, a.db)
+	if err != nil {
+		// 404 rather than 403 for a slug that is not published. There is
+		// nothing to tell apart here - a Recipe that was never Featured and one
+		// that never existed are the same answer to this route - and this is an
+		// expected state rather than an exceptional one: the email template's
+		// slugs are hand-picked and can drift from the flag, which ADR-0011
+		// accepts and the landing page is built to handle.
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, huma.Error404NotFound("No such featured recipe")
+		}
+		if errors.Is(err, service.ErrAmbiguousFeaturedSlug) {
+			return nil, fail(ctx, huma.Error500InternalServerError("Featured recipe is ambiguous"), err)
+		}
+		return nil, fail(ctx, huma.Error500InternalServerError("could not add featured recipe"), err)
+	}
+
+	// A copy upserts every Unit and Ingredient its lines reference, exactly as
+	// a create does - see purgeCatalogCaches. In practice a curated Recipe
+	// introduces neither, but that is a property of the curation rather than of
+	// this code, so the purge is not skipped on the strength of it.
+	a.purgeCatalogCaches()
+
+	out := &AddFeaturedRecipeOutput{}
+	out.Body.Status = "ok"
+	out.Body.ID = id
+	out.Body.AlreadyHad = alreadyHad
+	return out, nil
+}
+
 func (a *App) registerRecipeRoutes(api huma.API) {
 	register(api, huma.Operation{
 		OperationID: "get-recipe",
@@ -196,6 +268,18 @@ func (a *App) registerRecipeRoutes(api huma.API) {
 		Summary:     "Edit a recipe",
 		Tags:        []string{"Recipes"},
 	}, a.editRecipe)
+
+	// Three path segments, so no collision with GET /recipe/{id} - which takes
+	// an id *or* a slug on one route, and would otherwise have swallowed this.
+	register(api, huma.Operation{
+		OperationID:   "add-featured-recipe",
+		Method:        http.MethodPost,
+		Path:          "/recipe/featured/{slug}",
+		Summary:       "Copy a Featured Recipe into the caller's Account",
+		Description:   "Idempotent: a second call returns the copy the first made rather than duplicating it.",
+		Tags:          []string{"Recipes"},
+		DefaultStatus: http.StatusCreated,
+	}, a.addFeaturedRecipe)
 
 	register(api, huma.Operation{
 		OperationID: "delete-recipe",

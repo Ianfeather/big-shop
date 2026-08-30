@@ -22,7 +22,33 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # fetch-depth: 0 for the migration check below, which needs the merge
+      # base with master. The default shallow fetch has neither master nor
+      # enough history to find one.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # First, because it is seconds and needs nothing installed - and because
+      # the two things it catches are otherwise caught only by a red deploy on
+      # master, after the merge.
+      #
+      # internal/pkg/migrate refuses an already-applied migration whose contents
+      # have changed, and a pending one that sorts below the high-water mark.
+      # Neither is findable in any test environment: CI builds every database by
+      # replaying migrations/ from empty in filename order, which is precisely
+      # the state in which neither problem exists. They are visible only against
+      # a database alive across both commits - production - so without this the
+      # first report is deploy-api.yml going red on master. That workflow only
+      # deploys master's tip, so a stuck migration then blocks every later merge
+      # from deploying too.
+      #
+      # In build-lint-test rather than the `go` job on purpose, even though it
+      # is about the API's schema: `go` is not in the required-checks ruleset
+      # (see the ACTION REQUIRED note on that job), so a check placed there
+      # would report without gating anything. This one needs to block a merge.
+      - name: Migrations are append-only
+        run: ./scripts/check-migrations-append-only.sh "origin/${{ github.event.pull_request.base.ref || 'master' }}"
 
       - uses: actions/setup-node@v7
         with:

@@ -618,8 +618,9 @@ commit from the one they last ran against. Note the ruleset is deliberately not
 "strict", so a branch does *not* need rebasing merely for being behind
 `master`; do this on an actual conflict, not on every unrelated push.
 
-**5. Merging is the user's call, and it has four steps.** Never merge on your
-own initiative. When the user does say to merge:
+**5. Merging is the user's call by default, and it has four steps.** With the
+one standing exception in rule 6, never merge on your own initiative. When the
+user does say to merge:
 
 ```bash
 gh pr merge <n> --squash        # 1. merge (squash unless told otherwise)
@@ -640,6 +641,54 @@ moment the row becomes `done`: set its State, **strip the `WIP ` prefix from
 its title**, and update the body to say what actually shipped. Until this step
 the item is still claimed and still reads as claimed to every other agent —
 which is correct while a PR is open, and wrong the second it lands.
+
+**6. A proven bug fix merges itself.** There is one standing exception to rule
+5, granted deliberately: a PR that fixes a bug *and proves that it did* does
+not wait for the user. Merge it, then do all four steps of rule 5 exactly as if
+the user had asked.
+
+The point is not to save the user a click. It is that this shape of PR carries
+its own evidence — the failing test **is** the argument — so there is nothing
+left for a human to weigh, and asking anyway is latency in front of a foregone
+answer.
+
+**Every one of these must hold. Doubt about any of them means ask.**
+
+- **It restores intended behaviour.** Something was meant to work and didn't.
+  That is a different thing from a change to *what the product does* — new
+  behaviour, changed copy, a different default, a judgement about what would be
+  better. Those stay the user's, however small and however obviously right they
+  look.
+- **There is a regression test, and you watched it fail without the fix.** Not
+  "a test exists", not "it would have failed" — you ran it against the unfixed
+  code, saw it go red for the stated reason, and saw it go green on the fix. A
+  regression test never observed to fail is not evidence of anything: it may be
+  asserting something that was always true. If reverting the fix to prove this
+  is impractical, that is a reason to ask, not a reason to skip the step.
+- **Every required check is green on the PR's head commit** — `build-lint-test`
+  and `e2e` both, watched to a conclusion per rule 3, on the commit actually
+  being merged rather than an earlier push.
+- **The diff is the fix, its test and its evidence, and nothing else.**
+  Drive-by refactors, unrelated tidying and opportunistic renames all take it
+  out of scope. Deleting code the fix has just made dead stays in scope, and is
+  worth doing.
+- **Nothing in it is hard to walk back.** No migration that rewrites or deletes
+  rows, no change to secrets, deploy config, CI workflows, the ruleset, or this
+  file's own rules, and no dependency bump. A revert has to be the whole remedy.
+
+Two things that do **not** clear the bar on their own. A green CI run: it says
+only that nothing *else* broke, and a fix for an untested bug passes CI just as
+happily as a fix for a tested one. And your own confidence in the diff. The
+observed-failing test is the load-bearing part, and the one worth being strict
+about.
+
+**If the user asked to see it, show them.** An explicit "let me look before you
+merge" outranks this rule, and so does a PR already handed over for review.
+This is permission not to ask; it is not an instruction to hurry.
+
+**Say what you merged and why it qualified** — the bug, the test that failed
+and then passed, the checks. Not approval sought after the fact, but a report,
+and the way anyone finds out if something merged that shouldn't have.
 
 ## Useful External Links
 

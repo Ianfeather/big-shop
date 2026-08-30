@@ -136,10 +136,15 @@ const List = () => {
       const token = await getAccessTokenSilently();
       const result = await apiGet<ShoppingListResult>('/shopping-list', token);
       if (cancelledRef.current) return {};
-      if (result.recipes.length) {
-        setListState(result.ingredients, result.extras);
-        return result;
-      }
+      // Hydrate from whatever came back, including an empty Recipe list. This
+      // used to be gated on `result.recipes.length`, which conflated "no
+      // Recipes are selected" with "the list is empty" - and Extra Items are
+      // stored independently of Recipes (GenerateShoppingList clears only
+      // `type = 'ingredient'` rows; GetShoppingList returns Extras
+      // unconditionally). So an Extra added with nothing selected was written,
+      // returned by the server on the next load, and then thrown away here.
+      setListState(result.ingredients, result.extras);
+      return result;
     } catch (e) {
       console.error(e);
     }
@@ -148,7 +153,7 @@ const List = () => {
 
   // This will only run once on load
   async function hydrateShoppingList() {
-    const { recipes = [], extras = {} } = await getListState();
+    const { recipes = [] } = await getListState();
     if (cancelledRef.current) return;
     hasHydratedRef.current = true;
     setHydrateFlag(true);
@@ -156,7 +161,6 @@ const List = () => {
       acc[recipe] = true;
       return acc;
     }, {}));
-    setExtras(extras);
   }
 
   async function getShoppingList() {

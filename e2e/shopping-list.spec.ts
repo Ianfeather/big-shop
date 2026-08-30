@@ -51,6 +51,27 @@ test.describe('shopping list', () => {
     await deleteRecipeById(request, soloRecipeId);
   });
 
+  // Regression: `getListState` in pages/list.tsx gated hydration on the stored
+  // list having at least one Recipe on it, so an Extra Item added with nothing
+  // selected was written server-side, returned by the next GET, and then thrown
+  // away by the client - it vanished on reload.
+  //
+  // Runs first, and clears up after itself, because the whole point is an
+  // Extras-only list: every other test in this serial file leaves Recipes on
+  // the list, which is exactly the state that hid the bug.
+  test('an extra item added with no recipe selected survives a reload', async ({ page, request }) => {
+    const soloExtraName = `e2e solo extra ${runId}`;
+    await page.goto('/list');
+    await page.getByPlaceholder('beer, snacks...').fill(soloExtraName);
+    await page.getByRole('button', { name: 'Add' }).click();
+    await expect(page.getByRole('checkbox', { name: soloExtraName })).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByRole('checkbox', { name: soloExtraName })).toBeVisible();
+
+    await clearShoppingList(request);
+  });
+
   test('deselecting your only selected recipe clears its ingredients', async ({ page }) => {
     await page.goto('/list');
     await page.getByRole('checkbox', { name: soloRecipeName }).click({ force: true });

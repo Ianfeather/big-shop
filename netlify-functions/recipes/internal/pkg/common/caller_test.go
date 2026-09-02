@@ -10,7 +10,7 @@ import (
 // The point of the type: nine lookups become one.
 func TestAccountIDResolvesOnce(t *testing.T) {
 	calls := 0
-	caller := NewCaller("auth0|someone", func() (int, error) {
+	caller := NewCaller("auth0|someone", "", func() (int, error) {
 		calls++
 		return 42, nil
 	}, noAdmin)
@@ -35,7 +35,7 @@ func TestAccountIDResolvesOnce(t *testing.T) {
 // resolving eagerly in middleware would add a query to all five.
 func TestAccountIDIsNotResolvedUntilAsked(t *testing.T) {
 	calls := 0
-	caller := NewCaller("auth0|someone", func() (int, error) {
+	caller := NewCaller("auth0|someone", "", func() (int, error) {
 		calls++
 		return 42, nil
 	}, noAdmin)
@@ -54,7 +54,7 @@ func TestAccountIDIsNotResolvedUntilAsked(t *testing.T) {
 // change that.
 func TestAccountIDMemoisesTheError(t *testing.T) {
 	calls := 0
-	caller := NewCaller("auth0|nobody", func() (int, error) {
+	caller := NewCaller("auth0|nobody", "", func() (int, error) {
 		calls++
 		return 0, sql.ErrNoRows
 	}, noAdmin)
@@ -79,7 +79,7 @@ func TestAccountIDMemoisesTheError(t *testing.T) {
 func TestAccountIDIsSafeUnderConcurrentFirstUse(t *testing.T) {
 	var mu sync.Mutex
 	calls := 0
-	caller := NewCaller("auth0|someone", func() (int, error) {
+	caller := NewCaller("auth0|someone", "", func() (int, error) {
 		mu.Lock()
 		calls++
 		mu.Unlock()
@@ -113,7 +113,7 @@ func noAdmin() (bool, error) { return false, nil }
 // two write paths ask, and every other route in the API does not.
 func TestIsAdminResolvesOnceAndNotUntilAsked(t *testing.T) {
 	calls := 0
-	caller := NewCaller("auth0|someone", func() (int, error) {
+	caller := NewCaller("auth0|someone", "", func() (int, error) {
 		return 42, nil
 	}, func() (bool, error) {
 		calls++
@@ -145,7 +145,7 @@ func TestIsAdminResolvesOnceAndNotUntilAsked(t *testing.T) {
 func TestIsAdminMemoisesItsError(t *testing.T) {
 	calls := 0
 	boom := errors.New("boom")
-	caller := NewCaller("auth0|someone", func() (int, error) {
+	caller := NewCaller("auth0|someone", "", func() (int, error) {
 		return 42, nil
 	}, func() (bool, error) {
 		calls++

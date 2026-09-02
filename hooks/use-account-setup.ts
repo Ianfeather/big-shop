@@ -83,9 +83,14 @@ export default function useAccountSetup(): { accountReady: boolean } {
         const token = await getAccessTokenSilently();
         // An idempotent upsert, so running it for an already-known user costs
         // one request and repairs the case where the original call failed.
+        // **No email.** The server takes the address from a verified claim on
+        // the access token and ignores anything a client sends, because the
+        // address decides who a person is for invitations and who Big Shop
+        // mails - and a value the browser supplies can be any address at all.
+        // Sending it anyway would only suggest, to the next reader, that it
+        // still mattered.
         const saved = await apiPost<User>('/user', token, {
           name: user.name,
-          email: user.email,
           timezone: browserTimezone()
         });
         // `onboarded` is recorded and no longer routes anybody. It used to

@@ -488,6 +488,16 @@ export interface components {
              */
             source: "banner" | "settings" | "login-sync";
         };
+        CreateUserInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/bigshop/schemas/CreateUserInputBody.json
+             */
+            readonly $schema?: string;
+            name?: string;
+            timezone?: string;
+        };
         CreatedResponse: {
             /**
              * Format: uri
@@ -1497,7 +1507,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["User"];
+                "application/json": components["schemas"]["CreateUserInputBody"];
             };
         };
         responses: {

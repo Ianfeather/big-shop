@@ -172,11 +172,17 @@ func newJWTMiddleware() (*jwtmiddleware.JWTMiddleware, error) {
 	// Issuer and audience are checked by the validator itself, and both are
 	// required rather than checked-if-present - a token this tenant signed for
 	// some other audience is exactly what this API must refuse.
+	// WithCustomClaims is what lets the API know the caller's email address
+	// without asking the caller for it - see claims.go. Registered here rather
+	// than read ad hoc from the raw token so that it is decoded once, by the
+	// same validation that checks the signature: an address this API acts on
+	// has to arrive inside something Auth0 signed, or it is worth nothing.
 	jwtValidator, err := validator.New(
 		provider.KeyFunc,
 		validator.RS256,
 		issuerURL.String(),
 		[]string{audience},
+		validator.WithCustomClaims(func() validator.CustomClaims { return &bigshopClaims{} }),
 	)
 	if err != nil {
 		return nil, err
@@ -226,7 +232,16 @@ func (a *App) userMiddleware(w http.ResponseWriter, r *http.Request, next http.H
 		return
 	}
 
-	next.ServeHTTP(w, r.WithContext(a.withCaller(r.Context(), claims.RegisteredClaims.Subject)))
+	// Absent for a token minted before the Action that sets it was deployed,
+	// and that is a supported state rather than a failure - the type assertion
+	// simply leaves this empty. Nothing here refuses a request over it; the
+	// handlers decide what an unverified caller may do.
+	verifiedEmail := ""
+	if custom, ok := claims.CustomClaims.(*bigshopClaims); ok {
+		verifiedEmail = custom.VerifiedEmail()
+	}
+
+	next.ServeHTTP(w, r.WithContext(a.withCaller(r.Context(), claims.RegisteredClaims.Subject, verifiedEmail)))
 }
 
 // withCaller puts a Caller for this request into the context.
@@ -239,8 +254,8 @@ func (a *App) userMiddleware(w http.ResponseWriter, r *http.Request, next http.H
 // attributed to the request that caused it like every other - the middleware
 // runs inside the server span, so this is the same span the handler would have
 // passed in had the Caller taken a context of its own.
-func (a *App) withCaller(ctx context.Context, userID string) context.Context {
-	caller := common.NewCaller(userID, func() (int, error) {
+func (a *App) withCaller(ctx context.Context, userID, verifiedEmail string) context.Context {
+	caller := common.NewCaller(userID, verifiedEmail, func() (int, error) {
 		return service.GetAccountID(ctx, a.db, userID)
 	}, func() (bool, error) {
 		return service.IsAdmin(ctx, a.db, userID)
@@ -315,6 +330,14 @@ const (
 	// sentinels. Nothing produces this today; it exists so that if something
 	// starts to, the span says "unclassified" rather than saying nothing.
 	reasonOther = "other"
+	// The token validated and carried a subject, but no verified email claim -
+	// so a route that needs one answered 403. The only cause is
+	// auth0/actions/add-verified-email-claim.js not running: it is
+	// unconditional, so a token minted while it is in the post-login trigger
+	// always has the claim. Worth its own value precisely because the fix is a
+	// dashboard change rather than anything in this repository, and nothing else
+	// in a trace would say so.
+	reasonNoVerifiedEmail = "no_verified_email"
 )
 
 // unauthorized writes the 401 body shape go-jwt-middleware itself uses, so a
@@ -346,7 +369,18 @@ func (a *App) devUserMiddleware(w http.ResponseWriter, r *http.Request, next htt
 	if devUserID == "" {
 		devUserID = "local-dev-user"
 	}
-	next.ServeHTTP(w, r.WithContext(a.withCaller(r.Context(), devUserID)))
+	// A verified address for the dev caller too, so the paths that require one
+	// (GET /invites and the accept/reject pair) are exercised locally and by the
+	// e2e suite rather than silently taking their "no verified email" branch -
+	// which would make DISABLE_AUTH=true hide exactly the behaviour this exists
+	// to provide. Defaults to the address docker/mysql-seed/dev-seed.sql gives
+	// `local-dev-user`, so the two agree out of the box.
+	devUserEmail := os.Getenv("DEV_USER_EMAIL")
+	if devUserEmail == "" {
+		devUserEmail = "dev@localhost"
+	}
+
+	next.ServeHTTP(w, r.WithContext(a.withCaller(r.Context(), devUserID, devUserEmail)))
 }
 
 // RouteTemplates lists the path templates registered on an API - "/recipes",

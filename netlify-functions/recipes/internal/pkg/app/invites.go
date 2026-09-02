@@ -24,12 +24,17 @@ type InvitesOutput struct {
 }
 
 func (a *App) acceptInvite(ctx context.Context, input *InviteTokenInput) (*struct{}, error) {
+	inviteeEmail, err := verifiedEmail(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	currentUser, err := service.GetUser(ctx, a.db, callerFrom(ctx).UserID)
 	if err != nil {
 		return nil, fail(ctx, huma.Error400BadRequest("Error finding current user"), err)
 	}
 
-	invitation, err := service.GetInvite(ctx, a.db, input.Body.Token, currentUser.Email)
+	invitation, err := service.GetInvite(ctx, a.db, input.Body.Token, inviteeEmail)
 	if err != nil {
 		return nil, fail(ctx, huma.Error400BadRequest("Error finding invite"), err)
 	}
@@ -53,7 +58,7 @@ func (a *App) acceptInvite(ctx context.Context, input *InviteTokenInput) (*struc
 	}
 
 	// remove the invite
-	if err := service.DeleteInvite(ctx, a.db, invitation.AccountID, currentUser.Email); err != nil {
+	if err := service.DeleteInvite(ctx, a.db, invitation.AccountID, inviteeEmail); err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("Error deleting invite"), err)
 	}
 
@@ -101,12 +106,12 @@ func (a *App) tellInviter(ctx context.Context, adminID string, kind email.Kind) 
 }
 
 func (a *App) getInvites(ctx context.Context, _ *struct{}) (*InvitesOutput, error) {
-	user, err := service.GetUser(ctx, a.db, callerFrom(ctx).UserID)
+	inviteeEmail, err := verifiedEmail(ctx)
 	if err != nil {
-		return nil, fail(ctx, huma.Error500InternalServerError("Error finding current user"), err)
+		return nil, err
 	}
 
-	invites, err := service.GetInvites(ctx, a.db, user.Email)
+	invites, err := service.GetInvites(ctx, a.db, inviteeEmail)
 	if err != nil {
 		return nil, fail(ctx, huma.Error404NotFound("Error finding invites"), err)
 	}
@@ -125,17 +130,17 @@ func (a *App) getInvites(ctx context.Context, _ *struct{}) (*InvitesOutput, erro
 // Resolving first is also what makes Session 3's rejection email possible: a
 // blind delete never reads the row, so there is no admin_id to tell.
 func (a *App) rejectInvite(ctx context.Context, input *InviteTokenInput) (*struct{}, error) {
-	currentUser, err := service.GetUser(ctx, a.db, callerFrom(ctx).UserID)
+	inviteeEmail, err := verifiedEmail(ctx)
 	if err != nil {
-		return nil, fail(ctx, huma.Error400BadRequest("Error finding current user"), err)
+		return nil, err
 	}
 
-	invitation, err := service.GetInvite(ctx, a.db, input.Body.Token, currentUser.Email)
+	invitation, err := service.GetInvite(ctx, a.db, input.Body.Token, inviteeEmail)
 	if err != nil {
 		return nil, fail(ctx, huma.Error400BadRequest("Error finding invite"), err)
 	}
 
-	if err := service.DeleteInvite(ctx, a.db, invitation.AccountID, currentUser.Email); err != nil {
+	if err := service.DeleteInvite(ctx, a.db, invitation.AccountID, inviteeEmail); err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("Error deleting invite"), err)
 	}
 

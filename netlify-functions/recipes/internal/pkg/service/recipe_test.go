@@ -434,7 +434,7 @@ func TestResolveFeatured(t *testing.T) {
 	adminErr := errors.New("lookup failed")
 
 	newCaller := func(admin bool, err error) *common.Caller {
-		return common.NewCaller("auth0|someone",
+		return common.NewCaller("auth0|someone", "",
 			func() (int, error) { return 1, nil },
 			func() (bool, error) { return admin, err },
 		)

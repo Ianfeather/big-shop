@@ -568,7 +568,7 @@ func TestTheSpanCarriesTheAuthenticatedSubject(t *testing.T) {
 	// A nil DB is fine: withCaller's Account lookup is lazy and nothing here
 	// resolves it.
 	application := &App{}
-	ctx := application.withCaller(context.Background(), "auth0|somebody")
+	ctx := application.withCaller(context.Background(), "auth0|somebody", "")
 
 	req := httptest.NewRequest(http.MethodGet, testBase+"/shopping-list", nil).WithContext(ctx)
 	if got := userSub(req); got != "auth0|somebody" {

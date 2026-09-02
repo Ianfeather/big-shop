@@ -27,6 +27,24 @@ type Caller struct {
 	// UserID is the authenticated subject, as it appears in account_user.
 	UserID string
 
+	// VerifiedEmail is the caller's email address **as asserted by the identity
+	// provider inside the signed token**, or "" when the token carried none.
+	//
+	// **The empty string is the whole safety property**, and the field is shaped
+	// this way deliberately. The obvious alternative - an Email plus an
+	// EmailVerified bool - makes it possible to read the address and forget the
+	// flag, which is precisely the mistake this exists to stop being possible.
+	// Here there is nothing to forget: an unverified address never reaches this
+	// field, so any non-empty value is one a provider vouched for.
+	//
+	// It is not the same thing as `user.email` in the database. That column is
+	// written from the POST /user request *body*, which the caller controls, so
+	// it is a display value and a mailing address and must never decide what
+	// somebody may reach. Anything making that kind of decision reads this
+	// instead - see app/invites.go, where the distinction was load-bearing
+	// rather than theoretical.
+	VerifiedEmail string
+
 	resolve   func() (int, error)
 	once      sync.Once
 	accountID int
@@ -44,8 +62,8 @@ type Caller struct {
 // that this package does not depend on `service`, which depends on this one.
 // It also keeps the query itself in exactly one place: service.GetAccountID,
 // whose only caller this becomes.
-func NewCaller(userID string, resolve func() (int, error), resolveAdmin func() (bool, error)) *Caller {
-	return &Caller{UserID: userID, resolve: resolve, resolveAdmin: resolveAdmin}
+func NewCaller(userID, verifiedEmail string, resolve func() (int, error), resolveAdmin func() (bool, error)) *Caller {
+	return &Caller{UserID: userID, VerifiedEmail: verifiedEmail, resolve: resolve, resolveAdmin: resolveAdmin}
 }
 
 // AccountID returns the Account this Caller belongs to, resolving it on first

@@ -27,8 +27,30 @@ type UserOutput struct {
 }
 
 func (a *App) addUser(ctx context.Context, input *UserInput) (*UserOutput, error) {
+	caller := callerFrom(ctx)
 	user := input.Body
-	user.ID = callerFrom(ctx).UserID
+	user.ID = caller.UserID
+
+	// **The token's address wins over the body's, whenever there is one.**
+	//
+	// `user.email` is written from here and read by the welcome email, by the
+	// collision guard below, and - until this change - by the invite lookups.
+	// Taking it from the body meant a caller could set it to anything: to an
+	// address they do not own, on every login, since the upsert refreshes the
+	// column each time. That turned a display value into an authorisation input
+	// and let anyone with a Big Shop login enumerate and accept invitations
+	// addressed to somebody else.
+	//
+	// The body field is kept as a fallback rather than removed, and only for as
+	// long as tokens minted before the Action can still be in circulation. It is
+	// safe *here* because nothing downstream of this write decides access on it
+	// any more - app/invites.go now reads the Caller directly and does not fall
+	// back at all. What remains is the possibility of a wrong address on a
+	// welcome email, which is worth accepting for a few hours to avoid failing
+	// signups mid-rollout.
+	if caller.VerifiedEmail != "" {
+		user.Email = caller.VerifiedEmail
+	}
 
 	created, err := service.AddUser(ctx, a.db, user)
 	if err != nil {

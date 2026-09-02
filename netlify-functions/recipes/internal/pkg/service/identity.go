@@ -55,29 +55,20 @@ func CanonicalUserID(ctx context.Context, db dbConn, subject string) (string, er
 	return userID, nil
 }
 
-// usersWithEmailQuery finds the people already holding an address.
+// userWithEmailQuery finds the person already holding an address, if anybody is.
 //
 // LOWER() on both sides because migrations/040 puts the column in utf8mb4_bin,
 // where `A` and `a` are different characters and providers do not agree on the
 // case they hand back. A missed match here is not a missed feature - it is a
-// person handed an empty Account - so this is worth the index it costs. `user`
-// is small enough for that to be irrelevant; if it ever is not, the answer is a
-// functional index rather than a case-sensitive comparison.
+// person handed an empty Account.
 //
-// Every match is returned rather than `LIMIT 1`, because "more than one" is a
-// distinct answer that must not be silently collapsed into "the first one" -
-// see LinkOrCreateIdentity.
-const usersWithEmailQuery = `SELECT id FROM user WHERE LOWER(email) = LOWER(?);`
-
-// ErrAmbiguousEmail means several existing users hold this address, so there is
-// no single person to link a new subject to.
-//
-// `user.email` carries no unique constraint and never has, so this is a real
-// state rather than a hypothetical one - anyone who managed to sign up twice
-// before identity aliasing existed is in it. Choosing between them would be
-// choosing whose recipes the arriving login sees, which is a decision for a
-// human.
-var ErrAmbiguousEmail = errors.New("more than one user holds this email address")
+// **At most one row, guaranteed by the database rather than by this query.**
+// migrations/044 makes `user.email` unique, so LIMIT 1 here describes the data
+// rather than choosing between candidates. Before that constraint it would have
+// been a silent choice about whose recipes an arriving login could read, which
+// is why this used to return every match and refuse when there was more than
+// one.
+const userWithEmailQuery = `SELECT id FROM user WHERE LOWER(email) = LOWER(?) LIMIT 1;`
 
 // LinkOrCreateIdentity is what a login resolves to, and it is the only writer of
 // `user_identity`.
@@ -92,6 +83,11 @@ var ErrAmbiguousEmail = errors.New("more than one user holds this email address"
 //     it. This is the case the whole change exists for.
 //  3. **The subject is new and the address is unknown.** A genuinely new person:
 //     a `user` row, its identity row, and an Account.
+//
+// There is deliberately no fourth outcome for "several people hold this
+// address": migrations/044 makes that state impossible, so handling it would be
+// unreachable code claiming to defend against something the database already
+// forbids.
 //
 // **The address must already have been verified by the caller.** This function
 // takes it on trust because it cannot check - app.verifiedEmail is what
@@ -175,38 +171,30 @@ func LinkOrCreateIdentity(ctx context.Context, db *sql.DB, subject, verifiedEmai
 	}
 
 	// 2. A new subject on an address somebody already has.
-	owners, err := usersWithEmail(ctx, tx, verifiedEmail)
-	if err != nil {
+	//
+	// The link, and it is one row: from here on this subject resolves to a
+	// person who already has an Account, so nothing downstream can tell the two
+	// logins apart. **No new Account and no new `user` row** - creating either is
+	// the failure being prevented, not a step towards preventing it.
+	owner, err := userWithEmail(ctx, tx, verifiedEmail)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return "", false, err
 	}
-	switch len(owners) {
-	case 1:
-		// The link. One row, and it is the entire feature: from here on this
-		// subject resolves to a person who already has an Account, so nothing
-		// downstream can tell the two logins apart.
-		//
-		// **No new Account, and no new `user` row.** Creating either is the
-		// failure being prevented, not a step towards preventing it.
+	if err == nil {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO user_identity (subject, user_id) VALUES (?, ?);`, subject, owners[0]); err != nil {
+			`INSERT INTO user_identity (subject, user_id) VALUES (?, ?);`, subject, owner); err != nil {
 			return "", false, fmt.Errorf("linking the new subject to an existing user: %w", err)
 		}
-		if err := refreshUser(ctx, tx, owners[0], name); err != nil {
+		if err := refreshUser(ctx, tx, owner, name); err != nil {
 			return "", false, err
 		}
-		if err := EnsureAccount(ctx, tx, owners[0]); err != nil {
+		if err := EnsureAccount(ctx, tx, owner); err != nil {
 			return "", false, err
 		}
 		if err := tx.Commit(); err != nil {
 			return "", false, fmt.Errorf("committing the identity link: %w", err)
 		}
-		return owners[0], false, nil
-	case 0:
-		// Falls through to case 3 below.
-	default:
-		// Refused rather than resolved. See ErrAmbiguousEmail: picking one would
-		// be picking whose Account this login can read.
-		return "", false, ErrAmbiguousEmail
+		return owner, false, nil
 	}
 
 	// 3. A genuinely new person.
@@ -231,22 +219,16 @@ func LinkOrCreateIdentity(ctx context.Context, db *sql.DB, subject, verifiedEmai
 	return subject, true, nil
 }
 
-func usersWithEmail(ctx context.Context, tx *sql.Tx, email string) ([]string, error) {
-	rows, err := tx.QueryContext(ctx, usersWithEmailQuery, email)
-	if err != nil {
-		return nil, fmt.Errorf("looking for an existing user with this email: %w", err)
-	}
-	defer rows.Close()
-
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("reading an existing user's id: %w", err)
+// userWithEmail returns the person holding this address, or sql.ErrNoRows.
+func userWithEmail(ctx context.Context, tx *sql.Tx, email string) (string, error) {
+	var id string
+	if err := tx.QueryRowContext(ctx, userWithEmailQuery, email).Scan(&id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", err
 		}
-		ids = append(ids, id)
+		return "", fmt.Errorf("looking for an existing user with this email: %w", err)
 	}
-	return ids, rows.Err()
+	return id, nil
 }
 
 // insertUser writes the `user` row for a genuinely new person.

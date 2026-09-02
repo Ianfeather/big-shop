@@ -300,14 +300,25 @@ Stated so they are not rediscovered as bugs:
 - **Nothing helps someone with two genuinely populated accounts.** They are
   refused and pointed at support, deliberately.
 
-## Open questions
+## Questions closed on review, 2026-09-02
 
-- **Rate limiting.** `POST /link/start` is cheap and authenticated, so the
-  exposure is small, but there is no per-user cap anywhere in this API today and
-  this is a reasonable first place to want one.
-- **Consent.** The abandoned user consented moments ago as that identity; the
-  cascade deletes the record and the linked account carries its own. Believed
-  correct — `ConsentSync` re-records against the surviving user — but it has not
-  been reasoned through in the way `migrations/034` reasons about erasure.
-- **Whether `/recipes` should get the entry point after all**, if telemetry shows
-  people reaching it without having read the `/list` panel.
+Recorded rather than deleted, because each of them is a thing somebody will
+later wonder was overlooked.
+
+- **Rate limiting: not now.** `POST /link/start` is authenticated and cheap, and
+  the worst an authenticated caller achieves by hammering it is issuing tokens
+  bound to their own subject, which do nothing without also passing the nonce and
+  a successful re-authentication. There is no per-user cap anywhere in this API
+  today, so adding the first one here would mean building the mechanism as well
+  as the policy. If a cap is ever wanted, this is still a reasonable first place
+  to put one — it is just not a reason to hold this up.
+- **Consent: settled, no special handling.** The abandoned user consented moments
+  earlier as that identity; the cascade deletes the record with the rest of their
+  rows, and the surviving account carries its own. `ConsentSync` re-records
+  against the surviving user on the next load, so the outcome is a consent record
+  attached to the person who actually continues to exist — which is what
+  `migrations/034` wants of it.
+- **`/recipes` does not get the entry point.** Considered and dropped. `/list` is
+  where the callback lands and is the only screen an affected person is
+  guaranteed to reach; a second surface is a second thing to keep right, and a
+  message that can appear twice in one session reads as a bug. See "The surface".

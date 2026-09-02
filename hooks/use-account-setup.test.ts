@@ -110,6 +110,23 @@ describe('useAccountSetup', () => {
     await waitFor(() => expect(result.current.accountReady).toBe(true));
   });
 
+  // The server takes the address from a verified claim on the access token and
+  // has no email field on this request at all. Sending one would be inert, but
+  // it would also be the thing that used to be an authorisation input - so this
+  // pins its absence rather than leaving the next reader to wonder whether the
+  // omission was deliberate.
+  it('does not send an email address the server would have to ignore', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ id: 'local-dev-user', onboarded: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const useAccountSetup = await loadHook(AUTH0_CALLBACK);
+    renderHook(() => useAccountSetup());
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).not.toHaveProperty('email');
+  });
+
   it('leaves an already-onboarded user alone', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ id: 'local-dev-user', onboarded: true }));
     vi.stubGlobal('fetch', fetchMock);

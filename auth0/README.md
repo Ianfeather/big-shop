@@ -32,8 +32,8 @@ way into that Account. The reasoning is in the file header and in
    secrets, no dependencies, no Management API access — it only reads `event`.
 2. **Actions → Triggers → post-login**, drag it in, and **put it first**. See
    the ordering note below.
-3. Deploy. Nothing else needs doing: the API tolerates its absence and starts
-   trusting the claim the moment it appears.
+3. Deploy — **before** shipping an API build that expects the claim. See the
+   hard-dependency note below; the API does not tolerate its absence.
 
 ### Ordering is load-bearing
 
@@ -42,24 +42,32 @@ can call `api.authentication.setPrimaryUser`, after which Auth0 halts the login
 flow and **executes no further Actions**. Reverse the order and the single login
 that gets linked is the single login whose token carries no email claim.
 
-### Rolling it out needs no forced re-login
+### The Action is a hard dependency, not an enhancement
+
+**Deploy this Action before the API build that expects it.** It is unconditional,
+so every token minted while it sits in the post-login trigger carries the claim —
+and every token minted without it carries nothing, which the API answers with
+`403` on `POST /user` and all three invitation routes. That is most of the app.
+
+An earlier draft softened this: `POST /user` fell back to the address in the
+request body, and `GET /invites` returned an empty list rather than refusing, so
+a token minted before the Action kept working. Both were dropped deliberately.
+The fallback put the welcome email, the onboarding sequence, the deletion
+confirmation and the SendGrid recipient erasure back under the caller's control
+for exactly as long as such a token survived — an unobservable window an
+attacker can simply wait for — and the empty list disguised the reason for a
+failure the caller could have fixed by signing in again. One condition, one
+answer, in all four places.
 
 Auth0 runs the post-login trigger on **refresh-token exchange** as well as on a
-real login, so sessions already in flight acquire the claim the next time the
-SPA renews its token — invisibly, with no sign-out. Until then those tokens
-simply have no claim, which the API handles deliberately rather than
-accidentally:
+real login, so a session already in flight would acquire the claim on its next
+renewal anyway. That is a nice property rather than a plan: the deploy order is
+what makes this safe.
 
-| Route | With no claim | Why |
-| --- | --- | --- |
-| `POST /user` | falls back to the body address | so a signup mid-rollout cannot fail; nothing downstream decides access on it any more |
-| `GET /invites` | returns an empty list | it is the account page's first load, and a token minutes older than the Action should not render an error |
-| `POST /invite/accept`, `/reject` | `403` | **no fallback** — a fallback would leave the hole open for exactly as long as pre-Action tokens circulate, which is the window an attacker would aim at |
-
-`errNoVerifiedEmail` is recorded on the span each time a caller reaches an
-invitation route without the claim, so the rollout is observable: a trickle that
-falls away is old tokens ageing out, and a flat line that never falls is the
-Action not running.
+`auth.failure_reason = no_verified_email` is recorded on the span every time a
+route refuses for this reason. A trace carrying it means the Action is not
+running — the fix is in the dashboard, and nothing else in the trace would say
+so.
 
 ### Testing it
 
@@ -71,7 +79,8 @@ tested against a real tenant:
 
 1. Sign in to a deploy preview and decode the access token (jwt.io, or the
    Network tab) — both claims should be present, and `email_verified` should be
-   a JSON `true`, not `"true"`.
+   a JSON `true`, not `"true"`. If they are absent, everything below fails with
+   `403` and the span says `no_verified_email`.
 2. Check **Monitoring → Logs** for the Action running on a *refresh*, not just
    on the initial login. That is the property the no-forced-re-login rollout
    rests on.

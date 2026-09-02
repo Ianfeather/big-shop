@@ -135,16 +135,27 @@ func TestInviteRoutesRefuseATokenCarryingNoVerifiedEmail(t *testing.T) {
 		}
 	})
 
-	// Listing answers empty rather than 403, deliberately - it hangs off the
-	// account page's first load, and a token a few minutes older than the Action
-	// should not render an error there. What matters is that it lists nothing.
-	t.Run("listing is empty, not an error", func(t *testing.T) {
-		out, err := application.getInvites(ctx, nil)
-		if err != nil {
-			t.Fatalf("listing returned an error rather than an empty list: %v", err)
+	t.Run("listing is forbidden", func(t *testing.T) {
+		_, err := application.getInvites(ctx, nil)
+		if err == nil {
+			t.Fatal("invitations were listed without a verified email")
 		}
-		if len(out.Body) != 0 {
-			t.Errorf("listed %d invitations for a caller with no verified email", len(out.Body))
+		if got := statusOf(err); got != http.StatusForbidden {
+			t.Errorf("status = %d, want %d", got, http.StatusForbidden)
+		}
+	})
+
+	// The route that writes the address every other one reads. It refuses for
+	// the same reason and by the same helper - a fallback here would put the
+	// welcome email, the onboarding sequence, the deletion confirmation and the
+	// SendGrid erasure back under the caller's control.
+	t.Run("creating a user is forbidden", func(t *testing.T) {
+		_, err := application.addUser(ctx, &CreateUserInput{})
+		if err == nil {
+			t.Fatal("a user was created without a verified email")
+		}
+		if got := statusOf(err); got != http.StatusForbidden {
+			t.Errorf("status = %d, want %d", got, http.StatusForbidden)
 		}
 	})
 }

@@ -330,6 +330,14 @@ const (
 	// sentinels. Nothing produces this today; it exists so that if something
 	// starts to, the span says "unclassified" rather than saying nothing.
 	reasonOther = "other"
+	// The token validated and carried a subject, but no verified email claim -
+	// so a route that needs one answered 403. The only cause is
+	// auth0/actions/add-verified-email-claim.js not running: it is
+	// unconditional, so a token minted while it is in the post-login trigger
+	// always has the claim. Worth its own value precisely because the fix is a
+	// dashboard change rather than anything in this repository, and nothing else
+	// in a trace would say so.
+	reasonNoVerifiedEmail = "no_verified_email"
 )
 
 // unauthorized writes the 401 body shape go-jwt-middleware itself uses, so a

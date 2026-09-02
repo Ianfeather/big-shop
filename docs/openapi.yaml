@@ -105,6 +105,21 @@ components:
         - policyVersion
         - source
       type: object
+    CreateUserInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /api/bigshop/schemas/CreateUserInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        name:
+          type: string
+        timezone:
+          type: string
+      type: object
     CreatedResponse:
       additionalProperties: false
       properties:
@@ -1124,7 +1139,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/User"
+              $ref: "#/components/schemas/CreateUserInputBody"
         required: true
       responses:
         "200":

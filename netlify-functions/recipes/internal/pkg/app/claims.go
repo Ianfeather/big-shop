@@ -3,6 +3,10 @@ package app
 import (
 	"context"
 	"encoding/json"
+
+	"recipes/internal/pkg/telemetry"
+
+	"github.com/danielgtaylor/huma/v2"
 )
 
 // The namespaced claims a post-login Action puts on the access token, carrying
@@ -90,4 +94,34 @@ func (b *flexBool) UnmarshalJSON(data []byte) error {
 	// Null, a number, an object - anything at all. Not an error: see above.
 	*b = false
 	return nil
+}
+
+// verifiedEmail is the caller's provider-asserted address, or a 403 explaining
+// why there isn't one.
+//
+// **Every route that needs an address calls this, and none of them falls back
+// to `user.email`.** That column is written by POST /user, which now takes its
+// value from here too, so a fallback would be circular as well as unsafe - the
+// thing it fell back to would be the thing it was trying to verify.
+//
+// It refuses rather than degrading. An earlier draft had GET /invites answer an
+// empty list instead, to keep the account page loading for somebody holding a
+// token minted before the Action existed. That softening bought nothing once
+// POST /user began requiring the claim as well: such a caller has no working
+// session at all, so an empty invitation list only disguises the reason. One
+// condition, one answer, in all four places.
+//
+// **The Action is therefore a hard dependency of this build**, not an
+// enhancement to it. If add-verified-email-claim is not in the post-login
+// trigger, no token carries the claim and every route here answers 403 - which
+// is a deliberate, legible failure rather than a subtle one, and is why the
+// message says what to do about it.
+func verifiedEmail(ctx context.Context) (string, error) {
+	email := callerFrom(ctx).VerifiedEmail
+	if email == "" {
+		telemetry.SetAuthFailureReason(ctx, reasonNoVerifiedEmail)
+		return "", huma.Error403Forbidden(
+			"This request needs a verified email address and your sign-in did not provide one. Please sign out and sign in again.")
+	}
+	return email, nil
 }

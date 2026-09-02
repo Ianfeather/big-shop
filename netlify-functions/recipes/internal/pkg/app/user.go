@@ -16,9 +16,32 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
-// UserInput carries a user body, used to add a new user.
+// UserInput carries a user body. Used by POST /invite, where the Email field is
+// the *invitee's* address and genuinely belongs in the request - naming somebody
+// else is not a claim about who you are, and no token can carry it.
 type UserInput struct {
 	Body common.User
+}
+
+// CreateUserInput is what POST /user accepts, and it is a distinct type from
+// UserInput for one reason: **it has no Email field.**
+//
+// Reusing common.User here is what made the vulnerability possible. The address
+// arrived in the body, was written to `user.email` on every login, and was then
+// what `invite.email` was matched against - so the request said who the
+// requester was, and the server believed it. Deleting the field is what makes
+// that unsayable rather than merely unused: a later edit cannot reintroduce the
+// hole by reading a value that no longer exists, and the generated OpenAPI
+// schema stops advertising a field the server ignores.
+//
+// Name and Timezone stay. Neither decides what anybody may reach - one is a
+// display string, the other picks the hour an email arrives - so the request is
+// the right place for both, and there is no claim to take them from.
+type CreateUserInput struct {
+	Body struct {
+		Name     string `json:"name,omitempty"`
+		Timezone string `json:"timezone,omitempty"`
+	}
 }
 
 // UserOutput is the response body for a user.
@@ -26,30 +49,31 @@ type UserOutput struct {
 	Body common.User
 }
 
-func (a *App) addUser(ctx context.Context, input *UserInput) (*UserOutput, error) {
+func (a *App) addUser(ctx context.Context, input *CreateUserInput) (*UserOutput, error) {
 	caller := callerFrom(ctx)
-	user := input.Body
-	user.ID = caller.UserID
 
-	// **The token's address wins over the body's, whenever there is one.**
+	// **The only source of the address, with nothing to fall back to.**
 	//
-	// `user.email` is written from here and read by the welcome email, by the
-	// collision guard below, and - until this change - by the invite lookups.
-	// Taking it from the body meant a caller could set it to anything: to an
-	// address they do not own, on every login, since the upsert refreshes the
-	// column each time. That turned a display value into an authorisation input
-	// and let anyone with a Big Shop login enumerate and accept invitations
-	// addressed to somebody else.
+	// `user.email` is written here and read by everything that mails this person
+	// or erases them: the welcome email, the fourteen-day onboarding sequence,
+	// the deletion confirmation, and the SendGrid recipient erasure - plus, until
+	// this change, the invite lookups that made it an authorisation input.
 	//
-	// The body field is kept as a fallback rather than removed, and only for as
-	// long as tokens minted before the Action can still be in circulation. It is
-	// safe *here* because nothing downstream of this write decides access on it
-	// any more - app/invites.go now reads the Caller directly and does not fall
-	// back at all. What remains is the possibility of a wrong address on a
-	// welcome email, which is worth accepting for a few hours to avoid failing
-	// signups mid-rollout.
-	if caller.VerifiedEmail != "" {
-		user.Email = caller.VerifiedEmail
+	// A body fallback would put every one of those back under the caller's
+	// control whenever a token happened to lack the claim, which is a state
+	// nobody can observe from the outside and an attacker can wait for. There is
+	// no version of that worth the signup it saves, so the request simply fails
+	// and says why.
+	verified, err := verifiedEmail(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	user := common.User{
+		ID:       caller.UserID,
+		Name:     input.Body.Name,
+		Email:    verified,
+		Timezone: input.Body.Timezone,
 	}
 
 	created, err := service.AddUser(ctx, a.db, user)

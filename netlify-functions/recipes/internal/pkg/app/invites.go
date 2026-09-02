@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"recipes/internal/pkg/common"
 	"recipes/internal/pkg/service"
@@ -24,40 +23,10 @@ type InvitesOutput struct {
 	Body []common.Invite
 }
 
-// errNoVerifiedEmail is recorded on the span when a caller reaches an invite
-// route with a token that carries no verified address. Not returned to anybody
-// - it exists so the rollout is observable: a steady trickle is pre-Action
-// tokens ageing out, and a flat line that never falls is the Action not running.
-var errNoVerifiedEmail = errors.New("token carries no verified email")
-
-// callerEmail is the address invitations are matched against: the one the
-// identity provider asserted inside the signed token, never the one in the
-// `user` row.
-//
-// **The difference is the whole of a live authorisation bug.** `user.email` is
-// written from the POST /user body and refreshed on every login, so a caller
-// could set it to any address they liked. Every function in this file matched
-// invitations on it, and GET /invites returns the invite *token* - so anyone
-// with a Big Shop login could name an address, read the invitation sent to it,
-// and accept their way into that Account. The token is a capability and this
-// was the gate on it.
-//
-// **There is deliberately no fallback to `user.email`.** A fallback would leave
-// the hole open for exactly as long as pre-Action tokens stay in circulation,
-// which is the window an attacker would aim at. Auth0 re-runs the post-login
-// trigger on refresh-token exchange, so a live session acquires the claim
-// without anybody logging in again, and the cost of being strict is that
-// somebody mid-refresh briefly sees no invitations.
-//
-// Empty means "this token predates the claim", not "this person has no email".
-func callerEmail(ctx context.Context) string {
-	return callerFrom(ctx).VerifiedEmail
-}
-
 func (a *App) acceptInvite(ctx context.Context, input *InviteTokenInput) (*struct{}, error) {
-	inviteeEmail := callerEmail(ctx)
-	if inviteeEmail == "" {
-		return nil, huma.Error403Forbidden("Your session predates a security update. Please sign out and back in.")
+	inviteeEmail, err := verifiedEmail(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	currentUser, err := service.GetUser(ctx, a.db, callerFrom(ctx).UserID)
@@ -137,15 +106,9 @@ func (a *App) tellInviter(ctx context.Context, adminID string, kind email.Kind) 
 }
 
 func (a *App) getInvites(ctx context.Context, _ *struct{}) (*InvitesOutput, error) {
-	inviteeEmail := callerEmail(ctx)
-	if inviteeEmail == "" {
-		// An empty list rather than an error, unlike accept and reject. This
-		// hangs off the account page's initial load, so answering 403 would put
-		// a failure in front of somebody whose only problem is a token a few
-		// minutes older than the Action. Nothing is lost: the list reappears on
-		// the next refresh, and the emailed link carries the token anyway.
-		telemetry.RecordWarning(ctx, "invites listed without a verified email", errNoVerifiedEmail)
-		return &InvitesOutput{Body: []common.Invite{}}, nil
+	inviteeEmail, err := verifiedEmail(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	invites, err := service.GetInvites(ctx, a.db, inviteeEmail)
@@ -167,9 +130,9 @@ func (a *App) getInvites(ctx context.Context, _ *struct{}) (*InvitesOutput, erro
 // Resolving first is also what makes Session 3's rejection email possible: a
 // blind delete never reads the row, so there is no admin_id to tell.
 func (a *App) rejectInvite(ctx context.Context, input *InviteTokenInput) (*struct{}, error) {
-	inviteeEmail := callerEmail(ctx)
-	if inviteeEmail == "" {
-		return nil, huma.Error403Forbidden("Your session predates a security update. Please sign out and back in.")
+	inviteeEmail, err := verifiedEmail(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	invitation, err := service.GetInvite(ctx, a.db, input.Body.Token, inviteeEmail)

@@ -107,7 +107,7 @@ The recipe image extraction uses Netlify Blobs to store async job results; the f
 
 ## Database Schema
 
-Production: TiDB (MySQL-compatible). There is no consolidated schema file, so `migrations/*.sql` (currently 42 files) is the authoritative source for exact columns/constraints.
+Production: TiDB (MySQL-compatible). There is no consolidated schema file, so `migrations/*.sql` is the authoritative source for exact columns/constraints.
 
 **Migrations are applied by the deploy, not by hand.** `.github/workflows/deploy-api.yml` runs `scripts/migrate-prod.sh` immediately before `flyctl deploy`, which applies every file the database has not recorded in its `schema_migration` ledger. Until 2026-08-28 this said "applied manually, in order", and that is what broke the Recipe view: #133 shipped a query selecting `recipe.featured` while migration 042 that adds the column sat unapplied, and every `GET /recipe/{id}` answered 500 for a day. See `netlify-functions/recipes/internal/pkg/migrate` for the runner and why no test could have caught it.
 

@@ -80,8 +80,14 @@ guessing:
   ship the code that stops using a column first, and drop the column in a later
   release.
 
-`go run . migrate --dry-run` from `netlify-functions/recipes` says what is
-pending without applying it. A database that predates the ledger — which
+`scripts/migrate-prod.sh --dry-run` says what is pending against production
+without applying it, and needs no Go installed: it runs the pinned toolchain in
+a container (a plain `docker run`, not `docker compose` — compose would resolve
+to whichever worktree's project the directory implies and would start the local
+`db` this has no use for). `MIGRATE_GO=host` uses the host's `go` instead, which
+is what the deploy workflow does because `setup-go` has already put the pinned
+version there. For a local database, `go run . migrate --dry-run` from
+`netlify-functions/recipes` does the same thing directly. A database that predates the ledger — which
 production did, once — has to be adopted with `--baseline <filename>` before the
 runner will touch it; it refuses to guess, and says so at length.
 

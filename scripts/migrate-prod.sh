@@ -62,6 +62,67 @@ export TIDB_PASSWORD
 # looking like TiDB Cloud, the connection quietly stops being encrypted.
 export TIDB_TLS=true
 
+# ---------------------------------------------------------------------------
+# Why this runs in a container
+# ---------------------------------------------------------------------------
+# Because the machine running it usually has no Go. The other scripts that talk
+# to production - backup-prod.sh, check-orphans.sh, sync-from-prod.sh - all run
+# `mysql` in a pinned container for exactly this reason, and this is the same
+# problem with a different tool. A plain `docker run`, not `docker compose run`:
+# compose would resolve to whichever project the working directory implies
+# (every worktree here is called big-shop - see CLAUDE.md) and would start the
+# local `db` service this has no use for. A production migration must not be
+# able to touch a development database by accident.
+#
+# It also fixes what a host toolchain cannot promise: that the Go applying the
+# migration is the Go the code was written for. GO_IMAGE tracks the Dockerfile's
+# build stage; go.mod's `go 1.25.0` and ci.yml's setup-go are the other two
+# places this version is stated, and all four move together.
+GO_IMAGE="golang:1.25-bookworm"
+
+# The repo goes in read-only. Nothing in `go run . migrate` writes to the tree -
+# builds land in GOCACHE and downloads in GOMODCACHE, both named volumes below -
+# so mounting it :ro costs nothing and means a container running as root cannot
+# leave root-owned files in someone's checkout.
+#
+# The two caches are named volumes rather than throwaway layers so that a second
+# run does not re-download the module graph. They are the only state this keeps.
+run_migrate_in_container() {
+  docker run --rm -i \
+    -v "$PWD:/src:ro" \
+    -v bigshop-go-mod-cache:/go/pkg/mod \
+    -v bigshop-go-build-cache:/root/.cache/go-build \
+    -w /src/netlify-functions/recipes \
+    -e TIDB_HOST -e TIDB_PORT -e TIDB_USER -e TIDB_DB -e TIDB_TLS \
+    -e TIDB_PASSWORD \
+    "$GO_IMAGE" \
+    go run . migrate "$@"
+}
+
+# `-e NAME` without a value, deliberately: docker takes the value from this
+# shell's environment instead of from the command line, so the password never
+# appears in `ps` output or in a shell history. `-e NAME=value` would put it in
+# both.
+
 echo "Applying pending migrations to ${TIDB_DB} on ${TIDB_HOST}..."
-cd netlify-functions/recipes
-exec go run . migrate "$@"
+
+# MIGRATE_GO=host skips the container and uses whatever `go` is on PATH.
+#
+# Set by the deploy workflow, which has already installed the pinned version
+# through actions/setup-go: pulling a ~350MB image to duplicate that would add a
+# minute to every deploy and put Docker Hub's availability on the production
+# deploy path, which is a new way for a deploy to fail and buys nothing.
+# Locally the container is the default, because locally there is usually no Go
+# at all.
+if [ "${MIGRATE_GO:-container}" = host ]; then
+  cd netlify-functions/recipes
+  exec go run . migrate "$@"
+fi
+
+if ! docker info >/dev/null 2>&1; then
+  echo "Docker is not running, and it is how this script gets a Go toolchain." >&2
+  echo "Start Docker, or re-run with MIGRATE_GO=host if you have Go ${GO_IMAGE#golang:} installed." >&2
+  exit 1
+fi
+
+run_migrate_in_container "$@"

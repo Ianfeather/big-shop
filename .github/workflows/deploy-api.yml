@@ -221,10 +221,18 @@ jobs:
       # TIDB_PASSWORD is a repository secret. The other four identifiers come
       # from .env.tidb, which is tracked in git and grants nothing on its own.
       # Until the secret exists this step fails, naming it.
+      #
+      # MIGRATE_GO=host uses the toolchain setup-go installed just above rather
+      # than the container the script defaults to. That default exists because a
+      # laptop usually has no Go; a runner that has just installed the pinned
+      # version does not need a ~350MB image pulled to supply it again, and
+      # putting Docker Hub on the production deploy path would be a new way for
+      # a deploy to fail for reasons unrelated to the deploy.
       - name: Apply pending database migrations
         run: ./scripts/migrate-prod.sh
         env:
           TIDB_PASSWORD: ${{ secrets.TIDB_PASSWORD }}
+          MIGRATE_GO: host
 
       # --remote-only builds on Fly's builder rather than this runner. It is
       # already flyctl's default (--local-only is the opt-out), so this is

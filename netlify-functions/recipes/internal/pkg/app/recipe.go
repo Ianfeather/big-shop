@@ -69,7 +69,13 @@ func (a *App) getRecipe(ctx context.Context, input *RecipeByIDInput) (*RecipeOut
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, huma.Error404NotFound("Recipe not found")
 		}
-		return nil, huma.Error500InternalServerError("Failed to parse recipe from db")
+		// fail(), not a bare huma.Error500: this exact line answered every
+		// GET /recipe/{id} in production for a day on 2026-08-27 while the real
+		// error was `Unknown column 'featured' in 'field list'` - migration 042
+		// had not been applied - and because the cause went nowhere, the only
+		// record of a day-long outage was the status code. See
+		// fail_coverage_test.go, which stops this regressing.
+		return nil, fail(ctx, huma.Error500InternalServerError("Failed to parse recipe from db"), err)
 	}
 
 	return &RecipeOutput{Body: *recipe}, nil
@@ -89,7 +95,7 @@ func (a *App) addRecipe(ctx context.Context, input *RecipeInput) (*AddRecipeOutp
 		if errors.Is(err, service.ErrNotAdmin) {
 			return nil, huma.Error403Forbidden("Not permitted to publish a Recipe")
 		}
-		return nil, huma.Error500InternalServerError("could not insert ingredients")
+		return nil, fail(ctx, huma.Error500InternalServerError("could not insert ingredients"), err)
 	}
 
 	a.purgeCatalogCaches()
@@ -109,7 +115,7 @@ func (a *App) editRecipe(ctx context.Context, input *RecipeInput) (*StatusOutput
 		if errors.Is(err, service.ErrNotAdmin) {
 			return nil, huma.Error403Forbidden("Not permitted to publish a Recipe")
 		}
-		return nil, huma.Error500InternalServerError("could not update recipe")
+		return nil, fail(ctx, huma.Error500InternalServerError("could not update recipe"), err)
 	}
 
 	a.purgeCatalogCaches()

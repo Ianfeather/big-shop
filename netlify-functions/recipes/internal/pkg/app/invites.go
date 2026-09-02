@@ -49,12 +49,12 @@ func (a *App) acceptInvite(ctx context.Context, input *InviteTokenInput) (*struc
 
 	// Add user to the account
 	if err := service.AddUserToAccount(ctx, a.db, invitation.AccountID, *currentUser); err != nil {
-		return nil, huma.Error500InternalServerError("Error adding user to the account")
+		return nil, fail(ctx, huma.Error500InternalServerError("Error adding user to the account"), err)
 	}
 
 	// remove the invite
 	if err := service.DeleteInvite(ctx, a.db, invitation.AccountID, currentUser.Email); err != nil {
-		return nil, huma.Error500InternalServerError("Error deleting invite")
+		return nil, fail(ctx, huma.Error500InternalServerError("Error deleting invite"), err)
 	}
 
 	// Told after the membership is written and the invite removed, so a failure

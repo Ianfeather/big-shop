@@ -63,8 +63,8 @@ func TestUserUpsertArgumentOrder(t *testing.T) {
 func TestNormaliseTimezone(t *testing.T) {
 	t.Run("keeps a real zone", func(t *testing.T) {
 		for _, zone := range []string{"Europe/London", "Asia/Tokyo", "America/Argentina/ComodRivadavia", "UTC"} {
-			if got := normaliseTimezone(zone); got != zone {
-				t.Errorf("normaliseTimezone(%q) = %v, want it kept", zone, got)
+			if got := NormaliseTimezone(zone); got != zone {
+				t.Errorf("NormaliseTimezone(%q) = %v, want it kept", zone, got)
 			}
 		}
 	})
@@ -79,8 +79,8 @@ func TestNormaliseTimezone(t *testing.T) {
 			"exactly 65 num": strings.Repeat("1", 65),
 		}
 		for name, zone := range cases {
-			if got := normaliseTimezone(zone); got != nil {
-				t.Errorf("%s: normaliseTimezone(%q) = %v, want nil so the column is NULL", name, zone, got)
+			if got := NormaliseTimezone(zone); got != nil {
+				t.Errorf("%s: NormaliseTimezone(%q) = %v, want nil so the column is NULL", name, zone, got)
 			}
 		}
 	})
@@ -90,7 +90,7 @@ func TestNormaliseTimezone(t *testing.T) {
 	// and this would return nil for all of them - the exact silent degradation
 	// where every user falls back to Europe/London and nothing reports it.
 	t.Run("the timezone database is actually available", func(t *testing.T) {
-		if normaliseTimezone("Pacific/Auckland") == nil {
+		if NormaliseTimezone("Pacific/Auckland") == nil {
 			t.Fatal("a valid IANA zone was refused; the timezone database is not loadable in this build")
 		}
 	})

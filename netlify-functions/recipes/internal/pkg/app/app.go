@@ -254,10 +254,22 @@ func (a *App) userMiddleware(w http.ResponseWriter, r *http.Request, next http.H
 // attributed to the request that caused it like every other - the middleware
 // runs inside the server span, so this is the same span the handler would have
 // passed in had the Caller taken a context of its own.
-func (a *App) withCaller(ctx context.Context, userID, verifiedEmail string) context.Context {
-	caller := common.NewCaller(userID, verifiedEmail, func() (int, error) {
-		return service.GetAccountID(ctx, a.db, userID)
+func (a *App) withCaller(ctx context.Context, subject, verifiedEmail string) context.Context {
+	// Declared before it is built so the admin closure can read it back. It
+	// cannot go through callerFrom(ctx): this is the context from *before* the
+	// Caller was put in it, and the closure would find nothing there.
+	var caller *common.Caller
+	caller = common.NewCaller(subject, verifiedEmail, func() (string, int, error) {
+		return service.ResolveCaller(ctx, a.db, subject)
 	}, func() (bool, error) {
+		// Reads the resolved person rather than the subject: the admin flag lives
+		// on `user`, and somebody signing in through their second provider is the
+		// same admin as through their first. Memoised, so this shares the one
+		// lookup rather than adding another.
+		userID, err := caller.UserID()
+		if err != nil {
+			return false, err
+		}
 		return service.IsAdmin(ctx, a.db, userID)
 	})
 	return context.WithValue(ctx, contextKey("caller"), caller)
@@ -295,7 +307,12 @@ func userSub(r *http.Request) string {
 	if !ok {
 		return ""
 	}
-	return caller.UserID
+	// The *subject*, not the resolved person: this is the join key back to an
+	// Auth0 log entry, so it has to name the identity that actually
+	// authenticated. It is also the only one available without a query - reading
+	// UserID() here would put a database call on the telemetry path for every
+	// request, including ones that never touch the database otherwise.
+	return caller.Subject
 }
 
 // The closed set of values for the auth.failure_reason span attribute.

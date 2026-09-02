@@ -352,11 +352,18 @@ func TestDeleteAuth0User(t *testing.T) {
 func swapSteps(t *testing.T, order *[]string, softGateErr, auth0Err, hardDeleteErr error) {
 	t.Helper()
 	origSoft, origSendGrid, origAuth0, origHard, origRestore := softGateStep, sendGridStep, auth0Step, hardDeleteStep, restoreStep
-	origConfirmation := confirmationStep
+	origConfirmation, origSubjects := confirmationStep, subjectsStep
 	t.Cleanup(func() {
 		softGateStep, sendGridStep, auth0Step, hardDeleteStep, restoreStep = origSoft, origSendGrid, origAuth0, origHard, origRestore
-		confirmationStep = origConfirmation
+		confirmationStep, subjectsStep = origConfirmation, origSubjects
 	})
+
+	// Not recorded in the order: it is a read, not a step, and it happens
+	// wherever the Auth0 deletion needs it. One subject, so the loop below runs
+	// once and the recorded order stays what these tests have always asserted.
+	subjectsStep = func(_ context.Context, _ querier, userID string) ([]string, error) {
+		return []string{userID}, nil
+	}
 
 	// Swapped out rather than left real, for the reason the real one exists:
 	// SendTransactionalAsync spawns a goroutine, so leaving it in would race
@@ -541,4 +548,74 @@ func TestFailedDeletionLeavesTheAccountReachable(t *testing.T) {
 			t.Errorf("restored access to an account that was successfully deleted: %v", order)
 		}
 	})
+}
+
+// **Every login goes, not just the one they signed in with.**
+//
+// Aliasing reopened the exact defect the hard gate exists to close. `userID`
+// names the person, and since one person can hold several Auth0 subjects,
+// deleting only that one leaves a working login for an account whose rows have
+// just been destroyed - which is board item #59's failure, reintroduced by the
+// feature that made a second provider possible.
+func TestEveryAuth0IdentityIsDeleted(t *testing.T) {
+	clearAuth0Env(t)
+
+	var order []string
+	swapSteps(t, &order, nil, nil, nil)
+
+	subjectsStep = func(_ context.Context, _ querier, _ string) ([]string, error) {
+		return []string{"google-oauth2|first", "windowslive|second", "apple|third"}, nil
+	}
+
+	var deleted []string
+	auth0Step = func(_ context.Context, subject string) (bool, error) {
+		deleted = append(deleted, subject)
+		return true, nil
+	}
+
+	if _, err := DeleteUserAndAccount(context.Background(), nil,
+		"google-oauth2|first", 7, "Ada", "ada@example.com"); err != nil {
+		t.Fatalf("DeleteUserAndAccount() error = %v", err)
+	}
+
+	want := []string{"google-oauth2|first", "windowslive|second", "apple|third"}
+	if len(deleted) != len(want) {
+		t.Fatalf("deleted %v, want all %v - a surviving identity is a working login for a deleted account", deleted, want)
+	}
+	for i := range want {
+		if deleted[i] != want[i] {
+			t.Errorf("deleted[%d] = %q, want %q", i, deleted[i], want[i])
+		}
+	}
+}
+
+// A person with no identity rows should be impossible, but "delete nothing and
+// report success" is the one outcome that must not happen: it is
+// indistinguishable from a completed hard gate. Falling back to the user id
+// restores the pre-aliasing behaviour, which was correct when one person had one
+// subject.
+func TestNoRecordedIdentitiesFallsBackToTheUserID(t *testing.T) {
+	clearAuth0Env(t)
+
+	var order []string
+	swapSteps(t, &order, nil, nil, nil)
+
+	subjectsStep = func(_ context.Context, _ querier, _ string) ([]string, error) {
+		return nil, nil
+	}
+
+	var deleted []string
+	auth0Step = func(_ context.Context, subject string) (bool, error) {
+		deleted = append(deleted, subject)
+		return true, nil
+	}
+
+	if _, err := DeleteUserAndAccount(context.Background(), nil,
+		"google-oauth2|lonely", 7, "Ada", "ada@example.com"); err != nil {
+		t.Fatalf("DeleteUserAndAccount() error = %v", err)
+	}
+
+	if len(deleted) != 1 || deleted[0] != "google-oauth2|lonely" {
+		t.Errorf("deleted %v, want a single fallback to the user id", deleted)
+	}
 }

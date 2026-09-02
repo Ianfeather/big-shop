@@ -21,11 +21,26 @@ import "sync"
 // and eager resolution adds one to each. Lazily, zero stays zero and nine
 // becomes one.
 //
+// That argument now covers the caller's *identity* as well as their Account.
+// Since `user_identity` began aliasing one person's several Auth0 subjects to
+// one `user.id`, "who is this" stopped being a fact carried in the token and
+// became a query too - so it joined the same lazy, memoised resolution rather
+// than being pushed back into the middleware.
+//
 // A Caller belongs to one request and must not be shared between them - the
 // memoised Account is only correct for the user it was built for.
 type Caller struct {
-	// UserID is the authenticated subject, as it appears in account_user.
-	UserID string
+	// Subject is the raw `sub` from the validated token, before aliasing.
+	//
+	// Kept separate rather than folded into UserID because two callers need the
+	// *login* rather than the person: telemetry, where `user.sub` is the join
+	// key back to an Auth0 log entry and must therefore name the identity that
+	// actually authenticated, and POST /user, which is the request that decides
+	// what this subject resolves to and so cannot use the answer as its input.
+	//
+	// Nothing else should read it. If a query needs to know who somebody is,
+	// UserID() is the answer; Subject is how they got here.
+	Subject string
 
 	// VerifiedEmail is the caller's email address **as asserted by the identity
 	// provider inside the signed token**, or "" when the token carried none.
@@ -45,8 +60,11 @@ type Caller struct {
 	// rather than theoretical.
 	VerifiedEmail string
 
-	resolve   func() (int, error)
+	// One lazy resolution answers both "who is this person" and "which Account
+	// are they in", because it is one query - see NewCaller.
+	resolve   func() (string, int, error)
 	once      sync.Once
+	userID    string
 	accountID int
 	err       error
 
@@ -58,12 +76,44 @@ type Caller struct {
 
 // NewCaller builds a Caller for one request.
 //
-// The Account lookup arrives as a function rather than a database handle so
-// that this package does not depend on `service`, which depends on this one.
-// It also keeps the query itself in exactly one place: service.GetAccountID,
-// whose only caller this becomes.
-func NewCaller(userID, verifiedEmail string, resolve func() (int, error), resolveAdmin func() (bool, error)) *Caller {
-	return &Caller{UserID: userID, VerifiedEmail: verifiedEmail, resolve: resolve, resolveAdmin: resolveAdmin}
+// The lookup arrives as a function rather than a database handle so that this
+// package does not depend on `service`, which depends on this one. It also keeps
+// the query itself in exactly one place: service.ResolveCaller, whose only
+// caller this becomes.
+//
+// **It returns the person and the Account together because they come from one
+// query.** Aliasing made "who is this" a database question rather than a fact
+// already in the token, and answering it separately would have doubled the
+// lookups the Caller was built to collapse. Joining `user_identity` to
+// `account_user` costs nothing over the account lookup that was there before.
+func NewCaller(subject, verifiedEmail string, resolve func() (string, int, error), resolveAdmin func() (bool, error)) *Caller {
+	return &Caller{Subject: subject, VerifiedEmail: verifiedEmail, resolve: resolve, resolveAdmin: resolveAdmin}
+}
+
+// UserID is the person making the request, as `user.id` and every table
+// referencing it spells them.
+//
+// **Not the same thing as the Auth0 subject**, and that difference is the whole
+// of the multi-provider design. One person can sign in through Google and
+// through Microsoft, arriving with a different `sub` each time; both resolve
+// through `user_identity` to this one id, so nothing downstream can tell the two
+// logins apart. See migrations/043_user_identity.sql.
+//
+// **A method rather than a field, and lazily resolved, because it is now a
+// query.** Resolving it eagerly in the auth middleware was tried and reverted:
+// it put a database call in front of every authenticated request, including the
+// ones Huma rejects before any handler runs, and made a request that needs no
+// database depend on one. It also turned an unresolvable identity into a silent
+// fallback to the subject, where here it is an error a caller has to look at.
+//
+// The error is memoised as deliberately as the value: a subject with no
+// `user_identity` row is a genuinely new person, and every route except POST
+// /user should refuse them rather than invent an identity.
+func (c *Caller) UserID() (string, error) {
+	c.once.Do(func() {
+		c.userID, c.accountID, c.err = c.resolve()
+	})
+	return c.userID, c.err
 }
 
 // AccountID returns the Account this Caller belongs to, resolving it on first
@@ -82,7 +132,7 @@ func NewCaller(userID, verifiedEmail string, resolve func() (int, error), resolv
 // ID explicitly rather than asking - keep it that way.
 func (c *Caller) AccountID() (int, error) {
 	c.once.Do(func() {
-		c.accountID, c.err = c.resolve()
+		c.userID, c.accountID, c.err = c.resolve()
 	})
 	return c.accountID, c.err
 }

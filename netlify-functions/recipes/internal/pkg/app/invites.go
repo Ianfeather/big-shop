@@ -29,7 +29,12 @@ func (a *App) acceptInvite(ctx context.Context, input *InviteTokenInput) (*struc
 		return nil, err
 	}
 
-	currentUser, err := service.GetUser(ctx, a.db, callerFrom(ctx).UserID)
+	userID, err := callerFrom(ctx).UserID()
+	if err != nil {
+		return nil, fail(ctx, huma.Error500InternalServerError("Error resolving the current user"), err)
+	}
+
+	currentUser, err := service.GetUser(ctx, a.db, userID)
 	if err != nil {
 		return nil, fail(ctx, huma.Error400BadRequest("Error finding current user"), err)
 	}

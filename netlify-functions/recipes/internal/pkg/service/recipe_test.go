@@ -435,7 +435,7 @@ func TestResolveFeatured(t *testing.T) {
 
 	newCaller := func(admin bool, err error) *common.Caller {
 		return common.NewCaller("auth0|someone", "",
-			func() (int, error) { return 1, nil },
+			func() (string, int, error) { return "auth0|someone", 1, nil },
 			func() (bool, error) { return admin, err },
 		)
 	}

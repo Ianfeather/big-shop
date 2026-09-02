@@ -39,11 +39,24 @@ import (
 // came to be correct by accident. There is now no such variable to misread.
 const hasAccountQuery = `SELECT EXISTS(SELECT 1 FROM account_user WHERE user_id = ?)`
 
-// CreateAccount gives a User an Account if they do not already have one.
+// EnsureAccount gives a User an Account if they do not already have one.
 //
 // A no-op for everyone but a genuinely new user, which is almost every call: it
 // hangs off POST /user, and that runs on every login.
-func CreateAccount(ctx context.Context, db *sql.DB, user common.User) error {
+//
+// **The no-op case is load-bearing rather than merely cheap**, which is why this
+// still runs for a returning user now that LinkOrCreateIdentity creates the
+// account and the user together in one transaction. That transaction means a
+// *new* user can no longer end up with a `user` row and no membership - but rows
+// written before it existed could, because AddUser and CreateAccount used to be
+// two separate calls with a failure window between them. Someone in that state
+// has no reachable Account and gets a 500 on every account-scoped route; this is
+// the only thing that repairs them, on their next login, silently.
+//
+// Takes a dbConn rather than *sql.DB so the identity path can run it inside its
+// transaction, and a plain user id rather than a common.User because nothing
+// else about the person was ever read.
+func EnsureAccount(ctx context.Context, db dbConn, userID string) error {
 	// EXISTS always returns exactly one row, so sql.ErrNoRows cannot happen here
 	// and every error is a real one. That is the point of the shape: this used to
 	// scan into a non-pointer `int`, which made `Scan` fail with "destination not
@@ -52,7 +65,7 @@ func CreateAccount(ctx context.Context, db *sql.DB, user common.User) error {
 	// behaviour, reached by declining to create an Account for a reason that had
 	// nothing to do with whether one existed.
 	var exists bool
-	if err := db.QueryRowContext(ctx, hasAccountQuery, user.ID).Scan(&exists); err != nil {
+	if err := db.QueryRowContext(ctx, hasAccountQuery, userID).Scan(&exists); err != nil {
 		return fmt.Errorf("checking whether the user already has an account: %w", err)
 	}
 	if exists {
@@ -68,7 +81,7 @@ func CreateAccount(ctx context.Context, db *sql.DB, user common.User) error {
 		return fmt.Errorf("reading new account id: %w", err)
 	}
 	accountUserQuery := `INSERT INTO account_user (user_id, account_id) VALUES (?, ?)`
-	if _, err := db.ExecContext(ctx, accountUserQuery, user.ID, int(id)); err != nil {
+	if _, err := db.ExecContext(ctx, accountUserQuery, userID, int(id)); err != nil {
 		return fmt.Errorf("linking user to new account: %w", err)
 	}
 	return nil
@@ -438,6 +451,15 @@ func deleteAccountTx(ctx context.Context, tx execer, userID string, accountID in
 		if _, err := tx.ExecContext(ctx, "DELETE FROM account_user WHERE account_id = ?;", accountID); err != nil {
 			return fmt.Errorf("deleting the account's remaining memberships: %w", err)
 		}
+	}
+
+	// Every way this person signs in. `fk_user_identity_user_id` is ON DELETE
+	// CASCADE, so the statement below would clear these anyway - but this
+	// cascade is hand-ordered on the principle that children go before parents,
+	// and a row that disappears through a constraint rather than a statement is
+	// the one nobody thinks about when they next edit the sequence.
+	if _, err := tx.ExecContext(ctx, "DELETE FROM user_identity WHERE user_id = ?;", userID); err != nil {
+		return fmt.Errorf("deleting the user's identities: %w", err)
 	}
 
 	if _, err := tx.ExecContext(ctx, "DELETE FROM user WHERE id = ?;", userID); err != nil {

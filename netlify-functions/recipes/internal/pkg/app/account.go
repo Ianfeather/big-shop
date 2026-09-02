@@ -54,7 +54,7 @@ func (a *App) addUserToAccount(ctx context.Context, input *AccountUserInput) (*A
 
 	account, err := service.GetAccount(ctx, a.db, caller)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to get Account from db")
+		return nil, fail(ctx, huma.Error500InternalServerError("Failed to get Account from db"), err)
 	}
 
 	return &AccountOutput{Body: *account}, nil
@@ -80,7 +80,7 @@ func (a *App) removeUserFromAccount(ctx context.Context, input *AccountUserInput
 
 	account, err := service.GetAccount(ctx, a.db, caller)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to get Account from db")
+		return nil, fail(ctx, huma.Error500InternalServerError("Failed to get Account from db"), err)
 	}
 
 	return &AccountOutput{Body: *account}, nil

@@ -44,7 +44,7 @@ func (a *App) getList(ctx context.Context, _ *struct{}) (*ShoppingListOutput, er
 
 	list, err := service.GetShoppingList(ctx, caller, a.catalogs, a.db)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Error Fetching Shopping List")
+		return nil, fail(ctx, huma.Error500InternalServerError("Error Fetching Shopping List"), err)
 	}
 
 	return &ShoppingListOutput{Body: *list}, nil
@@ -75,7 +75,7 @@ func (a *App) addExtraListItem(ctx context.Context, input *ListItemInput) (*Stat
 	}
 
 	if err := service.AddExtraListItem(ctx, caller, extraItem.Name, extraItem.IsBought, a.db); err != nil {
-		return nil, huma.Error500InternalServerError("Cannot add list items")
+		return nil, fail(ctx, huma.Error500InternalServerError("Cannot add list items"), err)
 	}
 
 	return &StatusOutput{Body: common.SimpleResponse{Status: "ok"}}, nil
@@ -104,7 +104,7 @@ func (a *App) buyListItem(ctx context.Context, input *ListItemInput) (*StatusOut
 	}
 
 	if err := service.BuyListItem(ctx, caller, listItem.Name, listItem.IsBought, a.db); err != nil {
-		return nil, huma.Error500InternalServerError("Error marking item as bought")
+		return nil, fail(ctx, huma.Error500InternalServerError("Error marking item as bought"), err)
 	}
 
 	return &StatusOutput{Body: common.SimpleResponse{Status: "ok"}}, nil
@@ -114,7 +114,7 @@ func (a *App) clearList(ctx context.Context, _ *struct{}) (*ShoppingListOutput, 
 	caller := callerFrom(ctx)
 
 	if err := service.RemoveAllListItems(ctx, caller, a.db); err != nil {
-		return nil, huma.Error500InternalServerError("Error removing list items")
+		return nil, fail(ctx, huma.Error500InternalServerError("Error removing list items"), err)
 	}
 
 	// Log clear event for meal planning intelligence

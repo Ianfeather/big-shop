@@ -245,6 +245,18 @@ docker compose exec db mysql -uroot -proot -e \
   "SELECT * FROM bigshop._migration_status"
 ```
 
+The companion table is `bigshop.schema_migration`, one row per migration the
+volume has actually had, with the SHA-256 of the file as it was applied. That
+is the ledger `internal/pkg/migrate` reads, and it is the same table production
+has — the healthcheck compares its rows against `./migrations`, and
+`scripts/ensure-db-current.sh` reads it to decide whether a volume has fallen
+behind. Which migrations a volume is missing:
+
+```bash
+docker compose exec db mysql -uroot -proot -N -B -e \
+  "SELECT filename FROM bigshop.schema_migration ORDER BY filename"
+```
+
 Fix the migration — or add it to the allowlist with a note, if it genuinely
 cannot apply from scratch — then `docker compose down -v && npm run dev:full`.
 

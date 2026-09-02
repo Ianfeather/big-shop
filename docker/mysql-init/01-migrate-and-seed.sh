@@ -26,28 +26,12 @@ sql bigshop -e "
     \`id\` tinyint NOT NULL,
     \`ok\` tinyint(1) NOT NULL COMMENT '1 only if every migration applied as expected and the seed loaded',
     \`detail\` text COMMENT 'the unexpected errors, when ok = 0',
-    \`applied\` text COMMENT 'the migration basenames this replay applied, sorted, newline-separated',
     \`applied_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (\`id\`)
   ) COLLATE=utf8mb4_bin
     COMMENT 'set by docker/mysql-init/01-migrate-and-seed.sh; read by the db healthcheck';
   REPLACE INTO \`_migration_status\` (id, ok, detail) VALUES (1, 0, 'migrations did not finish');
 "
-
-# The set of migrations this replay is about to apply, recorded so that a later
-# start can tell whether the volume has fallen behind the repo.
-#
-# This is the half of the check that could not exist before: the entrypoint only
-# runs this script when the data directory is empty, so everything above runs
-# exactly once in a volume's life and `ok = 1` is a statement about the day the
-# volume was created. Add a migration and every existing volume is silently
-# behind, with a green healthcheck asserting the opposite. Recording *what* was
-# applied is what lets the healthcheck (and scripts/ensure-db-current.sh) notice.
-#
-# Basenames rather than a checksum, because the comparison has to be able to
-# name the missing files - "11 migrations missing, starting at 034_consent_event"
-# is actionable and "digest mismatch" is not.
-APPLIED="$(cd "$MIGRATIONS" && ls -1 *.sql | sort | tr '\n' '@')"
 
 for f in "$MIGRATIONS"/*.sql; do
   base="$(basename "$f")"
@@ -131,10 +115,40 @@ MSG
   exit 0
 fi
 
+# The per-file ledger that internal/pkg/migrate reads, written here so that a
+# freshly built dev volume is already adopted and `go run . migrate` behaves
+# locally exactly as it does against production.
+#
+# Distinct from _migration_status above, which is one row and a boolean
+# answering "did this volume's single replay go cleanly?" for the healthcheck.
+# This is the durable record of *which* files ran, and it is the same table the
+# production database has - so the thing exercised locally is the real thing.
+#
+# Populated only on the success path, below the allowlist reconciliation and
+# above the seed, for the same reason ok = 1 is: a volume must never report a
+# migration it did not finish applying.
+echo "Recording the applied migrations in schema_migration"
+sql bigshop -e "
+  CREATE TABLE IF NOT EXISTS \`schema_migration\` (
+    \`filename\` varchar(255) NOT NULL COMMENT 'basename of the file in migrations/',
+    \`checksum\` char(64) NOT NULL COMMENT 'SHA-256 of the file as applied; empty means unknown',
+    \`applied_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (\`filename\`)
+  ) COLLATE=utf8mb4_bin COMMENT='applied migrations; written by internal/pkg/migrate';
+"
+for f in "$MIGRATIONS"/*.sql; do
+  base="$(basename "$f")"
+  sum="$(sha256sum "$f" | cut -d' ' -f1)"
+  sql bigshop -e "INSERT IGNORE INTO \`schema_migration\` (filename, checksum) VALUES ('$base', '$sum');"
+done
+
 echo "Applying dev seed data"
 sql bigshop < /seed/dev-seed.sql
 
-# ok = 1 and the applied set land in the same statement, deliberately: a volume
-# must never be able to report a migration set it did not finish applying.
-sql bigshop -e "REPLACE INTO \`_migration_status\` (id, ok, detail, applied) VALUES (1, 1, NULL, REPLACE('$APPLIED', '@', CHAR(10)));"
+# Last, and after the ledger rows above: `ok = 1` is the assertion that this
+# replay finished, so nothing that reads it may be written afterwards. The
+# healthcheck requires both this and a ledger matching ./migrations, and a
+# volume must never be able to report a migration set it did not finish
+# applying.
+sql bigshop -e "REPLACE INTO \`_migration_status\` (id, ok, detail) VALUES (1, 1, NULL);"
 echo "Migrations and seed applied; _migration_status.ok = 1"

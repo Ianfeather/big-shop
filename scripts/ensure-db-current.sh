@@ -161,19 +161,20 @@ fi
 # ---------------------------------------------------------------------------
 # 3. Compare the recorded migration set against the repo.
 # ---------------------------------------------------------------------------
-# The '@' round trip keeps the whole set in one batch-mode field: mysql's -B
-# output escapes a real newline to a literal \n, which would then have to be
-# un-escaped here. A migration filename cannot contain '@' (they are all
-# NNN_lower_snake.sql), so nothing is ambiguous. The same substitution is on the
-# writing side in 01-migrate-and-seed.sh and in the healthcheck.
+# One row per filename, which is also how the db healthcheck reads it. The
+# recorded set used to be a single newline-joined field on _migration_status,
+# round-tripped through '@' to survive batch mode; it now lives in
+# `schema_migration`, the per-file ledger that internal/pkg/migrate reads and
+# writes. That removes the second record of the one fact - `go run . migrate`
+# updates the ledger, and nothing was updating the old column, so applying a
+# migration by hand left this script calling a current volume stale.
 recorded_raw="$(mysql_in_db -N -B -e \
-  "SELECT REPLACE(applied, CHAR(10), '@') FROM bigshop._migration_status WHERE id = 1" \
+  "SELECT filename FROM bigshop.schema_migration ORDER BY filename" \
   2>/dev/null || true)"
 
-# Three ways this can be empty, all meaning the same thing: no _migration_status
-# table (a volume predating the whole verdict mechanism), no `applied` column (a
-# volume predating this script), or a NULL value. All are treated as stale,
-# unconditionally.
+# Two ways this can be empty, both meaning the same thing: no schema_migration
+# table (a volume predating the ledger, including every volume predating this
+# script), or no rows in it. Both are treated as stale, unconditionally.
 #
 # That is a deliberate reversal of the precedent in docker-compose.yml comment
 # 3, which fell back to a plain ping when _migration_status was absent, to avoid
@@ -187,7 +188,7 @@ EXPECTED="$(mktemp)"
 trap 'rm -f "$RECORDED" "$EXPECTED"' EXIT
 
 if [ -n "$recorded_raw" ] && [ "$recorded_raw" != "NULL" ]; then
-  printf '%s' "$recorded_raw" | tr '@' '\n' | grep -v '^$' | sort > "$RECORDED"
+  printf '%s\n' "$recorded_raw" | grep -v '^$' | sort > "$RECORDED"
 else
   : > "$RECORDED"
 fi

@@ -51,6 +51,47 @@ which runs on every pull request *and* on pushes to `master`. The Go API is
 deployed to Fly.io by `.github/workflows/deploy-api.yml`, not by Netlify — see
 [ADR-0006](./docs/adr/0006-go-api-leaves-netlify-functions.md).
 
+### Database migrations
+
+**Migrations reach production through the deploy, not by hand.** `deploy-api.yml`
+runs `scripts/migrate-prod.sh` immediately before `flyctl deploy`; it applies
+every file in `migrations/` that the database has not recorded in its
+`schema_migration` ledger, and a failure fails the job so nothing ships against
+a schema that would not take it.
+
+Writing one is therefore just: add `NNN_name.sql` to `migrations/`, open a PR,
+merge. Locally, a fresh volume replays the lot and writes the ledger itself, and
+`npm run dev:full` repairs a volume that is merely behind.
+
+Three rules the runner enforces, each of which fails loudly rather than
+guessing:
+
+- **Never edit an applied migration.** The ledger stores each file's SHA-256 and
+  the runner stops if one has changed since it ran. Correct a mistake with a new
+  migration — the old file is a record of what the database actually had done to
+  it.
+- **Never renumber below the high-water mark.** A `043` merged after `044` has
+  already run would build a schema no fresh database passes through, so the
+  runner refuses it and asks for a renumber. This is the one that bites when two
+  branches both add the same number.
+- **A destructive migration is two releases.** Migrating *before* deploying keeps
+  the schema ahead of the code, which is the right way round for adding
+  anything; it does mean the old code briefly runs against the new schema. So
+  ship the code that stops using a column first, and drop the column in a later
+  release.
+
+`go run . migrate --dry-run` from `netlify-functions/recipes` says what is
+pending without applying it. A database that predates the ledger — which
+production did, once — has to be adopted with `--baseline <filename>` before the
+runner will touch it; it refuses to guess, and says so at length.
+
+This exists because it did not: on 2026-08-27 #133 shipped a query selecting
+`recipe.featured` while migration 042 that adds the column sat unapplied, and
+`GET /recipe/{id}` answered 500 for a day. No suite could have caught it —
+every environment a test runs in builds its schema from `migrations/*.sql` at
+the same commit as the code, so production was the only one that could drift and
+the only one with no record of what it had.
+
 ### Local Development Setup
 
 **Fastest path — full local stack:** `npm run dev:full` (needs Docker running).
@@ -90,8 +131,10 @@ This runs `scripts/dev-full.sh`, which:
   error.
 
   Two things now close that. The init script records *which* migrations it
-  replayed on `_migration_status`, and the healthcheck compares that set
-  against `./migrations` (bind-mounted into the container) on every check, so
+  replayed in `schema_migration` — one row per file, the same ledger
+  `internal/pkg/migrate` and the production database use — and the healthcheck
+  compares those rows against `./migrations` (bind-mounted into the container)
+  on every check, so
   `api` refuses to start against a stale schema through the same mechanism
   that already protects it from a broken one. And `scripts/ensure-db-current.sh`
   — run by `dev-full.sh` before anything waits on health, and by

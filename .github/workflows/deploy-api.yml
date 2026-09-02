@@ -187,6 +187,45 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
+      # Go, for the migration step below. Not needed by anything else in this
+      # job - flyctl builds the image on Fly's remote builder, not here.
+      - uses: actions/setup-go@v7
+        with:
+          # Matches go.mod's `go 1.25.0`, the Dockerfile's build stage and
+          # ci.yml's `go` job.
+          go-version: '1.25'
+          cache-dependency-path: netlify-functions/recipes/go.sum
+
+      # **The step this workflow was missing.** It had three guards - CI green,
+      # the declared secrets matching the app's, the machines actually taking
+      # the release - and not one of them asked whether the database had the
+      # columns the new code was about to select. So on 2026-08-27 it shipped
+      # #133, whose queries select `recipe.featured`, while migration 042 that
+      # adds that column sat unapplied; every GET /recipe/{id} answered 500 for
+      # a day. No test could have caught it, because every environment a test
+      # runs in builds its schema from migrations/*.sql at the same commit as
+      # the code - production was the only one that could drift and the only one
+      # with no record of what it had.
+      #
+      # Before the deploy, so the schema is never behind the code. See the
+      # header of migrate-prod.sh for the consequence of that ordering: a
+      # destructive migration has to be split across two releases, because
+      # between this step and the release the *old* code is running against the
+      # *new* schema.
+      #
+      # Fails the job on any error, which stops the deploy. That is the intended
+      # relationship: shipping code whose migration would not apply is the thing
+      # being prevented, so a broken migration must not become a broken
+      # production API as well.
+      #
+      # TIDB_PASSWORD is a repository secret. The other four identifiers come
+      # from .env.tidb, which is tracked in git and grants nothing on its own.
+      # Until the secret exists this step fails, naming it.
+      - name: Apply pending database migrations
+        run: ./scripts/migrate-prod.sh
+        env:
+          TIDB_PASSWORD: ${{ secrets.TIDB_PASSWORD }}
+
       # --remote-only builds on Fly's builder rather than this runner. It is
       # already flyctl's default (--local-only is the opt-out), so this is
       # explicit rather than necessary - worth keeping so the intent survives a

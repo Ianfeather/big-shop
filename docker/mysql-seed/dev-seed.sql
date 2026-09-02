@@ -6,6 +6,12 @@
 
 INSERT INTO `user` (id, name, email) VALUES ('local-dev-user', 'Local Dev', 'dev@localhost');
 INSERT INTO `account_user` (user_id, account_id) VALUES ('local-dev-user', 1);
+-- Its identity row, and this one is easy to miss: migrations/043 backfills
+-- `user_identity` from whatever is in `user` at the time, and this file runs
+-- *after* every migration - so the row it inserts above is invisible to that
+-- backfill. Without this line the seeded user resolves to nobody, and the whole
+-- DISABLE_AUTH flow 500s on a database that looks correctly migrated.
+INSERT INTO `user_identity` (subject, user_id) VALUES ('local-dev-user', 'local-dev-user');
 
 -- The blank-name row is a deliberate sentinel for "no unit, just a count" (e.g. "2 eggs") -
 -- part.unit_id is NOT NULL, so count-only ingredients still need a real unit row to point to.

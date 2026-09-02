@@ -57,10 +57,15 @@ func (a *App) recordConsent(ctx context.Context, input *ConsentInput) (*UserOutp
 		return nil, huma.Error422UnprocessableEntity("analytics is required")
 	}
 
-	err := service.RecordConsent(
+	userID, err := caller.UserID()
+	if err != nil {
+		return nil, fail(ctx, huma.Error500InternalServerError("could not resolve the current user"), err)
+	}
+
+	err = service.RecordConsent(
 		ctx,
 		a.db,
-		caller.UserID,
+		userID,
 		*input.Body.Analytics,
 		input.Body.PolicyVersion,
 		source,
@@ -69,7 +74,7 @@ func (a *App) recordConsent(ctx context.Context, input *ConsentInput) (*UserOutp
 		return nil, fail(ctx, huma.Error500InternalServerError("could not record consent"), err)
 	}
 
-	saved, err := service.GetUser(ctx, a.db, caller.UserID)
+	saved, err := service.GetUser(ctx, a.db, userID)
 	if err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("Error fetching saved user"), err)
 	}

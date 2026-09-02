@@ -300,6 +300,7 @@ var (
 	restoreStep      = DisableUserAccountRestore
 	confirmationStep = sendDeletionConfirmation
 	sendGridStep     = EraseSendGridRecipient
+	subjectsStep     = SubjectsFor
 	auth0Step        = DeleteAuth0User
 	hardDeleteStep   = DeleteAccount
 	externalsTimeout = 20 * time.Second
@@ -366,18 +367,54 @@ func DeleteUserAndAccount(ctx context.Context, db *sql.DB, userID string, accoun
 	}
 
 	// 3. Auth0, the hard gate.
-	called, err := auth0Step(externalsCtx, userID)
+	//
+	// **Every subject this person signs in with, not just one.** Since
+	// `user_identity` began aliasing several Auth0 subjects to one `user.id`,
+	// somebody who has linked a second provider has more than one login - and
+	// `userID` names only the first of them. Deleting that one alone would leave
+	// a working login for an account that no longer exists, which is precisely
+	// the failure the hard gate exists to prevent, reopened by the feature that
+	// made linking possible.
+	//
+	// Read before the cascade, because step 4 deletes the rows holding them -
+	// the same ordering constraint the address has, for the same reason.
+	subjects, err := subjectsStep(externalsCtx, db, userID)
 	if err != nil {
-		// Abort with every row intact and the Account reachable again. This is
-		// the survivable failure, and keeping it survivable is the whole design.
 		unGate()
-		return false, fmt.Errorf("deleting the Auth0 identity: %w", err)
+		return false, fmt.Errorf("listing the user's auth0 identities: %w", err)
 	}
-	if !called {
-		// Loud, because this is the configuration gap that would leave a
-		// working login for a deleted account.
-		telemetry.RecordWarning(ctx, "auth0 identity deletion skipped",
-			fmt.Errorf("AUTH0_MGMT_CLIENT_ID/AUTH0_MGMT_CLIENT_SECRET are not set; the login for this deleted account is NOT being removed"))
+	// A person with no identity rows should be impossible, but "delete nothing
+	// and report success" is the one outcome that must not happen here: it is
+	// indistinguishable from a completed hard gate. Falling back to the user id
+	// restores exactly the pre-aliasing behaviour, which was correct when one
+	// person had one subject.
+	if len(subjects) == 0 {
+		telemetry.RecordWarning(ctx, "no auth0 identities recorded for the user",
+			fmt.Errorf("falling back to the user id as the subject"))
+		subjects = []string{userID}
+	}
+
+	for _, subject := range subjects {
+		called, err := auth0Step(externalsCtx, subject)
+		if err != nil {
+			// Abort with every row intact and the Account reachable again. This
+			// is the survivable failure, and keeping it survivable is the whole
+			// design.
+			//
+			// A later subject failing after an earlier one succeeded leaves the
+			// person with fewer logins than they started with and all their data
+			// - which is untidy but safe, and retrying reaches the same place
+			// because deleting an already-deleted Auth0 user is a 404 this
+			// tolerates.
+			unGate()
+			return false, fmt.Errorf("deleting the Auth0 identity: %w", err)
+		}
+		if !called {
+			// Loud, because this is the configuration gap that would leave a
+			// working login for a deleted account.
+			telemetry.RecordWarning(ctx, "auth0 identity deletion skipped",
+				fmt.Errorf("AUTH0_MGMT_CLIENT_ID/AUTH0_MGMT_CLIENT_SECRET are not set; the login for this deleted account is NOT being removed"))
+		}
 	}
 
 	// 4. The irreversible step, last. It reports which branch it took from

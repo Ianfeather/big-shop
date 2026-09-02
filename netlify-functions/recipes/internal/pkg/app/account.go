@@ -121,12 +121,17 @@ func (a *App) deleteAccount(ctx context.Context, _ *struct{}) (*DeleteAccountOut
 	// to delete the row holding it. service.EraseSendGridRecipient takes the
 	// address as a parameter and cannot enforce this itself, so it is enforced
 	// here.
-	user, err := service.GetUser(ctx, a.db, caller.UserID)
+	userID, err := caller.UserID()
+	if err != nil {
+		return nil, fail(ctx, huma.Error500InternalServerError("Could not resolve the current user"), err)
+	}
+
+	user, err := service.GetUser(ctx, a.db, userID)
 	if err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("Could not read the current user"), err)
 	}
 
-	accountDeleted, err := service.DeleteUserAndAccount(ctx, a.db, caller.UserID, accountID, user.Name, user.Email)
+	accountDeleted, err := service.DeleteUserAndAccount(ctx, a.db, userID, accountID, user.Name, user.Email)
 	if err != nil {
 		// The sequence leaves a gated, retryable Account behind on any failure,
 		// so a 500 here genuinely means "try again" rather than "some of your

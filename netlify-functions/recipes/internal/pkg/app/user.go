@@ -54,41 +54,40 @@ func (a *App) addUser(ctx context.Context, input *CreateUserInput) (*UserOutput,
 
 	// **The only source of the address, with nothing to fall back to.**
 	//
-	// `user.email` is written here and read by everything that mails this person
-	// or erases them: the welcome email, the fourteen-day onboarding sequence,
-	// the deletion confirmation, and the SendGrid recipient erasure - plus, until
-	// this change, the invite lookups that made it an authorisation input.
-	//
-	// A body fallback would put every one of those back under the caller's
-	// control whenever a token happened to lack the claim, which is a state
-	// nobody can observe from the outside and an attacker can wait for. There is
-	// no version of that worth the signup it saves, so the request simply fails
-	// and says why.
+	// `user.email` is written from here and read by everything that mails this
+	// person or erases them: the welcome email, the fourteen-day onboarding
+	// sequence, the deletion confirmation and the SendGrid recipient erasure -
+	// and it is what an arriving second login is matched on just below. A body
+	// fallback would put every one of those back under the caller's control.
 	verified, err := verifiedEmail(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	user := common.User{
-		ID:       caller.UserID,
-		Name:     input.Body.Name,
-		Email:    verified,
-		Timezone: input.Body.Timezone,
-	}
-
-	created, err := service.AddUser(ctx, a.db, user)
+	// **caller.Subject, not caller.UserID.** This is the one request that
+	// decides what the subject resolves to, so it cannot take the answer as its
+	// input - for a new person, UserID is only the middleware's fallback to the
+	// subject itself, and for a second provider it would already be the linked
+	// user, which is the thing being established here.
+	userID, created, err := service.LinkOrCreateIdentity(
+		ctx, a.db, caller.Subject, verified, input.Body.Name, service.NormaliseTimezone(input.Body.Timezone))
 	if err != nil {
+		if errors.Is(err, service.ErrAmbiguousEmail) {
+			// Several existing people hold this address, so linking would be
+			// choosing whose recipes this login can read. Refused rather than
+			// guessed - see service.ErrAmbiguousEmail.
+			return nil, huma.Error409Conflict(
+				"This email address is already associated with more than one Big Shop account, so we could not sign you in safely.")
+		}
 		return nil, fail(ctx, huma.Error500InternalServerError("could not add new user"), err)
 	}
 
-	if err := service.CreateAccount(ctx, a.db, user); err != nil {
-		return nil, fail(ctx, huma.Error500InternalServerError("Error creating account for user"), err)
-	}
-
-	// Re-fetch rather than echoing the input body: `onboarded` is server-managed
-	// (untouched by the upsert in AddUser for existing rows), so the caller needs
-	// the DB's current value to know whether to show the onboarding screen.
-	saved, err := service.GetUser(ctx, a.db, user.ID)
+	// Re-fetch rather than echoing the input: `onboarded` is server-managed and
+	// LinkOrCreateIdentity does not touch it, so the caller needs the DB's
+	// current value to know whether to show the onboarding screen. It is also
+	// how the response carries the *linked* person for a second-provider login,
+	// rather than anything about the subject that just arrived.
+	saved, err := service.GetUser(ctx, a.db, userID)
 	if err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("Error fetching saved user"), err)
 	}
@@ -224,7 +223,12 @@ type PreferencesInput struct {
 func (a *App) getUser(ctx context.Context, _ *struct{}) (*UserOutput, error) {
 	caller := callerFrom(ctx)
 
-	user, err := service.GetUser(ctx, a.db, caller.UserID)
+	userID, err := caller.UserID()
+	if err != nil {
+		return nil, fail(ctx, huma.Error500InternalServerError("could not resolve the current user"), err)
+	}
+
+	user, err := service.GetUser(ctx, a.db, userID)
 	if err != nil {
 		// The no-rows case is not a fault: someone who reached an inner page
 		// before POST /user ever ran for them. The client treats a 404 as "no
@@ -248,11 +252,16 @@ func (a *App) getUser(ctx context.Context, _ *struct{}) (*UserOutput, error) {
 func (a *App) setPreferences(ctx context.Context, input *PreferencesInput) (*UserOutput, error) {
 	caller := callerFrom(ctx)
 
-	if err := service.SetShowPantryStaples(ctx, a.db, caller.UserID, input.Body.ShowPantryStaples); err != nil {
+	userID, err := caller.UserID()
+	if err != nil {
+		return nil, fail(ctx, huma.Error500InternalServerError("could not resolve the current user"), err)
+	}
+
+	if err := service.SetShowPantryStaples(ctx, a.db, userID, input.Body.ShowPantryStaples); err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("could not save preferences"), err)
 	}
 
-	saved, err := service.GetUser(ctx, a.db, caller.UserID)
+	saved, err := service.GetUser(ctx, a.db, userID)
 	if err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("Error fetching saved user"), err)
 	}
@@ -263,11 +272,16 @@ func (a *App) setPreferences(ctx context.Context, input *PreferencesInput) (*Use
 func (a *App) completeOnboarding(ctx context.Context, _ *struct{}) (*UserOutput, error) {
 	caller := callerFrom(ctx)
 
-	if err := service.SetOnboarded(ctx, a.db, caller.UserID); err != nil {
+	userID, err := caller.UserID()
+	if err != nil {
+		return nil, fail(ctx, huma.Error500InternalServerError("could not resolve the current user"), err)
+	}
+
+	if err := service.SetOnboarded(ctx, a.db, userID); err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("could not complete onboarding"), err)
 	}
 
-	saved, err := service.GetUser(ctx, a.db, caller.UserID)
+	saved, err := service.GetUser(ctx, a.db, userID)
 	if err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("Error fetching saved user"), err)
 	}
@@ -279,7 +293,12 @@ func (a *App) inviteUser(ctx context.Context, input *UserInput) (*struct{}, erro
 	caller := callerFrom(ctx)
 	userToInvite := input.Body
 
-	currentUser, err := service.GetUser(ctx, a.db, caller.UserID)
+	userID, err := caller.UserID()
+	if err != nil {
+		return nil, fail(ctx, huma.Error500InternalServerError("could not resolve the current user"), err)
+	}
+
+	currentUser, err := service.GetUser(ctx, a.db, userID)
 	if err != nil {
 		return nil, fail(ctx, huma.Error400BadRequest("Error finding current user"), err)
 	}
@@ -291,7 +310,7 @@ func (a *App) inviteUser(ctx context.Context, input *UserInput) (*struct{}, erro
 
 	// Generate a token and write it to the invites table
 	token, _ := common.RandToken(32)
-	if err := service.CreateInvite(ctx, a.db, token, account.ID, userToInvite.Email, caller.UserID); err != nil {
+	if err := service.CreateInvite(ctx, a.db, token, account.ID, userToInvite.Email, userID); err != nil {
 		return nil, fail(ctx, huma.Error500InternalServerError("Error creating Invite"), err)
 	}
 

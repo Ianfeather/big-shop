@@ -76,7 +76,7 @@ func userUpsert(user common.User) (string, []any) {
 			;
 	`
 	return query, []any{
-		user.ID, user.Name, user.Email, normaliseTimezone(user.Timezone),
+		user.ID, user.Name, user.Email, NormaliseTimezone(user.Timezone),
 		user.Name, user.Email,
 	}
 }
@@ -105,7 +105,7 @@ func userUpsert(user common.User) (string, []any) {
 // "Local" is refused along with the empty string: time.LoadLocation accepts both
 // and resolves them against the *server's* zone, which would silently make every
 // such user's mail arrive at 10:00 Frankfurt.
-func normaliseTimezone(tz string) any {
+func NormaliseTimezone(tz string) any {
 	if tz == "" || tz == "Local" || len(tz) > 64 {
 		return nil
 	}

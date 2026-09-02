@@ -22,33 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      # fetch-depth: 0 for the migration check below, which needs the merge
-      # base with master. The default shallow fetch has neither master nor
-      # enough history to find one.
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      # First, because it is seconds and needs nothing installed - and because
-      # the two things it catches are otherwise caught only by a red deploy on
-      # master, after the merge.
-      #
-      # internal/pkg/migrate refuses an already-applied migration whose contents
-      # have changed, and a pending one that sorts below the high-water mark.
-      # Neither is findable in any test environment: CI builds every database by
-      # replaying migrations/ from empty in filename order, which is precisely
-      # the state in which neither problem exists. They are visible only against
-      # a database alive across both commits - production - so without this the
-      # first report is deploy-api.yml going red on master. That workflow only
-      # deploys master's tip, so a stuck migration then blocks every later merge
-      # from deploying too.
-      #
-      # In build-lint-test rather than the `go` job on purpose, even though it
-      # is about the API's schema: `go` is not in the required-checks ruleset
-      # (see the ACTION REQUIRED note on that job), so a check placed there
-      # would report without gating anything. This one needs to block a merge.
-      - name: Migrations are append-only
-        run: ./scripts/check-migrations-append-only.sh "origin/${{ github.event.pull_request.base.ref || 'master' }}"
 
       - uses: actions/setup-node@v7
         with:
@@ -82,17 +56,18 @@ jobs:
   # Deliberately a separate job from build-lint-test rather than more steps on
   # it: it needs Go and not Node, and the two have no ordering between them.
   #
-  # ACTION REQUIRED: add `go` to the `required checks` repository ruleset. It
-  # matches on job name and currently lists only `build-lint-test` and `e2e`,
-  # so until it is updated this job gates nothing on merge - CLAUDE.md's "a
-  # check that never reports is not the same as a check that fails", and the
-  # reason it says to update the ruleset in the same change.
+  # Required. The `required checks` ruleset lists build-lint-test, e2e and
+  # `go`, so a red job here blocks the merge.
   #
-  # The gap is worse than a missing gate, because deploy-api.yml keys off this
-  # whole workflow's conclusion. A red `go` job merged through the un-updated
-  # ruleset silently stops the API deploying while Netlify goes on shipping the
-  # site from that same commit - a frontend and an API drifting apart, with no
-  # red required check anywhere to say so.
+  # It did not always, and the gap was worse than a missing gate: deploy-api.yml
+  # keys off this whole workflow's conclusion, so a red `go` merged through the
+  # un-updated ruleset silently stopped the API deploying while Netlify went on
+  # shipping the site from that same commit - a frontend and an API drifting
+  # apart with no red required check anywhere to say so.
+  #
+  # The ruleset matches on **job name**, so renaming this job silently removes
+  # the gate rather than breaking it. Rename it and update the ruleset in the
+  # same change.
   go:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -100,7 +75,45 @@ jobs:
       run:
         working-directory: netlify-functions/recipes
     steps:
+      # fetch-depth: 0 for the migration check below, which needs the merge base
+      # with master. The default shallow fetch has neither master nor enough
+      # history to find one.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Ahead of setup-go, because it is a git question and needs no toolchain -
+      # so a renumbering mistake reports in seconds rather than after a Go
+      # install and a test run.
+      #
+      # internal/pkg/migrate refuses an already-applied migration whose contents
+      # have changed, and a pending one that sorts below the high-water mark.
+      # Neither is findable in any test environment, however thorough: CI builds
+      # every database by replaying migrations/ from empty in filename order,
+      # which is precisely the state in which neither problem exists. A 043
+      # added after 044 has shipped replays perfectly from scratch, and so does
+      # a migration edited long after it was applied. They are visible only
+      # against a database alive across both commits - production.
+      #
+      # Without this the first report is deploy-api.yml going red on master,
+      # after the merge. That workflow only deploys master's tip, so a stuck
+      # migration then blocks every later merge from deploying too, not just the
+      # one that caused it.
+      #
+      # In this job rather than build-lint-test because migrations are the API's
+      # schema, and this job is where the API's other schema-shaped checks live
+      # (the openapi.yaml and api.d.ts drift checks below). It was briefly in
+      # build-lint-test for one reason only - `go` did not gate merges then, and
+      # a check that reports without gating is not a check.
+      #
+      # working-directory overrides this job's default of
+      # netlify-functions/recipes, which every other step here wants and this
+      # one does not: migrations/ and scripts/ are at the repo root. Without it
+      # the path does not resolve and the step fails for a reason that has
+      # nothing to do with migrations.
+      - name: Migrations are append-only
+        working-directory: .
+        run: ./scripts/check-migrations-append-only.sh "origin/${{ github.event.pull_request.base.ref || 'master' }}"
 
       - uses: actions/setup-go@v7
         with:

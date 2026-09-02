@@ -412,12 +412,19 @@ report under `CI` (plain `list` isn't useful without a terminal to scroll
 back through); the workflow uploads it, plus any failure traces, as build
 artifacts.
 
-**Both CI workflows are required checks and block merging into `master`.** The
-`required checks` repository ruleset requires the `build-lint-test` job (from
-`ci.yml`) and the `e2e` job (from `e2e.yml`) to pass on every pull request.
-Renaming either job in its workflow file silently breaks the gate — the
+**Three jobs are required checks and block merging into `master`.** The
+`required checks` repository ruleset requires `build-lint-test` and `go` (both
+from `ci.yml`) and `e2e` (from `e2e.yml`) to pass on every pull request.
+Renaming any of them in its workflow file silently breaks the gate — the
 ruleset matches on job name, and a check that never reports is not the same
 as a check that fails. Update the ruleset in the same change.
+
+`go` was added to the ruleset after the fact, and its absence was worse than a
+missing gate while it lasted: `deploy-api.yml` keys off the whole `CI`
+workflow's conclusion, so a red `go` job merged through the un-updated ruleset
+stopped the API deploying while Netlify went on shipping the site from that
+same commit — a frontend and an API drifting apart, with no red required check
+anywhere to say so.
 
 One thing the ruleset deliberately does *not* do: it is not "strict", so a
 branch does not have to be up to date with `master` before merging — that
@@ -633,7 +640,7 @@ gh pr checks --watch            # blocks until every check concludes
 gh run view <run-id> --log-failed   # the failing step's output
 ```
 
-Both `build-lint-test` and `e2e` are required and both must be green. A red
+`build-lint-test`, `go` and `e2e` are all required and all must be green. A red
 check is work still owed on the task: read the failure, fix the cause, push,
 and watch again. Fix it rather than reporting it back as a question — go back
 to the user only if the failure needs a decision that is genuinely theirs (a
@@ -708,8 +715,8 @@ answer.
   regression test never observed to fail is not evidence of anything: it may be
   asserting something that was always true. If reverting the fix to prove this
   is impractical, that is a reason to ask, not a reason to skip the step.
-- **Every required check is green on the PR's head commit** — `build-lint-test`
-  and `e2e` both, watched to a conclusion per rule 3, on the commit actually
+- **Every required check is green on the PR's head commit** — `build-lint-test`,
+  `go` and `e2e`, watched to a conclusion per rule 3, on the commit actually
   being merged rather than an earlier push.
 - **The diff is the fix, its test and its evidence, and nothing else.**
   Drive-by refactors, unrelated tidying and opportunistic renames all take it

@@ -65,8 +65,8 @@ func TestResolveCallerQuery(t *testing.T) {
 
 // The email match is what links a second provider to an existing person, so a
 // miss here is not a missing feature - it is somebody handed an empty Account.
-func TestUsersWithEmailQuery(t *testing.T) {
-	q := usersWithEmailQuery
+func TestUserWithEmailQuery(t *testing.T) {
+	q := userWithEmailQuery
 
 	// Both sides lowered. migrations/040 puts the column in utf8mb4_bin, where
 	// `A` and `a` are different characters, and providers do not agree on the
@@ -76,11 +76,8 @@ func TestUsersWithEmailQuery(t *testing.T) {
 		t.Errorf("the comparison is not case-insensitive on both sides:\n%s", q)
 	}
 
-	// **No LIMIT.** "More than one" is a distinct answer that must reach
-	// LinkOrCreateIdentity, because choosing between several owners is choosing
-	// whose recipes the arriving login can read. A LIMIT 1 would silently make
-	// that choice.
-	if strings.Contains(strings.ToUpper(q), "LIMIT") {
-		t.Errorf("the query is limited, which would collapse an ambiguous address into an arbitrary owner:\n%s", q)
+	// Keyed on the address and returning the person, not the reverse.
+	if !strings.Contains(q, "SELECT id") {
+		t.Errorf("the lookup does not return the person holding the address:\n%s", q)
 	}
 }

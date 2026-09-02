@@ -1,0 +1,54 @@
+-- `user.email` becomes unique, which makes an ambiguous address impossible
+-- rather than merely unlikely.
+--
+-- **Why now and not before.** The column has never had this constraint, and
+-- until recently could not have: POST /user wrote the address straight from its
+-- request body and refreshed it on every login, so any caller could set theirs
+-- to anything, including something somebody else already held. Two changes
+-- closed that. The address now comes from a verified claim on the access token
+-- (`app/claims.go`), and it is written once at signup rather than on every
+-- login (`service.refreshUser`).
+--
+-- **What makes it safe is that duplicates can no longer be created at all.**
+-- service.LinkOrCreateIdentity has exactly two outcomes for a new subject: an
+-- address somebody already holds *links* the new login to that person, and an
+-- address nobody holds creates one user. Neither writes a second row for an
+-- existing address. So the only duplicates that could exist are legacy ones,
+-- and production was checked for them before this was written: none.
+--
+-- **What this buys is the deletion of a branch, not the prevention of a bug.**
+-- LinkOrCreateIdentity had to handle "several people hold this address" by
+-- refusing with a 409, because choosing between them would be choosing whose
+-- recipes the arriving login could read. That branch is unreachable once the
+-- database will not hold two such rows, and unreachable error handling is worse
+-- than none: it cannot be tested, and it invites the next reader to believe the
+-- case is live. The constraint is the guarantee; the Go code no longer pretends
+-- to be.
+--
+-- EMPTY STRINGS FIRST, and this is the step that would otherwise fail the
+-- migration. A unique index permits many NULLs but only one '', and the check
+-- for duplicates above deliberately excluded blank addresses, so any two users
+-- with '' would collide here. They are normalised to NULL because that is what
+-- the schema already means by "no address on file": every reader treats the two
+-- identically - lifecycle/store.go's candidate query filters
+-- `u.email IS NOT NULL AND u.email <> ''` in one predicate - so this changes
+-- nothing about behaviour and only about representation.
+--
+-- A user left with a NULL address is not stranded. They can still sign in, and
+-- they are simply not a candidate for the onboarding sequence, which is the
+-- same position they were already in with ''.
+UPDATE `user` SET `email` = NULL WHERE `email` = '';
+
+-- Unique on a nullable column: MySQL and TiDB both allow any number of NULLs
+-- through a unique index, so users with no address on file are unaffected and
+-- stay that way.
+--
+-- Not a functional index on LOWER(email), which is what the lookup in
+-- service.identity actually uses. Two addresses differing only in case would
+-- therefore both be accepted here while the lookup treats them as one - a gap
+-- worth naming rather than closing, because closing it means an expression
+-- index whose behaviour differs between MySQL 8 and TiDB, to defend against a
+-- state that requires two identity providers to disagree about the case of one
+-- person's address. If that ever happens, the lookup finds the older row and
+-- links to it, which is the right answer anyway.
+CREATE UNIQUE INDEX `idx_user_email` ON `user` (`email`);

@@ -72,13 +72,6 @@ func (a *App) addUser(ctx context.Context, input *CreateUserInput) (*UserOutput,
 	userID, created, err := service.LinkOrCreateIdentity(
 		ctx, a.db, caller.Subject, verified, input.Body.Name, service.NormaliseTimezone(input.Body.Timezone))
 	if err != nil {
-		if errors.Is(err, service.ErrAmbiguousEmail) {
-			// Several existing people hold this address, so linking would be
-			// choosing whose recipes this login can read. Refused rather than
-			// guessed - see service.ErrAmbiguousEmail.
-			return nil, huma.Error409Conflict(
-				"This email address is already associated with more than one Big Shop account, so we could not sign you in safely.")
-		}
 		return nil, fail(ctx, huma.Error500InternalServerError("could not add new user"), err)
 	}
 

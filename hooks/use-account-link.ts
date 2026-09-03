@@ -14,7 +14,7 @@ import {
 // The two halves of account linking recovery, as the components see them.
 //
 // See `lib/account-link.ts` for the nonce and why it is the load-bearing part,
-// and `specs/account-linking-recovery.md` for the whole design.
+// and `specs/completed/account-linking-recovery.md` for the whole design.
 
 interface StartLinkResponse {
   token: string;

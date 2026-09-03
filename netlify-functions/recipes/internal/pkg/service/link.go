@@ -17,7 +17,7 @@ import (
 // Account linking recovery: letting somebody who signed in a new way get back
 // to the recipes they already had.
 //
-// See specs/account-linking-recovery.md. The short version is that
+// See specs/completed/account-linking-recovery.md. The short version is that
 // LinkOrCreateIdentity links a second provider to an existing person **when the
 // verified email matches**, and this file is for the people that clause misses:
 // Apple Private Relay addresses, which can never match anything, and anybody

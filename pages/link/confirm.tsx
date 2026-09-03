@@ -21,7 +21,7 @@ import styles from './confirm.module.css';
 // have done everything the server needs — they hold a token, its nonce, and a
 // session as the original account — so finishing automatically would work. It
 // would also mean a permanent new way into somebody's account was granted by a
-// navigation, which is exactly the shape `specs/account-linking-recovery.md`
+// navigation, which is exactly the shape `specs/completed/account-linking-recovery.md`
 // rejects an emailed confirmation link for. The last step is a click on a screen
 // that says plainly what the click does.
 //

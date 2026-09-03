@@ -13,7 +13,7 @@ import (
 )
 
 // The two routes behind account linking recovery - see
-// specs/account-linking-recovery.md and the header of service/link.go.
+// specs/completed/account-linking-recovery.md and the header of service/link.go.
 //
 // Somebody whose second provider handed over a different verified address gets
 // a brand new, empty Account and no error anywhere, because at the level of the

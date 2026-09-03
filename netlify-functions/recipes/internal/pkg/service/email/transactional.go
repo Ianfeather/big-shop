@@ -71,7 +71,7 @@ type Email struct {
 // Three of the first four did not exist before
 // specs/completed/transactional-email.md; the fourth, the invite, had been
 // broken since the API Gateway stack its link pointed at was decommissioned.
-// sign-in-added joined them with specs/account-linking-recovery.md.
+// sign-in-added joined them with specs/completed/account-linking-recovery.md.
 var Family = []Email{
 	{
 		Kind:     KindInvite,

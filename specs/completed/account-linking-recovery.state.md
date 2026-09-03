@@ -1,8 +1,8 @@
 ---
-spec: specs/account-linking-recovery.md
-status: in-progress
+spec: specs/completed/account-linking-recovery.md
+status: complete
 branch: implement/account-linking-recovery
-pr:
+pr: https://github.com/Ianfeather/big-shop/pull/157
 ---
 
 Branched from `spec/account-linking-recovery` (PR #156, which carries the spec

@@ -23,7 +23,7 @@ interface AccountLinkButtonProps {
 // It deliberately says nothing about *which* account the person might have.
 // Answering that would mean telling somebody, on a page they reached by signing
 // up ten seconds ago, whether a given address already exists here - which is
-// the account-enumeration oracle `specs/account-linking-recovery.md` refuses to
+// the account-enumeration oracle `specs/completed/account-linking-recovery.md` refuses to
 // build, and the same reason the server's refusals never name a provider.
 const AccountLinkButton = ({ children }: AccountLinkButtonProps) => {
   const start = useStartAccountLink();

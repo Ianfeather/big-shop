@@ -1,5 +1,5 @@
 // The browser's half of account linking recovery — see
-// `specs/account-linking-recovery.md` and
+// `specs/completed/account-linking-recovery.md` and
 // `netlify-functions/recipes/internal/pkg/service/link.go`.
 //
 // Somebody whose second sign-in handed over a different verified address gets a

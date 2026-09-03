@@ -12,6 +12,7 @@ import Toast from '@components/toast';
 import PageHeading from '@components/page-heading';
 import Button from '@components/button';
 import { useCookieSettings } from '@components/consent-banner';
+import AccountLinkButton from '@components/account-link';
 import { inviteSent } from '../lib/analytics/events';
 import type { Account, Invite as InviteModel } from '../types/models';
 
@@ -292,6 +293,34 @@ const List = () => {
               and you can change your mind whenever you like.
             </p>
             <Button style="primary" onClick={openCookieSettings}>Cookie settings</Button>
+          </div>
+
+          {/* The durable home for account linking recovery. The panel on /list
+              is the one an affected person actually stumbles into, because the
+              Auth0 callback lands there and an empty library is the first thing
+              you notice - but it is gated on having no recipes at all, so it
+              disappears the moment somebody adds one. This is where it can
+              still be found afterwards, and where somebody who has been told
+              about it by support goes looking.
+
+              Deliberately not a list of sign-in methods, and deliberately no
+              way to remove one. Removal would not durably work: take Microsoft
+              off your account, sign in with Microsoft again, and
+              LinkOrCreateIdentity case 2 finds your verified address and links
+              it straight back. It *is* durable for an Apple relay address and
+              for a genuinely different address, because nothing matches - so
+              one button would behave differently depending on the provider,
+              for reasons no user could infer. See the spec's "Rejected:
+              unlinking". */}
+          <div className={styles.accountModule}>
+            <h3 className={styles.moduleHeading}>Missing recipes you know you had?</h3>
+            <p>
+              If you have signed in a different way than usual &mdash; a different provider, or
+              Apple&apos;s &ldquo;Hide My Email&rdquo; &mdash; you may be looking at a second,
+              empty account. You can join it to your original one by signing in the way you did
+              the first time.
+            </p>
+            <AccountLinkButton>Link an existing account</AccountLinkButton>
           </div>
 
           {/* Deletion lives here rather than behind a settings sub-page: this is

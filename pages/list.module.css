@@ -30,3 +30,20 @@
   color: var(--ink);
   border-bottom-color: var(--color-primary);
 }
+
+/* The account-linking recovery panel, shown only when the account has no
+   recipes at all - see pages/list.tsx. A bordered aside rather than a banner:
+   it is an offer to somebody who may be alarmed, not an alert, and the page
+   underneath it is still perfectly usable if they are simply new. */
+.linkPrompt {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-5);
+  max-width: 46ch;
+}
+
+.linkPromptCopy {
+  margin-top: 0;
+  margin-bottom: var(--space-3);
+}

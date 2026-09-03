@@ -443,6 +443,7 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, huma.API, error) {
 	a.registerUserRoutes(api)
 	a.registerConsentRoutes(api)
 	a.registerInviteRoutes(api)
+	a.registerLinkRoutes(api)
 
 	c := cors.New(cors.Options{
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE"},

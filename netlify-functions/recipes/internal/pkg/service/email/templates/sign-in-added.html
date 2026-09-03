@@ -1,0 +1,62 @@
+{{ define "content" }}
+  {{/*
+    Sent when a second way of signing in is linked to somebody's account - see
+    specs/completed/account-linking-recovery.md and service/link.go.
+
+    **This is the only thing that tells the account's owner it happened.**
+    Everything else in that design makes the grant hard to obtain: the
+    re-authentication, the nonce, the single-use token. None of it lets the
+    owner *find out*. A successful trick, or an honest mistake, adds a
+    permanent new way into an account and otherwise says nothing to anybody
+    outside that one browser session.
+
+    **It carries no grant, and that is what makes it safe to send.** No link, no
+    token, nothing to click and nothing to act on - so phishing a copy of it
+    achieves precisely nothing. That is the difference between this and the
+    emailed confirmation link the spec rejects: that one *was* the
+    authorisation, wearing an email's clothes.
+
+    It names the provider rather than the address or the Auth0 subject. The
+    subject is a stable identifier for a person at their identity provider and
+    ADR-0008 §1 keeps those out of anything user-facing; the address belongs to
+    the *other* account, and repeating it here would tell whoever reads this
+    email something they may not already know.
+
+    {{ .Data.Provider }} can legitimately be empty, for a connection
+    service.ProviderName has no name for. The sentence is written so it still
+    reads correctly - "a new way of signing in" - rather than leaving a hole.
+
+    {{ .Data.When }} is UTC with the zone named, and deliberately not localised:
+    see the field's comment. The time is the part a recipient actually reasons
+    with - "was I signing in at half past three?" is how somebody decides
+    whether this was them - so a *wrong* local time would be worse than an
+    honest UTC one.
+
+    Transactional, and pointedly not unsubscribable: ADR-0010's unsubscribe
+    covers the onboarding sequence, and somebody who opted out of that has said
+    nothing about whether they want to be told their account has a new key.
+  */}}
+  <p style="margin:0 0 16px 0;">Hello {{ .Data.Name }},</p>
+
+  <p style="margin:0 0 16px 0;">
+    {{ if .Data.Provider }}
+      Your {{ .Data.Provider }} sign-in was just added to your Big Shop account.
+    {{ else }}
+      A new way of signing in was just added to your Big Shop account.
+    {{ end }}
+    You can now use it to reach your recipes and your shopping list, alongside the
+    way you signed in before.
+  </p>
+
+  <p style="margin:0 0 16px 0;">
+    This happened on {{ .Data.When }}.
+  </p>
+
+  <p style="margin:0 0 16px 0;">
+    If that was you, there is nothing to do.
+  </p>
+
+  <p style="margin:0; font-size:14px; color:#6b7178;">
+    If it was not, reply to this email straight away and we will look into it.
+  </p>
+{{ end }}

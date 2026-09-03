@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // querier is the read half dbConn does not cover: SubjectsFor returns a set
@@ -333,4 +334,41 @@ func ResolveCaller(ctx context.Context, db dbConn, subject string) (userID strin
 		return userID, 0, sql.ErrNoRows
 	}
 	return userID, int(account.Int64), nil
+}
+
+// providerNames maps an Auth0 connection prefix to something a person would
+// recognise.
+//
+// **The prefix is the connection, not the provider**, which is why this is a
+// table rather than a title-case of whatever precedes the "|". Auth0 spells
+// Microsoft's consumer connection `windowslive` and its own database connection
+// `auth0`, and neither is a name to put in an email.
+var providerNames = map[string]string{
+	"google-oauth2": "Google",
+	"apple":         "Apple",
+	"windowslive":   "Microsoft",
+	"facebook":      "Facebook",
+	"github":        "GitHub",
+	"linkedin":      "LinkedIn",
+	// The username/password connection. Called out because "Auth0" is a name a
+	// user has never seen and would read as a third party.
+	"auth0": "email and password",
+}
+
+// ProviderName is how a sign-in method is named to the person who owns it.
+//
+// **It returns "" rather than a guess for anything unrecognised**, and every
+// caller has to handle that. The alternative - falling back to the raw prefix -
+// puts a connection name nobody chose into a sentence somebody is being asked
+// to make a security decision about, and a wrong or cryptic name there is worse
+// than no name: the whole job of the confirmation screen is to be believable.
+//
+// Adding a connection to the Auth0 tenant therefore means adding it here, and
+// the failure of forgetting is a vaguer sentence rather than a broken one.
+func ProviderName(subject string) string {
+	prefix, _, found := strings.Cut(subject, "|")
+	if !found {
+		return ""
+	}
+	return providerNames[prefix]
 }

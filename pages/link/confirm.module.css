@@ -1,0 +1,33 @@
+/* The one sentence the page exists for, given the weight to match.
+   Everything else here is ordinary body copy; this is the line somebody is
+   being asked to make a security decision about, so it reads first. */
+.statement {
+  font-size: var(--text-md);
+  line-height: 1.5;
+  max-width: 46ch;
+}
+
+/* Matching pages/account.module.css's confirmActions: stacked on a phone,
+   side by side once there is room. The delete confirmation is the closest
+   thing in the product to this screen and they should not feel different. */
+.actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+@media (min-width: 500px) {
+  .actions {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+/* Cancel is a link and not a Button, deliberately. Two buttons of similar
+   weight make the reader compare them; a link makes the safe way out obvious
+   without competing with the thing they came here to do. */
+.cancel {
+  color: var(--ink-soft);
+}

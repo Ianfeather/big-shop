@@ -4,6 +4,7 @@ import ClearList from './clear-list';
 import PageHeading from '@components/page-heading';
 import EmptyState from '@components/empty-state';
 import EmptyBasketIllustration from '@components/svg/empty-basket';
+import { ReactNode } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import useSyncedFlag from '@hooks/use-synced-flag';
 import useUser from '@hooks/use-user';
@@ -41,9 +42,19 @@ interface ShoppingListProps {
   extras: Record<string, ListIngredient>;
   buyIngredient: (name: string, type: 'ingredient' | 'extra') => void;
   clearList: () => void;
+  // Rendered directly under the masthead, above the list itself. A slot rather
+  // than the page stacking something above this component, because this owns
+  // the PageHeading - so anything the page put before it would sit above the
+  // page's own title, which reads as a layout mistake rather than as a notice
+  // about the page.
+  //
+  // Deliberately not a `showAccountLinkPrompt` boolean: what goes here is the
+  // page's business, and one route rendering one thing does not need this
+  // component to know what that thing is.
+  notice?: ReactNode;
 }
 
-const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList }: ShoppingListProps) => {
+const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList, notice }: ShoppingListProps) => {
   const user = useUser();
   const { getAccessTokenSilently } = useAuth();
   const queryClient = useQueryClient();
@@ -99,6 +110,7 @@ const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList }: Shoppi
       <PageHeading action={hasListItems ? <ClearList onClick={clearList} /> : undefined}>
         Your shopping list
       </PageHeading>
+      { notice }
       { !hasListItems && (
           <EmptyState
             illustration={EmptyBasketIllustration}

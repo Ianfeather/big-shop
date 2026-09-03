@@ -66,4 +66,29 @@ describe('useRecipes', () => {
 
     expect(result.current[0]).toEqual([]);
   });
+
+  // The point of the second element, and the reason it had to exist: the list
+  // above is `[]` in both of the next two tests, so nothing about it can tell
+  // "still loading" from "this account genuinely has no recipes". Anything that
+  // renders a message about an empty library has to read the flag instead, or
+  // it shows that message to everybody on every load.
+  it('reports an in-flight query as unresolved, alongside the same empty list', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
+
+    const { default: useRecipes } = await import('./use-recipes');
+    const { result } = renderHook(() => useRecipes(), { wrapper: createWrapper() });
+
+    expect(result.current[0]).toEqual([]);
+    expect(result.current[1]).toBe(false);
+  });
+
+  it('reports a query that came back empty as resolved', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse([])));
+
+    const { default: useRecipes } = await import('./use-recipes');
+    const { result } = renderHook(() => useRecipes(), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current[1]).toBe(true));
+    expect(result.current[0]).toEqual([]);
+  });
 });

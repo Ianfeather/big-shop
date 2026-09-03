@@ -170,6 +170,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/link/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish linking a sign-in to the caller's account
+         * @description Grants the subject the token names access to the Account the caller is signed into, and erases the empty Account that subject used to reach. Refused if that Account holds any recipes.
+         */
+        post: operations["complete-link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/link/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start linking the current sign-in to an existing account
+         * @description Issues a short-lived, single-use token bound to the caller's own Auth0 subject. Grants nothing on its own: redeeming it also needs the nonce, which stays in the calling browser's storage, and a successful re-authentication as the account being linked to.
+         */
+        post: operations["start-link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/recipe": {
         parameters: {
             query?: never;
@@ -603,6 +643,47 @@ export interface components {
             readonly $schema?: string;
             Token: string;
         };
+        LinkCompleteInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/bigshop/schemas/LinkCompleteInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description The nonce the same browser generated when it started this link. */
+            nonce: string;
+            /** @description The token POST /link/start returned. */
+            token: string;
+        };
+        LinkCompleteOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/bigshop/schemas/LinkCompleteOutputBody.json
+             */
+            readonly $schema?: string;
+            provider: string;
+        };
+        LinkStartInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/bigshop/schemas/LinkStartInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description A random value held in the calling browser's own storage. */
+            nonce: string;
+        };
+        LinkStartOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/bigshop/schemas/LinkStartOutputBody.json
+             */
+            readonly $schema?: string;
+            provider: string;
+            token: string;
+        };
         ListIngredient: {
             amounts: components["schemas"]["Amount"][] | null;
             department: string;
@@ -1017,6 +1098,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Invite"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "complete-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkCompleteInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkCompleteOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "start-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkStartInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkStartOutputBody"];
                 };
             };
             /** @description Error */

@@ -97,6 +97,24 @@ func TestRenderGolden(t *testing.T) {
 			data:           AccountDeletedData{Name: "Ian Feather"},
 			unsubscribable: false,
 		},
+		{
+			name:           "sign-in-added",
+			template:       "sign-in-added",
+			data:           SignInAddedData{Name: "Ian Feather", Provider: "Apple", When: "2 September 2026 at 14:05 UTC"},
+			unsubscribable: false,
+		},
+		// The same email for a connection service.ProviderName has no name for.
+		// Rendered separately because the fallback sentence is the whole reason
+		// ProviderName returns "" rather than guessing: a raw Auth0 connection
+		// name in a security notice is worse than a vaguer one, but only if the
+		// vaguer one actually reads as English. That is reviewed here, not
+		// assumed - the same reason welcome-no-name exists.
+		{
+			name:           "sign-in-added-unknown-provider",
+			template:       "sign-in-added",
+			data:           SignInAddedData{Name: "Ian Feather", When: "2 September 2026 at 14:05 UTC"},
+			unsubscribable: false,
+		},
 		// The four onboarding emails. Unsubscribable, so each golden file also
 		// pins that the footer link is present - the condition ADR-0010's whole
 		// lawful basis rests on.

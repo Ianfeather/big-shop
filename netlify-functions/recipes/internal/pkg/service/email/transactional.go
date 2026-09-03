@@ -41,6 +41,7 @@ const (
 	KindInviteAccepted Kind = "invite-accepted"
 	KindInviteRejected Kind = "invite-rejected"
 	KindAccountDeleted Kind = "account-deleted"
+	KindSignInAdded    Kind = "sign-in-added"
 )
 
 // String makes a Kind print as itself in log lines and errors.
@@ -67,9 +68,10 @@ type Email struct {
 
 // Family is every transactional email Big Shop sends.
 //
-// Three of the four did not exist before specs/completed/transactional-email.md; the
-// fourth, the invite, had been broken since the API Gateway stack its link
-// pointed at was decommissioned.
+// Three of the first four did not exist before
+// specs/completed/transactional-email.md; the fourth, the invite, had been
+// broken since the API Gateway stack its link pointed at was decommissioned.
+// sign-in-added joined them with specs/completed/account-linking-recovery.md.
 var Family = []Email{
 	{
 		Kind:     KindInvite,
@@ -90,6 +92,16 @@ var Family = []Email{
 		Kind:     KindAccountDeleted,
 		Subject:  "Your Big Shop account is being deleted",
 		Template: "account-deleted",
+	},
+	{
+		Kind: KindSignInAdded,
+		// Deliberately plain and specific. This is the one email in the family
+		// whose whole job is to be *noticed* by somebody it might alarm, so the
+		// subject line has to survive being read in a notification preview with
+		// nothing else around it - and must not read as marketing, which is what
+		// anything cleverer would.
+		Subject:  "A new sign-in was added to your Big Shop account",
+		Template: "sign-in-added",
 	},
 }
 
@@ -141,6 +153,37 @@ type (
 	// AccountDeletedData renders templates/account-deleted.html.
 	AccountDeletedData struct {
 		Name string
+	}
+
+	// SignInAddedData renders templates/sign-in-added.html, sent to the
+	// account that just gained a second way of signing in.
+	//
+	// **Provider is the human name of the identity provider, and nothing more
+	// identifying than that.** Not the Auth0 subject, which ADR-0008 §1 keeps
+	// out of anything user-facing, and not the other account's address, which
+	// would tell the reader something they may not already know. It can be
+	// empty, for a connection service.ProviderName has no name for; the
+	// template is written so the sentence still reads.
+	SignInAddedData struct {
+		Name     string
+		Provider string
+		// When the sign-in was added, already formatted, and **already in UTC
+		// with the zone named.**
+		//
+		// The spec asks the email to say which sign-in, *when*, and where to get
+		// help - and the "when" is the part a recipient actually reasons with:
+		// "was I signing in at half past three?" is how somebody decides whether
+		// this was them. "Just added" reads as the moment they open it, which
+		// may be a day later.
+		//
+		// Not localised, because this cannot be done half-way. `user.timezone`
+		// exists (migrations/037) but GetUser deliberately does not return it -
+		// specs/completed/email.md's justification for storing it is that it
+		// goes no further than our database - so rendering a local time here
+		// would mean either a new read or a guess, and a *wrong* local time is
+		// worse than an honest UTC one on the one line somebody is checking
+		// against their own memory. Naming the zone is what makes it honest.
+		When string
 	}
 )
 

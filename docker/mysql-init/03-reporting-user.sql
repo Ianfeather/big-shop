@@ -1,0 +1,50 @@
+-- The account the three read-only production scripts connect as, mirrored into
+-- the local stack so the grant can be rehearsed without touching production.
+--
+-- Its sibling is 02-api-user.sql, and the two are here for different reasons
+-- that are worth not confusing:
+--
+--   02  is a *guard*. `api` connects as that account on every dev session and
+--       every e2e run, so a change needing a fifth privilege fails on a pull
+--       request. Nothing has to remember to check it.
+--
+--   03  is a *rehearsal*. Nothing in dev or e2e connects as this account -
+--       check-charsets.sh, check-orphans.sh and sync-from-prod.sh all talk to
+--       production - so this file guards nothing on its own. What it does is
+--       make "does that grant actually suffice?" a question anyone can answer
+--       in one command, against a schema built from the same migrations/, when
+--       one of those scripts grows a new query.
+--
+-- That question is not hypothetical: the grant below was *established* this
+-- way rather than guessed. The board item proposing it expected mysqldump to
+-- need LOCK TABLES and PROCESS as well; running it under plain SELECT showed
+-- it needs neither, and needs only --no-tablespaces to stop asking for
+-- PROCESS. See docs/reporting-database-user.md, which has the rehearsal
+-- command.
+--
+-- Applied automatically on a fresh volume by the MySQL entrypoint. On an
+-- existing volume the entrypoint has already run, so pipe it in by hand -
+-- CREATE USER IF NOT EXISTS makes that safe to repeat:
+--
+--   docker compose exec -T db mysql -uroot -proot < docker/mysql-init/03-reporting-user.sql
+--
+-- Deliberately NOT re-applied by scripts/dev-full.sh the way 02 is. That runs
+-- on every dev start and every e2e run, and dev has no use for this account;
+-- paying a statement there for a rehearsal aid would be the tail wagging the
+-- dog.
+CREATE USER IF NOT EXISTS 'bigshop_reporting'@'%' IDENTIFIED BY 'bigshop_reporting';
+
+-- SELECT, one schema, and nothing else. This is the whole grant, and it is the
+-- same one production's `<prefix>.reporting` account carries.
+--
+-- No LOCK TABLES: sync-from-prod.sh passes --skip-lock-tables, which it did
+-- already, for an unrelated TiDB reason (SAVEPOINT incompatibility).
+-- No PROCESS: only mysqldump's tablespace dumping wants it, and
+-- --no-tablespaces removes that. PROCESS is cluster-wide and exposes other
+-- sessions' queries, which is why docs/ci-database-user.md refuses it to the
+-- migration account too.
+-- No RELOAD, no FILE, no GRANT OPTION, nothing on *.*.
+--
+-- Local credentials are not secret - the root password in docker-compose.yml is
+-- `root`. What is being mirrored here is the privilege set, not the password.
+GRANT SELECT ON `bigshop`.* TO 'bigshop_reporting'@'%';

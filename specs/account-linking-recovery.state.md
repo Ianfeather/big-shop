@@ -143,3 +143,49 @@ Notes: gofmt/vet clean and `go test ./... -race` green. Two golden files - the
   specs/evidence/account-linking-recovery/sign-in-added-email.png, taken from
   that preview server - no unsubscribe footer (transactional, per ADR-0010) and
   no link or token anywhere in the body.
+
+## Review round two, and one thing the spec asks for that this run could not do
+
+`/code-review` was run a second time over Sessions 3-5. Fixed:
+
+- **The journey could strand somebody, on exactly the platforms the spec worried
+  about.** The nonce is in localStorage so it survives an installed PWA being
+  resumed or a native wrapper deep-linking back; the *navigation* to
+  `/link/confirm` rode `lib/return-to.ts`, which is sessionStorage. So on those
+  platforms the nonce would survive and the navigation would not - and the
+  person would land on `/list` signed in as the account that *has* recipes, so
+  the panel was suppressed and nothing pointed at the link they were halfway
+  through. `lib/account-link.ts`'s `accountLinkOffer` now returns `finish`
+  whenever a link is pending, whatever the recipe count, and the panel offers
+  "Finish linking". The return-to is a convenience again rather than the only
+  thread holding the journey together.
+- **The email now says *when*.** The spec asks for "which one, when, and the
+  support address"; it had the first and third. UTC with the zone named, not
+  localised - `user.timezone` exists but GetUser deliberately does not return
+  it, and a wrong local time is worse than an honest UTC one on the one line
+  somebody checks against their own memory.
+- **The condition that must not flash is now tested.** It was the most laboured
+  requirement in the spec and asserted nowhere; `accountLinkOffer` and
+  `linkRefusalMessage` moved into `lib/account-link.ts` so they could be, and
+  `hooks/use-account-link.test.ts` covers the ordering that actually carries
+  weight - the nonce is stored *before* any navigation, and cleared only on
+  success. That ordering test was mutation-checked: reversing the two lines
+  turns it red.
+- Undefined CSS custom properties (`--color-border`, `--color-text-muted`) that
+  always fell through to hardcoded hex, replaced with the real tokens `--rule`
+  and `--ink-soft`, plus `--space-*` / `--radius-md`; both new inline error
+  paragraphs replaced by `components/message`, which gained `role="alert"`;
+  an unused `style` prop removed; the repeated four-deep layout wrapper in
+  `confirm.tsx` extracted; `useStartAccountLink` made a named export to match
+  its sibling; a stale "three of the four" comment corrected.
+
+**Phase 2's done-when is NOT met, and that is worth saying plainly rather than
+in a footnote.** The spec says "Done when the whole path works end to end
+against a real tenant with two providers." Everything here was verified under
+`DISABLE_AUTH` against a real MySQL, including a genuine second identity with
+its own empty account - so the token, the nonce, the refusals, the cascade and
+the grant are all exercised for real. What is *not* exercised is the Auth0 round
+trip itself: the `prompt=login` redirect and the callback. That needs tenant
+credentials this run did not have, and it is the one part of the flow no test
+here covers. Somebody should walk it once on a deploy preview with two
+providers before this is trusted in production.

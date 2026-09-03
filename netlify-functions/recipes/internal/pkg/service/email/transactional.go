@@ -68,9 +68,10 @@ type Email struct {
 
 // Family is every transactional email Big Shop sends.
 //
-// Three of the four did not exist before specs/completed/transactional-email.md; the
-// fourth, the invite, had been broken since the API Gateway stack its link
-// pointed at was decommissioned.
+// Three of the first four did not exist before
+// specs/completed/transactional-email.md; the fourth, the invite, had been
+// broken since the API Gateway stack its link pointed at was decommissioned.
+// sign-in-added joined them with specs/account-linking-recovery.md.
 var Family = []Email{
 	{
 		Kind:     KindInvite,
@@ -166,6 +167,23 @@ type (
 	SignInAddedData struct {
 		Name     string
 		Provider string
+		// When the sign-in was added, already formatted, and **already in UTC
+		// with the zone named.**
+		//
+		// The spec asks the email to say which sign-in, *when*, and where to get
+		// help - and the "when" is the part a recipient actually reasons with:
+		// "was I signing in at half past three?" is how somebody decides whether
+		// this was them. "Just added" reads as the moment they open it, which
+		// may be a day later.
+		//
+		// Not localised, because this cannot be done half-way. `user.timezone`
+		// exists (migrations/037) but GetUser deliberately does not return it -
+		// specs/completed/email.md's justification for storing it is that it
+		// goes no further than our database - so rendering a local time here
+		// would mean either a new read or a guess, and a *wrong* local time is
+		// worse than an honest UTC one on the one line somebody is checking
+		// against their own memory. Naming the zone is what makes it honest.
+		When string
 	}
 )
 

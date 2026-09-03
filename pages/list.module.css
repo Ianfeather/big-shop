@@ -36,14 +36,14 @@
    it is an offer to somebody who may be alarmed, not an alert, and the page
    underneath it is still perfectly usable if they are simply new. */
 .linkPrompt {
-  border: 1px solid var(--color-border, #e0dbd2);
-  border-radius: 8px;
-  padding: 1rem;
-  margin-bottom: 1.5rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-5);
   max-width: 46ch;
 }
 
 .linkPromptCopy {
   margin-top: 0;
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--space-3);
 }

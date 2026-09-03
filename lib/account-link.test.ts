@@ -4,7 +4,9 @@ import {
   rememberPendingLink,
   readPendingLink,
   forgetPendingLink,
-  providerLabel
+  providerLabel,
+  accountLinkOffer,
+  linkRefusalMessage
 } from './account-link';
 
 beforeEach(() => {
@@ -118,5 +120,80 @@ describe('providerLabel', () => {
 
   it('falls back to something true when there is not', () => {
     expect(providerLabel('')).toBe('the way you just signed in');
+  });
+});
+
+// The most laboured requirement in the spec, and the one that would regress
+// silently: the panel must never appear while the recipes query is in flight.
+// `useRecipes` defaults to `[]`, so an unresolved query and an empty library
+// look identical from the count alone.
+describe('accountLinkOffer', () => {
+  it('offers nothing while the recipes query is still in flight', () => {
+    expect(accountLinkOffer({ recipesResolved: false, recipeCount: 0, hasPendingLink: false }))
+      .toBe('none');
+  });
+
+  it('offers nothing to somebody who has recipes', () => {
+    expect(accountLinkOffer({ recipesResolved: true, recipeCount: 12, hasPendingLink: false }))
+      .toBe('none');
+  });
+
+  it('offers the start once the query has resolved to an empty library', () => {
+    expect(accountLinkOffer({ recipesResolved: true, recipeCount: 0, hasPendingLink: false }))
+      .toBe('start');
+  });
+
+  // The stranded case: the nonce lives in localStorage and survives a PWA or
+  // native-wrapper session boundary, while lib/return-to.ts's sessionStorage
+  // navigation to /link/confirm does not. Without this the person lands back on
+  // /list signed in as the account that *has* recipes, so nothing on screen
+  // points at the link they are halfway through - and there is no way to finish
+  // it short of signing out.
+  it('offers the finish when a link is pending, even with a full library', () => {
+    expect(accountLinkOffer({ recipesResolved: true, recipeCount: 12, hasPendingLink: true }))
+      .toBe('finish');
+  });
+
+  // The pending link wins outright, including before the query resolves: it is
+  // a fact about this browser rather than about the account, so nothing has to
+  // load before it can be acted on.
+  it('offers the finish before the recipes query has even resolved', () => {
+    expect(accountLinkOffer({ recipesResolved: false, recipeCount: 0, hasPendingLink: true }))
+      .toBe('finish');
+  });
+});
+
+// Every refusal is retryable except the populated-account one, and each says
+// something different about what to do next - which is the whole reason the
+// server answers with a table of them rather than one message.
+describe('linkRefusalMessage', () => {
+  it('covers all three conflicts without claiming which, on a 409', () => {
+    const message = linkRefusalMessage(409);
+
+    expect(message).toContain('same method');
+    expect(message).toContain('support');
+  });
+
+  it('sends a 400 back to the shopping list to start again', () => {
+    expect(linkRefusalMessage(400)).toContain('Start again from your shopping list');
+  });
+
+  // Not an ApiError at all - a network failure, say. It must not claim the
+  // request was invalid, because nothing says it was.
+  it('says only that something went wrong when there is no status', () => {
+    const message = linkRefusalMessage(undefined);
+
+    expect(message).toContain('nothing has been linked');
+    expect(message).not.toContain('expired');
+  });
+
+  // The same rule the server's refusals are held to: naming a provider or an
+  // address would turn this into an account-enumeration oracle.
+  it.each([409, 400, 500, undefined])('names nobody (status %s)', (status) => {
+    const message = linkRefusalMessage(status).toLowerCase();
+
+    for (const word of ['google', 'apple', 'microsoft', '@']) {
+      expect(message).not.toContain(word);
+    }
   });
 });

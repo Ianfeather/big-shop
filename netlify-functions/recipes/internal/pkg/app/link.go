@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"recipes/internal/pkg/service"
 	"recipes/internal/pkg/service/email"
@@ -155,7 +156,13 @@ func (a *App) completeLink(ctx context.Context, input *LinkCompleteInput) (*Link
 	email.SendTransactionalAsync(ctx,
 		email.Recipient{Name: outcome.Name, Address: outcome.Email},
 		email.KindSignInAdded,
-		email.SignInAddedData{Name: outcome.Name, Provider: outcome.Provider})
+		email.SignInAddedData{
+			Name:     outcome.Name,
+			Provider: outcome.Provider,
+			// UTC, with the zone named. See the field's comment for why this is
+			// not the recipient's local time.
+			When: time.Now().UTC().Format("2 January 2006 at 15:04 MST"),
+		})
 
 	out := &LinkCompleteOutput{}
 	out.Body.Provider = outcome.Provider

@@ -129,6 +129,72 @@ export function forgetPendingLink(): void {
   }
 }
 
+// What, if anything, the Shopping List should offer about account linking.
+//
+// **Two conditions, and the second is a bug fix rather than a nicety.** The
+// journey out to Auth0 and back to `/link/confirm` rides `lib/return-to.ts`,
+// which stores its destination in *sessionStorage* - deliberately, since it
+// only ever has to survive one tab's round trip. The nonce does not live there;
+// it is in localStorage precisely because the installed PWA can be resumed in
+// what the browser treats as a fresh session, and the native wrapper deep-links
+// back into the app. On exactly those platforms the nonce would survive and the
+// *navigation* would not: the person returns to `/list` signed in as their
+// original account, which has recipes, so `noRecipes` is false and there is
+// nothing on screen pointing at the link they are halfway through.
+//
+// So a pending link is offered *whatever* the recipe count, and it wins. That
+// makes the return-to a convenience rather than the only thread holding the
+// journey together, which is what the spec's "the failure direction is the safe
+// one - the person retries" actually requires.
+//
+// Held here, as a function of three plain values, rather than as a condition
+// inside pages/list.tsx: it is the most laboured requirement in the spec and
+// the one that regresses silently, and a page that fetches a shopping list, a
+// recipe list and a user is not where you want to be asserting it.
+export type AccountLinkOffer = 'none' | 'start' | 'finish';
+
+export function accountLinkOffer(
+  { recipesResolved, recipeCount, hasPendingLink }:
+  { recipesResolved: boolean; recipeCount: number; hasPendingLink: boolean }
+): AccountLinkOffer {
+  if (hasPendingLink) return 'finish';
+  // **Resolved, not just empty.** `useRecipes` defaults to `[]` so consumers
+  // can map immediately, which makes an in-flight fetch indistinguishable from
+  // a genuinely empty library - and offering on the count alone would flash
+  // this on every load, for everybody, including someone with two hundred
+  // recipes. pages/account.tsx left the same lesson in its invite message and
+  // its deliberately undefaulted `otherMembers`.
+  if (recipesResolved && recipeCount === 0) return 'start';
+  return 'none';
+}
+
+// What to show for a link the server refused.
+//
+// `lib/api-client.ts`'s ApiError carries the status but not the server's
+// message, so the advice is rebuilt here from the status. That duplicates the
+// server's copy and is the lesser evil: widening ApiError to carry a body would
+// change the shape every call site in the app sees, for one screen. The two are
+// kept honest by both deriving from the same closed set of refusals in
+// `app/link.go`.
+//
+// 409 is the one that needs distinguishing and cannot be from a status alone:
+// three different conflicts share it. The wording therefore covers all three
+// without claiming which, in the same spirit as the invite message in
+// pages/account.tsx that covers expired, already-accepted and
+// addressed-to-somebody-else with one honest sentence.
+export function linkRefusalMessage(status: number | undefined): string {
+  if (status === 409) {
+    return 'That did not link. You may have signed in again with the same method you were already '
+      + 'using — try again and choose the one you signed up with. If this account already has '
+      + 'recipes in it, get in touch with support and we will help.';
+  }
+  if (status === undefined) {
+    return 'Something went wrong and nothing has been linked. Please try again.';
+  }
+  return 'That link request is no longer valid — it may have expired, or been started in a '
+    + 'different browser. Start again from your shopping list.';
+}
+
 // How a sign-in method is named on screen when the server did not recognise it.
 //
 // The server returns "" rather than guessing at a provider it has no name for —

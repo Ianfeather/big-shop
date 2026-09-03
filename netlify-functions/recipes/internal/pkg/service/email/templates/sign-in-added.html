@@ -26,6 +26,12 @@
     service.ProviderName has no name for. The sentence is written so it still
     reads correctly - "a new way of signing in" - rather than leaving a hole.
 
+    {{ .Data.When }} is UTC with the zone named, and deliberately not localised:
+    see the field's comment. The time is the part a recipient actually reasons
+    with - "was I signing in at half past three?" is how somebody decides
+    whether this was them - so a *wrong* local time would be worse than an
+    honest UTC one.
+
     Transactional, and pointedly not unsubscribable: ADR-0010's unsubscribe
     covers the onboarding sequence, and somebody who opted out of that has said
     nothing about whether they want to be told their account has a new key.
@@ -40,6 +46,10 @@
     {{ end }}
     You can now use it to reach your recipes and your shopping list, alongside the
     way you signed in before.
+  </p>
+
+  <p style="margin:0 0 16px 0;">
+    This happened on {{ .Data.When }}.
   </p>
 
   <p style="margin:0 0 16px 0;">

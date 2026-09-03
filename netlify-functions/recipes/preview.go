@@ -61,7 +61,11 @@ func transactionalSample(kind email.Kind) any {
 		// person; the empty-Provider fallback is pinned by the
 		// sign-in-added-unknown-provider golden rather than previewed here,
 		// since --kind takes one value per email.
-		return email.SignInAddedData{Name: "Ada Lovelace", Provider: "Apple"}
+		return email.SignInAddedData{
+			Name:     "Ada Lovelace",
+			Provider: "Apple",
+			When:     "2 September 2026 at 14:05 UTC",
+		}
 	}
 	return nil
 }

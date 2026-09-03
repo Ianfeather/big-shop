@@ -8,6 +8,8 @@ import ShoppingList from '@components/shopping-list/ShoppingList';
 import useAuth0 from '@hooks/use-auth';
 import useRecipes from '@hooks/use-recipes';
 import AccountLinkButton from '@components/account-link';
+import Button from '@components/button';
+import { accountLinkOffer, readPendingLink } from '../lib/account-link';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api-client';
 import type { ListIngredient } from '../types/models';
 import { shoppingListGenerated } from '../lib/analytics/events';
@@ -222,22 +224,28 @@ const List = () => {
   useEffect(() => { getShoppingList() }, [recipeList]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // **"This account has no recipes", not "this shopping list is empty."** A
-  // returning user with a full library and nothing picked for the week must
-  // never see this - which is most people, most of the time.
+  // The account-linking recovery offer - see lib/account-link.ts's
+  // accountLinkOffer for what decides it, which is where the reasoning lives
+  // and where it is tested.
   //
-  // The sidebar below already loads the account's recipes through the same
+  // The sidebar below already loads the account's recipes through this same
   // hook, and TanStack dedupes on queryKeys.recipes, so asking here costs no
   // extra request.
   //
-  // **Gated on the query having resolved, not just on the count.** `useRecipes`
-  // defaults to `[]` so its consumers can map immediately, which makes an
-  // in-flight fetch indistinguishable from a genuinely empty library - and
-  // rendering on the count alone would flash this panel on every load, for
-  // everybody. pages/account.tsx learned the same lesson with its invite
-  // message and its deliberately undefaulted `otherMembers`.
+  // The pending link is read in an effect rather than during render: it comes
+  // from localStorage, which does not exist while Next renders this on the
+  // server, so reading it in the render body makes the first client render
+  // disagree with the server's HTML.
   const [accountRecipes, recipesResolved] = useRecipes();
-  const showLinkPrompt = recipesResolved && accountRecipes.length === 0;
+  const [hasPendingLink, setHasPendingLink] = useState(false);
+  useEffect(() => {
+    setHasPendingLink(readPendingLink() !== null); // eslint-disable-line react-hooks/set-state-in-effect
+  }, []);
+  const linkOffer = accountLinkOffer({
+    recipesResolved,
+    recipeCount: accountRecipes.length,
+    hasPendingLink
+  });
 
   return (
     <Layout>
@@ -248,7 +256,7 @@ const List = () => {
             shoppingList={shoppingList}
             extras={extras}
             buyIngredient={buyIngredient}
-            notice={showLinkPrompt && (
+            notice={linkOffer !== 'none' && (
               /* The one surface account linking recovery is offered from, and
                  the only screen an affected person is guaranteed to reach: the
                  Auth0 callback lands here (lib/app-origin.ts's
@@ -257,10 +265,25 @@ const List = () => {
                  /recipes deliberately does not get a second copy. Its empty
                  state is arguably where "where are my recipes?" forms most
                  sharply, but one surface is one thing to get right, and a
-                 message that can appear twice in a session reads as a bug. */
+                 message that can appear twice in a session reads as a bug.
+
+                 The `finish` case is the one that is easy to leave out: it is
+                 what a person sees if they came back from Auth0 without the
+                 navigation that should have carried them to /link/confirm. It
+                 is offered whatever their recipe count, because by then they
+                 are signed in as the account that *has* the recipes. */
               <div className={styles.linkPrompt}>
-                <p className={styles.linkPromptCopy}>Expected to see your recipes here?</p>
-                <AccountLinkButton>Link an existing account</AccountLinkButton>
+                { linkOffer === 'finish' ? (
+                  <>
+                    <p className={styles.linkPromptCopy}>You have a sign-in waiting to be linked.</p>
+                    <Button style="primary" href="/link/confirm">Finish linking</Button>
+                  </>
+                ) : (
+                  <>
+                    <p className={styles.linkPromptCopy}>Expected to see your recipes here?</p>
+                    <AccountLinkButton>Link an existing account</AccountLinkButton>
+                  </>
+                )}
               </div>
             )}
           />

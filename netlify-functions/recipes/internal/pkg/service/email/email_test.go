@@ -100,7 +100,7 @@ func TestRenderGolden(t *testing.T) {
 		{
 			name:           "sign-in-added",
 			template:       "sign-in-added",
-			data:           SignInAddedData{Name: "Ian Feather", Provider: "Apple"},
+			data:           SignInAddedData{Name: "Ian Feather", Provider: "Apple", When: "2 September 2026 at 14:05 UTC"},
 			unsubscribable: false,
 		},
 		// The same email for a connection service.ProviderName has no name for.
@@ -112,7 +112,7 @@ func TestRenderGolden(t *testing.T) {
 		{
 			name:           "sign-in-added-unknown-provider",
 			template:       "sign-in-added",
-			data:           SignInAddedData{Name: "Ian Feather"},
+			data:           SignInAddedData{Name: "Ian Feather", When: "2 September 2026 at 14:05 UTC"},
 			unsubscribable: false,
 		},
 		// The four onboarding emails. Unsubscribable, so each golden file also

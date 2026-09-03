@@ -32,7 +32,7 @@ interface CompleteLinkResponse {
 // token are written to this browser's storage **before** any navigation, because
 // once `loginWithRedirect` runs the page is gone and nothing else will get the
 // chance.
-export default function useStartAccountLink() {
+export function useStartAccountLink() {
   const { getAccessTokenSilently, loginWithRedirect } = useAuth();
   const router = useRouter();
 

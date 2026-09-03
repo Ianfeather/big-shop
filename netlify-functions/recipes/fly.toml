@@ -152,7 +152,24 @@ primary_region = "fra"
   TIDB_HOST = "gateway01.eu-central-1.prod.aws.tidbcloud.com"
   # 4000 is TiDB Cloud's protocol port, not MySQL's usual 3306.
   TIDB_PORT = "4000"
-  TIDB_USER = "3of82tmdiXMHzuo.root"
+  # Not root. This account holds SELECT, INSERT, UPDATE and DELETE on `bigshop`
+  # and nothing else - no DDL, no other schema, no CREATE USER, no GRANT OPTION
+  # - so a defect that reaches the database cannot alter the schema, read
+  # another one, or widen its own access. docs/api-database-user.md has the
+  # grant, why it is exactly those four, and how to rotate it.
+  #
+  # Migrations are applied by a *different* credential from the deploy
+  # (docs/ci-database-user.md). Splitting them is what lets this one be this
+  # small: the account serving the internet needs no ability to change the
+  # schema.
+  #
+  # **This value and the TIDB_PASSWORD secret must change together.** They are
+  # applied by the same deploy, so stage the password rather than setting it
+  # live: `fly secrets set TIDB_PASSWORD=... --stage` updates it without
+  # deploying, and the deploy that carries this line picks it up. Setting it
+  # unstaged restarts the machine with the new password and the old username,
+  # which is an outage.
+  TIDB_USER = "3of82tmdiXMHzuo.api"
   TIDB_DB = "bigshop"
 
   # TLS is on because TiDB Cloud requires it, and it is stated rather than

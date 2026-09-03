@@ -138,6 +138,24 @@ MSG
 # below rather than after.
 scripts/ensure-db-current.sh
 
+# Make sure the API's database account exists before `api` tries to use it.
+#
+# docker/mysql-init/02-api-user.sql creates it, but the entrypoint runs
+# docker-entrypoint-initdb.d exactly once in a volume's life - so every volume
+# created before that file existed has the schema and not the account, and
+# `api` would fail to connect with nothing explaining why. Reapplying it here is
+# idempotent (CREATE USER IF NOT EXISTS) and near-instant.
+#
+# ensure-db-current.sh above has already brought `db` up and repaired any
+# migration drift, so the database is there to talk to by this point. e2e needs
+# none of this - it tears its volumes down on every run, so the entrypoint
+# always runs - but it goes through this script too and the cost is one
+# statement.
+echo "Ensuring the API's database account exists..."
+docker compose exec -T db mysql -h 127.0.0.1 -uroot -proot \
+  < docker/mysql-init/02-api-user.sql 2>/dev/null \
+  || echo "  could not apply docker/mysql-init/02-api-user.sql; 'api' may fail to connect" >&2
+
 if [ "$START_LGTM" = "true" ]; then
   echo "Starting local MySQL + Go API + LGTM (docker compose)..."
   docker compose up -d --build db api lgtm || compose_up_failed

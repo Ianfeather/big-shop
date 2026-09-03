@@ -1,0 +1,32 @@
+-- The account the API connects as, which is deliberately not root.
+--
+-- **This file is the local half of a production property.** In production the
+-- API connects as a TiDB user holding exactly these four privileges on exactly
+-- this schema (see docs/api-database-user.md). Granting the local stack more
+-- than that would mean the one environment nobody can test is the only one
+-- running under the real constraint - which is the shape of every incident this
+-- repo has written up: #133 shipped a query for a column only production
+-- lacked, and no suite could catch it because no suite ran against production's
+-- schema.
+--
+-- So dev and e2e run under the same grant, and a change that needs a fifth
+-- privilege fails on a pull request instead of as a 500 on whichever route
+-- happens to need it.
+--
+-- SELECT, INSERT, UPDATE, DELETE and nothing else. The Go API issues no DDL on
+-- any request-serving path - no CREATE, ALTER, DROP, TRUNCATE or RENAME outside
+-- migrations/ - reads no other schema, and calls no stored routine. Migrations
+-- are applied by a different credential entirely, from the deploy
+-- (docs/ci-database-user.md), which is what makes it possible for this one to
+-- be this small.
+--
+-- IF NOT EXISTS because this runs twice: once from the entrypoint on a fresh
+-- volume, and again from scripts/dev-full.sh on every start, so that a volume
+-- created before this file existed gains the user rather than leaving `api`
+-- unable to connect.
+CREATE USER IF NOT EXISTS 'bigshop_api'@'%' IDENTIFIED BY 'bigshop_api';
+
+-- Local credentials are not secret and never have been - the root password in
+-- docker-compose.yml is `root`. What matters here is the privilege set, not the
+-- password.
+GRANT SELECT, INSERT, UPDATE, DELETE ON `bigshop`.* TO 'bigshop_api'@'%';

@@ -855,9 +855,8 @@ and the way anyone finds out if something merged that shouldn't have.
   schema and no DDL at all ([api-database-user.md](./docs/api-database-user.md)),
   and the deploy applies migrations as a separate account that does have DDL
   ([ci-database-user.md](./docs/ci-database-user.md)). The three read-only
-  scripts in `scripts/` are wired to prefer a third account holding nothing but
-  `SELECT` ([reporting-database-user.md](./docs/reporting-database-user.md)),
-  switched on by creating it and uncommenting one line in `.env.tidb`; that
+  scripts in `scripts/` connect as a third account holding nothing but `SELECT`
+  ([reporting-database-user.md](./docs/reporting-database-user.md)), which
   leaves root to `backup-prod.sh` and `probe-charset-conversion.sh`, the two
   that genuinely need it. Each doc has the grant, why it is exactly that, and
   how to rotate it. The local stack runs `api` under the same grant production

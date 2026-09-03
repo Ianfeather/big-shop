@@ -142,45 +142,53 @@ GRANT SELECT ON `bigshop`.* TO `3of82tmdiXMHzuo.reporting`@`%`
 
 `USAGE` is not a privilege; it is how MySQL and TiDB spell "this user exists".
 
-## Turning it on
+## Verifying it
 
-**One line, and not before the account exists.** `.env.tidb` carries
-`TIDB_READONLY_USER` commented out:
+The account exists and [`.env.tidb`](../.env.tidb) names it in
+`TIDB_READONLY_USER`, so the three scripts already connect as it. The quickest
+confirmation is the password prompt itself, which names the account **before**
+asking for anything — so it tells you which credential is about to be used
+while there is still time to press Ctrl-C:
 
-```diff
--# TIDB_READONLY_USER=3of82tmdiXMHzuo.reporting
-+TIDB_READONLY_USER=3of82tmdiXMHzuo.reporting
+```
+TiDB password for 3of82tmdiXMHzuo.reporting@gateway01.eu-central-1.prod.aws.tidbcloud.com:
 ```
 
-Until that is uncommented, `tidb_env_prefer_user` finds nothing and the three
-scripts fall back to `TIDB_USER` — root — exactly as they always did. That
-fallback is what made the code change safe to merge ahead of the account being
-created; it is not a state to leave things in indefinitely, because it means the
-work is done and switched off.
-
-Uncomment it *after* the `CREATE USER` above, or the three scripts start failing
-to authenticate for everyone who pulls.
-
-Verify by running the two cheap ones. Each prompts for the password, and the
-prompt itself names the account it is about to use — read it:
+Run the two cheap ones first; both are pure reads and safe against production at
+any time:
 
 ```bash
 scripts/check-charsets.sh
 scripts/check-orphans.sh
 ```
 
-```
-TiDB password for 3of82tmdiXMHzuo.reporting@gateway01.eu-central-1.prod.aws.tidbcloud.com:
-```
+A privilege that is missing surfaces as a specific `Error 1142 ... command
+denied to user`, naming the one to add. An account created without the
+cluster's `3of82tmdiXMHzuo.` prefix fails earlier and differently — it exists
+but cannot authenticate at all, so the symptom is `Access denied for user`
+rather than a privilege error.
 
-A missing privilege surfaces as a specific `Error 1142 ... command denied to
-user`, naming the one to add.
-
-Then the real one, which is the only one that dumps:
+Then the one that actually dumps, which is the only one exercising `mysqldump`
+and therefore the only one that would notice a missing `--no-tablespaces`:
 
 ```bash
 scripts/sync-from-prod.sh
 ```
+
+## Rolling back
+
+Comment the line out again:
+
+```diff
+-TIDB_READONLY_USER=3of82tmdiXMHzuo.reporting
++# TIDB_READONLY_USER=3of82tmdiXMHzuo.reporting
+```
+
+`tidb_env_prefer_user` then finds nothing, falls back to `TIDB_USER`, and the
+three scripts behave exactly as they did before this account existed. There is
+nothing to coordinate and no window in which anything is broken, because nothing
+stores this password and no unattended process uses it — which is the same
+property that makes rotation trivial, below.
 
 ## Rehearsing it without touching production
 

@@ -290,6 +290,81 @@ components:
       required:
         - Token
       type: object
+    LinkCompleteInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /api/bigshop/schemas/LinkCompleteInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        nonce:
+          description: The nonce the same browser generated when it started this link.
+          maxLength: 256
+          minLength: 16
+          type: string
+        token:
+          description: The token POST /link/start returned.
+          maxLength: 128
+          minLength: 1
+          type: string
+      required:
+        - token
+        - nonce
+      type: object
+    LinkCompleteOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /api/bigshop/schemas/LinkCompleteOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        provider:
+          type: string
+      required:
+        - provider
+      type: object
+    LinkStartInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /api/bigshop/schemas/LinkStartInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        nonce:
+          description: A random value held in the calling browser's own storage.
+          maxLength: 256
+          minLength: 16
+          type: string
+      required:
+        - nonce
+      type: object
+    LinkStartOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /api/bigshop/schemas/LinkStartOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        provider:
+          type: string
+        token:
+          type: string
+      required:
+        - token
+        - provider
+      type: object
     ListIngredient:
       additionalProperties: false
       properties:
@@ -765,6 +840,58 @@ paths:
       summary: List invites for the current user
       tags:
         - Invites
+  /link/complete:
+    post:
+      description: Grants the subject the token names access to the Account the caller is signed into, and erases the empty Account that subject used to reach. Refused if that Account holds any recipes.
+      operationId: complete-link
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkCompleteInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkCompleteOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Finish linking a sign-in to the caller's account
+      tags:
+        - Account
+  /link/start:
+    post:
+      description: "Issues a short-lived, single-use token bound to the caller's own Auth0 subject. Grants nothing on its own: redeeming it also needs the nonce, which stays in the calling browser's storage, and a successful re-authentication as the account being linked to."
+      operationId: start-link
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkStartInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkStartOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Start linking the current sign-in to an existing account
+      tags:
+        - Account
   /recipe:
     delete:
       operationId: delete-recipe

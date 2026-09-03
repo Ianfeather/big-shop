@@ -38,8 +38,30 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Captured before tidb_env_load, which fills TIDB_USER in from .env.tidb - after
+# it runs there is no way to tell a value the caller chose from the file's
+# default, and the two want opposite treatment.
+caller_user="${TIDB_USER:-}"
+
 . "$(dirname "$0")/lib/tidb-env.sh"
 tidb_env_load
+
+# Default to the migration account rather than to .env.tidb's TIDB_USER.
+#
+# That file names root, because the other scripts sharing it dump the database
+# and alter charsets. Applying a migration needs none of that - the deploy has
+# used the narrower `gh_migrate` account since #148 - but this script kept
+# inheriting root, so a human running `--dry-run` to rehearse the deploy was
+# rehearsing the wrong credential. It passed, and proved nothing: the whole
+# point of that rehearsal is to establish that the narrow grant is sufficient,
+# and root is sufficient for anything.
+#
+# An explicitly exported TIDB_USER still wins, which is what the deploy
+# workflow passes and what a one-off run as another account would set.
+if [ -z "$caller_user" ] && [ -n "${TIDB_MIGRATE_USER:-}" ]; then
+  TIDB_USER="$TIDB_MIGRATE_USER"
+  export TIDB_USER
+fi
 
 if [ -z "${TIDB_PASSWORD:-}" ]; then
   if [ -t 0 ]; then

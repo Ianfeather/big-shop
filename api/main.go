@@ -37,9 +37,6 @@ import (
 	_ "time/tzdata"
 
 	"github.com/XSAM/otelsql"
-	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-lambda-go/lambda"
-	negroniadapter "github.com/awslabs/aws-lambda-go-api-proxy/negroni"
 	"github.com/danielgtaylor/huma/v2"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/urfave/negroni"
@@ -47,7 +44,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-var negroniLambda *negroniadapter.NegroniAdapter
 var router *negroni.Negroni
 var openapiAPI huma.API
 
@@ -84,30 +80,18 @@ var routeTemplates []string
 // line. Cheaper to make it true than to rely on it.
 var shutdownTelemetry = func(context.Context) error { return nil }
 
-// basePath is the prefix every route is registered under when this runs as a
-// server - the Fly container in production, and `serve` locally - and it is the
-// OpenAPI server URL. Netlify rewrites it to the Fly origin with status = 200,
-// which keeps the API same-origin to the browser. /api alone would swallow the
-// Next.js routes under pages/api, hence the second segment. Changing this means
-// regenerating docs/openapi.yaml and types/api.d.ts - both are drift-checked in
-// CI.
+// basePath is the prefix every route is registered under - the Fly container in
+// production, and `serve` locally - and it is the OpenAPI server URL. Netlify
+// rewrites it to the Fly origin with status = 200, which keeps the API
+// same-origin to the browser. /api alone would swallow the Next.js routes under
+// pages/api, hence the second segment. Changing this means regenerating
+// docs/openapi.yaml and types/api.d.ts - both are drift-checked in CI.
+//
+// It used to have a sibling, lambdaBasePath (/.netlify/functions/recipes), so
+// the Lambda could go on serving its own prefix as ADR-0006's rollback target
+// while Fly took over. That rollback was retired with the Lambda entry point
+// itself, so there is now one prefix and one server.
 const basePath = "/api/bigshop"
-
-// lambdaBasePath is what the Netlify Function has always served, and goes on
-// serving unchanged.
-//
-// It is not simply the old value of basePath. Netlify routes a request to a
-// function by the function's own path, so the Lambda has to keep registering
-// routes under that prefix or it 404s on everything the moment this branch
-// deploys. That would quietly destroy the rollback the whole migration rests
-// on: specs/api-hosting-migration.md's Phase 4 says rollback is "reverting
-// those values and redeploying. The Lambda is still there, still serving its
-// old path, untouched" - which is only true if it really is untouched. So the
-// two servers coexist through the cooling-off period, on different paths,
-// against the same database.
-//
-// Deleted along with the lambda.Start branch in Phase 5.
-const lambdaBasePath = "/.netlify/functions/recipes"
 
 // isOpenAPIMode reports whether the process was invoked as `go run . openapi`,
 // which prints the generated OpenAPI spec and exits - no DB connection is
@@ -164,15 +148,6 @@ func isSendTestMode() bool {
 // memory keep working.
 func isServeMode() bool {
 	return len(os.Args) > 1 && (os.Args[1] == "serve" || os.Args[1] == "dev")
-}
-
-// routerBasePath picks the prefix for the mode this process is running in.
-// Anything that is not the OpenAPI printer or a server is the Lambda.
-func routerBasePath() string {
-	if isOpenAPIMode() || isServeMode() {
-		return basePath
-	}
-	return lambdaBasePath
 }
 
 func init() {
@@ -313,15 +288,13 @@ func init() {
 	purgeConfigured = application.PurgeConfigured()
 
 	var api huma.API
-	router, api, err = application.GetRouter(routerBasePath())
+	router, api, err = application.GetRouter(basePath)
 	if err != nil {
 		fmt.Println("Failed to get application router")
 		fmt.Println(err)
 	}
 
 	routeTemplates = app.RouteTemplates(api)
-
-	negroniLambda = negroniadapter.New(router)
 }
 
 // Pool limits. `database/sql` applies its own defaults when nothing is set, and
@@ -389,10 +362,6 @@ func configurePool(db *sql.DB) {
 	db.SetConnMaxLifetime(connMaxLifetime)
 }
 
-func handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	return negroniLambda.ProxyWithContext(ctx, req)
-}
-
 func main() {
 	if isPreviewMode() {
 		runPreview()
@@ -438,11 +407,12 @@ func main() {
 		}
 
 		// This branch is no longer dev-only: it is what the production
-		// container on Fly runs too (see Dockerfile), so its timeouts now
-		// apply to real traffic for the first time - the lambda.Start path
-		// below never used them. The old 3s read/write pair would have cut
-		// off anything slower than that, shopping-list generation being the
-		// obvious candidate. WriteTimeout covers handler execution, and sits
+		// container on Fly runs too (see Dockerfile), and since the Lambda
+		// entry point was deleted it is the only thing that serves traffic at
+		// all - so its timeouts govern every request. The old 3s read/write
+		// pair would have cut off anything slower than that, shopping-list
+		// generation being the obvious candidate. WriteTimeout covers handler
+		// execution, and sits
 		// above the Netlify proxy's own 26s ceiling so the proxy is what
 		// gives up first rather than the origin truncating a response
 		// mid-flight.
@@ -456,9 +426,10 @@ func main() {
 		//
 		// Started here and nowhere else, which is the point: this branch is the
 		// single always-on Fly machine, so there is exactly one ticker in
-		// existence. The Lambda branch below must never start one - it would
-		// start a fresh ticker on every invocation, each living as long as the
-		// invocation and none of them ever reaching the next hour.
+		// existence. That it is started from a *mode* rather than from init()
+		// is what guarantees it: none of the short-lived subcommands above
+		// (openapi, migrate, send-test and the rest) starts a ticker it would
+		// then exit out from under.
 		//
 		// Given a database and nothing else. With no SendGrid key or no
 		// unsubscribe group configured it runs, finds who is due, declines to
@@ -473,10 +444,7 @@ func main() {
 			WriteTimeout: 30 * time.Second,
 			IdleTimeout:  120 * time.Second,
 			// Outside the negroni stack, so the span covers auth, CORS and
-			// routing rather than just the handler. Only the server mode is
-			// wrapped: the Lambda below is the rollback target from ADR-0006 and
-			// is left exactly as it was, which is also why it needs no telemetry
-			// of its own - it serves no traffic unless the migration is undone.
+			// routing rather than just the handler.
 			Handler: telemetry.Handler(router, basePath, routeTemplates),
 		}
 		// Fatal rather than ignored: a bind failure used to exit 0 silently,
@@ -492,6 +460,19 @@ func main() {
 		cancel()
 		log.Fatal(err)
 	} else {
-		lambda.Start(handler)
+		// Every mode above is an explicit subcommand, and there is no default.
+		//
+		// This branch used to be `lambda.Start(handler)` - the Netlify Function
+		// entry point that ADR-0006 retired and Phase 5 of
+		// specs/completed/api-hosting-migration.md deleted along with the
+		// aws-lambda-go dependencies. Nothing invokes the binary bare any more:
+		// the Dockerfile's ENTRYPOINT passes `serve`, and so does .air.toml.
+		// So reaching here is a mistake, and failing loudly beats what the
+		// Lambda branch would now do - block waiting on a runtime API that is
+		// not there.
+		if len(os.Args) > 1 {
+			log.Fatalf("unknown mode %q: expected one of serve, openapi, migrate, preview, send-test, hash-invite-emails", os.Args[1])
+		}
+		log.Fatal("no mode given: expected one of serve, openapi, migrate, preview, send-test, hash-invite-emails")
 	}
 }

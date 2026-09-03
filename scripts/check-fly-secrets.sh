@@ -36,7 +36,7 @@
 # Read-only: it lists secret NAMES and nothing else. `flyctl secrets list` never
 # emits a value, only a digest, so there is no value here to leak.
 set -euo pipefail
-cd "$(dirname "$0")/../netlify-functions/recipes"
+cd "$(dirname "$0")/../api"
 
 # Secrets that exist on the app on purpose while reaching no container. Empty,
 # and it should stay that way - add a name only with a comment saying why, and

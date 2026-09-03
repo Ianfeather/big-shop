@@ -688,3 +688,130 @@ func assertOneSpanWithReason(t *testing.T, spans *tracetest.SpanRecorder, want s
 	}
 	t.Errorf("span carries no auth.failure_reason; a 401 is illegible without it")
 }
+
+// The CORS allowlist names real origins, and refuses everything else.
+//
+// What this guards is narrow but not nothing. In production the browser reaches
+// this API same-origin through netlify.toml's status = 200 rewrite, so no
+// preflight is made at all; the origins that genuinely preflight are the local
+// dev pair (:3000 -> :8080) and the e2e stack's per-worktree ports. So the
+// failure this catches is "a preflight the local and e2e stacks depend on stops
+// passing", which is invisible to every production check.
+//
+// It also pins the two halves of the defect that
+// specs/completed/api-hosting-migration.md recorded and Phase 5 fixed:
+// AllowedOrigins "*" paired with AllowCredentials true, a combination the CORS
+// spec forbids, so the config never meant what it said.
+func TestCORSAllowlist(t *testing.T) {
+	preflight := func(t *testing.T, origin string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodOptions, testBase+"/shopping-list", nil)
+		req.Header.Set("Origin", origin)
+		req.Header.Set("Access-Control-Request-Method", http.MethodGet)
+		req.Header.Set("Access-Control-Request-Headers", "Authorization")
+		rec := httptest.NewRecorder()
+		newRouter(t, "").ServeHTTP(rec, req)
+		return rec
+	}
+
+	// A predicate rather than a fixed list, because the e2e stack derives its
+	// web port from a hash of the worktree path (e2e/instance.cjs) and no list
+	// here could name it.
+	t.Run("allows a localhost origin on any port", func(t *testing.T) {
+		for _, origin := range []string{
+			"http://localhost:3000",
+			"http://localhost:3947",
+			"http://127.0.0.1:3000",
+		} {
+			rec := preflight(t, origin)
+			if got := rec.Header().Get("Access-Control-Allow-Origin"); got != origin {
+				t.Errorf("origin %s: Access-Control-Allow-Origin = %q, want %q", origin, got, origin)
+			}
+		}
+	})
+
+	t.Run("allows the production site origin", func(t *testing.T) {
+		const origin = "https://www.bigshop.life"
+		rec := preflight(t, origin)
+		if got := rec.Header().Get("Access-Control-Allow-Origin"); got != origin {
+			t.Errorf("Access-Control-Allow-Origin = %q, want %q", got, origin)
+		}
+	})
+
+	// The point of the whole change: an origin nobody named gets no header, so
+	// the browser refuses the response. Under the old "*" this passed for
+	// everyone.
+	t.Run("refuses an origin that is not on the list", func(t *testing.T) {
+		for _, origin := range []string{
+			"https://evil.example",
+			"https://www.bigshop.life.evil.example",
+			// The reason isLoopbackOrigin parses instead of prefix-matching.
+			// `http://localhost:*` handed to rs/cors is a prefix match with an
+			// empty suffix, so it admits every one of these - and each is a
+			// host somebody else can register and serve.
+			"http://localhost:3000.evil.example",
+			"http://localhost.evil.example",
+			"http://127.0.0.1.evil.example",
+			// https, not http: a loopback origin is only ever plain HTTP here.
+			"https://localhost:3000",
+			// Not an origin at all - an origin is scheme, host and port.
+			"http://localhost:3000/evil",
+			"http://user@localhost:3000",
+		} {
+			rec := preflight(t, origin)
+			if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
+				t.Errorf("origin %s: Access-Control-Allow-Origin = %q, want no header", origin, got)
+			}
+		}
+	})
+
+	// Authorization is the header every route bar /health needs, so a preflight
+	// that does not permit it fails every real request.
+	t.Run("permits the Authorization header", func(t *testing.T) {
+		rec := preflight(t, "http://localhost:3000")
+		if got := rec.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, "Authorization") {
+			t.Errorf("Access-Control-Allow-Headers = %q, want it to contain Authorization", got)
+		}
+	})
+
+	// AllowCredentials is off: this API authenticates with a bearer token set
+	// explicitly by the client, not with cookies. Its presence alongside a
+	// wildcard origin was the invalid pairing.
+	t.Run("claims no credentials support", func(t *testing.T) {
+		rec := preflight(t, "http://localhost:3000")
+		if got := rec.Header().Get("Access-Control-Allow-Credentials"); got != "" {
+			t.Errorf("Access-Control-Allow-Credentials = %q, want no header", got)
+		}
+	})
+
+	// The override is how a new front-end origin becomes reachable without a
+	// code change - fly.toml's [env] block is where production would state one.
+	t.Run("CORS_ALLOWED_ORIGINS replaces the defaults", func(t *testing.T) {
+		t.Setenv("CORS_ALLOWED_ORIGINS", "https://staging.example, https://other.example")
+
+		rec := preflight(t, "https://staging.example")
+		if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "https://staging.example" {
+			t.Errorf("Access-Control-Allow-Origin = %q, want the configured origin", got)
+		}
+
+		// Replaces rather than extends, so neither a default origin nor
+		// loopback survives the override. A deployment that names its origins
+		// is stating the complete set.
+		for _, origin := range []string{"https://www.bigshop.life", "http://localhost:3000"} {
+			rec = preflight(t, origin)
+			if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
+				t.Errorf("origin %s: Access-Control-Allow-Origin = %q, want no header once overridden", origin, got)
+			}
+		}
+	})
+
+	// A blank variable must not be able to take local development down, so it
+	// falls back to the defaults rather than to an empty allowlist.
+	t.Run("a blank CORS_ALLOWED_ORIGINS falls back to the defaults", func(t *testing.T) {
+		t.Setenv("CORS_ALLOWED_ORIGINS", "  ,  ")
+		rec := preflight(t, "http://localhost:3000")
+		if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:3000" {
+			t.Errorf("Access-Control-Allow-Origin = %q, want the default localhost origin", got)
+		}
+	})
+}

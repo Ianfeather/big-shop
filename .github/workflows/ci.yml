@@ -73,7 +73,7 @@ jobs:
     timeout-minutes: 15
     defaults:
       run:
-        working-directory: netlify-functions/recipes
+        working-directory: api
     steps:
       # fetch-depth: 0 for the migration check below, which needs the merge base
       # with master. The default shallow fetch has neither master nor enough
@@ -106,11 +106,10 @@ jobs:
       # build-lint-test for one reason only - `go` did not gate merges then, and
       # a check that reports without gating is not a check.
       #
-      # working-directory overrides this job's default of
-      # netlify-functions/recipes, which every other step here wants and this
-      # one does not: migrations/ and scripts/ are at the repo root. Without it
-      # the path does not resolve and the step fails for a reason that has
-      # nothing to do with migrations.
+      # working-directory overrides this job's default of api, which every
+      # other step here wants and this one does not: migrations/ and scripts/
+      # are at the repo root. Without it the path does not resolve and the step
+      # fails for a reason that has nothing to do with migrations.
       - name: Migrations are append-only
         working-directory: .
         run: ./scripts/check-migrations-append-only.sh "origin/${{ github.event.pull_request.base.ref || 'master' }}"
@@ -119,7 +118,7 @@ jobs:
         with:
           # Matches go.mod's `go 1.25.0` and the Dockerfile's build stage.
           go-version: '1.25'
-          cache-dependency-path: netlify-functions/recipes/go.sum
+          cache-dependency-path: api/go.sum
 
       # `gofmt -l`, not `go fmt ./...`: the latter *rewrites* the files and
       # exits 0 regardless, so as a CI gate it passes unconditionally. It has
@@ -152,9 +151,9 @@ jobs:
       # migration did.
       - name: Check docs/openapi.yaml is up to date
         run: |
-          if ! diff -u ../../docs/openapi.yaml <(go run . openapi); then
+          if ! diff -u ../docs/openapi.yaml <(go run . openapi); then
             echo "docs/openapi.yaml is out of date. Regenerate it with:"
-            echo "  cd netlify-functions/recipes && go run . openapi > ../../docs/openapi.yaml"
+            echo "  cd api && go run . openapi > ../docs/openapi.yaml"
             exit 1
           fi
 

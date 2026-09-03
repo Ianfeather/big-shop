@@ -114,7 +114,7 @@ run_migrate_in_container() {
     -v "$PWD:/src:ro" \
     -v bigshop-go-mod-cache:/go/pkg/mod \
     -v bigshop-go-build-cache:/root/.cache/go-build \
-    -w /src/netlify-functions/recipes \
+    -w /src/api \
     -e TIDB_HOST -e TIDB_PORT -e TIDB_USER -e TIDB_DB -e TIDB_TLS \
     -e TIDB_PASSWORD \
     "$GO_IMAGE" \
@@ -137,7 +137,7 @@ echo "Applying pending migrations to ${TIDB_DB} on ${TIDB_HOST}..."
 # Locally the container is the default, because locally there is usually no Go
 # at all.
 if [ "${MIGRATE_GO:-container}" = host ]; then
-  cd netlify-functions/recipes
+  cd api
   exec go run . migrate "$@"
 fi
 

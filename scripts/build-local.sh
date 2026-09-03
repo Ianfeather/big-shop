@@ -7,8 +7,8 @@
 # It no longer does: those checks moved to CI when the API left Netlify
 # Functions (docs/adr/0006-...), and build.sh reduced to `npm run package`.
 # So this script's counterpart is now ci.yml, and the two should stay in step.
-# ./netlify-functions/recipes is bind-mounted into that container, so `go fmt`
-# still writes back to the files on disk and `go test`/`go run` see live source.
+# ./api is bind-mounted into that container, so `go fmt` still writes back to
+# the files on disk and `go test`/`go run` see live source.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

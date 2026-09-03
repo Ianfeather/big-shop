@@ -29,7 +29,7 @@ const ApiDocs = () => {
             Dev-only viewer for the Go API&apos;s OpenAPI spec. The spec itself is
             generated from <code>internal/pkg/app</code>&apos;s Huma route
             definitions, not hand-written - run{' '}
-            <code>cd netlify-functions/recipes &amp;&amp; go run . openapi {'>'} ../../docs/openapi.yaml</code>{' '}
+            <code>cd api &amp;&amp; go run . openapi {'>'} ../docs/openapi.yaml</code>{' '}
             to regenerate it after changing a route, then refresh this page.
           </p>
           <div className={styles.swaggerWrapper}>

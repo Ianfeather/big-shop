@@ -106,8 +106,8 @@ they are deliberately not defaulted, because a script that silently connects
 somewhere you did not mean is worse than one that refuses.
 
 - **Host and username** are the same values the API itself uses, in
-  `netlify-functions/recipes/fly.toml`'s `[env]` block - `TIDB_HOST` and
-  `TIDB_USER`, under those exact names. They used to have to be dug out of a
+  `api/fly.toml`'s `[env]` block - `TIDB_HOST` and `TIDB_USER`, under those
+  exact names. They used to have to be dug out of a
   `DSN` connection string in Netlify's environment UI; there is no such string
   any more, because `dsn.go` assembles the connection from these components and
   the `TIDB_PASSWORD` secret. See

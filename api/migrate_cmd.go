@@ -20,7 +20,7 @@ import (
 // run from the deployed container. That is deliberate rather than a limitation:
 // migrations run from a checkout, in CI, before the image that needs them is
 // deployed. See .github/workflows/deploy-api.yml.
-const defaultMigrationsDir = "../../migrations"
+const defaultMigrationsDir = "../migrations"
 
 // runMigrate applies every migration the database has not recorded.
 //

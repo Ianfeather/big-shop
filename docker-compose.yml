@@ -161,7 +161,7 @@ services:
 
   api:
     build:
-      context: ./netlify-functions/recipes
+      context: ./api
       dockerfile: Dockerfile.dev
     restart: unless-stopped
     depends_on:
@@ -170,8 +170,8 @@ services:
     environment:
       # The connection, by component. There is no DSN string here any more:
       # parseTime, interpolateParams and collation are literals in
-      # netlify-functions/recipes/dsn.go, because not one of them ever differed
-      # between this stack and production - and a hand-written string is exactly
+      # api/dsn.go, because not one of them ever differed between this stack
+      # and production - and a hand-written string is exactly
       # how production came to lose parseTime and answer 500 on GET /user for a
       # day. See that file for the reasoning, and never add multiStatements.
       #
@@ -211,14 +211,17 @@ services:
     ports:
       - "${API_PORT:-8080}:8080"
     volumes:
-      - ./netlify-functions/recipes:/app
+      - ./api:/app
       # The migrations are outside the Go module (the build context is the
       # module alone, so they are not in the image), but `go run . migrate`
       # needs to read them and internal/pkg/migrate's test asserts the real
       # directory is numbered the way filename-order-is-apply-order requires.
-      # Mounted at /migrations because that is where `../../../../../migrations`
+      # Mounted at /migrations because that is where `../../../../migrations`
       # lands from the test's package directory when the module root is /app -
-      # the same path it resolves to from a full checkout in CI.
+      # `..` clamps at / rather than erroring, so the walk runs out of parents
+      # and stops there. From a full checkout in CI the same relative path
+      # resolves to the repository root's migrations/ instead, which is the
+      # point: one path that is correct in both.
       - ./migrations:/migrations:ro
 
 volumes:

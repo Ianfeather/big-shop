@@ -5,8 +5,8 @@
 // Decisions live in docs/adr/0007-observability-otel-grafana-cloud.md; what the
 // telemetry deliberately does not carry lives in docs/adr/0008. The one rule
 // that governs every line of this file, exactly as it governs its Go sibling in
-// netlify-functions/recipes/internal/pkg/telemetry: **telemetry must never
-// affect the application.** Nothing here throws, nothing here logs on an export
+// api/internal/pkg/telemetry: **telemetry must never affect the
+// application.** Nothing here throws, nothing here logs on an export
 // failure, and setup on a machine with no collector is a no-op rather than a
 // problem.
 //

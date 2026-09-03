@@ -126,7 +126,7 @@ app.post('/shopping-list', (req, res) => {
   // summed into a wrong number. It deliberately stops short of the real
   // service's kind/factor conversion (tsp+tbsp) - the evals don't exercise it,
   // and duplicating the unit catalog here would just be a second thing to keep
-  // in step. See netlify-functions/recipes/internal/pkg/service/list.go.
+  // in step. See api/internal/pkg/service/list.go.
   const combinedIngredients = {};
 
   selectedRecipes.forEach(recipe => {

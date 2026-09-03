@@ -29,7 +29,7 @@
 #
 # Read-only: it lists releases and machines and writes nothing.
 set -euo pipefail
-cd "$(dirname "$0")/../netlify-functions/recipes"
+cd "$(dirname "$0")/../api"
 
 # `-c fly.toml` from this directory, rather than `-a big-shop-api`, so the app
 # name lives in exactly one place - the same file the deploy step passes.

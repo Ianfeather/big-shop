@@ -2,8 +2,8 @@
 // of the container before it freezes.
 //
 // This is the Netlify-side equivalent of the Go API's telemetry middleware
-// (netlify-functions/recipes/internal/pkg/telemetry/http.go), and it makes the
-// same two judgement calls for the same two reasons:
+// (api/internal/pkg/telemetry/http.go), and it makes the same two judgement
+// calls for the same two reasons:
 //
 //   - **`http.route` is a hard-coded template, never the request path.** On the
 //     Go side that mattered because `/recipe/{id}` also accepts a slug, so a

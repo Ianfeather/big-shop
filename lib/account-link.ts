@@ -1,6 +1,6 @@
 // The browser's half of account linking recovery — see
 // `specs/completed/account-linking-recovery.md` and
-// `netlify-functions/recipes/internal/pkg/service/link.go`.
+// `api/internal/pkg/service/link.go`.
 //
 // Somebody whose second sign-in handed over a different verified address gets a
 // brand new, empty Account and no error anywhere, because at the level of the

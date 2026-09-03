@@ -1,0 +1,7 @@
+/* Sits directly under the button, so the failure reads as belonging to the
+   thing that just failed rather than to the page. */
+.error {
+  color: var(--color-danger, #b3261e);
+  margin-bottom: 0;
+  max-width: 46ch;
+}

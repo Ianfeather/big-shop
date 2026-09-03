@@ -6,6 +6,8 @@ import Layout, { MainContent, Sidebar } from '@components/layout'
 import RecipeSidebar from '@components/shopping-list/Recipes';
 import ShoppingList from '@components/shopping-list/ShoppingList';
 import useAuth0 from '@hooks/use-auth';
+import useRecipes from '@hooks/use-recipes';
+import AccountLinkButton from '@components/account-link';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api-client';
 import type { ListIngredient } from '../types/models';
 import { shoppingListGenerated } from '../lib/analytics/events';
@@ -220,6 +222,23 @@ const List = () => {
   useEffect(() => { getShoppingList() }, [recipeList]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  // **"This account has no recipes", not "this shopping list is empty."** A
+  // returning user with a full library and nothing picked for the week must
+  // never see this - which is most people, most of the time.
+  //
+  // The sidebar below already loads the account's recipes through the same
+  // hook, and TanStack dedupes on queryKeys.recipes, so asking here costs no
+  // extra request.
+  //
+  // **Gated on the query having resolved, not just on the count.** `useRecipes`
+  // defaults to `[]` so its consumers can map immediately, which makes an
+  // in-flight fetch indistinguishable from a genuinely empty library - and
+  // rendering on the count alone would flash this panel on every load, for
+  // everybody. pages/account.tsx learned the same lesson with its invite
+  // message and its deliberately undefaulted `otherMembers`.
+  const [accountRecipes, recipesResolved] = useRecipes();
+  const showLinkPrompt = recipesResolved && accountRecipes.length === 0;
+
   return (
     <Layout>
       <Tabs buttonsClassName={styles.tabButtons} maxWidth={800}>
@@ -229,6 +248,21 @@ const List = () => {
             shoppingList={shoppingList}
             extras={extras}
             buyIngredient={buyIngredient}
+            notice={showLinkPrompt && (
+              /* The one surface account linking recovery is offered from, and
+                 the only screen an affected person is guaranteed to reach: the
+                 Auth0 callback lands here (lib/app-origin.ts's
+                 loginRedirectUri), so it is the first thing they see.
+
+                 /recipes deliberately does not get a second copy. Its empty
+                 state is arguably where "where are my recipes?" forms most
+                 sharply, but one surface is one thing to get right, and a
+                 message that can appear twice in a session reads as a bug. */
+              <div className={styles.linkPrompt}>
+                <p className={styles.linkPromptCopy}>Expected to see your recipes here?</p>
+                <AccountLinkButton>Link an existing account</AccountLinkButton>
+              </div>
+            )}
           />
         </MainContent>
         <Sidebar name="Pick recipes">

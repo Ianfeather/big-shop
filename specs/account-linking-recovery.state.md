@@ -29,7 +29,7 @@ Notes: `npm run typecheck`, `npm run lint` and the full Vitest suite (54 files,
   its tests, and the code-review skill spawns two sub-agents.
 
 ## Session 2: The server, with no UI (Phase 1)
-Status: pending
+Status: done
 Scope: `migrations/045_pending_link.sql`; `service/link.go` holding
   `StartLink` / `CompleteLink` and the narrow cascade entry point that runs
   `deleteAccountTx` (never `DeleteUserAndAccount`); `POST /link/start` and
@@ -79,21 +79,52 @@ Notes: gofmt/vet clean; `go test ./... -race` green; `docs/openapi.yaml` and
   is written down in `applyLink` instead.
 
 ## Session 3: The flow (Phase 2)
-Status: pending
+Status: done
 Scope: `pages/link/confirm.tsx`, the `prompt=login` redirect, the localStorage
   nonce, the confirmation copy, and the `/link/confirm` entry in
   `lib/analytics/page-titles.ts` (without which the route test fails).
 Depends on: Session 2
-Commit:
-Notes:
+Commit: 2d343cb
+Notes: Typecheck, lint and the full Vitest suite green, with 14 new tests for
+  the nonce and the stored pending link. Verified in a browser against the real
+  stack: the "nothing to link" state, the confirmation naming the provider, and
+  a refusal rendering its advice while leaving the request retryable.
+  Screenshots in specs/evidence/account-linking-recovery/.
+
+  Two judgement calls worth review. (1) The Auth0 callback still lands on
+  `/list` and `lib/return-to.ts` forwards to `/link/confirm`, rather than
+  `/link/confirm` becoming an Allowed Callback URL in the tenant: the latter
+  needs a tenant change per origin (deploy previews included, where it would
+  fail silently at the last step) and would put a second owner on the one
+  post-login navigation `pages/_app.tsx` deliberately owns alone. The spec's
+  step 5 - "return to /link/confirm" - is still what happens. **No Auth0
+  configuration change is needed to ship this.** (2) With auth disabled the
+  mock `loginWithRedirect` is a no-op, so the hook navigates straight to
+  `/link/confirm`; that keeps the screen reachable locally and in e2e, where it
+  refuses correctly because signing in "again" yields the same subject.
 
 ## Session 4: The surface (Phase 3)
-Status: pending
+Status: done
 Scope: The `/list` panel behind the resolved-and-empty condition, and the
   `/account` entry point. `/recipes` deliberately untouched.
 Depends on: Sessions 1 and 3
-Commit:
-Notes:
+Commit: 1a3a41a
+Notes: Typecheck, lint and 438 Vitest tests green. Verified in a browser
+  against the real stack, including the negative case: with two seeded recipes
+  the panel is absent; with none it appears; and after a successful link it
+  disappears again. The whole loop was then driven through the UI with a real
+  second identity (`apple|relay9`, an empty account) - clicking the panel
+  started the link and stored the nonce, the confirmation named the Apple
+  sign-in, and completing it aliased that subject to the original user, removed
+  the abandoned `account` row and left the surviving recipe reachable from
+  *both* sign-ins. Screenshots of all four states in
+  specs/evidence/account-linking-recovery/.
+
+  One change beyond the panel itself: `components/shopping-list/ShoppingList`
+  gained an optional `notice` slot. It owns the PageHeading, so anything the
+  page stacked above it sat above the page's own title and read as a layout
+  mistake. A slot rather than a `showAccountLinkPrompt` boolean - what goes
+  there is the page's business.
 
 ## Session 5: The notification (Phase 4)
 Status: pending

@@ -38,11 +38,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Captured before tidb_env_load, which fills TIDB_USER in from .env.tidb - after
-# it runs there is no way to tell a value the caller chose from the file's
-# default, and the two want opposite treatment.
-caller_user="${TIDB_USER:-}"
-
 . "$(dirname "$0")/lib/tidb-env.sh"
 tidb_env_load
 
@@ -57,11 +52,11 @@ tidb_env_load
 # and root is sufficient for anything.
 #
 # An explicitly exported TIDB_USER still wins, which is what the deploy
-# workflow passes and what a one-off run as another account would set.
-if [ -z "$caller_user" ] && [ -n "${TIDB_MIGRATE_USER:-}" ]; then
-  TIDB_USER="$TIDB_MIGRATE_USER"
-  export TIDB_USER
-fi
+# workflow passes and what a one-off run as another account would set. The
+# capture that makes that distinction possible now lives in tidb-env.sh, which
+# is sourced above; the three read-only scripts ask for TIDB_READONLY_USER
+# through the same function.
+tidb_env_prefer_user TIDB_MIGRATE_USER
 
 if [ -z "${TIDB_PASSWORD:-}" ]; then
   if [ -t 0 ]; then

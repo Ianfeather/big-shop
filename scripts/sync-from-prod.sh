@@ -26,6 +26,17 @@ cd "$(dirname "$0")/.."
 . scripts/lib/tidb-env.sh
 tidb_env_load
 
+# Connect as the read-only account rather than as .env.tidb's TIDB_USER, which
+# names root. This script only ever reads, so a root session buys it nothing and
+# costs the difference between a mistyped statement that cannot write and one
+# that can. docs/reporting-database-user.md has the grant - plain SELECT on
+# bigshop, established by running exactly these queries under it.
+#
+# Falls back to TIDB_USER when no such account is configured, so this behaves
+# as it always did until someone creates one. `TIDB_USER=... scripts/...` still
+# wins, for connecting as somebody else deliberately.
+tidb_env_prefer_user TIDB_READONLY_USER
+
 # ACCOUNT_ID is the one value that still asks when it has not been set. It can
 # live in .env.tidb like the rest, but it must not silently default: migration
 # 012 swapped accounts around, so 1 is not reliably yours in production, and a
@@ -69,12 +80,32 @@ run_mysqldump() {
   # With explicit column names the local-only columns simply take their
   # defaults, which is exactly right: a column production doesn't have yet has
   # no value to sync.
+  #
+  # --no-tablespaces is what lets this run as an account holding nothing but
+  # SELECT, and it is the only flag here that is about privileges rather than
+  # about correctness. mysqldump 8.0 reads INFORMATION_SCHEMA.FILES to emit
+  # tablespace DDL, which needs the cluster-level PROCESS privilege; without it
+  # it prints
+  #
+  #   mysqldump: Error: 'Access denied; you need (at least one of) the PROCESS
+  #   privilege(s) for this operation' when trying to dump tablespaces
+  #
+  # and - the part that matters - **carries on and exits 0**, having written a
+  # complete and correct data-only dump. So the failure mode this avoids is not
+  # a broken sync; it is a scary error on every run that means nothing, of
+  # exactly the kind that teaches people to ignore stderr.
+  #
+  # Granting PROCESS instead would be the wrong way round: it is cluster-wide,
+  # it exposes every other session's running queries, and docs/ci-database-user.md
+  # already refuses it to the migration account for that reason. There is no
+  # tablespace DDL to dump here anyway - --no-create-info means no DDL at all.
   docker run --rm -e MYSQL_PWD="$TIDB_PASSWORD" mysql:8.0 \
     mysqldump -h "$TIDB_HOST" -P "$TIDB_PORT" -u "$TIDB_USER" \
     --ssl-mode=REQUIRED \
     --no-create-info \
     --complete-insert \
     --skip-lock-tables \
+    --no-tablespaces \
     --set-gtid-purged=OFF \
     "$@"
 }

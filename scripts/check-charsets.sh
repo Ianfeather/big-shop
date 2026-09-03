@@ -39,6 +39,18 @@ cd "$(dirname "$0")/.."
 
 . scripts/lib/tidb-env.sh
 tidb_env_load
+
+# Connect as the read-only account rather than as .env.tidb's TIDB_USER, which
+# names root. This script only ever reads, so a root session buys it nothing and
+# costs the difference between a mistyped statement that cannot write and one
+# that can. docs/reporting-database-user.md has the grant - plain SELECT on
+# bigshop, established by running exactly these queries under it.
+#
+# Falls back to TIDB_USER when no such account is configured, so this behaves
+# as it always did until someone creates one. `TIDB_USER=... scripts/...` still
+# wins, for connecting as somebody else deliberately.
+tidb_env_prefer_user TIDB_READONLY_USER
+
 tidb_prompt_password
 
 # SQL on stdin; any extra mysql flags as arguments.

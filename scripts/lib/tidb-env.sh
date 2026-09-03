@@ -5,6 +5,7 @@
 #
 #   . "$(dirname "$0")/lib/tidb-env.sh"
 #   tidb_env_load       # TIDB_HOST/PORT/USER/DB, from the environment
+#   tidb_env_prefer_user TIDB_READONLY_USER   # optional; see below
 #   tidb_prompt_password  # TIDB_PASSWORD, typed silently, held in memory only
 #
 # ---------------------------------------------------------------------------
@@ -41,6 +42,17 @@
 # Resolve the repo root from this file's own location, so it does not matter
 # what the caller has cd'd to.
 TIDB_ENV_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+
+# The TIDB_USER the caller had already exported, captured now - before
+# tidb_env_load fills the variable in from .env.tidb. Once that has run there is
+# no way to tell a username a person chose deliberately from the file's default,
+# and tidb_env_prefer_user needs to treat the two in opposite ways.
+#
+# Sourcing this file is the last moment that distinction still exists, which is
+# why the capture lives here rather than in the function that uses it. It used
+# to be a `caller_user` local in migrate-prod.sh, which meant every script
+# wanting the same behaviour had to remember to capture before sourcing.
+TIDB_ENV_CALLER_USER="${TIDB_USER:-}"
 
 # Read KEY=VALUE lines from $1 into the environment, without overwriting
 # anything already set to a non-empty value.
@@ -101,6 +113,54 @@ tidb_env_load() {
   fi
 
   export TIDB_HOST TIDB_PORT TIDB_USER TIDB_DB
+}
+
+# Point TIDB_USER at the narrower, role-specific account named by $1 - a
+# variable name, e.g. `tidb_env_prefer_user TIDB_READONLY_USER`.
+#
+# ---------------------------------------------------------------------------
+# Why the scripts do not simply share .env.tidb's TIDB_USER
+# ---------------------------------------------------------------------------
+# Because they do very different things to production, and one username cannot
+# be right for all of them. TIDB_USER names **root**, and has to, because
+# backup-prod.sh dumps the whole database and probe-charset-conversion.sh runs
+# ALTER. A script that only ever reads inherited that anyway, so every one of
+# these sessions was a root session regardless of what it needed.
+#
+# So each script that has a narrower account available asks for it by name, and
+# .env.tidb carries one line per role. root stays the default for the scripts
+# that genuinely need it rather than being the default for everything.
+#
+# ---------------------------------------------------------------------------
+# Why an explicitly exported TIDB_USER still wins
+# ---------------------------------------------------------------------------
+# `TIDB_USER=... scripts/check-orphans.sh` is how you deliberately connect as
+# somebody else - as root to compare, or as a fifth account that does not exist
+# yet. Silently overriding that would make the override look broken.
+#
+# The distinction is only observable before tidb_env_load runs, which is why it
+# is captured at source time into TIDB_ENV_CALLER_USER above.
+#
+# Both no-op branches return 0 deliberately: every caller runs under `set -e`,
+# so a function returning non-zero as its last act would abort the script.
+tidb_env_prefer_user() {
+  local var="$1"
+
+  # The caller chose a username; leave it alone.
+  if [ -n "${TIDB_ENV_CALLER_USER:-}" ]; then
+    return 0
+  fi
+
+  # No such account configured - .env.tidb's line is absent or commented out.
+  # Falling back to TIDB_USER keeps the script working exactly as it did
+  # before the narrower account existed, which is what makes adding one a
+  # change that can be merged before the account is created.
+  if [ -z "${!var:-}" ]; then
+    return 0
+  fi
+
+  TIDB_USER="${!var}"
+  export TIDB_USER
 }
 
 # TIDB_PASSWORD, typed silently. Never defaulted from the environment or the

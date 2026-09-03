@@ -68,6 +68,73 @@ const dsnCollation = "utf8mb4_general_ci"
 // certificate name behind, failing the handshake rather than the lookup. It now
 // derives from TIDB_HOST, so there is one hostname.
 func DSN() (string, error) {
+	cfg, err := config()
+	if err != nil {
+		return "", err
+	}
+
+	// The three that used to be hand-written, and the reason this function
+	// exists. ParseTime makes DATETIME/TIMESTAMP columns scan into time.Time
+	// rather than []byte; InterpolateParams halves the blocking round trips of
+	// every parameterised query by escaping client-side instead of preparing
+	// server-side (measured: GET /shopping-list 15.2 -> 9.1); dsnCollation
+	// keeps the escape-bypass guard armed, as its own comment explains.
+	//
+	// **multiStatements must never join them.** An unsafe collation the driver
+	// refuses outright, failing at startup; nothing stops multiStatements being
+	// combined with InterpolateParams, and it is the setting that would turn any
+	// future escaping defect into stacked statements.
+	cfg.ParseTime = true
+	cfg.InterpolateParams = true
+	cfg.Collation = dsnCollation
+
+	return cfg.FormatDSN(), nil
+}
+
+// MigrationDSN is the connection string for `recipes migrate`, and it is
+// deliberately not DSN.
+//
+// It differs in exactly two settings, both of which DSN argues against above,
+// so the difference needs saying rather than assuming:
+//
+// **MultiStatements is on.** A migration file is a sequence of statements and
+// the point of this connection is to execute one as a unit. DSN's rule -
+// "multiStatements must never join them" - is about the *request-serving*
+// connection, where the hazard is a parameterised query built from user input
+// and an escaping defect turning one statement into two. Nothing about that
+// applies here: this connection executes files that are committed to the repo
+// and reviewed as code, and it is opened by a deploy-time subcommand that
+// serves no requests and reads no user input. Splitting the files on `;`
+// client-side is the alternative, and it is worse - it means reimplementing
+// enough of a SQL lexer to know which semicolons are inside string literals.
+//
+// **InterpolateParams is off**, because MultiStatements is on. Those two
+// together are the combination DSN warns about, and the ledger's INSERT is the
+// one parameterised statement this connection runs. Turning interpolation off
+// sends it as a genuine prepared statement, so the parameters cannot become
+// statement text however they are escaped. The round-trip cost that argument
+// was weighed against is irrelevant at one INSERT per migration.
+func MigrationDSN() (string, error) {
+	cfg, err := config()
+	if err != nil {
+		return "", err
+	}
+
+	cfg.ParseTime = true
+	cfg.MultiStatements = true
+	cfg.InterpolateParams = false
+	// Left unset rather than pinned to dsnCollation. That constant exists only
+	// to keep the driver's escape-bypass guard armed under InterpolateParams,
+	// which is off here, so pinning it would state a dependency that is not
+	// there and invite someone to turn interpolation back on to match.
+
+	return cfg.FormatDSN(), nil
+}
+
+// config reads the environment and builds everything the two DSNs agree on:
+// credentials, address, database name and TLS. What they disagree about is set
+// by the callers, where the reasoning for each difference lives.
+func config() (*mysql.Config, error) {
 	host := os.Getenv("TIDB_HOST")
 	port := os.Getenv("TIDB_PORT")
 	user := os.Getenv("TIDB_USER")
@@ -100,7 +167,7 @@ func DSN() (string, error) {
 	// present for the process to serve anything, so failing on the first would
 	// just mean finding out about the rest one restart at a time.
 	if len(missing) > 0 {
-		return "", fmt.Errorf("database configuration is incomplete: %s not set", strings.Join(missing, ", "))
+		return nil, fmt.Errorf("database configuration is incomplete: %s not set", strings.Join(missing, ", "))
 	}
 
 	cfg := mysql.NewConfig()
@@ -110,21 +177,6 @@ func DSN() (string, error) {
 	cfg.Addr = net.JoinHostPort(host, port)
 	cfg.DBName = dbName
 
-	// The three that used to be hand-written, and the reason this function
-	// exists. ParseTime makes DATETIME/TIMESTAMP columns scan into time.Time
-	// rather than []byte; InterpolateParams halves the blocking round trips of
-	// every parameterised query by escaping client-side instead of preparing
-	// server-side (measured: GET /shopping-list 15.2 -> 9.1); dsnCollation
-	// keeps the escape-bypass guard armed, as its own comment explains.
-	//
-	// **multiStatements must never join them.** An unsafe collation the driver
-	// refuses outright, failing at startup; nothing stops multiStatements being
-	// combined with InterpolateParams, and it is the setting that would turn any
-	// future escaping defect into stacked statements.
-	cfg.ParseTime = true
-	cfg.InterpolateParams = true
-	cfg.Collation = dsnCollation
-
 	// Explicit rather than inferred from the hostname. Guessing would mean that
 	// the day a host stops looking like TiDB Cloud, the connection quietly stops
 	// being encrypted - a failure with no symptom at all.
@@ -133,10 +185,10 @@ func DSN() (string, error) {
 			MinVersion: tls.VersionTLS12,
 			ServerName: host,
 		}); err != nil {
-			return "", fmt.Errorf("registering the %q TLS config: %w", tlsConfigName, err)
+			return nil, fmt.Errorf("registering the %q TLS config: %w", tlsConfigName, err)
 		}
 		cfg.TLSConfig = tlsConfigName
 	}
 
-	return cfg.FormatDSN(), nil
+	return cfg, nil
 }

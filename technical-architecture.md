@@ -107,7 +107,14 @@ The recipe image extraction uses Netlify Blobs to store async job results; the f
 
 ## Database Schema
 
-Production: TiDB (MySQL-compatible). Migrations in `migrations/` applied manually, in order — there is no consolidated schema file, so `migrations/*.sql` (currently 34 files) is the authoritative source for exact columns/constraints.
+Production: TiDB (MySQL-compatible). There is no consolidated schema file, so `migrations/*.sql` is the authoritative source for exact columns/constraints.
+
+**Migrations are applied by the deploy, not by hand.** `.github/workflows/deploy-api.yml` runs `scripts/migrate-prod.sh` immediately before `flyctl deploy`, which applies every file the database has not recorded in its `schema_migration` ledger. Until 2026-08-28 this said "applied manually, in order", and that is what broke the Recipe view: #133 shipped a query selecting `recipe.featured` while migration 042 that adds the column sat unapplied, and every `GET /recipe/{id}` answered 500 for a day. See `netlify-functions/recipes/internal/pkg/migrate` for the runner and why no test could have caught it.
+
+Two consequences worth knowing before writing a migration:
+
+- **A destructive change is two releases.** Migrating before deploying means the schema is never behind the code, at the cost of the mirror case: between the migration and the release, the *old* code runs against the *new* schema. Adding a column is safe; dropping one the running code still reads is not. Ship the code that stops using it, then the migration that removes it.
+- **An applied migration is immutable.** The ledger stores each file's SHA-256, and the runner refuses to continue if a file that has already been applied has since changed. Correct a mistake with a new migration.
 
 | Table | Purpose |
 |-------|---------|

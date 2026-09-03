@@ -51,8 +51,16 @@ services:
       #    is merely out of date, through the same mechanism that already
       #    protects it from one a migration failed to build.
       #
-      #    A volume with no _migration_status row, no `applied` column or a NULL
-      #    value fails too. This reverses the earlier version of this comment,
+      #    The recorded set lives in `schema_migration`, the same per-file ledger
+      #    internal/pkg/migrate reads and writes - not in a column of
+      #    _migration_status, which is where it used to be. There were briefly
+      #    two records of the one fact, and `go run . migrate` updated only the
+      #    ledger, so applying a migration locally left this check asserting the
+      #    volume was stale while the schema was in fact current. One record,
+      #    written by whichever path applied the file.
+      #
+      #    A volume with no schema_migration table, or one whose rows do not
+      #    match ./migrations, fails. This reverses the earlier version of this comment,
       #    which fell back to a plain ping on an unrecorded volume so that
       #    upgrading would not turn every existing database unhealthy - the cost
       #    of the only remedy then available being a `down -v` that "throws away
@@ -69,14 +77,24 @@ services:
       #
       # Unhealthy here means: `npm run dev:full`, which repairs both cases (or
       # tells you which migration is broken). `docker compose logs db` for why.
+      # Two queries and a shell comparison rather than one clever SQL predicate.
+      # Joining the recorded filenames back into a single field to compare
+      # in-database means GROUP_CONCAT, whose default group_concat_max_len is
+      # 1024 bytes - and 43 migrations of ~30 characters is already past that.
+      # It truncates silently and returns no error, so the check would simply
+      # start reporting every volume stale once the repo grew enough
+      # migrations. Comparing row-per-filename has no such limit.
       test:
         - CMD-SHELL
         - >-
-          expected="$$(cd /migrations && ls -1 *.sql | sort | tr '\n' '@')";
-          mysql -h 127.0.0.1 -uroot -proot -N -B
-          -e "SELECT 1 FROM bigshop._migration_status WHERE id = 1 AND ok = 1
-          AND REPLACE(applied, CHAR(10), '@') = '$$expected'"
-          2>/dev/null | grep -qx 1
+          expected="$$(cd /migrations && ls -1 *.sql | sort)";
+          recorded="$$(mysql -h 127.0.0.1 -uroot -proot -N -B
+          -e 'SELECT filename FROM bigshop.schema_migration ORDER BY filename'
+          2>/dev/null)";
+          ok="$$(mysql -h 127.0.0.1 -uroot -proot -N -B
+          -e 'SELECT ok FROM bigshop._migration_status WHERE id = 1'
+          2>/dev/null)";
+          [ "$$ok" = 1 ] && [ "$$recorded" = "$$expected" ]
       interval: 5s
       timeout: 5s
       # 20 before start_period existed, because the retry budget was doubling as
@@ -182,6 +200,14 @@ services:
       - "${API_PORT:-8080}:8080"
     volumes:
       - ./netlify-functions/recipes:/app
+      # The migrations are outside the Go module (the build context is the
+      # module alone, so they are not in the image), but `go run . migrate`
+      # needs to read them and internal/pkg/migrate's test asserts the real
+      # directory is numbered the way filename-order-is-apply-order requires.
+      # Mounted at /migrations because that is where `../../../../../migrations`
+      # lands from the test's package directory when the module root is /app -
+      # the same path it resolves to from a full checkout in CI.
+      - ./migrations:/migrations:ro
 
 volumes:
   bigshop-db-data:

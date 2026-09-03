@@ -131,6 +131,18 @@ func isHashInviteEmailsMode() bool {
 	return len(os.Args) > 1 && os.Args[1] == "hash-invite-emails"
 }
 
+// isMigrateMode reports whether the process was invoked as `go run . migrate`,
+// which applies the pending files in migrations/ and exits.
+//
+// Like the OpenAPI printer it returns early from init(), but for a different
+// reason: it needs a database, just not *this* one. It opens its own connection
+// from dbconfig.MigrationDSN, which differs from the serving DSN in two
+// settings that matter only to migrations. Letting init() open the ordinary
+// pool first would mean two pools, one of them unusable for the job at hand.
+func isMigrateMode() bool {
+	return len(os.Args) > 1 && os.Args[1] == "migrate"
+}
+
 // isPreviewMode reports whether the process was invoked as `go run . preview`,
 // which serves the email templates in a browser and sends nothing. Like the
 // OpenAPI printer it needs no database.
@@ -175,6 +187,14 @@ func init() {
 	// send-test deliberately writes no email_send row because a test send is not
 	// a send to that user.
 	if isPreviewMode() || isSendTestMode() {
+		return
+	}
+
+	// Opens its own connection - see isMigrateMode. Telemetry is deliberately
+	// not set up either: this runs in a CI step whose log is the record, it
+	// lives for seconds, and ADR-0007's exporters would have to be flushed
+	// around every log.Fatal below to emit anything at all.
+	if isMigrateMode() {
 		return
 	}
 
@@ -376,6 +396,8 @@ func handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.API
 func main() {
 	if isPreviewMode() {
 		runPreview()
+	} else if isMigrateMode() {
+		runMigrate()
 	} else if isSendTestMode() {
 		runSendTest()
 	} else if isOpenAPIMode() {

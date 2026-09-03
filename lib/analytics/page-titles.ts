@@ -28,6 +28,10 @@ const PAGE_TITLES: Record<string, string> = {
   // would be reading a crash rate off the wrong row.
   '/error': 'Error page',
   '/list': 'Shopping list',
+  // Where somebody lands after re-authenticating to link a second sign-in to
+  // the account they already had. Named for the task, not the outcome: the
+  // page is the same route whether they go through with it or cancel.
+  '/link/confirm': 'Link account',
   '/privacy': 'Privacy policy',
   '/recipes': 'Recipes',
   '/support': 'Support',

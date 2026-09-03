@@ -5,10 +5,13 @@ The Go API connects to TiDB as `3of82tmdiXMHzuo.api`, declared in
 `[env]` block with the password as a Fly secret. It is not root, and this is
 how to create, verify and rotate it.
 
-Its sibling is [`ci-database-user.md`](./ci-database-user.md), the account the
-*deploy* uses to apply migrations. Two credentials rather than one is what lets
-each be small: the account serving the internet needs no ability to change the
-schema, and the account that changes the schema is not reachable from it.
+Its siblings are [`ci-database-user.md`](./ci-database-user.md), the account the
+*deploy* uses to apply migrations, and
+[`reporting-database-user.md`](./reporting-database-user.md), the `SELECT`-only
+account the read-only scripts in `scripts/` use. Separate credentials rather
+than one is what lets each be small: the account serving the internet needs no
+ability to change the schema, the account that changes the schema is not
+reachable from it, and the account a person runs reports under can do neither.
 
 ## What it may do, and why exactly that
 

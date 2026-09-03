@@ -78,6 +78,10 @@ gh variable set TIDB_MIGRATE_USER --repo Ianfeather/big-shop \
   --body '3of82tmdiXMHzuo.gh_migrate'
 ```
 
+The variable is an override, not the source of truth: `.env.tidb` names the same
+account, so the deploy still reaches it if the variable is ever cleared. That
+ordering is deliberate — the fallback is the narrow account, never root.
+
 A **variable**, not a secret, for the username: `.env.tidb` already tracks the
 root username in git and argues why — these identify the instance, they do not
 open it. Keeping it visible means a failed deploy says which account it tried.
@@ -91,9 +95,13 @@ only fills in values that are not already set, so the variable wins over
 From a checkout, with Docker running and no Go needed:
 
 ```bash
-TIDB_USER='3of82tmdiXMHzuo.gh_migrate' TIDB_PASSWORD='<generated-password>' \
-  ./scripts/migrate-prod.sh --dry-run
+TIDB_PASSWORD='<generated-password>' ./scripts/migrate-prod.sh --dry-run
 ```
+
+No `TIDB_USER` needed: the script defaults to `.env.tidb`'s `TIDB_MIGRATE_USER`,
+which names this account. It used to inherit `TIDB_USER` — root — so a rehearsal
+run without an explicit override tested the wrong credential and passed for the
+wrong reason. Export `TIDB_USER` to connect as somebody else deliberately.
 
 Expected on a baselined, up-to-date production: `migrate: up to date; all N
 migration(s) applied`. A privilege that is missing shows up here as a specific

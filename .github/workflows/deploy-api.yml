@@ -218,8 +218,21 @@ jobs:
       # being prevented, so a broken migration must not become a broken
       # production API as well.
       #
-      # TIDB_PASSWORD is a repository secret. The other four identifiers come
-      # from .env.tidb, which is tracked in git and grants nothing on its own.
+      # TIDB_PASSWORD is a repository secret; TIDB_MIGRATE_USER is a repository
+      # *variable*, because a username identifies an account without opening it -
+      # the same argument .env.tidb makes for tracking the root username in git,
+      # and it means a failed deploy can say which account it tried.
+      #
+      # Both are passed because both have to change together. The username comes
+      # from .env.tidb otherwise, which names root: a new password with the old
+      # username authenticates root and fails. scripts/lib/tidb-env.sh only fills
+      # in values that are not already set, so the variable wins when present and
+      # .env.tidb still applies when it is not.
+      #
+      # The account this should name is not root. See docs/ci-database-user.md
+      # for the grant, which is derived from the statements migrations/ actually
+      # contains rather than guessed, and for how to create and rotate it.
+      #
       # Until the secret exists this step fails, naming it.
       #
       # MIGRATE_GO=host uses the toolchain setup-go installed just above rather
@@ -231,6 +244,7 @@ jobs:
       - name: Apply pending database migrations
         run: ./scripts/migrate-prod.sh
         env:
+          TIDB_USER: ${{ vars.TIDB_MIGRATE_USER }}
           TIDB_PASSWORD: ${{ secrets.TIDB_PASSWORD }}
           MIGRATE_GO: host
 

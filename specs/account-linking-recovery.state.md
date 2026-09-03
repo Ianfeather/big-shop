@@ -39,7 +39,7 @@ Scope: `migrations/045_pending_link.sql`; `service/link.go` holding
   source account holding recipes is refused; a successful link leaves no
   orphaned `account` row.
 Depends on: none
-Commit: 202f927
+Commit: e8907c7
 Notes: gofmt/vet clean; `go test ./... -race` green; `docs/openapi.yaml` and
   `types/api.d.ts` regenerated and byte-identical to their generators. Verified
   against a real MySQL as well as in unit tests - migration applies and the
@@ -108,7 +108,7 @@ Status: done
 Scope: The `/list` panel behind the resolved-and-empty condition, and the
   `/account` entry point. `/recipes` deliberately untouched.
 Depends on: Sessions 1 and 3
-Commit: 1a3a41a
+Commit: 80434fb
 Notes: Typecheck, lint and 438 Vitest tests green. Verified in a browser
   against the real stack, including the negative case: with two seeded recipes
   the panel is absent; with none it appears; and after a successful link it
@@ -127,10 +127,19 @@ Notes: Typecheck, lint and 438 Vitest tests green. Verified in a browser
   there is the page's business.
 
 ## Session 5: The notification (Phase 4)
-Status: pending
+Status: done
 Scope: A new `email.Kind` and template telling the original account's address
   that a new sign-in method was added — best-effort and asynchronous, carrying
   no grant.
 Depends on: Session 2
-Commit:
-Notes:
+Commit: d750f08
+Notes: gofmt/vet clean and `go test ./... -race` green. Two golden files - the
+  named-provider case and the one where service.ProviderName has no name for
+  the connection, so the fallback sentence is reviewed rather than assumed, for
+  the same reason `welcome-no-name` exists. `TestEveryRegisteredEmailRenders`
+  caught the new Kind before it could ship without sample data, which is
+  exactly what it is for; `preview.go`'s transactionalSample gained a case so
+  `go run . preview` renders it too. The rendered email is screenshotted in
+  specs/evidence/account-linking-recovery/sign-in-added-email.png, taken from
+  that preview server - no unsubscribe footer (transactional, per ADR-0010) and
+  no link or token anywhere in the body.

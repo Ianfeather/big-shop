@@ -24,6 +24,35 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # A script that loses its executable bit is invisible in review: the
+      # content diff is empty, so a mode change shows up as nothing at all in
+      # the files-changed view. The first symptom is a deploy dying on
+      # "Permission denied" with exit code 126, in a job that only runs after
+      # the merge.
+      #
+      # That is not hypothetical - it is how this check came to exist. #164
+      # rewrote scripts/migrate-prod.sh through a temp file and `mv`, which
+      # creates the replacement with the default 0644 rather than preserving
+      # 0755, and the next deploy could not run the migrations step at all.
+      #
+      # Ahead of setup-node deliberately: it is a git question needing no
+      # toolchain, so it reports in seconds.
+      # scripts/lib/ is deliberately excluded: those files are *sourced*
+      # (`. scripts/lib/tidb-env.sh`), never executed, so 0644 is correct for
+      # them and requiring 0755 would be wrong. The `:(glob)` prefix is what
+      # makes that exclusion hold - without it git's pathspec `*` matches
+      # across `/` too, and the check flags scripts/lib as well.
+      - name: Scripts are executable
+        run: |
+          non_exec="$(git ls-files -s ':(glob)scripts/*.sh' | awk '$1 != "100755" { print $4 }')"
+          if [ -n "$non_exec" ]; then
+            echo "These scripts are not executable in git (expected mode 100755):"
+            echo "$non_exec"
+            echo
+            echo "Fix with: git update-index --chmod=+x <file>"
+            exit 1
+          fi
+
       - uses: actions/setup-node@v7
         with:
           node-version: 22

@@ -4,6 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Big Shop is a recipe management and meal planning app: a Next.js 16 / React 19 frontend with Auth0 auth, a Go API backend deployed as AWS Lambda via Netlify Functions, and a TiDB (MySQL-compatible) database.
 
+- **How to get a worktree before you touch anything** (several agents share this repo; `treehouse` hands out isolated ones) → "Starting and ending a session" below
 - **What this product is** (Account, Recipe, Shopping List, and the rest of the domain vocabulary) → [CONTEXT.md](./CONTEXT.md)
 - **How it's built** (DB schema, API routes, component structure, hooks, deployment, dependencies) → [technical-architecture.md](./technical-architecture.md)
 - **Known issues we don't plan to fix** (investigated, judged not worth acting on — check here before chasing a surprising error) → [known-issues.md](./known-issues.md)
@@ -18,6 +19,98 @@ entry fails), and an analytics event is added only when answering its question
 needs more than Grafana's 14-day retention — otherwise it is a metric. Both are
 argued in [ADR-0008](./docs/adr/0008-what-telemetry-does-not-carry.md) §1 and
 `lib/analytics/events.ts`.
+
+## Starting and ending a session: `treehouse`
+
+**Several agents work this repo at once, and they share one checkout unless you
+take your own.** `treehouse` maintains a pool of pre-warmed git worktrees for
+exactly this — acquire one before you touch anything, return it when the work
+is over. Two agents editing `/Users/ianfeather/Repositories/big-shop` at the
+same time is the failure this prevents, and it is silent while it happens:
+neither one sees the other's half-finished edits arriving in files it is
+reasoning about.
+
+Use `treehouse`, not Claude Code's own `EnterWorktree` tool, in this repo. The
+pool is the thing other agents' claims are visible in (`treehouse status`); a
+worktree created outside it is invisible to them and is not cleaned up by
+`prune`.
+
+### 1. First action of the session: get a worktree
+
+**Check whether you already have one.** `TREEHOUSE_DIR` is set in the
+environment of every pool worktree, so:
+
+```bash
+echo "${TREEHOUSE_DIR:-not in a worktree}"
+```
+
+If it names a directory, you are already isolated — that is how most sessions
+start, and there is nothing to do. Don't acquire a second one.
+
+If it is empty, acquire one:
+
+```bash
+treehouse get --lease --lease-holder "claude-<short-task-slug>"   # prints the path
+```
+
+`--lease` is the flag that matters. A bare `treehouse get` opens an interactive
+subshell, which an agent cannot use; `--lease` acquires durably and
+non-interactively, prints **only** the absolute path on stdout (every banner
+goes to stderr), and marks the worktree leased so no later `get` hands it to
+another agent and no `prune` removes it while you are idle in it. `cd` to the
+printed path and do all the work there.
+
+`treehouse status` shows the whole pool and what is running in each worktree —
+worth a look if you need to know whether a worktree is genuinely busy.
+`treehouse enter <n> --print-path` gives the path of a worktree that is already
+in use, for the rare case where you need to attach to one.
+
+### 2. Last action of the session: stop background processes, then return
+
+Do this at the end of the session, and equally at the end of **a logical piece
+of work that would end a session** — the PR is open and handed over, or merged
+and the board claim released. Sitting on a leased worktree after the work has
+landed is how the pool runs out.
+
+**Stop the background processes first, and don't assume `return` does it for
+you.** `treehouse return` terminates processes *inside* the worktree, which
+covers `next dev` and anything else you backgrounded — but a Docker stack is
+owned by the daemon, not by your shell, so containers, volumes and bound ports
+all survive it and go on colliding with the next agent to take that worktree.
+
+```bash
+npm run test:e2e:stop        # the e2e stack (per-worktree; goes through scripts/e2e-compose.sh)
+```
+
+The **dev** stack needs more care, because it does not derive a per-worktree
+project name the way the e2e one does: `scripts/dev-full.sh` leaves
+`COMPOSE_PROJECT_NAME` unset, so compose falls back to the directory basename —
+which is `big-shop` in *every* treehouse worktree. Tear it down with the same
+`COMPOSE_PROJECT_NAME` and ports you brought it up with, and confirm what a
+bare `docker compose down` would actually hit before running one. This is the
+same hazard as "Multiple worktrees — isolate the docker compose project" below,
+which has the `docker inspect` incantation for checking.
+
+**Then commit and push** — per "Shipping work: pull requests" below, the work is
+not done until there is a PR open against `master`. A returned worktree is
+reset and handed to somebody else, so anything not pushed is gone.
+
+**Then return it:**
+
+```bash
+treehouse return "$TREEHOUSE_DIR"
+```
+
+**The subcommand is `return`, not `exit`** — `treehouse exit` is not a command
+(checked against v2.1.1; `treehouse --help` lists the real set). `return`
+prompts if the worktree is dirty, which is the prompt you want: it is asking
+whether you meant to throw away uncommitted work. `--force` skips that check and
+resets regardless, so use it only once you have confirmed the branch is pushed.
+
+If a worktree genuinely has to go away while it still holds unlanded work,
+that is `treehouse destroy <path>` — a dry run by default, with an explicit
+`--include-unlanded --yes` to actually do it. Reach for it deliberately, never
+as a way to get unstuck.
 
 ## How to run and test the app
 

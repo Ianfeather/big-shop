@@ -122,11 +122,22 @@ ALTER USER '3of82tmdiXMHzuo.gh_migrate'@'%' IDENTIFIED BY '<new-password>';
 There is no window to coordinate: the credential is used only by the deploy
 step, which is not running between deploys.
 
-## What this does not cover
+## Its two siblings
 
-The **API's own** runtime credential is still `root`, in `fly.toml`'s `[env]`
-with the password as a Fly secret. That is the more valuable one to narrow —
-it is reachable from the internet, it is long-lived, and it needs no DDL at all
-(`SELECT, INSERT, UPDATE, DELETE` on `bigshop.*` would do). Narrowing it is a
-separate change, because unlike this one it touches the running application and
-wants a deploy to verify.
+This was the first of three credentials to be narrowed, and for a while the
+section here said the API's own was "still root" and the more valuable one to
+narrow. It was, and it since has been — both of the others now exist, so this
+doc is one of three rather than the only one:
+
+- [`api-database-user.md`](./api-database-user.md) — `<prefix>.api`, four DML
+  privileges and no DDL at all, which the API has connected as since #160. That
+  doc also carries the staged-Fly-secret rollout, because unlike this credential
+  a bad cutover there is an outage rather than a failed deploy.
+- [`reporting-database-user.md`](./reporting-database-user.md) —
+  `<prefix>.reporting`, holding nothing but `SELECT`, used by the three
+  read-only scripts in `scripts/`.
+
+Root remains, and should. `backup-prod.sh` wants `LOCK TABLES` and `RELOAD` for
+a consistent full logical backup, and `probe-charset-conversion.sh` genuinely
+needs `ALTER`; neither belongs in a narrowed account, and both are run rarely
+and deliberately rather than on a schedule.

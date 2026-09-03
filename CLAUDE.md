@@ -689,6 +689,23 @@ is easy to skip and the one that rots the board:
 
 - **Noticing something worth doing → create a row in `backlog`.** Don't add it
   to a markdown file, and don't leave it in a PR description.
+- **Except a minor documentation correction, which you just fix.** A stale
+  sentence, a dead link, a doc still describing shipped work as pending, a
+  cross-reference that was never added — these go in as an **additional commit
+  on the branch you are already on**, not as a row. Filing one costs more to
+  write, triage and pick up than the fix costs to make, and the doc goes on
+  misleading whoever reads it next for as long as the row waits. Say what you
+  corrected in the PR description so the drive-by is visible rather than
+  smuggled.
+
+  Two boundaries on that. It covers **correcting prose to match what is already
+  true**; a documentation change that is really a decision — restructuring a
+  doc, changing what a runbook instructs someone to do, writing a new ADR — is
+  ordinary work and gets a row like anything else. And a PR carrying one of
+  these commits **no longer qualifies for the self-merge exception** in
+  "Shipping work" rule 6, whose bar is that the diff is the fix, its test and
+  its evidence and nothing else. Correcting a doc in passing is cheap; it costs
+  you the right to merge that particular PR unasked.
 - **Titles keep the `#N` prefix** for items that came from `follow-ups.md`, so
   the cross-references in the bodies (and in code comments, migrations and
   ADRs) still resolve. New items don't need a number. A `WIP ` claim prefix

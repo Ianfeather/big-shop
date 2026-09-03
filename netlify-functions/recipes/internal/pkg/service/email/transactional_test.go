@@ -133,6 +133,7 @@ func TestEveryRegisteredEmailRenders(t *testing.T) {
 		KindInviteAccepted: InviteAcceptedData{InviterName: "Ada"},
 		KindInviteRejected: InviteRejectedData{InviterName: "Ada"},
 		KindAccountDeleted: AccountDeletedData{Name: "Ada"},
+		KindSignInAdded:    SignInAddedData{Name: "Ada", Provider: "Apple"},
 	}
 
 	for _, entry := range Family {

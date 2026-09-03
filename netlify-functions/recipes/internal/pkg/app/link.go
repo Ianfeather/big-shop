@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"recipes/internal/pkg/service"
+	"recipes/internal/pkg/service/email"
 
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -126,6 +127,35 @@ func (a *App) completeLink(ctx context.Context, input *LinkCompleteInput) (*Link
 		}
 		return nil, fail(ctx, huma.Error500InternalServerError("could not link the accounts"), err)
 	}
+
+	// **The only thing that tells the account's owner this happened.**
+	//
+	// Everything else in this design makes the grant hard to obtain - the
+	// re-authentication, the nonce, the single-use token. None of it lets the
+	// owner *find out*: a successful trick, or an honest mistake, adds a
+	// permanent new way into an account and says nothing to anybody outside
+	// that browser session.
+	//
+	// **It is the one place SendGrid belongs in this feature, because it
+	// carries no grant.** No link, no token, nothing to act on - so phishing a
+	// copy of it achieves nothing. That is exactly what the emailed
+	// confirmation link this spec rejects was not.
+	//
+	// Best-effort and asynchronous like every other transactional send, and
+	// here that is load-bearing rather than conventional: the link has already
+	// happened and been committed by the time this runs, so a send failure has
+	// nothing to undo and must not be allowed to report one.
+	// SendTransactionalAsync returns nothing, which is what makes that
+	// impossible rather than merely intended.
+	//
+	// An empty address is not a failure - migrations/044 normalises blanks to
+	// NULL and a user can legitimately have none on file. The email package
+	// treats a recipient with no address as the unconfigured case and stays
+	// quiet.
+	email.SendTransactionalAsync(ctx,
+		email.Recipient{Name: outcome.Name, Address: outcome.Email},
+		email.KindSignInAdded,
+		email.SignInAddedData{Name: outcome.Name, Provider: outcome.Provider})
 
 	out := &LinkCompleteOutput{}
 	out.Body.Provider = outcome.Provider

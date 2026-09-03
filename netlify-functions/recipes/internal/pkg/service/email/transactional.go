@@ -41,6 +41,7 @@ const (
 	KindInviteAccepted Kind = "invite-accepted"
 	KindInviteRejected Kind = "invite-rejected"
 	KindAccountDeleted Kind = "account-deleted"
+	KindSignInAdded    Kind = "sign-in-added"
 )
 
 // String makes a Kind print as itself in log lines and errors.
@@ -90,6 +91,16 @@ var Family = []Email{
 		Kind:     KindAccountDeleted,
 		Subject:  "Your Big Shop account is being deleted",
 		Template: "account-deleted",
+	},
+	{
+		Kind: KindSignInAdded,
+		// Deliberately plain and specific. This is the one email in the family
+		// whose whole job is to be *noticed* by somebody it might alarm, so the
+		// subject line has to survive being read in a notification preview with
+		// nothing else around it - and must not read as marketing, which is what
+		// anything cleverer would.
+		Subject:  "A new sign-in was added to your Big Shop account",
+		Template: "sign-in-added",
 	},
 }
 
@@ -141,6 +152,20 @@ type (
 	// AccountDeletedData renders templates/account-deleted.html.
 	AccountDeletedData struct {
 		Name string
+	}
+
+	// SignInAddedData renders templates/sign-in-added.html, sent to the
+	// account that just gained a second way of signing in.
+	//
+	// **Provider is the human name of the identity provider, and nothing more
+	// identifying than that.** Not the Auth0 subject, which ADR-0008 §1 keeps
+	// out of anything user-facing, and not the other account's address, which
+	// would tell the reader something they may not already know. It can be
+	// empty, for a connection service.ProviderName has no name for; the
+	// template is written so the sentence still reads.
+	SignInAddedData struct {
+		Name     string
+		Provider string
 	}
 )
 

@@ -56,6 +56,12 @@ func transactionalSample(kind email.Kind) any {
 		return email.InviteRejectedData{InviterName: "Ada Lovelace"}
 	case email.KindAccountDeleted:
 		return email.AccountDeletedData{Name: "Ada Lovelace"}
+	case email.KindSignInAdded:
+		// A named provider, because that is the shape that ships to a real
+		// person; the empty-Provider fallback is pinned by the
+		// sign-in-added-unknown-provider golden rather than previewed here,
+		// since --kind takes one value per email.
+		return email.SignInAddedData{Name: "Ada Lovelace", Provider: "Apple"}
 	}
 	return nil
 }

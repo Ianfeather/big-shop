@@ -61,7 +61,7 @@ runbook, stop and check the flag.
 The fast loop. Renders every template in a browser, sends nothing, needs no key.
 
 ```bash
-cd netlify-functions/recipes
+cd api
 SITE_URL=http://localhost:3000 go run . preview        # serves 127.0.0.1:8090
 ```
 
@@ -91,7 +91,7 @@ real clients, and whether SPF/DKIM align.
 Locally, against the real SendGrid:
 
 ```bash
-cd netlify-functions/recipes
+cd api
 SENDGRID_API_KEY=<key> SENDGRID_ASM_GROUP_ID=32124 SITE_URL=https://www.bigshop.life \
   go run . send-test --to=you@example.com --kind=welcome
 ```
@@ -264,10 +264,10 @@ SELECT COUNT(*) FROM user u
 
 ### Then: flip the flag
 
-Set `ONBOARDING_EMAIL_ENABLED = "true"` in `netlify-functions/recipes/fly.toml` and deploy:
+Set `ONBOARDING_EMAIL_ENABLED = "true"` in `api/fly.toml` and deploy:
 
 ```bash
-fly deploy ./netlify-functions/recipes --build-arg SERVICE_VERSION=$(git rev-parse --short HEAD)
+fly deploy ./api --build-arg SERVICE_VERSION=$(git rev-parse --short HEAD)
 ```
 
 It is in `[env]` rather than `fly secrets` on purpose — it is not a credential, and `[env]`

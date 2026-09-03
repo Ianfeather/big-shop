@@ -7,9 +7,9 @@ For product/domain vocabulary (Account, Recipe, Shopping List, etc.), see [CONTE
 Big Shop is a recipe management and meal planning application with a hybrid Next.js frontend and Go API backend:
 
 - **Frontend**: Next.js 16 / React 19 with Auth0 authentication
-- **Backend**: Go API deployed as AWS Lambda via Netlify Functions
+- **Backend**: Go API deployed as a container on Fly.io, proxied by Netlify
 - **Database**: TiDB (MySQL-compatible) for production, local MySQL for development
-- **Deployment**: Netlify with automatic deployments from git
+- **Deployment**: Netlify for the site, Fly.io for the API, both automatic from git
 - **AI**: OpenAI GPT-4 Vision (recipe image extraction) + GPT-3.5-turbo (Dave chat assistant)
 
 ### Key Components
@@ -17,7 +17,7 @@ Big Shop is a recipe management and meal planning application with a hybrid Next
 - `pages/`: Next.js pages with file-based routing
 - `components/`: Reusable React components organized by feature
 - `hooks/`: Custom React hooks for shared logic
-- `netlify-functions/recipes/`: Go API with JWT authentication
+- `api/`: Go API with JWT authentication
 - `migrations/`: SQL database schema migrations
 - `mocks/`: JSON files for local development without API
 - `pages/api/`: Next.js serverless API routes (image recognition, Dave chat, recipe import)
@@ -34,7 +34,7 @@ The app uses Auth0 for authentication:
 
 ## Go API Structure
 
-Located in `netlify-functions/recipes/`:
+Located in `api/`:
 - `main.go`: entry point, TiDB connection, Negroni router setup. `main()` branches three
   ways on `os.Args[1]`: `openapi` prints the spec and exits, `serve` (or its older alias
   `dev`) runs a plain `http.Server` on `:8080` — which is what both local development
@@ -88,7 +88,7 @@ Instrumentation currently covers `GET /recipes` only — an allow-list in
 `telemetry/http.go` (`phase1Routes`) — which the observability spec widens to
 every route next.
 
-**Route list**: routes are registered in `internal/pkg/app/app.go`'s `GetRouter`, using [Huma](https://github.com/danielgtaylor/huma) (`humamux`, on top of the same `gorilla/mux` router) so each operation's request/response types double as its OpenAPI schema - no separate hand-maintained doc to drift. The generated spec is committed at [`docs/openapi.yaml`](./docs/openapi.yaml); regenerate it with `cd netlify-functions/recipes && go run . openapi > ../../docs/openapi.yaml` (no DB needed - route registration never touches it). `.github/workflows/ci.yml`'s `go` job fails if the committed spec is stale relative to `app.go` (it used to be `build.sh`, i.e. only during a Netlify deploy). All routes except `/health` require Auth0 JWT validation, against a JWKS held in process for 5 minutes by `go-jwt-middleware` v2's `jwks.CachingProvider` (built once, in `GetRouter` - it used to be fetched over HTTPS on every request). `userMiddleware` takes the `sub` claim and puts a **`common.Caller`** in the request context; handlers read it with `callerFrom(ctx)`. A `Caller` carries the user ID and resolves that user's Account **lazily**, at most once per request - so a route that never needs an Account (`/tags`, `/units`, `/ingredients`, `/user`, `/invites`) still makes no lookup at all, while `POST /shopping-list` makes one instead of nine.
+**Route list**: routes are registered in `internal/pkg/app/app.go`'s `GetRouter`, using [Huma](https://github.com/danielgtaylor/huma) (`humamux`, on top of the same `gorilla/mux` router) so each operation's request/response types double as its OpenAPI schema - no separate hand-maintained doc to drift. The generated spec is committed at [`docs/openapi.yaml`](./docs/openapi.yaml); regenerate it with `cd api && go run . openapi > ../docs/openapi.yaml` (no DB needed - route registration never touches it). `.github/workflows/ci.yml`'s `go` job fails if the committed spec is stale relative to `app.go` (it used to be `build.sh`, i.e. only during a Netlify deploy). All routes except `/health` require Auth0 JWT validation, against a JWKS held in process for 5 minutes by `go-jwt-middleware` v2's `jwks.CachingProvider` (built once, in `GetRouter` - it used to be fetched over HTTPS on every request). `userMiddleware` takes the `sub` claim and puts a **`common.Caller`** in the request context; handlers read it with `callerFrom(ctx)`. A `Caller` carries the user ID and resolves that user's Account **lazily**, at most once per request - so a route that never needs an Account (`/tags`, `/units`, `/ingredients`, `/user`, `/invites`) still makes no lookup at all, while `POST /shopping-list` makes one instead of nine.
 
 ### API Testing
 For authenticated endpoints, copy the `Authorization` header from browser dev tools — no established curl/Postman workflow exists yet.
@@ -109,7 +109,7 @@ The recipe image extraction uses Netlify Blobs to store async job results; the f
 
 Production: TiDB (MySQL-compatible). There is no consolidated schema file, so `migrations/*.sql` is the authoritative source for exact columns/constraints.
 
-**Migrations are applied by the deploy, not by hand.** `.github/workflows/deploy-api.yml` runs `scripts/migrate-prod.sh` immediately before `flyctl deploy`, which applies every file the database has not recorded in its `schema_migration` ledger. Until 2026-08-28 this said "applied manually, in order", and that is what broke the Recipe view: #133 shipped a query selecting `recipe.featured` while migration 042 that adds the column sat unapplied, and every `GET /recipe/{id}` answered 500 for a day. See `netlify-functions/recipes/internal/pkg/migrate` for the runner and why no test could have caught it.
+**Migrations are applied by the deploy, not by hand.** `.github/workflows/deploy-api.yml` runs `scripts/migrate-prod.sh` immediately before `flyctl deploy`, which applies every file the database has not recorded in its `schema_migration` ledger. Until 2026-08-28 this said "applied manually, in order", and that is what broke the Recipe view: #133 shipped a query selecting `recipe.featured` while migration 042 that adds the column sat unapplied, and every `GET /recipe/{id}` answered 500 for a day. See `api/internal/pkg/migrate` for the runner and why no test could have caught it.
 
 Two consequences worth knowing before writing a migration:
 
@@ -442,8 +442,7 @@ unproxied origin to every visitor and undo the same-origin property.
   request 401s. Both live in `fly.toml`'s `[env]`, not the Netlify UI.
 - `AUTH0_TENANT_DOMAIN` — the **canonical** tenant domain
   (`dev-x-n37k6b.eu.auth0.com`), used only for the Management API. **Now set**, in
-  `netlify-functions/recipes/fly.toml`'s `[env]` rather than as a secret — a domain
-  name is not one. It became necessary when the tenant adopted the custom domain
+  `api/fly.toml`'s `[env]` rather than as a secret — a domain name is not one. It became necessary when the tenant adopted the custom domain
   `auth.bigshop.life`: Auth0 requires the Management API `audience` to stay the
   canonical domain even behind a custom one, while `AUTH0_DOMAIN` has to become the
   custom domain so the Go API can validate the issuer of login tokens. Without this
@@ -468,8 +467,8 @@ unproxied origin to every visitor and undo the same-origin property.
 
 #### The connection string, and why nobody writes one
 
-**There is no `DSN` variable any more.** `netlify-functions/recipes/dsn.go` builds the
-connection string from components: `TIDB_HOST`, `TIDB_PORT`, `TIDB_USER`, `TIDB_DB` and
+**There is no `DSN` variable any more.** `api/dsn.go` builds the connection
+string from components: `TIDB_HOST`, `TIDB_PORT`, `TIDB_USER`, `TIDB_DB` and
 `TIDB_TLS` from `fly.toml`'s `[env]` (and `docker-compose.yml` locally), plus the
 `TIDB_PASSWORD` secret. The three query parameters below are **literals in that file**, not
 configuration — none of them ever differed between the local stack and production, so
@@ -598,18 +597,18 @@ Two independent pipelines, one per deployable — an accepted consequence of
 - Next.js Runtime: `@netlify/plugin-nextjs` v5 (pinned as a devDependency so
   `netlify.toml`'s `[[plugins]]` entry resolves during the deploy build). v5 is
   required for Next.js 13.5+; the v4 runtime only supported Next.js 10–13.4
-- Environment: Node 22 (`.node-version`, matching both CI workflows; Next.js 16 requires >=20.9.0), Go 1.25 (`netlify.toml` `GO_VERSION`, matches `go.mod`)
-- `GO_VERSION` is still needed even though `build.sh` no longer runs anything Go:
-  Netlify goes on compiling the `netlify-functions/recipes` Lambda on every deploy
-  throughout the migration's cooling-off period, because that Lambda is the rollback
-  target. Phase 5 deletes the function and the pin together
+- Environment: Node 22 (`.node-version`, matching both CI workflows; Next.js 16 requires >=20.9.0). **No Go** — this build compiles none
+- `netlify.toml` no longer pins `GO_VERSION`. It was kept through the Fly
+  cutover's cooling-off period because Netlify went on compiling the Lambda in
+  `netlify-functions/recipes` as the rollback target; that entry point and its
+  `aws-lambda-go` dependencies are now deleted, so there is nothing left for
+  Netlify to build and no toolchain to pin
 
 **Go API — Fly.io** (`big-shop-api`, region `fra`), by
 `.github/workflows/deploy-api.yml` on push to `master`.
 - Gated on the CI workflow succeeding, so a commit that fails `go test` or a drift
   check is never deployed
-- Config: `netlify-functions/recipes/fly.toml`; image:
-  `netlify-functions/recipes/Dockerfile`
+- Config: `api/fly.toml`; image: `api/Dockerfile`
 - Needs a `FLY_API_TOKEN` repository secret; `TIDB_PASSWORD`, `SENDGRID_API_KEY`,
   `INVITE_EMAIL_PEPPER`, `AUTH0_MGMT_CLIENT_ID` and `AUTH0_MGMT_CLIENT_SECRET` are Fly
   secrets, `AUTH0_DOMAIN`/`AUTH0_AUDIENCE` are in `fly.toml`'s `[env]`

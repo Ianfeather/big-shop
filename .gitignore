@@ -13,7 +13,7 @@ yarn-error.log*
 netlify/
 dev-secrets
 evals/results
-netlify-functions/recipes/tmp/
+api/tmp/
 docker/prod-dumps/
 test-results/
 playwright-report/

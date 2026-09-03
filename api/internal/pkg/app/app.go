@@ -12,7 +12,9 @@ import (
 	"recipes/internal/pkg/purge"
 	"recipes/internal/pkg/service"
 	"recipes/internal/pkg/telemetry"
+	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	jwtmiddleware "github.com/auth0/go-jwt-middleware/v2"
@@ -417,6 +419,95 @@ func RouteTemplates(api huma.API) []string {
 	return templates
 }
 
+// defaultAllowedOrigins is the browser origin allowlist this API answers
+// preflights for when CORS_ALLOWED_ORIGINS is unset.
+//
+// **In production almost nothing reaches it**, and that is worth stating so the
+// list is not mistaken for the thing holding production up. netlify.toml
+// rewrites /api/bigshop/* to the Fly origin with status = 200, so the browser
+// calls the API on www.bigshop.life - same-origin, no preflight, no CORS at
+// all. A Netlify deploy preview carries the same rewrite and is same-origin
+// too. These entries are therefore belt-and-braces: correct if anything ever
+// calls big-shop-api.fly.dev from a page, inert while nothing does.
+//
+// Replacing "*" here fixes a defect recorded in
+// specs/completed/api-hosting-migration.md: "*" was paired with
+// AllowCredentials: true, a combination the CORS spec forbids outright, so the
+// config never behaved as it read.
+var defaultAllowedOrigins = []string{
+	"https://www.bigshop.life",
+	"https://bigshop.life",
+}
+
+// corsOriginAllowed reports whether a browser origin may call this API.
+//
+// CORS_ALLOWED_ORIGINS overrides the whole decision with a comma-separated list
+// of exact origins. The override exists so a new front-end origin does not need
+// a code change and a deploy of *this* service to be reachable - fly.toml's
+// [env] block is where production states such things. An empty or unset value
+// falls back to the defaults rather than to "no origins", because an
+// accidentally-blank variable should not be able to take local development
+// down; and it never falls back to "*", because that is the defect being fixed.
+//
+// Note that the override *replaces* rather than extends, loopback included. A
+// deployment that names its origins is stating the complete set, and silently
+// keeping localhost reachable would make the variable mean something other than
+// what it says.
+func corsOriginAllowed(origin string) bool {
+	if configured := configuredOrigins(); len(configured) > 0 {
+		return slices.Contains(configured, origin)
+	}
+	return slices.Contains(defaultAllowedOrigins, origin) || isLoopbackOrigin(origin)
+}
+
+// configuredOrigins parses CORS_ALLOWED_ORIGINS, discarding blank entries.
+func configuredOrigins() []string {
+	raw := strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ",")
+
+	origins := make([]string, 0, len(raw))
+	for _, o := range raw {
+		if o = strings.TrimSpace(o); o != "" {
+			origins = append(origins, o)
+		}
+	}
+	return origins
+}
+
+// isLoopbackOrigin reports whether origin is a plain-HTTP loopback address on
+// any port - which is what local development and the e2e stack are.
+//
+// These are the origins that carry the only real preflight traffic this API
+// sees. Locally the browser is on :3000 and the API on :8080
+// (.env.development); the e2e stack puts them on a per-worktree pair out of the
+// 3900+/8980+ blocks, derived from a hash of the worktree path
+// (e2e/instance.cjs). The port is therefore not knowable here, which is why
+// this is a predicate rather than a list.
+//
+// **It is deliberately not `http://localhost:*` passed to rs/cors.** That
+// pattern is a prefix match with an empty suffix, so it also admits
+// `http://localhost:3000.evil.example` - a real host somebody else can own.
+// Parsing is what rules that out: url.Parse rejects a non-numeric port
+// outright, so the trailing-garbage forms fail before the hostname is even
+// consulted, and the hostname is then matched exactly rather than by prefix.
+// The test for this asserts the attack strings, not just the happy path.
+func isLoopbackOrigin(origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	// An Origin is a scheme, host and port and nothing else. Anything carrying
+	// a path, a query or user info is not one, whatever it parses as.
+	if u.Scheme != "http" || u.Path != "" || u.RawQuery != "" || u.User != nil {
+		return false
+	}
+	switch u.Hostname() {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	default:
+		return false
+	}
+}
+
 // GetRouter returns the application router and the Huma API instance backing
 // it, from which the OpenAPI spec can be generated (see the `openapi` mode in
 // main.go) without needing to start a server or hold a DB connection.
@@ -425,8 +516,8 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, huma.API, error) {
 	router := mux.NewRouter()
 
 	// All operations are registered on this subrouter so that `base` (the
-	// Netlify function's path prefix) becomes the OpenAPI server URL rather
-	// than being repeated in every operation's path.
+	// API's path prefix, main.go's basePath) becomes the OpenAPI server URL
+	// rather than being repeated in every operation's path.
 	sub := router.PathPrefix(base).Subrouter()
 	config := huma.DefaultConfig("Big Shop API", "1.0.0")
 	config.Info.Description = "The Go API backing Big Shop, a recipe management and meal planning app."
@@ -446,10 +537,22 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, huma.API, error) {
 	a.registerLinkRoutes(api)
 
 	c := cors.New(cors.Options{
-		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
-		AllowedOrigins:   []string{"*"},
-		AllowedHeaders:   []string{"*"},
-		AllowCredentials: true,
+		AllowedMethods:  []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
+		AllowOriginFunc: corsOriginAllowed,
+		// Named rather than "*", because a wildcard here is echoed back
+		// verbatim and so tells a browser nothing about what this API actually
+		// accepts. Authorization is the one that matters: every route bar
+		// /health is bearer-authenticated, so a preflight that does not permit
+		// it fails every real request. Content-Type covers the JSON bodies.
+		AllowedHeaders: []string{"Authorization", "Content-Type"},
+		// Deliberately false. "Credentials" in CORS means cookies, TLS client
+		// certificates and HTTP-auth - none of which this API uses. Its
+		// Authorization header is set explicitly by lib/api-client.ts, which
+		// makes it an ordinary header covered by AllowedHeaders above, not a
+		// credential. Setting this true was the other half of the defect the
+		// allowlist fixes: the CORS spec forbids AllowCredentials alongside
+		// AllowedOrigins "*", so the pairing never did what it appeared to.
+		AllowCredentials: false,
 	})
 
 	healthPath := base + "/health"
@@ -459,10 +562,9 @@ func (a *App) GetRouter(base string) (*negroni.Negroni, huma.API, error) {
 	// including /health, which is answered by the carve-out below without ever
 	// reaching a handler that could set one.
 	n.Use(negroni.HandlerFunc(cacheControlMiddleware))
-	// /health must stay reachable without a JWT - it's used by uptime monitors,
-	// Fly's own health check and Lambda warmers, none of which can hold an
-	// Auth0 token - so it's handled before CORS/auth even run, not registered
-	// on the mux router.
+	// /health must stay reachable without a JWT - it's used by uptime monitors
+	// and Fly's own health check, neither of which can hold an Auth0 token - so
+	// it's handled before CORS/auth even run, not registered on the mux router.
 	//
 	// Answered at two paths. `base + "/health"` is the real one, and is what
 	// fly.toml checks: it travels the same prefix as live traffic, so it fails

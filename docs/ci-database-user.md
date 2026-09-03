@@ -1,7 +1,7 @@
 # The CI database user
 
 `.github/workflows/deploy-api.yml` applies pending migrations before every
-deploy (see [`internal/pkg/migrate`](../netlify-functions/recipes/internal/pkg/migrate/migrate.go)).
+deploy (see [`internal/pkg/migrate`](../api/internal/pkg/migrate/migrate.go)).
 That step needs a database credential, and this is how to create one that is
 not `root`.
 

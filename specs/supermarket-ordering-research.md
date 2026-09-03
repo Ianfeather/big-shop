@@ -330,7 +330,7 @@ Good news: the read side is already the right shape.
 - `GET /shopping-list` returns `ShoppingList{Recipes, Ingredients, Extras}` where each
   `ListIngredient` has `Amounts[]` of `{quantity, unit, baseQuantity, baseUnit}`,
   plus `department` and `isBought`. `baseQuantity`/`baseUnit` are exactly what §5 needs
-  for query synthesis. (`netlify-functions/recipes/internal/pkg/common/types.go`)
+  for query synthesis. (`api/internal/pkg/common/types.go`)
 - The combining work is done and lives in Go
   (`internal/pkg/service/list.go`, `CombineIngredients` / `ApplyDisplayUnits`).
 

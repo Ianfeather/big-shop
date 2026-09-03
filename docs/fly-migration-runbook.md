@@ -6,9 +6,10 @@ that carries the code — the code is inert until these steps run.
 
 Decisions and rationale: [ADR-0006](./adr/0006-go-api-leaves-netlify-functions.md).
 
-**Nothing here is urgent or irreversible until step 5.** Steps 1–4 stand up a second API
-that no client is using. The Lambda goes on serving `/.netlify/functions/recipes` the
-whole time, untouched, which is what makes step 5 revertible.
+**Historical.** This runbook records a cutover that has already happened, and its
+rollback has since been retired deliberately — see step 7. At the time of writing, steps
+1–4 stood up a second API that no client was using, and the Lambda went on serving
+`/.netlify/functions/recipes` untouched, which is what made step 5 revertible.
 
 ---
 
@@ -24,15 +25,15 @@ whole time, untouched, which is what makes step 5 revertible.
 
 ---
 
-> **Every `fly` command below runs from `netlify-functions/recipes/`.** `--config` only
-> relocates the config *file*; the app root and the Docker build context still come from
+> **Every `fly` command below runs from `api/`.** `--config` only relocates the
+> config *file*; the app root and the Docker build context still come from
 > the working directory. Running these from the repository root would make the whole repo
 > the build context and look for a `Dockerfile` there, which does not exist — and
 > `fly launch` would helpfully detect the Next.js app instead. This is the same directory
 > `.github/workflows/deploy-api.yml` sets as its `working-directory`.
 >
 > ```bash
-> cd netlify-functions/recipes
+> cd api
 > ```
 
 ## 1. Create the app
@@ -312,13 +313,21 @@ conclusion, so a red `go` job merged through the un-updated ruleset silently sto
 deploying while Netlify goes on shipping the site from the same commit — a frontend and an
 API drifting apart, with no red required check anywhere to say so.
 
-## 7. After the cooling-off period
+## 7. After the cooling-off period — **done**
 
-Days later, once the Fly API has carried real traffic without incident, Phase 5 of the spec
-is a separate PR: delete the `lambda.Start` branch and `lambdaBasePath` from `main.go`, drop
-`aws-lambda-go` and `aws-lambda-go-api-proxy` from `go.mod`, remove `GO_VERSION` from
-`netlify.toml`, rename `netlify-functions/recipes/` to `api/`, and fix the CORS config
-(`app.go` pairs `AllowedOrigins: {"*"}` with `AllowCredentials: true`, which the CORS spec
-forbids, so it does not do what it looks like it does).
+Phase 5 has shipped. It deleted the `lambda.Start` branch and `lambdaBasePath` from
+`main.go`, dropped `aws-lambda-go` and `aws-lambda-go-api-proxy` from `go.mod`, removed
+`GO_VERSION` from `netlify.toml`, renamed `netlify-functions/recipes/` to `api/`, and
+replaced the CORS config's `AllowedOrigins: {"*"}` / `AllowCredentials: true` pairing —
+which the CORS spec forbids, so it never did what it looked like it did — with a named
+origin allowlist.
 
-**Merging that PR is what makes rollback stop working.** Do not do it on the same day.
+**So the rollback described in step 5 no longer exists.** There is no Lambda to revert to:
+Netlify stopped compiling one the moment the entry point was deleted, and the function
+that was still deployed serves whatever it last built until someone deletes it. Steps 1–6
+above are kept as the record of how the cutover was carried out, and the warnings in them
+about preserving the rollback should be read in the past tense.
+
+Undoing the migration now means redeploying the API somewhere, not flipping an environment
+variable. The measured reason not to is in ADR-0006: ~165ms of server latency on Fly
+against ~1624ms on the Lambda.

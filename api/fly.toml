@@ -5,7 +5,7 @@
 # carried out: specs/api-hosting-migration.md.
 #
 # Deploy from the repository root with:
-#   fly deploy ./netlify-functions/recipes
+#   fly deploy ./api
 # (this file sits next to the Dockerfile so the build context is the Go module
 # and nothing else - not the whole repo). docs/fly-migration-runbook.md has the
 # first-time setup, including the TIDB_PASSWORD secret.

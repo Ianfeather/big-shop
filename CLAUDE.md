@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Big Shop is a recipe management and meal planning app: a Next.js 16 / React 19 frontend with Auth0 auth, a Go API backend deployed as AWS Lambda via Netlify Functions, and a TiDB (MySQL-compatible) database.
+Big Shop is a recipe management and meal planning app: a Next.js 16 / React 19 frontend with Auth0 auth, a Go API backend deployed as a container on Fly.io, and a TiDB (MySQL-compatible) database.
 
 - **How to get a worktree before you touch anything** (several agents share this repo; `treehouse` hands out isolated ones) → "Starting and ending a session" below
 - **What this product is** (Account, Recipe, Shopping List, and the rest of the domain vocabulary) → [CONTEXT.md](./CONTEXT.md)
@@ -180,8 +180,8 @@ to whichever worktree's project the directory implies and would start the local
 `db` this has no use for). `MIGRATE_GO=host` uses the host's `go` instead, which
 is what the deploy workflow does because `setup-go` has already put the pinned
 version there. For a local database, `go run . migrate --dry-run` from
-`netlify-functions/recipes` does the same thing directly. A database that predates the ledger — which
-production did, once — has to be adopted with `--baseline <filename>` before the
+`api` does the same thing directly. A database that predates the ledger —
+which production did, once — has to be adopted with `--baseline <filename>` before the
 runner will touch it; it refuses to guess, and says so at length.
 
 This exists because it did not: on 2026-08-27 #133 shipped a query selecting
@@ -320,8 +320,8 @@ against the real stack, or against a synced copy of production
 (`scripts/sync-from-prod.sh`).
 
 **Manual path** (what `dev:full` automates, useful if you want the API/DB
-outside Docker): `go run . serve` inside `netlify-functions/recipes/` starts a
-plain HTTP server on `:8080` — the same mode the production container on Fly
+outside Docker): `go run . serve` inside `api/` starts a plain HTTP server on
+`:8080` — the same mode the production container on Fly
 runs, which is why it is no longer called `dev` (`dev` still works as an alias).
 Routes are registered under
 `/api/bigshop` (`main.go`'s `basePath`, passed to `GetRouter`), so
@@ -371,7 +371,7 @@ different call than the one you are handling.
 
 Go API tests:
 ```bash
-cd netlify-functions/recipes
+cd api
 go test ./... -v
 ```
 

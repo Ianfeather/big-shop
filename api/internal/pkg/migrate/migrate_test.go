@@ -195,7 +195,7 @@ func write(t *testing.T, dir, name, body string) {
 // The real migrations directory has to satisfy the ordering assumption the
 // whole scheme rests on: fixed-width numeric prefixes, no duplicates.
 func TestRepoMigrationsAreNumberedSoFilenameOrderIsApplyOrder(t *testing.T) {
-	files, err := Load("../../../../../migrations")
+	files, err := Load("../../../../migrations")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}

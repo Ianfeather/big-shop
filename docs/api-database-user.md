@@ -1,8 +1,8 @@
 # The API's database user
 
 The Go API connects to TiDB as `3of82tmdiXMHzuo.api`, declared in
-[`netlify-functions/recipes/fly.toml`](../netlify-functions/recipes/fly.toml)'s
-`[env]` block with the password as a Fly secret. It is not root, and this is
+[`api/fly.toml`](../api/fly.toml)'s `[env]` block with the password as a Fly
+secret. It is not root, and this is
 how to create, verify and rotate it.
 
 Its siblings are [`ci-database-user.md`](./ci-database-user.md), the account the

@@ -5,27 +5,19 @@
 [[plugins]]
 package = "@netlify/plugin-nextjs"
 
-# GO_VERSION is deliberately still here, though specs/api-hosting-migration.md's
-# Phase 2 says to remove it.
+# There is deliberately no [build.environment] GO_VERSION here.
 #
-# The reason it says so is that build.sh no longer runs `go fmt`/`go test` -
-# those moved to .github/workflows/ci.yml's `go` job, which pins its own
-# toolchain via actions/setup-go. True, but not the whole story: Netlify also
-# *compiles* the function in netlify-functions/recipes on every deploy, and goes
-# on doing so through the migration's cooling-off period, because that Lambda is
-# the rollback target. (The functions directory is set in the Netlify UI, not
-# here - which is exactly why removing this pin looks safe from the repo alone.)
+# It was kept through the Fly cutover's cooling-off period because Netlify went
+# on *compiling* the Lambda in netlify-functions/recipes on every deploy as the
+# rollback target, and an unpinned build would have taken whatever Go version
+# Netlify's image defaulted to - a failure that takes the whole site down, not
+# just the API. There is no longer a Lambda to compile: its entry point and the
+# aws-lambda-go dependencies are gone, and the directory is now api/.
 #
-# Dropping it would hand that build whatever Go version Netlify's image
-# defaults to. go.mod's `go 1.25.0` directive means a default of 1.21+ would
-# fetch the matching toolchain and survive; a default below that fails, and a
-# failed Netlify build takes the whole site down, not just the API. Netlify's
-# default has historically trailed well behind - not a bet worth taking for the
-# sake of deleting two lines a few days early.
-#
-# Phase 5 deletes the function, and this pin goes with it.
-[build.environment]
-  GO_VERSION = "1.25"
+# So this build needs no Go toolchain at all. If a Netlify build ever starts
+# trying to compile Go again, the functions directory setting in the Netlify UI
+# is the thing to look at - it is configured there, not here, which is exactly
+# why its absence from this file never meant it was not happening.
 
 # Proxies the Go API, which now runs on Fly.io in Frankfurt
 # (docs/adr/0006-go-api-leaves-netlify-functions.md), so it stays on

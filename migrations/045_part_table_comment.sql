@@ -1,0 +1,31 @@
+-- Name the `part` table in the schema, and exercise the deploy's migration
+-- runner on something that cannot hurt.
+--
+-- **Two jobs, and the second is the reason for the timing.** #148 made
+-- .github/workflows/deploy-api.yml apply pending migrations before every
+-- deploy, and its first run against production was necessarily a no-op:
+-- production had been baselined level with the repo, so the runner correctly
+-- reported "up to date; all 44 migration(s) already applied" and applied
+-- nothing. That proves it can connect, read its ledger and decline to act. It
+-- does not prove it can apply anything.
+--
+-- This is the smallest change that proves the rest: it is metadata only, it
+-- touches no row, it is instant on a table of any size, and reverting it is
+-- another comment. If the runner, the ledger write or the narrowed
+-- `gh_migrate` credential's ALTER privilege is wrong, this is where we would
+-- rather find out than on a migration that matters.
+--
+-- **Why `part` and not an arbitrary table.** The schema currently carries no
+-- table-level comment at all, and `part` is the one whose name conveys least:
+-- it is a Recipe's Ingredient Line - one Amount of one Ingredient, scoped to
+-- one Recipe. CONTEXT.md goes out of its way to warn against confusing that
+-- with Ingredient itself ("Avoid: Using 'Ingredient' for a Recipe's specific
+-- quantity of one - that's an Ingredient Line"), which is a warning the
+-- database has never carried. Anyone meeting this schema through a console
+-- rather than through CONTEXT.md gets the domain term at the point of
+-- confusion.
+--
+-- ALTER TABLE ... COMMENT is a metadata-only change on MySQL 8 and TiDB: no
+-- table rebuild, no row touched, no lock worth the name.
+ALTER TABLE `part`
+  COMMENT = 'Ingredient Line: one Amount of one Ingredient, scoped to one Recipe. See CONTEXT.md';

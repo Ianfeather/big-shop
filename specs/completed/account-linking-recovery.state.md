@@ -30,7 +30,7 @@ Notes: `npm run typecheck`, `npm run lint` and the full Vitest suite (54 files,
 
 ## Session 2: The server, with no UI (Phase 1)
 Status: done
-Scope: `migrations/045_pending_link.sql`; `service/link.go` holding
+Scope: `migrations/046_pending_link.sql`; `service/link.go` holding
   `StartLink` / `CompleteLink` and the narrow cascade entry point that runs
   `deleteAccountTx` (never `DeleteUserAndAccount`); `POST /link/start` and
   `POST /link/complete` in `app/link.go`; regenerated `docs/openapi.yaml` and

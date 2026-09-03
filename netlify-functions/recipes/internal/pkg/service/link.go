@@ -352,7 +352,7 @@ func CompleteLink(ctx context.Context, db *sql.DB, targetSubject, token, nonce s
 // pieces separately goes on passing.
 type pendingLink struct {
 	// grantedSubject is the identity that will *gain* access, named by whoever
-	// started the link. See migrations/045 for why the column is not just
+	// started the link. See migrations/046 for why the column is not just
 	// `subject`.
 	grantedSubject string
 	nonceHash      string

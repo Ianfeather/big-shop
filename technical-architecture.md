@@ -288,7 +288,7 @@ application reads them — `@next/env` loads `.env`, `.env.local` and
 | Variable | Default | Notes |
 |---|---|---|
 | `TIDB_HOST` | none — required | The same value `fly.toml`'s `[env]` gives the API |
-| `TIDB_USER` | none — required | Same place |
+| `TIDB_USER` | none — required | Same place. Three different accounts use these variables and they are deliberately not interchangeable: the API connects as `<prefix>.api` ([four DML privileges on `bigshop`](./docs/api-database-user.md)), the deploy's migration step as `<prefix>.gh_migrate` ([DDL as well](./docs/ci-database-user.md)), and the interactive scripts in `scripts/` as whoever is running them |
 | `TIDB_PORT` | `4000` | TiDB Cloud's protocol port, not MySQL's `3306` |
 | `TIDB_DB` | `bigshop` | |
 | `ACCOUNT_ID` | none — asks | `sync-from-prod.sh` only; deliberately not defaulted to `1` |

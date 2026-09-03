@@ -183,8 +183,20 @@ services:
       # compose network. Production sets it in fly.toml.
       TIDB_HOST: "db"
       TIDB_PORT: "3306"
-      TIDB_USER: "root"
-      TIDB_PASSWORD: "root"
+      # Not root, deliberately, and this is load-bearing rather than tidy.
+      #
+      # Production's API connects as a user holding four privileges on one
+      # schema (docs/api-database-user.md). If dev and e2e ran as root, the only
+      # environment subject to that constraint would be the one nobody can test
+      # - so a change needing a fifth privilege would be discovered as a 500 in
+      # production, on whichever route happened to need it. Running under the
+      # same grant here means it fails on a pull request instead.
+      #
+      # The user is created by docker/mysql-init/02-api-user.sql, and reapplied
+      # by scripts/dev-full.sh so a volume predating it gains the account rather
+      # than leaving this service unable to connect.
+      TIDB_USER: "bigshop_api"
+      TIDB_PASSWORD: "bigshop_api"
       TIDB_DB: "bigshop"
       DISABLE_AUTH: "true"
       DEV_USER_ID: "local-dev-user"

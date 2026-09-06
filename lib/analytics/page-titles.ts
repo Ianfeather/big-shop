@@ -20,6 +20,11 @@
 
 const PAGE_TITLES: Record<string, string> = {
   '/': 'Home',
+  '/about-bigshop': 'About Bigshop',
+  // Generic on purpose, same reasoning as '/recipes/[id]' below: a post's own
+  // title is content, and this map exists precisely so a page title can never
+  // carry content to Google. See the note at the top of this file.
+  '/about-bigshop/[slug]': 'About Bigshop post',
   '/account': 'Account',
   '/dave': 'Dave',
   // Distinct from BUILT_IN_TITLES' '/_error': 'Error'. That is Next's own crash
@@ -43,6 +48,10 @@ const PAGE_TITLES: Record<string, string> = {
   '/recipes/add/[slug]': 'Add featured recipe',
   '/recipes/[id]': 'Recipe',
   '/recipes/[id]/edit': 'Edit recipe',
+  // Not navigated to via router.route in the normal sense - getServerSideProps
+  // writes the XML response directly - but it is still a file under pages/,
+  // so the exhaustiveness test below still requires an entry.
+  '/sitemap.xml': 'Sitemap',
   '/dev/api-docs': 'Dev: API docs',
   '/dev/design-system': 'Dev: design system',
 };

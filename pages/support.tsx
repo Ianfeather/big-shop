@@ -96,6 +96,7 @@ export default function Support() {
           <p>Big Shop &mdash; recipes in, shopping list out.</p>
           <nav className={styles.footerLinks}>
             <Link href="/privacy">Privacy</Link>
+            <Link href="/about-bigshop">About Bigshop</Link>
             <button type="button" onClick={openCookieSettings}>Cookie settings</button>
           </nav>
         </footer>

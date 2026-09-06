@@ -127,7 +127,11 @@ export default function App({ Component, pageProps, router }: AppProps) {
   // first time: NEXT_PUBLIC_DISABLE_AUTH makes hooks/use-auth.ts's mock report
   // `isAuthenticated: true` unconditionally, so the gate never fires and the
   // page appears to work.
-  const publicRoutes = ['/', '/privacy', '/support', '/error'];
+  // '/about-bigshop' and its post pages join the same list for the same
+  // reason /privacy did: they are linked from the logged-out marketing
+  // footer, so the audience they exist for - someone who has never signed
+  // up - is exactly who this gate would otherwise bounce.
+  const publicRoutes = ['/', '/privacy', '/support', '/error', '/about-bigshop', '/about-bigshop/[slug]'];
   const behindAuth = !publicRoutes.includes(router.route);
 
   // Created once per app instance (not per render) - every hooks/use-*.ts

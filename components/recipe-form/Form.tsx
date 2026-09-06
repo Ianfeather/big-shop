@@ -476,6 +476,12 @@ export default function Form({initialRecipe = {}, mode = 'new', focusSection, im
         </div>
       </div>
 
+      {/* A single row, not the two opposite corners of the whole two-column
+          grid it used to be: with Method/Notes and Ingredients landing in
+          different columns depending on isAdmin (grid auto-placement), a
+          `justify-content: space-between` footer sent Update and Delete to
+          the page's far left and right edges - visually unrelated buttons
+          rather than the one action group they are. */}
       <div className={styles.buttonContainer}>
         <Button style="primary" disabled={loading} onClick={submitRecipe}>
           { mode === 'edit' ? 'Update Recipe' : 'Save Recipe'}
@@ -483,12 +489,12 @@ export default function Form({initialRecipe = {}, mode = 'new', focusSection, im
         </Button>
         {
           mode === 'edit' && (
-            <div>
+            <>
               <Button style="danger" icon="trash" onClick={deleteRecipe}>Delete Recipe</Button>
               {
-                deleted && <span>Deleted</span>
+                deleted && <span className={styles.deletedNotice}>Deleted</span>
               }
-            </div>
+            </>
           )
         }
       </div>

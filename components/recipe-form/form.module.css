@@ -70,21 +70,34 @@
 
 .buttonContainer {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--rule);
+}
+
+.deletedNotice {
+  color: var(--ink-soft);
+  font-size: var(--text-sm);
 }
 
 .form input:not([type='checkbox']), .form textarea {
   width: 100%;
-  padding: 8px 0;
-  border: none;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-primary-border);
+  border-radius: var(--radius-sm);
   outline: none;
-  border-bottom: 1px solid var(--color-primary-border);
+  background: var(--card);
   font-size: var(--text-base);
   font-family: inherit;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .form input:focus, .form textarea:focus {
-  border-bottom: 2px solid var(--color-primary);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-tint);
 }
 
 .form input::placeholder, .form textarea::placeholder {
@@ -106,12 +119,21 @@
 }
 
 .ingredientUnit {
-  height: 39px;
   width: 100%;
-  border: none;
-  border-bottom: 1px solid var(--color-primary-border);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-primary-border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  font-size: var(--text-base);
+  font-family: inherit;
   -webkit-appearance: none;
   text-align: left;
+}
+
+.ingredientUnit:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-tint);
 }
 
 .group {
@@ -202,25 +224,21 @@
   margin-bottom: var(--space-4);
 }
 
-.addIngredientSection input {
-  background-color: var(--color-primary-soft);
-}
-
 .addIngredientHint {
-  font-size: 13px;
-  color: #7a7a7a;
-  margin-bottom: 14px;
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+  margin-bottom: var(--space-3);
 }
 
 .bulkTextarea {
   width: 100%;
-  padding: 10px;
-  border: 1px solid #d7b1f3;
-  border-radius: 5px;
-  font-size: 15px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-primary-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-base);
   font-family: inherit;
-  background-color: #fff;
-  margin-bottom: 14px;
+  background-color: var(--card);
+  margin-bottom: var(--space-3);
   resize: vertical;
 }
 
@@ -241,8 +259,9 @@
 .bulkTextarea:focus {
   outline: none;
   border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-tint);
 }
 
 .bulkError {
-  margin-top: 14px;
+  margin-top: var(--space-3);
 }

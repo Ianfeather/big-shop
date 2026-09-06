@@ -519,6 +519,7 @@ export default function Privacy() {
           <p>Big Shop &mdash; recipes in, shopping list out.</p>
           <nav className={styles.footerLinks}>
             <Link href="/support">Support</Link>
+            <Link href="/about-bigshop">About Bigshop</Link>
             <button type="button" onClick={openCookieSettings}>Cookie settings</button>
           </nav>
         </footer>

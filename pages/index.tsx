@@ -424,6 +424,7 @@ const Index = () => {
           <nav className={styles.footerLinks}>
             <Link href="/privacy">Privacy</Link>
             <Link href="/support">Support</Link>
+            <Link href="/about-bigshop">About Bigshop</Link>
             <button type="button" onClick={openCookieSettings}>Cookie settings</button>
           </nav>
         </footer>

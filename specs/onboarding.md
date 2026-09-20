@@ -2,10 +2,13 @@
 
 Working notes toward a spec for the [bigshop board](https://app.notion.com/p/87fae8a2ed054f2c874201e827639bd8)'s
 **[#42 — Onboarding: the empty account, not the pitch, is what loses people](https://app.notion.com/p/3bfc724ecda181d9a6a2f4a6100d9ce2)**.
-This is the start of a brief, not a finished spec: it captures the diagnosis and the
-aha-moment/motivation framework a first design pass landed on, but the actual
-step-by-step onboarding flow is not yet sequenced. Picking this back up means
-starting from "design the steps," not from a blank page.
+This is still a brief, not a finished spec: it captures the diagnosis, the
+aha-moment/motivation framework a first design pass landed on, and — as of
+this pass — a first sequencing of the actual step-by-step flow. What's still
+missing is listed in full at the bottom; the short version is that the flow
+below documents a *design*, not something live today, because the two
+mechanisms it depends on (the try-before-signup importer, sample-seeded
+Accounts) are both still unbuilt.
 
 ## The diagnosis (from #42, unchanged here)
 
@@ -135,6 +138,13 @@ that's fixed is the exact "empty try-it box" failure #42 already names for
 URL import, wearing a different feature — worse to mention a broken thing
 than not mention it at all.
 
+**Update: `#46` shipped.** The dependency above is cleared — the invite flow
+works, so nothing stops the existing Day 3 email mention, or any future
+onboarding copy, from pointing at Share. That doesn't change Share's status
+here: it's still not an aha moment and still doesn't get a dedicated step, for
+the same Kano reasoning. See Stage 4 of the step-by-step flow below for the
+one open question `#46` shipping actually raises.
+
 ## Personas: a second axis, not a fourth motivation
 
 Two persona narratives came up, each threading through motivations already
@@ -181,6 +191,140 @@ Everything raised in this document — persona included — comes out on the
 first cut; any future ask needs to clear this bar rather than being added
 because it seems useful.
 
+## The step-by-step flow (first pass)
+
+The sections above settle *what* the aha moments are; this one sequences what
+a signup concretely walks through to reach them. It's a first pass, written
+from what's shipped as of 2026-09-20 rather than from the state of the app
+when the framework above was drafted — two things changed underneath it in
+the meantime, both folded in below: `#46` shipped, and [account-linking
+recovery](./completed/account-linking-recovery.md) went live on `/list`,
+which turns out to collide directly with the welcome this section designs.
+
+### Stage 0 — the marketing page, pre-signup
+
+`pages/index.tsx` no longer redirects anyone anywhere (`#58`): a logged-in
+visitor sees the same pitch as everyone else, and the Auth0 callback goes
+straight to `/list`. That leaves the marketing page exactly one onboarding
+job, upstream of signup: which CTA someone clicks is the only persona signal
+available before an Account exists at all, per the "infer, don't ask" table
+above (Family weekly shop vs. Dinner party host).
+
+Not designed here, and not a blocker on the rest of this section: carrying
+that signal through the Auth0 round trip and into `/list`'s first render (a
+query param, or a value written before the redirect and read after — the
+shape `lib/return-to.ts` already uses for navigation state). Until it exists,
+Stage 2 below defaults to one fixed ordering and works correctly either way —
+the signal reorders which aha leads, it doesn't gate anything.
+
+The try-before-signup importer #42 opens with would be a second, lower-
+friction entry point here, ahead of Auth0 entirely — but it isn't built. Worth
+noting where it would plug in once it exists: a successful test-import is a
+stronger signal than a CTA click (an actual Recipe, not an intention), and
+ought to carry into Stage 2 as a real seed rather than being discarded at the
+signup boundary. Not solved in the abstract here; revisit when that importer
+is actually designed.
+
+### Stage 1 — first landing on /list, and the collision this document flagged
+
+`useAccountSetup` upserts the User and Account on this first authenticated
+load (`hooks/use-account-setup.ts`); the Account holds zero Recipes. `/list`
+renders with an empty sidebar and, since `#157` shipped, a `notice` slot on
+`ShoppingList` that already has an occupant: `accountLinkOffer`
+(`lib/account-link.ts`) fills it with "Expected to see your recipes here?
+Link an existing account" for exactly this condition —
+`recipesResolved && recipeCount === 0` — which is this document's *general*
+diagnosis, not a special case of the mismatched-identity one.
+
+**That's a real collision today, not a hypothetical for whenever a second
+login provider ships.** `accountLinkOffer` has no way to tell a genuinely new
+signup from a returning person stranded by a mismatched identity, and per the
+completed spec's own "Current state" section, it structurally can't: "there
+is no signal anywhere that distinguishes this person from someone who
+genuinely signed up thirty seconds ago — because at the level of the data,
+there isn't one." So right now, before any second provider is even enabled in
+the Auth0 tenant, every brand-new signup's first sight of the product is a
+question that presumes they've used it before. That spec named this exactly:
+"#42 has been annotated with the interaction, so whoever sequences that flow
+can decide how lightly to acknowledge this group." This is that decision.
+
+**Resolution: don't try to tell them apart — change which message is the
+headline.** The two states can't be distinguished, so the design shouldn't
+try to; it should stop presuming either. The primary content of the empty
+`/list` state becomes the Stage 2 welcome below — a Recipe-shaped payoff,
+right for the large genuinely-new majority and neutral for the (currently
+zero, eventually small) mismatched minority, who lose nothing by being
+offered "photograph a recipe" first. The account-link offer drops from a
+headline prompt to one quiet secondary line beneath it — "Signed in before?
+Link that account" — present for the person it's actually for, without
+opening on a note of doubt for everyone else. The `'finish'` case (someone
+returning mid-link) is unaffected and keeps its current priority and full
+prominence: it only fires for someone who has demonstrably started this flow
+already, which is a different and more certain signal than an empty library.
+
+That's a copy-and-priority change to the existing `notice` slot, not a new
+mechanism — filed as its own buildable item rather than folded into this
+docs-only PR, since it needs its own tests: [The account-link recovery prompt
+greets every new signup, not just a mismatched
+one](https://app.notion.com/p/3e1c724ecda1815e8694e00ff1ba1eff).
+
+### Stage 2 — the welcome itself
+
+Ordered by whatever persona signal Stage 0 supplies, defaulting to Archive
+first when there isn't one — matching the motivations table's own "Session 1,
+live" for Archive ahead of Combine's "Session 1–2, live":
+
+1. **Archive** — a single CTA straight into Photo Import, skipping the
+   intermediate "add a recipe" menu for this one action, since the entire
+   point is minimising steps to the first payoff. Live today, using Photo
+   Import as it already exists.
+2. **Combine** — "see it combine two recipes," using sample Recipes so the
+   moment doesn't depend on the visitor having a physical recipe to
+   photograph, or on Photo Import's still-untested reliability against a
+   handwritten card. **This needs the sample-seeding mechanism #42 already
+   names, and it doesn't exist in production.** Until it does, Stage 2 ships
+   with one working CTA rather than two half-working ones: Archive alone, with
+   Combine added the moment seeding lands — never a button that leads
+   nowhere useful.
+
+Repertoire gets no CTA — there's no history yet to show — but the welcome
+carries one line naming what's coming ("recipes you haven't made in a while
+start showing up here too"), linking to the same illustrated walkthrough the
+Day 3 / Day 14 emails use once that asset exists. One asset, referenced from
+two places, keeps this optional and re-openable rather than a gate, per
+"skippable, not gating" above, without a second onboarding surface to
+maintain.
+
+### Stage 3 — the welcome retires itself
+
+Once the first Recipe lands (`recipeCount > 0`), `accountLinkOffer`'s own
+condition already stops returning `'start'`, and the same
+`recipesResolved && recipeCount === 0` guard retires the Stage 2 welcome for
+free — no dismissed-onboarding flag to write, store, or drift out of sync
+with reality. `/list` falls through to its ordinary sidebar-and-list
+behaviour, unchanged.
+
+One edge case worth naming rather than solving: someone who adds a Recipe and
+then deletes it returns to `recipeCount === 0` and sees the welcome again.
+Arguably correct (the account really is empty again) and arguably noise
+(they're not new). `user.onboarded` — already recorded and otherwise unused
+(`hooks/use-account-setup.ts`) — is available if this turns out to need a
+real answer. Worth deciding only if it's actually observed to matter, not
+pre-emptively.
+
+### Stage 4 — Share, now unblocked
+
+`#46` — the broken invite flow named above as a hard blocker on mentioning
+Share — shipped since this document was first drafted. Nothing above changes
+as a result: Share still gets no onboarding step of its own, for the same
+Kano reasoning. What changes is that the Day 3 email's existing one-line
+mention is no longer describing a feature that 400s on every call, so nothing
+here still blocks that copy. Whether Share deserves the same quiet-secondary-
+line treatment given to account-linking in Stage 1 — surfaced somewhere in the
+welcome rather than left entirely to Day 3 — is a fair question and an open
+one; `#46` shipping is a precondition for asking it, not an argument for
+either answer.
+
 ## Adjacent work, logged separately
 
 **[Dinner party / batch cook planner](https://app.notion.com/p/3c5c724ecda181f983acdfb56ffa1966)**
@@ -192,13 +336,26 @@ here.
 
 ## Not yet done
 
-- **The actual step-by-step onboarding flow.** This document settles what the
-  aha moments are and how the motivations/personas relate to them; it does
-  not yet sequence what a new signup concretely walks through, in what order,
-  to reach Archive and Combine live and see the Repertoire walkthrough.
-- Whether the two-CTA (or first-action) persona inference is granular enough
-  in practice, or needs revisiting per the explicit-capture test above.
+- **The two mechanisms the whole flow leans on.** The try-before-signup
+  importer and sample-seeded Accounts are both still unbuilt (see #42 itself
+  for what each needs — rate limiting and a real failure state for the
+  former, a curated Ingredient-safe recipe set and a production seeding path
+  for the latter). Stage 2 above is designed to degrade gracefully without
+  them — one working CTA rather than two broken ones — but the flow as
+  *intended* doesn't exist until they do.
+- **The account-link recovery prompt's headline collision with a new
+  signup**, found and resolved on paper in Stage 1 above, needs the actual
+  code change and its tests: [tracked
+  separately](https://app.notion.com/p/3e1c724ecda1815e8694e00ff1ba1eff) so
+  it's buildable independent of the rest of this document.
+- Whether the CTA-based (or first-action) persona inference is granular
+  enough in practice, or needs revisiting per the explicit-capture test
+  above — and the mechanics of actually carrying that signal through the
+  Auth0 round trip, sketched but not designed in Stage 0.
 - The mechanics of hosting a static illustration asset for the email context
-  (where it needs to live, how it's referenced from `html/template`).
+  (where it needs to live, how it's referenced from `html/template`), and
+  building the walkthrough itself.
 - Photo Import's real-world reliability on handwritten/low-quality sources,
-  ahead of leaning on it as a headline moment.
+  ahead of leaning on it as a headline moment in Stage 2.
+- Whether Share earns a mention inside the welcome now that `#46` has shipped,
+  or stays confined to the Day 3 email — raised, not answered, in Stage 4.

@@ -6,9 +6,11 @@ This is still a brief, not a finished spec: it captures the diagnosis, the
 aha-moment/motivation framework a first design pass landed on, and — as of
 this pass — a first sequencing of the actual step-by-step flow. What's still
 missing is listed in full at the bottom; the short version is that the flow
-below documents a *design*, not something live today, because the two
-mechanisms it depends on (the try-before-signup importer, sample-seeded
-Accounts) are both still unbuilt.
+below documents a *design*, not something live today, because the one
+mechanism it still depends on — sample-seeded Accounts, `specs/sample-seeded-
+accounts.md` — is unbuilt. The other mechanism #42 originally floated
+(try-before-signup import) is deliberately deferred rather than pending; see
+below.
 
 ## The diagnosis (from #42, unchanged here)
 
@@ -16,10 +18,23 @@ Every claim the marketing page makes — ingredients adding up, aisle order, "2
 tins" — needs several Recipes to be visible at all, so a new Account holding
 nothing delivers none of it and asks for data entry instead. No amount of copy
 fixes that; the empty Account is the funnel's actual failure point, not the
-pitch in front of it. Two mechanisms already floated in #42 to attack this —
-letting someone try the real URL importer before signing up, and seeding a new
-Account with sample Recipes — are assumed by everything below, not
-re-litigated here.
+pitch in front of it. #42 floated two mechanisms to attack this: seeding a new
+Account with sample Recipes, and letting someone try the real URL importer
+before signing up. Only the first is assumed by everything below.
+
+**The second is deliberately deferred (2026-09-20 decision).** It needs
+infrastructure this document isn't going to justify building speculatively —
+an LLM call on a public, unauthenticated endpoint needs its own rate limiting
+and cost ceiling, neither of which exists anywhere in this API today, and #42
+is already explicit that a try-it box which comes back empty is worse than
+never offering one; #41's 12 known-bad URLs make that a live risk rather than
+a hypothetical. A recorded demo — a short video or animation on the marketing
+page, showing Archive and/or Combine actually happening — gets a version of
+the same "will it work on the sites I use?" reassurance for close to no
+engineering cost, and is what Stage 0 below uses instead. The idea isn't
+dropped, just filed on its own so it isn't re-discovered:
+[Let someone import a recipe before they have an account](https://app.notion.com/p/3e1c724ecda18138bd34d5b4ff71df2f)
+(`future feature`).
 
 Also already shipped and load-bearing: every authenticated login now lands on
 `/list`, not the marketing homepage (`3c3c724e-cda1-8083-a8ef-f2a9f6fbc165`),
@@ -217,13 +232,18 @@ shape `lib/return-to.ts` already uses for navigation state). Until it exists,
 Stage 2 below defaults to one fixed ordering and works correctly either way —
 the signal reorders which aha leads, it doesn't gate anything.
 
-The try-before-signup importer #42 opens with would be a second, lower-
-friction entry point here, ahead of Auth0 entirely — but it isn't built. Worth
-noting where it would plug in once it exists: a successful test-import is a
-stronger signal than a CTA click (an actual Recipe, not an intention), and
-ought to carry into Stage 2 as a real seed rather than being discarded at the
-signup boundary. Not solved in the abstract here; revisit when that importer
-is actually designed.
+**The try-before-signup importer is deliberately not part of this pass** —
+see the diagnosis section above for why, and the linked backlog row for when.
+In its place, Stage 0 gets a recorded demo: a short video or animation on the
+marketing page showing Archive and/or Combine happening for real, alongside
+the `method` section already there. It costs no new infrastructure — no
+public endpoint, no rate limiting, no failure state to design around a live
+LLM call — and answers a similar "does this actually work?" question with
+something that can't come back empty. What it doesn't do, which the live
+importer would have: hand the visitor an actual Recipe to carry into signup.
+That's a real loss for the persona-inference story above — there's no
+successful-import signal to promote into a seed — but a smaller one than
+shipping an unauthenticated LLM endpoint to get it.
 
 ### Stage 1 — first landing on /list, and the collision this document flagged
 
@@ -262,10 +282,35 @@ returning mid-link) is unaffected and keeps its current priority and full
 prominence: it only fires for someone who has demonstrably started this flow
 already, which is a different and more certain signal than an empty library.
 
-That's a copy-and-priority change to the existing `notice` slot, not a new
-mechanism — filed as its own buildable item rather than folded into this
-docs-only PR, since it needs its own tests: [The account-link recovery prompt
-greets every new signup, not just a mismatched
+**This resolution has a second, sharper dependency on Stage 2's seeding,
+worth logging precisely because it's easy to miss.** The moment sample-seeded
+Accounts ship, a brand-new Account is no longer created with zero Recipes —
+it's created with the two or three seed Recipes already in it. If
+`accountLinkOffer` keeps trusting `recipeCount === 0` as-is, that condition
+stops being true for anyone, on day one, ever — short of deleting every
+sample. **That doesn't just mislabel the recovery offer, which is what
+today's collision does — it silences it.** A person genuinely stranded by a
+mismatched identity would land in a freshly-seeded new Account, see sample
+Recipes sitting there, and never be offered the one thing that could get them
+back to their real library, because the condition built to detect "this
+library is suspiciously empty" is now true of every signup and false the
+instant seeding runs.
+
+The fix has to travel with seeding, not follow it: **the count both the
+welcome and `accountLinkOffer` key off has to become "Recipes the Account
+actually added," not "Recipes on the Account."** `recipe.featured_from` is
+already exactly that distinction — non-null on any copy of curated content,
+whether it arrived via seeding or a Day 8 email click — so no new schema is
+needed, only exposing it. See `specs/sample-seeded-accounts.md`'s Phase 0,
+where this is sequenced as a prerequisite of seeding rather than a follow-on:
+shipping seeding before this fix, even briefly, is the silent-breakage
+direction and the harder one to notice in the wild.
+
+Between the two, this is a copy-and-priority change plus a count-source fix
+to the existing `notice` slot — not a new mechanism, and not blocked on
+anything but implementation. Filed as its own buildable item rather than
+folded into this docs-only PR, since it needs its own tests: [The
+account-link recovery prompt greets every new signup, not just a mismatched
 one](https://app.notion.com/p/3e1c724ecda1815e8694e00ff1ba1eff).
 
 ### Stage 2 — the welcome itself
@@ -282,10 +327,11 @@ live" for Archive ahead of Combine's "Session 1–2, live":
    moment doesn't depend on the visitor having a physical recipe to
    photograph, or on Photo Import's still-untested reliability against a
    handwritten card. **This needs the sample-seeding mechanism #42 already
-   names, and it doesn't exist in production.** Until it does, Stage 2 ships
-   with one working CTA rather than two half-working ones: Archive alone, with
-   Combine added the moment seeding lands — never a button that leads
-   nowhere useful.
+   names, and it doesn't exist in production** — see
+   `specs/sample-seeded-accounts.md` for the build plan. Until it lands,
+   Stage 2 ships with one working CTA rather than two half-working ones:
+   Archive alone, with Combine added the moment seeding lands — never a
+   button that leads nowhere useful.
 
 Repertoire gets no CTA — there's no history yet to show — but the welcome
 carries one line naming what's coming ("recipes you haven't made in a while
@@ -336,18 +382,23 @@ here.
 
 ## Not yet done
 
-- **The two mechanisms the whole flow leans on.** The try-before-signup
-  importer and sample-seeded Accounts are both still unbuilt (see #42 itself
-  for what each needs — rate limiting and a real failure state for the
-  former, a curated Ingredient-safe recipe set and a production seeding path
-  for the latter). Stage 2 above is designed to degrade gracefully without
-  them — one working CTA rather than two broken ones — but the flow as
-  *intended* doesn't exist until they do.
-- **The account-link recovery prompt's headline collision with a new
-  signup**, found and resolved on paper in Stage 1 above, needs the actual
-  code change and its tests: [tracked
-  separately](https://app.notion.com/p/3e1c724ecda1815e8694e00ff1ba1eff) so
-  it's buildable independent of the rest of this document.
+- **Sample-seeded Accounts, the one mechanism this pass still leans on.** Not
+  built yet, but no longer blocked on an open design question —
+  `specs/sample-seeded-accounts.md` has the build plan, reusing the Featured
+  Recipes machinery rather than inventing anything new. Stage 2 above degrades
+  to one working CTA (Archive) until it lands. The one open question that
+  spec can't close by itself: which Recipes to seed with.
+- **The try-before-signup importer is out of scope for this pass**, replaced
+  by a recorded demo per Stage 0's 2026-09-20 update. Filed on its own so
+  it isn't re-discovered:
+  [Let someone import a recipe before they have an account](https://app.notion.com/p/3e1c724ecda18138bd34d5b4ff71df2f)
+  (`future feature`).
+- **The account-link recovery prompt's collision with a new signup**, and its
+  sharper second form once seeding ships (the trigger going silent rather than
+  just mislabelled) — both found and resolved on paper in Stage 1 above.
+  [Tracked on the board](https://app.notion.com/p/3e1c724ecda1815e8694e00ff1ba1eff),
+  and sequenced in `specs/sample-seeded-accounts.md` as Phase 0 — a
+  prerequisite of seeding, not a follow-on.
 - Whether the CTA-based (or first-action) persona inference is granular
   enough in practice, or needs revisiting per the explicit-capture test
   above — and the mechanics of actually carrying that signal through the

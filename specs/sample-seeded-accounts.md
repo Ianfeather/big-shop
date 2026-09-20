@@ -83,11 +83,42 @@ editorially-varied Day 8 pick has no reason to guarantee. A slice, not a new
 schema field: swapping the starter set later is a one-line change, no
 migration.
 
-**What's still a product decision, not an engineering one**: whether the
-starter set is the existing three Day 8 Recipes, three new ones written
-specifically for this (so onboarding's curation criteria don't have to
-compromise with Day 8's), and exactly how many. See "Open questions" below —
-this is the one this spec can't close by itself.
+**The starter set is decided (2026-09-20): three of the account holder's own
+existing Recipes**, not the Day 8 set — chosen and verified against a
+production dump (`docker/prod-dumps/prod-sync-1-20260920-183728.sql`) rather
+than assumed:
+
+| Recipe | Slug | Recipe id |
+|---|---|---|
+| Pasta with Beans and Kale | `pasta-with-beans-and-kale` | 9 |
+| Pea and Pancetta Pasta | `pea-&-pancetta-pasta` | 17 |
+| Apple Crumble | `apple-crumble` | 33 |
+
+**Overlap confirmed by ingredient id, not just by name**: recipe 9 and
+recipe 17 both use ingredient 4 (onion), 48 (pancetta) and 571179 (garlic),
+each at the same unit (no conversion needed for them to combine on a
+generated list — the "2 tins" beat doesn't strictly need a curated Unit Size
+here, just the same `unit_id` on both sides, which these already have).
+Onion is the one of the three already marked `curated = 1`, so it's the
+overlap to lean on if only one needs to be bulletproof. Their "pasta" lines
+do **not** overlap — `curly pasta` (id 50) on 9 and `fresh pasta` (id 159) on
+17 are different Ingredient rows, so they'll render as two separate lines
+rather than combining. Not a blocker, given onion/pancetta/garlic already
+deliver the beat, but worth knowing rather than discovering on the first demo
+list. Apple Crumble shares nothing with either, which is the point — it's the
+variety, not a second overlap.
+
+**Not yet flagged.** All three are `featured = 0` in the dump above — this
+list can't be copied by `service.CopyFeaturedRecipe` until an admin flips
+`featured` on each, via the existing checkbox in the recipe edit form
+(`specs/completed/featured-recipes.md` Phase 2). That's a production write
+this spec doesn't make on its own initiative; it's the concrete next action,
+separate from writing the Go slice of slugs.
+
+**One slug has a literal `&` in it** (`pea-&-pancetta-pasta`) — worth a
+second look when it's hard-coded into the Go starter-slug slice and into
+whatever hits `POST /recipe/featured/{slug}`, since that character needs
+URL-encoding on the wire even though the stored slug carries it as-is.
 
 ### Phase 2 — clearly marked, deletable in one action
 
@@ -142,10 +173,9 @@ this is the one this spec can't close by itself.
 
 ## Open questions
 
-1. **Which Recipes, and how many.** Needs a product decision: reuse the
-   Day 8 set, or curate a dedicated onboarding set. Either way, at least one
-   deliberately overlapping ingredient across whatever's chosen — see
-   Phase 1.
+1. ~~Which Recipes, and how many.~~ **Resolved 2026-09-20** — see Phase 1.
+   Flipping `featured` on the three in production is still an outstanding
+   action, not a decision.
 2. **Synchronous seeding vs. best-effort background**, per Phase 1 — a
    timing question, answerable by testing against a real database rather
    than by further discussion.

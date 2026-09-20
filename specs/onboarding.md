@@ -384,10 +384,13 @@ here.
 
 - **Sample-seeded Accounts, the one mechanism this pass still leans on.** Not
   built yet, but no longer blocked on an open design question —
-  `specs/sample-seeded-accounts.md` has the build plan, reusing the Featured
-  Recipes machinery rather than inventing anything new. Stage 2 above degrades
-  to one working CTA (Archive) until it lands. The one open question that
-  spec can't close by itself: which Recipes to seed with.
+  `specs/sample-seeded-accounts.md` has the build plan and, as of
+  2026-09-20, the actual starter set (three of the account holder's own
+  Recipes, verified to overlap where it matters), reusing the Featured
+  Recipes machinery rather than inventing anything new. Stage 2 above
+  degrades to one working CTA (Archive) until it lands. What's still
+  outstanding is an action, not a decision: those three Recipes need
+  `featured` flipped on in production before anything can copy them.
 - **The try-before-signup importer is out of scope for this pass**, replaced
   by a recorded demo per Stage 0's 2026-09-20 update. Filed on its own so
   it isn't re-discovered:

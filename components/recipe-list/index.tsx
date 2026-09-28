@@ -8,6 +8,7 @@ import SidebarHeading from '../sidebar-heading';
 import Button from '@components/button';
 import useRecipes from '@hooks/use-recipes';
 import useTags from '@hooks/use-tags';
+import useSimilarRecipes from '@hooks/use-similar-recipes';
 import icons from '@components/svg';
 import type { RecipeSummary } from '../../types/models';
 
@@ -44,9 +45,12 @@ const RecipeList = ({ handleRecipeSelect, filterFn = () => true, selectedIds = {
     ));
   }
 
-  const visibleRecipes = recipes
+  // Everything the page and the Tag filter leave in view. Recipe Search then
+  // splits it in two: the Exact Matches, and the rest, which are the only
+  // candidates for Similar Recipes - so no Recipe can appear in both, and a
+  // Tag filter narrows both tranches alike.
+  const inView = recipes
     .filter(filterFn)
-    .filter(({ name }) => name.toLowerCase().includes(sidebarFilter.toLowerCase()))
     .filter(({ tags: recipeTags }) => {
       if (tagsFilter.length === 0) {
         return true;
@@ -56,12 +60,31 @@ const RecipeList = ({ handleRecipeSelect, filterFn = () => true, selectedIds = {
       return (recipeTags ?? []).some(tag => tagsFilter.includes(tag))
     });
 
-  // Selected recipes float to the top of the list, so a user building a
-  // shopping list can see at a glance what they've already picked.
-  const orderedRecipes = [
-    ...visibleRecipes.filter(({ id }) => selectedIds[id]),
-    ...visibleRecipes.filter(({ id }) => !selectedIds[id])
+  const search = sidebarFilter.toLowerCase();
+  const exactMatches = inView.filter(({ name }) => name.toLowerCase().includes(search));
+  const candidates = inView.filter(({ name }) => !name.toLowerCase().includes(search));
+  const candidateIds = candidates.map(({ id }) => id);
+
+  const similarMatches = useSimilarRecipes(sidebarFilter, candidateIds);
+  // Mapped back through the candidates still on screen, in the server's
+  // (most probable first) order: an answer that names a Recipe the User has
+  // since filtered away shows nothing for it.
+  const byId = new Map(candidates.map(recipe => [recipe.id, recipe]));
+  const similarRecipes = similarMatches.flatMap(({ id }) => byId.get(id) ?? []);
+
+  // Selected recipes float to the top, so a user building a shopping list can
+  // see at a glance what they've already picked - within each tranche, so a
+  // selection never pulls a Similar Recipe above the line.
+  const pinSelected = (list: RecipeSummary[]) => [
+    ...list.filter(({ id }) => selectedIds[id]),
+    ...list.filter(({ id }) => !selectedIds[id])
   ];
+
+  const renderItem = (recipe: RecipeSummary) => (
+    // tags null -> undefined so ListItem's tags = [] default kicks in (JS
+    // defaults only trigger on undefined, not null).
+    <ListItem {...recipe} tags={recipe.tags ?? undefined} key={recipe.id} checked={!!selectedIds[recipe.id]} variant="panel" onClick={onClick}/>
+  );
 
   return (
     <div className={styles.panel}>
@@ -75,12 +98,25 @@ const RecipeList = ({ handleRecipeSelect, filterFn = () => true, selectedIds = {
       <SidebarInput icon={icons.search} placeholder="Search..." onChange={(e) => setSidebarFilter(e.target.value)} value={sidebarFilter} />
       <div className={styles.recipeList}>
         <ul>
-          {
-            // tags null -> undefined so ListItem's tags = [] default kicks in (JS
-            // defaults only trigger on undefined, not null).
-            orderedRecipes.map(recipe => <ListItem {...recipe} tags={recipe.tags ?? undefined} key={recipe.id} checked={!!selectedIds[recipe.id]} variant="panel" onClick={onClick}/>)
-          }
+          { pinSelected(exactMatches).map(renderItem) }
         </ul>
+        {
+          // Only ever added beneath the Exact Matches, never a placeholder
+          // for them: no loading state, and nothing at all when there are
+          // none. The rule separates the tranches, so with no Exact Matches
+          // above it there is nothing to separate and only the caption shows.
+          similarRecipes.length > 0 && (
+            <section aria-labelledby="similar-recipes-heading" className={styles.similar}>
+              { exactMatches.length > 0 && <hr className={styles.divider} /> }
+              <SidebarHeading className={styles.similarHeading}>
+                <span id="similar-recipes-heading">Similar recipes</span>
+              </SidebarHeading>
+              <ul>
+                { pinSelected(similarRecipes).map(renderItem) }
+              </ul>
+            </section>
+          )
+        }
       </div>
     </div>
   )

@@ -74,6 +74,10 @@ export default defineConfig({
       // collector that was never started. See scripts/dev-full.sh.
       START_LGTM: 'false',
       OTEL_EXPORTER_OTLP_ENDPOINT: '',
+      // Similar Recipes off, even for someone with the key exported: the
+      // suite asserts on the feature being absent, and a real Jev call per
+      // search would make it slow, paid and non-deterministic.
+      TYPESAFE_API_KEY: '',
       // dev-full.sh moves to the next free port when a requested one is taken,
       // which is right for `npm run dev:full` and wrong here: baseURL and the
       // health-check url above are already fixed, so a drifting stack is one

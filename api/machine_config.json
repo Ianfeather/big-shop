@@ -7,7 +7,8 @@
         { "env_var": "SENDGRID_API_KEY" },
         { "env_var": "INVITE_EMAIL_PEPPER" },
         { "env_var": "AUTH0_MGMT_CLIENT_ID" },
-        { "env_var": "AUTH0_MGMT_CLIENT_SECRET" }
+        { "env_var": "AUTH0_MGMT_CLIENT_SECRET" },
+        { "env_var": "TYPESAFE_API_KEY" }
       ],
       "env": {
         "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"

@@ -208,6 +208,10 @@ services:
       # the variable is *unset*, so e2e can pass an explicit empty string to
       # turn telemetry off, rather than having the default reinstated.
       OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT-http://lgtm:4318}"
+      # Jev, for Similar Recipes. Off unless exported in the shell that runs
+      # the stack - it is a real, paid key, so nothing here supplies one. The
+      # e2e stack pins it empty in playwright.config.ts.
+      TYPESAFE_API_KEY: "${TYPESAFE_API_KEY:-}"
     ports:
       - "${API_PORT:-8080}:8080"
     volumes:

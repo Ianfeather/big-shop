@@ -48,6 +48,18 @@ A User permitted to mark a Recipe as Featured. Currently one person; there is no
 **Tag**:
 A closed-vocabulary label attached to a Recipe (e.g. "Vegetarian", "Batch Cook") for filtering/browsing. Not user-extensible — see Global Catalog.
 
+**Recipe Search**:
+Narrowing an Account's Recipes by what a User types. It answers in two tranches, always in this order: Exact Matches, then Similar Recipes. It narrows only the Recipes a Tag filter has already left in view — searching "curry" with Vegetarian selected finds vegetarian curries in both tranches.
+
+**Exact Match**:
+A Recipe whose name contains the search text. Instant, and always listed first; what Recipe Search was before Similar Recipes existed.
+
+**Similar Recipe**:
+A Recipe whose name does *not* contain the search text, but which a cook searching for it would want: the same kind of dish, a cuisine or style it belongs to, or built around that ingredient. "Prawn Balti" is a Similar Recipe for "curry"; "Coq au Vin" for "chicken". Incidental overlap does not count — sharing a minor ingredient or a loose association is not similarity.
+
+Judged from the Recipe's name alone, and purely additive: Similar Recipes appear beneath the Exact Matches when they are found, never displace or reorder them, never repeat one, and their absence is not an error. Only searches of three characters or more look for them.
+_Avoid_: Semantic Match (names the mechanism, not the thing), Related Recipe, Suggestion (both suggest recommendations the User did not search for)
+
 **Ingredient**:
 A canonical, Global Catalog entry for a foodstuff (e.g. "tomato") — just an identity, no quantity. What a Shopping List is ultimately built out of.
 _Avoid_: Using "Ingredient" for a Recipe's specific quantity of one — that's an Ingredient Line.

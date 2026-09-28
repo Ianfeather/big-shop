@@ -56,9 +56,14 @@ export async function apiGet<T>(path: string, token: string): Promise<T> {
   return parseBody(res) as Promise<T>;
 }
 
-async function apiMutate<T>(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, token: string, body?: unknown): Promise<T> {
+// `signal` lets a caller abandon a request it no longer wants - TanStack Query
+// passes one to every queryFn and aborts it when the query's key moves on.
+// Only hooks/use-similar-recipes.ts uses it: a search the User has typed past
+// is a paid model call worth cancelling, which no other request here is.
+async function apiMutate<T>(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, token: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`${process.env.NEXT_PUBLIC_API_HOST}${path}`, {
     method,
+    signal,
     headers: {
       Authorization: `Bearer ${token}`,
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {})
@@ -71,7 +76,7 @@ async function apiMutate<T>(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: s
   return parseBody(res) as Promise<T>;
 }
 
-export const apiPost = <T>(path: string, token: string, body?: unknown) => apiMutate<T>('POST', path, token, body);
+export const apiPost = <T>(path: string, token: string, body?: unknown, signal?: AbortSignal) => apiMutate<T>('POST', path, token, body, signal);
 export const apiPut = <T>(path: string, token: string, body?: unknown) => apiMutate<T>('PUT', path, token, body);
 export const apiPatch = <T>(path: string, token: string, body?: unknown) => apiMutate<T>('PATCH', path, token, body);
 export const apiDelete = <T>(path: string, token: string, body?: unknown) => apiMutate<T>('DELETE', path, token, body);

@@ -2,6 +2,7 @@ import type { components } from './api';
 
 export type Recipe = components['schemas']['Recipe'];
 export type RecipeSummary = components['schemas']['RecipeSummary'];
+export type SimilarMatch = components['schemas']['SimilarMatch'];
 export type IngredientName = components['schemas']['IngredientName'];
 export type Unit = components['schemas']['Unit'];
 export type Invite = components['schemas']['Invite'];

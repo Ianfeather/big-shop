@@ -289,6 +289,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/recipes/similar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Find Similar Recipes
+         * @description Judges which of the given Recipes someone searching for `query` would want, though their names do not contain it. Answers 200 with no matches when the feature is unconfigured or the model is unavailable: Similar Recipes are additive, never required.
+         */
+        post: operations["similar-recipes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shopping-list": {
         parameters: {
             query?: never;
@@ -758,6 +778,33 @@ export interface components {
             readonly $schema?: string;
             favorite_recipes: number[] | null;
             recent_recipes: number[] | null;
+        };
+        SimilarMatch: {
+            /** Format: int64 */
+            id: number;
+            /** Format: double */
+            probability: number;
+        };
+        SimilarRecipesInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/bigshop/schemas/SimilarRecipesInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Recipe ids to judge. Any not belonging to the caller's Account are ignored. */
+            candidateIds: number[] | null;
+            /** @description What the User typed. At least three characters once trimmed. */
+            query: string;
+        };
+        SimilarRecipesOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/bigshop/schemas/SimilarRecipesOutputBody.json
+             */
+            readonly $schema?: string;
+            matches: components["schemas"]["SimilarMatch"][] | null;
         };
         SimpleResponse: {
             /**
@@ -1356,6 +1403,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecipeSummary"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "similar-recipes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SimilarRecipesInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimilarRecipesOutputBody"];
                 };
             };
             /** @description Error */

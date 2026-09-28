@@ -25,7 +25,11 @@ test.describe('recipe management', () => {
     await page.goto('/recipes/new');
     await page.getByRole('button', { name: 'Enter Manually' }).click();
     await page.getByLabel('Recipe Name').fill(recipeName);
-    await page.getByLabel('Method').fill('Combine everything and cook until done.');
+    // exact: getByLabel matches substrings, and the sidebar lists every
+    // Recipe as a checkbox labelled with its name - so while
+    // recipe-import.spec.ts's "E2E Method Link" exists in a parallel worker,
+    // a bare 'Method' matches that too and fails strict mode.
+    await page.getByLabel('Method', { exact: true }).fill('Combine everything and cook until done.');
     await page.getByRole('button', { name: 'Save Recipe' }).click();
 
     await expect(page).toHaveURL(/\/recipes\/\d+$/);
@@ -49,7 +53,7 @@ test.describe('recipe management', () => {
 
     const updatedName = `${recipeName} (updated)`;
     await page.getByLabel('Recipe Name').fill(updatedName);
-    await page.getByLabel('Method').fill('Updated method.');
+    await page.getByLabel('Method', { exact: true }).fill('Updated method.');
     await page.getByLabel('Quantity').fill('350');
     await page.getByRole('button', { name: 'Update Recipe' }).click();
 

@@ -541,6 +541,67 @@ components:
         - recent_recipes
         - favorite_recipes
       type: object
+    SimilarMatch:
+      additionalProperties: false
+      properties:
+        id:
+          format: int64
+          type: integer
+        probability:
+          format: double
+          type: number
+      required:
+        - id
+        - probability
+      type: object
+    SimilarRecipesInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /api/bigshop/schemas/SimilarRecipesInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        candidateIds:
+          description: Recipe ids to judge. Any not belonging to the caller's Account are ignored.
+          items:
+            format: int64
+            type: integer
+          maxItems: 1000
+          minItems: 1
+          type:
+            - array
+            - "null"
+        query:
+          description: What the User typed. At least three characters once trimmed.
+          maxLength: 100
+          minLength: 3
+          type: string
+      required:
+        - query
+        - candidateIds
+      type: object
+    SimilarRecipesOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - /api/bigshop/schemas/SimilarRecipesOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        matches:
+          items:
+            $ref: "#/components/schemas/SimilarMatch"
+          type:
+            - array
+            - "null"
+      required:
+        - matches
+      type: object
     SimpleResponse:
       additionalProperties: false
       properties:
@@ -1043,6 +1104,32 @@ paths:
                 $ref: "#/components/schemas/ErrorModel"
           description: Error
       summary: List recipes
+      tags:
+        - Recipes
+  /recipes/similar:
+    post:
+      description: "Judges which of the given Recipes someone searching for `query` would want, though their names do not contain it. Answers 200 with no matches when the feature is unconfigured or the model is unavailable: Similar Recipes are additive, never required."
+      operationId: similar-recipes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SimilarRecipesInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimilarRecipesOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Find Similar Recipes
       tags:
         - Recipes
   /shopping-list:

@@ -59,6 +59,9 @@ var db *sql.DB
 // the App actually built, not a second guess at it.
 var purgeConfigured bool
 
+// similarConfigured is the same thing for Similar Recipes' Jev key.
+var similarConfigured bool
+
 // appDB is the database handle init() opened, kept so that maintenance
 // subcommands in main() can use the same pool - and the same DSN, TLS config
 // and pool limits - as the server does, rather than opening a second one.
@@ -286,6 +289,7 @@ func init() {
 		fmt.Println(err)
 	}
 	purgeConfigured = application.PurgeConfigured()
+	similarConfigured = application.SimilarConfigured()
 
 	var api huma.API
 	router, api, err = application.GetRouter(basePath)
@@ -404,6 +408,14 @@ func main() {
 			log.Println("edge cache purging enabled")
 		} else {
 			log.Println("edge cache purging disabled (NETLIFY_PURGE_TOKEN and NETLIFY_SITE_ID must both be set); /units will expire on its s-maxage instead")
+		}
+		// Same reasoning: off is right locally and in CI, and a missing
+		// declaration in machine_config.json on Fly, and only this line
+		// tells the two apart.
+		if similarConfigured {
+			log.Println("similar recipes enabled")
+		} else {
+			log.Println("similar recipes disabled (TYPESAFE_API_KEY is not set); /recipes/similar will answer with no matches")
 		}
 
 		// This branch is no longer dev-only: it is what the production

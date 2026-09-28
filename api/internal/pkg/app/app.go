@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"recipes/internal/pkg/common"
+	"recipes/internal/pkg/jev"
 	"recipes/internal/pkg/purge"
 	"recipes/internal/pkg/service"
 	"recipes/internal/pkg/telemetry"
@@ -40,6 +41,18 @@ type App struct {
 	// A nil *service.Catalogs is a valid uncached cache, so nothing breaks if
 	// an App is built without one.
 	catalogs *service.Catalogs
+	// judge answers Similar Recipes. Never nil: unconfigured, jev.Client is
+	// itself a no-op and the tranche is simply absent, which is what local
+	// development, e2e and CI get. An interface only so a test can stand in
+	// for Jev.
+	judge service.RelevanceJudge
+}
+
+// SimilarConfigured reports whether Similar Recipes will actually call Jev,
+// for the startup line in main.go - see PurgeConfigured for why that line
+// exists.
+func (a *App) SimilarConfigured() bool {
+	return a.judge != nil && a.judge.Configured()
 }
 
 // PurgeConfigured reports whether edge cache purging will actually happen, for
@@ -68,6 +81,7 @@ func NewApp(env *common.Env) (*App, error) {
 		db:       env.DB,
 		purger:   purge.New(),
 		catalogs: service.NewCatalogs(),
+		judge:    jev.New(),
 	}
 	return app, nil
 }

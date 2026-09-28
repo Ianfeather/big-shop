@@ -126,6 +126,12 @@ primary_region = "fra"
 #                       the machines were frozen on while the deploys reverted,
 #                       so this is one gap the freeze did not cause and did not
 #                       hide. It was undeclared from the first minute it ran.
+#   TYPESAFE_API_KEY  - Jev, for Similar Recipes (internal/pkg/jev,
+#                       specs/recipe-search-similar-recipes.md). Declared in the
+#                       `api` container's `secrets` array. Unset, the feature is
+#                       off rather than broken - which is exactly why the
+#                       startup log says which, and why forgetting the
+#                       declaration would go unnoticed without the deploy check.
 #
 # DISABLE_AUTH must never be set here. It is a local-development
 # switch that makes the API resolve every request to DEV_USER_ID without

@@ -437,6 +437,8 @@ unproxied origin to every visitor and undo the same-origin property.
   below.
 - `OPENAI_API_KEY` — GPT-4 Vision + GPT-3.5-turbo
 - `SENDGRID_API_KEY` — Email invitations
+- `TYPESAFE_API_KEY` — Jev, for Similar Recipes in Recipe Search. A Fly secret read by
+  the Go API, not a Netlify one; unset (locally, CI, e2e) the feature is simply off
 - `AUTH0_DOMAIN` / `AUTH0_AUDIENCE` — Go JWT validation. `AUTH0_DOMAIN` is
   `auth.bigshop.life`, the custom domain, because that is what issues the tokens;
   it must match the browser's `NEXT_PUBLIC_AUTH0_DOMAIN` or every authenticated
@@ -611,8 +613,8 @@ Two independent pipelines, one per deployable — an accepted consequence of
   check is never deployed
 - Config: `api/fly.toml`; image: `api/Dockerfile`
 - Needs a `FLY_API_TOKEN` repository secret; `TIDB_PASSWORD`, `SENDGRID_API_KEY`,
-  `INVITE_EMAIL_PEPPER`, `AUTH0_MGMT_CLIENT_ID` and `AUTH0_MGMT_CLIENT_SECRET` are Fly
-  secrets, `AUTH0_DOMAIN`/`AUTH0_AUDIENCE` are in `fly.toml`'s `[env]`
+  `INVITE_EMAIL_PEPPER`, `AUTH0_MGMT_CLIENT_ID`, `AUTH0_MGMT_CLIENT_SECRET` and
+  `TYPESAFE_API_KEY` are Fly secrets, `AUTH0_DOMAIN`/`AUTH0_AUDIENCE` are in `fly.toml`'s `[env]`
 - Reached from the browser through a Netlify `status = 200` rewrite, so it stays
   same-origin. Server-side callers address it directly
 - First-time setup, cutover and rollback:

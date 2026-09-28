@@ -84,9 +84,10 @@ Three things about the wiring are easy to break by tidying:
   how `database/sql` and the driver negotiate the fast path. Left recorded,
   every query span carries `STATUS_CODE_ERROR`.
 
-Instrumentation currently covers `GET /recipes` only — an allow-list in
-`telemetry/http.go` (`phase1Routes`) — which the observability spec widens to
-every route next.
+Instrumentation covers every registered route except the health check
+(`isTracedRoute` in `telemetry/http.go`), labelled by the path template the router
+registered rather than the raw path, so no Recipe slug reaches a span name or a
+metric label.
 
 **Route list**: routes are registered in `internal/pkg/app/app.go`'s `GetRouter`, using [Huma](https://github.com/danielgtaylor/huma) (`humamux`, on top of the same `gorilla/mux` router) so each operation's request/response types double as its OpenAPI schema - no separate hand-maintained doc to drift. The generated spec is committed at [`docs/openapi.yaml`](./docs/openapi.yaml); regenerate it with `cd api && go run . openapi > ../docs/openapi.yaml` (no DB needed - route registration never touches it). `.github/workflows/ci.yml`'s `go` job fails if the committed spec is stale relative to `app.go` (it used to be `build.sh`, i.e. only during a Netlify deploy). All routes except `/health` require Auth0 JWT validation, against a JWKS held in process for 5 minutes by `go-jwt-middleware` v2's `jwks.CachingProvider` (built once, in `GetRouter` - it used to be fetched over HTTPS on every request). `userMiddleware` takes the `sub` claim and puts a **`common.Caller`** in the request context; handlers read it with `callerFrom(ctx)`. A `Caller` carries the user ID and resolves that user's Account **lazily**, at most once per request - so a route that never needs an Account (`/tags`, `/units`, `/ingredients`, `/user`, `/invites`) still makes no lookup at all, while `POST /shopping-list` makes one instead of nine.
 

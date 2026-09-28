@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -17,7 +18,21 @@ import (
 // Recipe. Set in the spec's Phase 0 against real Recipe names
 // (specs/recipe-search-similar-recipes.md); raise it rather than capping the
 // tranche if the tail gets noisy (decision 9).
-const SimilarThreshold = 0.5
+const SimilarThreshold = 0.6
+
+// How candidates are fanned out to Jev - see rankSimilar for why they are
+// chunked at all, and why at 10.
+const (
+	similarChunkSize = 10
+	// At most this many chunks in flight at once. The API allows up to 1000
+	// candidates, which is 100 chunks; an unbounded fan-out of that size is
+	// the kind of burst Jev answers with 429s.
+	similarConcurrency = 16
+	// The whole fan-out's budget, however many chunks it has. The same figure
+	// as jev's per-request timeout, so one slow chunk and a long queue of
+	// chunks are bounded alike.
+	similarDeadline = 3 * time.Second
+)
 
 // SimilarMatch is one Similar Recipe: which Recipe, and how sure Jev was.
 type SimilarMatch struct {
@@ -42,6 +57,9 @@ const (
 	OutcomeEmpty    SimilarOutcome = "empty"
 	OutcomeDisabled SimilarOutcome = "disabled"
 	OutcomeError    SimilarOutcome = "error"
+	// Some chunks answered and some did not; the matches are from those
+	// that did.
+	OutcomePartial SimilarOutcome = "partial"
 )
 
 // SimilarResult is FindSimilarRecipes' answer plus what telemetry needs.
@@ -50,13 +68,14 @@ type SimilarResult struct {
 	Outcome SimilarOutcome
 	// Candidates is how many names were actually sent to Jev, after scoping.
 	Candidates int
-	Model      string
 	Usage      jev.Usage
-	// JudgeDuration is how long the Jev call took; zero when none was made.
+	// JudgeDuration is how long the Jev fan-out took; zero when none was made.
 	JudgeDuration time.Duration
-	// JudgeErr is why Jev gave no answer, when it didn't. Not returned as an
-	// error: a Jev failure is an empty tranche, not a failed request
-	// (decision 8), so the caller records it and answers 200.
+	// FailedChunks is how many chunks gave no answer.
+	FailedChunks int
+	// JudgeErr is why they gave none, joined. Not returned as an error: a Jev
+	// failure is a missing or shorter tranche, not a failed request (decision
+	// 8), so the caller records it and answers 200.
 	JudgeErr error
 }
 
@@ -131,6 +150,18 @@ func loadCandidates(ctx context.Context, db *sql.DB, accountID int, ids []int) (
 
 // rankSimilar is FindSimilarRecipes without the database: judge the
 // candidates, keep those over the threshold, most probable first.
+//
+// Candidates go to Jev in chunks of similarChunkSize, several at once, not in
+// one request. One request carrying every name was the specced design, and
+// Phase 0 found it unusable on real data: a judgment's quality decays with the
+// name's position in the list, so in a 150-Recipe Account the breakfast dishes
+// at positions ~90-100 scored below pork chops for "breakfast". One request
+// per name was accurate but took 5-7s for 150 names. Chunks of 10 matched
+// per-name judgments closely and answered in ~0.4s.
+//
+// A chunk that fails or misses similarDeadline is dropped and the rest are
+// kept: Similar Recipes are additive, so a tranche missing a few Recipes is
+// better than none, and nobody waits past the deadline for the stragglers.
 func rankSimilar(ctx context.Context, judge RelevanceJudge, query string, candidates []candidate) SimilarResult {
 	result := SimilarResult{Matches: []SimilarMatch{}, Candidates: len(candidates)}
 
@@ -144,35 +175,81 @@ func rankSimilar(ctx context.Context, judge RelevanceJudge, query string, candid
 		return result
 	}
 
-	names := make([]string, len(candidates))
-	for i, c := range candidates {
-		names[i] = c.name
+	ctx, cancel := context.WithTimeout(ctx, similarDeadline)
+	defer cancel()
+
+	type chunkResult struct {
+		start         int
+		probabilities []float64
+		usage         jev.Usage
+		err           error
 	}
 
+	var chunks [][]candidate
+	for start := 0; start < len(candidates); start += similarChunkSize {
+		end := min(start+similarChunkSize, len(candidates))
+		chunks = append(chunks, candidates[start:end])
+	}
+
+	results := make(chan chunkResult, len(chunks))
+	slots := make(chan struct{}, similarConcurrency)
 	started := time.Now()
-	probabilities, model, usage, err := judge.Relevance(ctx, query, names)
-	result.JudgeDuration = time.Since(started)
-	result.Model, result.Usage = model, usage
-	if err != nil {
-		result.Outcome = OutcomeError
-		result.JudgeErr = err
-		return result
+	for i, chunk := range chunks {
+		go func(start int, chunk []candidate) {
+			select {
+			case slots <- struct{}{}:
+				defer func() { <-slots }()
+			case <-ctx.Done():
+				// Never got a slot before the deadline: dropped, like a
+				// chunk that timed out mid-call.
+				results <- chunkResult{start: start, err: ctx.Err()}
+				return
+			}
+			names := make([]string, len(chunk))
+			for j, c := range chunk {
+				names[j] = c.name
+			}
+			probabilities, _, usage, err := judge.Relevance(ctx, query, names)
+			results <- chunkResult{start: start, probabilities: probabilities, usage: usage, err: err}
+		}(i*similarChunkSize, chunk)
 	}
 
-	for i, p := range probabilities {
-		if p >= SimilarThreshold {
-			result.Matches = append(result.Matches, SimilarMatch{ID: candidates[i].id, Probability: p})
+	var errs []error
+	for range chunks {
+		r := <-results
+		result.Usage.InputTokens += r.usage.InputTokens
+		result.Usage.OutputTokens += r.usage.OutputTokens
+		if r.err != nil {
+			errs = append(errs, r.err)
+			continue
+		}
+		for j, p := range r.probabilities {
+			if p >= SimilarThreshold {
+				result.Matches = append(result.Matches, SimilarMatch{ID: candidates[r.start+j].id, Probability: p})
+			}
 		}
 	}
-	// Stable, so equal probabilities keep id order and the same input always
-	// renders the same list.
-	sort.SliceStable(result.Matches, func(i, j int) bool {
-		return result.Matches[i].Probability > result.Matches[j].Probability
+	result.JudgeDuration = time.Since(started)
+	result.FailedChunks = len(errs)
+	result.JudgeErr = errors.Join(errs...)
+
+	// Ordered by probability, ties by id, so the same answers always render
+	// the same list whichever chunk happened to come back first.
+	sort.Slice(result.Matches, func(i, j int) bool {
+		if result.Matches[i].Probability != result.Matches[j].Probability {
+			return result.Matches[i].Probability > result.Matches[j].Probability
+		}
+		return result.Matches[i].ID < result.Matches[j].ID
 	})
 
-	if len(result.Matches) == 0 {
+	switch {
+	case len(errs) == len(chunks):
+		result.Outcome = OutcomeError
+	case len(errs) > 0:
+		result.Outcome = OutcomePartial
+	case len(result.Matches) == 0:
 		result.Outcome = OutcomeEmpty
-	} else {
+	default:
 		result.Outcome = OutcomeResults
 	}
 	return result

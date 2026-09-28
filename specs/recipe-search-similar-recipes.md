@@ -33,7 +33,7 @@ reader can tell a choice from an accident.
 | # | Decision | Why |
 | --- | --- | --- |
 | 1 | All five `RecipeList` surfaces, no per-surface switch. | "Show me curries" is as useful when building a Shopping List as when browsing. A switch would be a setting nobody flips. |
-| 2 | **One Jev request per search**: every candidate name goes in `state`, with one Noul per candidate. | Titles are sent once and every question runs in parallel. The alternative (one request per title, as in TypeSafe's reranking cookbook) keeps each judgment independent but means N requests per search. Phase 0 checks that the two agree on real data. |
+| 2 | **Chunks of 10 names per Jev request, in parallel** (at most 16 in flight). *Revised by Phase 0: this originally said one request per search.* | One request carrying every name was unusable on real data: judgments decayed with a name's position in the list (see Phase 0 results). One request per name was accurate but took 5–7s for 150 names. Chunks of 10 matched per-name judgments closely at ~0.4s. |
 | 3 | **Noul, not Score.** | Relevance to a search is a yes/no condition. A Score's levels would have to be worded for any possible search term, and it doesn't help batching. |
 | 4 | **The question asks about relevance, not category membership.** | "Is this a {term}?" works for "curry" but fails for "chicken" (Coq au Vin contains chicken but is not a chicken) and for adjectives ("italian", "spicy"). |
 | 5 | **Only the leftovers are candidates**: Recipes that pass `filterFn` and the Tag filter but did *not* exact-match. | No Recipe appears in both tranches. Tags still narrow Similar Recipes. Requests stay smaller. The cost is that toggling a Tag mid-search re-queries. |
@@ -72,12 +72,14 @@ same-origin and the bearer token works unchanged.
   either stale (another member deleted the Recipe) or not the caller's to ask
   about. If nothing survives, return `{ "matches": [] }` without calling Jev.
 - **Returns probabilities**, not just ids, so the client can sort. The threshold
-  is applied server-side (a named constant, starting at 0.5, set in Phase 0), so
+  is applied server-side (a named constant, **0.6**, set in Phase 0), so
   the client doesn't need to know it.
-- **Failure is an empty tranche, not an error the User sees:** a Jev timeout,
-  429/529 or 5xx comes back as `{ "matches": [] }` with the cause recorded via
-  `fail`/telemetry. Jev gets a **3s** context deadline. After that, the answer
-  arrives too late to matter.
+- **Failure is a shorter or empty tranche, not an error the User sees:** a
+  chunk that times out, gets a 429/529 or a 5xx is dropped and the other
+  chunks' matches are kept (outcome `partial`); if every chunk fails the answer
+  is `{ "matches": [] }` (outcome `error`). The cause is recorded on the span.
+  The whole fan-out gets a **3s** deadline. After that, the answer arrives too
+  late to matter.
 - **Feature off when unconfigured:** if `TYPESAFE_API_KEY` is unset, the handler
   returns `{ "matches": [] }` without calling anything. This is the state for
   local dev, CI, e2e and deploy previews, the same pattern as
@@ -164,8 +166,9 @@ No query text, no Recipe names, no ids. The log line may carry counts, as
 `api` container's `secrets` array in `api/machine_config.json`, or it's
 absent at runtime and the feature is silently off.
 `scripts/check-fly-secrets.sh` fails the deploy on drift. Add the name to the
-environment variable table in `technical-architecture.md`. It isn't needed in
-`docker-compose.yml`; anyone wanting it locally can set it in their shell.
+environment variable table in `technical-architecture.md`. `docker-compose.yml`
+passes it through from the shell (empty by default), and `playwright.config.ts`
+pins it empty so the e2e stack never calls Jev.
 
 ## Phase 0: check the design on real data before building
 
@@ -187,14 +190,45 @@ local DB, or the read-only reporting account), with a throwaway script:
 4. **The fragment question (decision 7).** Check whether "curr" and similar
    produce false positives. Add the in-request fragment Noul only if they do.
 
+### Phase 0 results (2026-09-28)
+
+Run against the 157 Recipe names in the 8 July production dump, from a laptop
+in the UK (not from Fly, see item 3).
+
+1. **One request per search was unusable.** Accuracy decayed with position in
+   the list. Names early on were judged well (Chicken Korma 0.90 for "curry",
+   Spaghetti Bolognese 0.95 for "pasta"), and later ones drifted towards
+   0.4–0.6 noise. For "breakfast", the actual breakfast dishes, at positions
+   ~90–100, scored ~0.4, while Seared Pork Chops scored 0.69. Per-name requests
+   put Prawn Balti at 0.95 for "curry" and the waffles, oats and omelettes at
+   0.9+ for "breakfast", but took 5.6–7s for ~150 requests at 8-way
+   concurrency. Chunks were compared at 5, 10 and 20 names against per-name
+   results. **10 was the best trade**: mean absolute difference 0.03–0.10,
+   0.86–0.94 set overlap for "curry" and "italian", ~0.4s for 15–16 parallel
+   requests. Size 5 had a 3.5s outlier; size 20 drifted further. With chunks
+   of 10, ten searches ran in 0.39–0.63s apart from one 3.57s outlier ("pie"),
+   with no 429s. That outlier is why a late chunk is dropped rather than waited
+   for. Cost: ~21k input tokens per search against ~17.6k for one request.
+2. **Threshold 0.6.** It keeps every clear match seen and trims weak tails
+   (Garbanzo Con Chorizo 0.53 for "soup", Sausage and Mash 0.54 for
+   "breakfast"). The criteria wording was kept as specced. Known model errors
+   remain: "chicken" rated Tacos De Cochinita Pibil (pork) 0.93.
+3. **Not measured from Fly.** Timing from a Fly `fra` machine means
+   `fly ssh console` on production, which wasn't done for this. From the UK the
+   typical chunked search was ~0.4s. `bigshop.similar.jev.duration` gives the
+   real Frankfurt figure once deployed.
+4. **No fragment check needed.** With chunks, "curr" gave 9 matches at 0.5,
+   nearly all curries, and fewer at 0.6. That's harmless, so decision 7 stands.
+
 ## Testing
 
 - **Go:** handler tests with `httptest` standing in for Jev. Cover: scoping
   drops foreign ids and never sends their names; threshold and sort order;
   Jev 429/5xx/timeout → `[]`; key unset → `[]` with no outbound call; empty
   candidates after scoping → no outbound call; validation 422s. Assert the
-  outbound request's shape (one request, one question per candidate, names in
-  `state.recipes` in index order).
+  outbound request's shape (one question per name, names in `state.recipes` in
+  index order), that candidates are chunked with each sent exactly once, and
+  that a failed or hung chunk is dropped while the rest are kept.
 - **Vitest:** `RecipeList` with the hook mocked. The tranche is absent below 3
   characters and when there are no matches. The caption and rule appear with
   both tranches, and the caption without the rule when there are no Exact

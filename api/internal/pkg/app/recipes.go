@@ -79,7 +79,7 @@ func (a *App) getSimilarRecipes(ctx context.Context, input *SimilarRecipesInput)
 		return nil, fail(ctx, huma.Error500InternalServerError("Failed to find similar recipes"), err)
 	}
 
-	// A Jev failure answers 200 with no matches: Similar Recipes is additive,
+	// A Jev failure answers 200 with fewer or no matches: Similar Recipes is additive,
 	// and the User was not waiting on it (spec decision 8). It is recorded on
 	// the span rather than returned, so it is visible without being an error
 	// the client has to handle.
@@ -92,7 +92,8 @@ func (a *App) getSimilarRecipes(ctx context.Context, input *SimilarRecipesInput)
 	telemetry.Logger().InfoContext(ctx, "similar recipes",
 		"similar.outcome", string(result.Outcome),
 		"similar.candidates", result.Candidates,
-		"similar.matches", len(result.Matches))
+		"similar.matches", len(result.Matches),
+		"similar.failed_chunks", result.FailedChunks)
 
 	out := &SimilarRecipesOutput{}
 	out.Body.Matches = result.Matches

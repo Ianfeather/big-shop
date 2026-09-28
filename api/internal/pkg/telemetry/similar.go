@@ -38,14 +38,14 @@ func similarMetrics() similarInstruments {
 		// package: a failed instrument is a no-op one, and telemetry must
 		// never affect the application.
 		similar.outcome, _ = m.Int64Counter("bigshop.similar.outcome",
-			metric.WithDescription("Similar Recipes requests by how they ended: results, empty, disabled or error"))
+			metric.WithDescription("Similar Recipes requests by how they ended: results, empty, partial, disabled or error"))
 		similar.latency, _ = m.Float64Histogram("bigshop.similar.jev.duration",
 			metric.WithUnit("s"),
-			metric.WithDescription("How long the Jev call took, for requests that made one"))
+			metric.WithDescription("How long the Jev fan-out took, for requests that made one"))
 		similar.candidates, _ = m.Int64Histogram("bigshop.similar.candidates",
-			metric.WithDescription("Recipe names sent to Jev in one request"))
+			metric.WithDescription("Recipe names sent to Jev for one search, across all its chunks"))
 		similar.matches, _ = m.Int64Histogram("bigshop.similar.matches",
-			metric.WithDescription("Similar Recipes returned by one request"))
+			metric.WithDescription("Similar Recipes returned for one search"))
 		// Same name and label shape as the web side's counter
 		// (lib/telemetry/metrics.ts), so one panel covers every model.
 		similar.tokens, _ = m.Int64Counter("bigshop.llm.tokens",

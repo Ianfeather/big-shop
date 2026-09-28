@@ -39,7 +39,11 @@
   margin: 0 0 var(--space-3);
 }
 
-.similarHeading {
+/* Scoped under .similar for specificity, not structure: SidebarHeading's own
+   .heading sets font-size with the same weight, and which of two equal rules
+   wins depends on which page's CSS chunk loaded last - it was large on
+   /recipes and small on /list. */
+.similar .similarHeading {
   font-size: var(--text-sm);
   margin-bottom: var(--space-2);
 }

@@ -2,8 +2,8 @@
 // search, for Similar Recipes (specs/recipe-search-similar-recipes.md).
 //
 // Jev answers typed questions about a piece of state rather than generating
-// text: here, one yes/no question (a "Noul") per Recipe name, all in one
-// request, each answered with a probability. The HTTP API is a single JSON
+// text: here, one yes/no question (a "Noul") per Recipe name, each answered
+// with a probability. The HTTP API is a single JSON
 // POST, so there is no SDK - and no Go one to have.
 //
 // Two properties shape it, both requirements rather than niceties:
@@ -124,7 +124,9 @@ type response struct {
 // searching for query would want that Recipe. model is the version that
 // answered.
 //
-// One request carries every name. Question IDs are "r<index>": they are for
+// One request carries every name it is given, so keep names short: the
+// caller chunks them (service.rankSimilar explains why, and why at 10).
+// Question IDs are "r<index>": they are for
 // this code only and never reach the model, which is why the full meaning -
 // including which name - is in each question's instructions.
 //

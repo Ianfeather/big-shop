@@ -85,6 +85,16 @@ const processors = [
     where: 'United States',
   },
   {
+    // Titles only - never ingredients, method or anything about the person -
+    // and no claim about retention or training, because TypeSafe's terms had
+    // not been checked when this shipped (specs/recipe-search-similar-recipes.md).
+    // The row must stay true without them.
+    name: 'TypeSafe',
+    purpose:
+      'Finding recipes related to a search. When you search, the names of your recipes and what you typed are sent to it.',
+    where: 'Not stated by TypeSafe',
+  },
+  {
     name: 'SendGrid (Twilio)',
     purpose:
       'Sending the emails below \u2014 your first-fortnight emails, and an invite when you share your account. Also holds unsubscribes permanently.',
@@ -252,7 +262,7 @@ export default function Privacy() {
           </section>
 
           <section className={styles.section}>
-            <h2 className={styles.heading}>Reading recipes, and Dave</h2>
+            <h2 className={styles.heading}>Reading recipes, searching them, and Dave</h2>
             <p>
               When you import a recipe from a link, a photo, or pasted text, the contents are sent to
               OpenAI to be turned into ingredients and a method.
@@ -267,6 +277,13 @@ export default function Privacy() {
             <p>
               OpenAI processes it on our behalf and, on the API terms Big Shop uses, does not train
               on it.
+            </p>
+            <p>
+              Searching your recipes works slightly differently. Once you have typed three or more
+              letters, the names of your recipes &mdash; only their names &mdash; and what you typed
+              are sent to TypeSafe, which says which recipes are related to your search. That is how
+              searching &ldquo;curry&rdquo; can find a Balti. Nothing else about your recipes, or about
+              you, is sent.
             </p>
           </section>
 

@@ -14,6 +14,12 @@
 // entries and invalidating one would never touch the other.
 export const queryKeys = {
   recipes: ['recipes'] as const,
+  // Nested under `recipes` on purpose: every mutation that invalidates the
+  // recipe list does so by prefix, so it invalidates these too, and a renamed
+  // or deleted Recipe can never be served from a stale judgment. The ids are
+  // sorted by the caller so the same set is the same key.
+  similarRecipes: (query: string, candidateIds: readonly number[]) =>
+    ['recipes', 'similar', query, candidateIds] as const,
   recipe: (id: string | number | undefined) =>
     ['recipe', id === undefined ? undefined : String(id)] as const,
   tags: ['tags'] as const,

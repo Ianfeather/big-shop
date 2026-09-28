@@ -1,5 +1,5 @@
 import { ComponentProps } from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -12,6 +12,27 @@ const recipes = [
 vi.mock('@hooks/use-recipes', () => ({ default: () => [recipes] }));
 vi.mock('@hooks/use-tags', () => ({ default: () => ['Vegetarian', 'Batch Cook'] }));
 vi.mock('next/router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
+// Stands in for the Jev round trip: `matches` is what the next render gets
+// back, and `calls` records what the list asked about - the candidate ids are
+// the half of the contract worth asserting on.
+const similar = vi.hoisted(() => ({
+  matches: [] as { id: number; probability: number }[],
+  calls: [] as [string, readonly number[]][]
+}));
+vi.mock('@hooks/use-similar-recipes', () => ({
+  default: (query: string, ids: readonly number[]) => {
+    similar.calls.push([query, ids]);
+    return similar.matches;
+  }
+}));
+
+beforeEach(() => {
+  similar.matches = [];
+  similar.calls = [];
+});
+
+const lastSimilarCall = () => similar.calls[similar.calls.length - 1];
 
 import RecipeList from './index';
 
@@ -103,5 +124,99 @@ describe('RecipeList', () => {
 
     expect(screen.getByText('Veggie Curry').closest('li')!.className).toMatch(/checked/);
     expect(screen.getByText("Shepherd's Pie").closest('li')!.className).not.toMatch(/checked/);
+  });
+
+  describe('Similar Recipes', () => {
+    it('shows nothing extra when there are none', async () => {
+      await renderList();
+
+      await userEvent.type(screen.getByPlaceholderText('Search...'), 'curry');
+
+      expect(screen.queryByText('Similar recipes')).not.toBeInTheDocument();
+      expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+    });
+
+    it('lists them beneath the Exact Matches, under a rule and a caption', async () => {
+      similar.matches = [{ id: 2, probability: 0.9 }];
+      await renderList();
+
+      await userEvent.type(screen.getByPlaceholderText('Search...'), 'curry');
+
+      const items = screen.getAllByRole('listitem');
+      expect(items.map(item => item.textContent)).toEqual([
+        expect.stringContaining('Veggie Curry'),
+        expect.stringContaining('Veggie Chilli')
+      ]);
+      const section = screen.getByRole('region', { name: 'Similar recipes' });
+      expect(section).toContainElement(screen.getByText('Veggie Chilli'));
+      expect(section).not.toContainElement(screen.getByText('Veggie Curry'));
+      expect(screen.getByRole('separator')).toBeInTheDocument();
+    });
+
+    it('asks only about Recipes that did not exact-match', async () => {
+      await renderList();
+
+      await userEvent.type(screen.getByPlaceholderText('Search...'), 'curry');
+
+      expect(lastSimilarCall()).toEqual(['curry', [1, 2]]);
+    });
+
+    it('lets the Tag filter narrow the candidates too', async () => {
+      await renderList();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Vegetarian' }));
+      await userEvent.type(screen.getByPlaceholderText('Search...'), 'curry');
+
+      // Shepherd's Pie is not Vegetarian, so it is not a candidate for a
+      // vegetarian curry either.
+      expect(lastSimilarCall()).toEqual(['curry', [2]]);
+    });
+
+    it('drops the rule, keeping the caption, when nothing exact-matched', async () => {
+      similar.matches = [{ id: 3, probability: 0.8 }];
+      await renderList();
+
+      await userEvent.type(screen.getByPlaceholderText('Search...'), 'stew');
+
+      expect(screen.getByRole('region', { name: 'Similar recipes' })).toContainElement(screen.getByText('Veggie Curry'));
+      expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+    });
+
+    it('keeps the order it was given, most probable first', async () => {
+      similar.matches = [{ id: 3, probability: 0.95 }, { id: 1, probability: 0.6 }];
+      await renderList();
+
+      await userEvent.type(screen.getByPlaceholderText('Search...'), 'stew');
+
+      const items = screen.getAllByRole('listitem');
+      expect(items[0]).toHaveTextContent('Veggie Curry');
+      expect(items[1]).toHaveTextContent("Shepherd's Pie");
+    });
+
+    it('pins a selection within its own tranche, never above the line', async () => {
+      similar.matches = [{ id: 2, probability: 0.9 }, { id: 1, probability: 0.7 }];
+      await renderList({ selectedIds: { '1': true } });
+
+      await userEvent.type(screen.getByPlaceholderText('Search...'), 'curry');
+
+      const items = screen.getAllByRole('listitem');
+      expect(items.map(item => item.textContent)).toEqual([
+        expect.stringContaining('Veggie Curry'),
+        expect.stringContaining("Shepherd's Pie"),
+        expect.stringContaining('Veggie Chilli')
+      ]);
+    });
+
+    it('shows nothing for a match that is no longer a candidate', async () => {
+      // An answer for "curry" naming Veggie Curry - which is an Exact Match,
+      // so it must not appear twice.
+      similar.matches = [{ id: 3, probability: 0.9 }];
+      await renderList();
+
+      await userEvent.type(screen.getByPlaceholderText('Search...'), 'curry');
+
+      expect(screen.getAllByText('Veggie Curry')).toHaveLength(1);
+      expect(screen.queryByText('Similar recipes')).not.toBeInTheDocument();
+    });
   });
 });

@@ -26,3 +26,20 @@
 .filterHeading {
   margin-bottom: 0;
 }
+
+/* Similar Recipes: a second tranche under the Exact Matches. Quieter than the
+   panel's own heading - it labels a continuation of the list, not a new one. */
+.similar {
+  margin-top: var(--space-3);
+}
+
+.divider {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 0 0 var(--space-3);
+}
+
+.similarHeading {
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-2);
+}

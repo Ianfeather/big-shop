@@ -86,14 +86,16 @@ answers exactly this — a non-empty result means this person is about to join
 someone else's Account, not keep whatever gets created here. Check it
 immediately before seeding, alongside the `created` check, not instead of it.
 
-**Open question this phase can't resolve on its own: synchronous, or
-best-effort background like the email?** Leaning synchronous — unlike the
-email this has no external dependency to fail against (no SendGrid call),
-it's two or three fast local transactions, and a `POST /user` that returns
-before the seed has landed reintroduces exactly the flash-of-empty-then-
-recipes-appear problem Stage 3 of the onboarding flow was designed to not
-need a flag for. Worth timing against a real database before deciding, not
-assumed.
+**Decided (2026-10-09): synchronous.** `POST /user` waits for the seed to
+land before responding, rather than firing it best-effort in the background
+like the welcome email. Unlike the email, seeding has no flaky external
+dependency to fail against (no SendGrid call) — it's two or three fast local
+transactions — and returning before the seed has landed would reintroduce
+exactly the flash-of-empty-then-recipes-appear problem Stage 3 of the
+onboarding flow was designed to not need a flag for. Still worth timing
+against a real database during implementation, to confirm the added latency
+is as small as expected — but that's a performance check now, not an open
+design question.
 
 **A fixed Go slice of "starter" slugs, not "everything `featured = 1`"** —
 mirroring the Day 8 email's own pattern of hand-picking specific slugs rather
@@ -226,8 +228,9 @@ than assumed.
    deliberately overlapping ingredient the way 9 and 17 were — not checked
    against anything newer than a 2026-07-08 dump that predates the Day 8
    curation pass on exactly these three.
-2. **Synchronous seeding vs. best-effort background**, per Phase 1 — a
-   timing question, answerable by testing against a real database rather
-   than by further discussion.
+2. ~~Synchronous seeding vs. best-effort background.~~ **Resolved
+   2026-10-09: synchronous** — see Phase 1's update. What's left is
+   implementation-time, not design-time: confirm the added latency is small
+   against a real database.
 3. **Where the "clear samples" action lives** — `/recipes`, `/account`, or
    both.

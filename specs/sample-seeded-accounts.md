@@ -159,14 +159,12 @@ the set this spec originally chose *against* — rather than the three above:
 production today — no flag-flip action pending, and
 `service.CopyFeaturedRecipe` can copy them as-is.
 
-**Ingredient overlap is still not confirmed.** The only production data to
-hand while making this change is `docker/prod-dumps/prod-sync-1-20260708-*.sql`,
-which predates both migration 042 and the ingredient/method curation
-`specs/completed/featured-recipes.md` Phase 6 did on these specific three for
-the Day 8 email — it says nothing about whether any two of the three share a
-deliberately overlapping ingredient the way 9 and 17 were. Needs a fresh
-check before Phase 1 ships, so the "2 tins" beat is confirmed to land rather
-than assumed.
+**Ingredient overlap confirmed (2026-10-09), by the account holder directly
+rather than by an ingredient-id check against a dump** — unlike 9/17's
+verification above, which cited specific ingredient ids. Good enough to
+build from; the specific overlapping ingredient(s) between the three aren't
+recorded here, so anyone revisiting this later should ask rather than assume
+which pair does the "2 tins" work.
 
 ### Phase 2 — clearly marked, deletable in one action
 
@@ -223,11 +221,9 @@ than assumed.
 
 1. ~~Which Recipes, and how many.~~ **Resolved 2026-09-20, superseded
    2026-10-09** — see Phase 1's update: now the Day 8 email's three
-   (43/112/300120), not 9/17/33. `featured = 1` confirmed for all three
-   (2026-10-09). **Still open**: whether at least two of the three share a
-   deliberately overlapping ingredient the way 9 and 17 were — not checked
-   against anything newer than a 2026-07-08 dump that predates the Day 8
-   curation pass on exactly these three.
+   (43/112/300120), not 9/17/33. `featured = 1` and ingredient overlap both
+   confirmed (2026-10-09, the latter by the account holder rather than an
+   ingredient-id check — see Phase 1). Nothing left open here.
 2. ~~Synchronous seeding vs. best-effort background.~~ **Resolved
    2026-10-09: synchronous** — see Phase 1's update. What's left is
    implementation-time, not design-time: confirm the added latency is small

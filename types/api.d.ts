@@ -752,6 +752,7 @@ export interface components {
             /** Format: int64 */
             id: number;
             name: string;
+            sample: boolean;
             tags: string[] | null;
         };
         ShoppingList: {

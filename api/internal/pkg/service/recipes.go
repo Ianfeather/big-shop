@@ -14,6 +14,16 @@ type Recipe struct {
 	Name string   `json:"name"`
 	ID   int      `json:"id"`
 	Tags []string `json:"tags"`
+	// Sample reports whether this Recipe arrived as a copy of curated content
+	// rather than something the Account itself added - set on any copy of a
+	// Featured Recipe, whether from sample-seeding or a Day 8 email click.
+	// `featured_from IS NOT NULL` is the existing provenance column from
+	// specs/completed/featured-recipes.md; this is a computed read of it, not
+	// a new signal. See specs/sample-seeded-accounts.md Phase 0 - callers that
+	// need to know whether an Account has actually added anything of its own
+	// (accountLinkOffer, the onboarding welcome) must count Recipes where this
+	// is false, not the raw Recipe count.
+	Sample bool `json:"sample"`
 }
 
 // GetAllRecipes returns all recipes in the recipe table.
@@ -39,7 +49,7 @@ func GetAllRecipes(ctx context.Context, db *sql.DB, caller *common.Caller) ([]Re
 	telemetry.SetAccountID(ctx, accountID)
 
 	recipesQuery := `
-		SELECT recipe.id, name, tag_name FROM recipe
+		SELECT recipe.id, name, tag_name, featured_from IS NOT NULL FROM recipe
 			LEFT JOIN recipe_tag on recipe.id = recipe_tag.recipe_id
 			WHERE account_id = ?
 			ORDER BY lower(recipe.name);
@@ -56,7 +66,7 @@ func GetAllRecipes(ctx context.Context, db *sql.DB, caller *common.Caller) ([]Re
 	for results.Next() {
 		r := Recipe{Tags: []string{}}
 		var tag sql.NullString
-		err = results.Scan(&r.ID, &r.Name, &tag)
+		err = results.Scan(&r.ID, &r.Name, &tag, &r.Sample)
 		if err != nil {
 			return nil, err
 		}

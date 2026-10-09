@@ -86,10 +86,61 @@ func (a *App) addUser(ctx context.Context, input *CreateUserInput) (*UserOutput,
 	}
 
 	if created {
+		a.seedStarterRecipes(ctx, caller, verified)
 		a.sendWelcomeEmail(ctx, *saved)
 	}
 
 	return &UserOutput{Body: *saved}, nil
+}
+
+// starterRecipeSlugs is the fixed slice of Featured Recipes copied into a
+// brand-new Account - the same three the Day 8 email already links to (ids
+// 43/112/300120). See specs/sample-seeded-accounts.md Phase 1: a slice rather
+// than "every featured=1 Recipe" because onboarding's curation needs (at
+// least one deliberately overlapping ingredient, so the Combine aha's "2
+// tins" beat actually lands) aren't the same question as Day 8's editorial
+// variety, even though the two currently share a set.
+var starterRecipeSlugs = []string{
+	"chicken-fricassee",
+	"thai-green-curry",
+	"creamy-sausage-pasta",
+}
+
+// seedStarterRecipes copies the starter set into a brand-new Account,
+// synchronously - see specs/sample-seeded-accounts.md Phase 1 for why
+// synchronous. Unlike the welcome email below, this has no flaky external
+// dependency to wait out, and a response that returns before the seed has
+// landed races the frontend's first fetch of /list straight into the empty
+// state this feature exists to remove.
+//
+// Must never fail the request - a seeding problem is not a reason to break
+// somebody's first-ever sign-in, the same principle sendWelcomeEmail is built
+// on just below. Logged and swallowed, not surfaced.
+func (a *App) seedStarterRecipes(ctx context.Context, caller *common.Caller, email string) {
+	invites, err := service.GetInvites(ctx, a.db, email)
+	if err != nil {
+		log.Printf("seeding starter recipes: checking for a pending invite: %v", err)
+		return
+	}
+	if !shouldSeed(invites) {
+		// About to accept an invite into someone else's Account - whatever
+		// Account LinkOrCreateIdentity just minted here is the solo one they
+		// are about to abandon, not the one they are joining. See
+		// specs/sample-seeded-accounts.md Phase 1.
+		return
+	}
+	for _, slug := range starterRecipeSlugs {
+		if _, _, err := service.CopyFeaturedRecipe(ctx, slug, caller, a.db); err != nil {
+			log.Printf("seeding starter recipe %q: %v", slug, err)
+		}
+	}
+}
+
+// shouldSeed is the decision split out from seedStarterRecipes so it can be
+// tested without a database - the same reason userUpsert is split out from
+// AddUser.
+func shouldSeed(pendingInvites []common.Invite) bool {
+	return len(pendingInvites) == 0
 }
 
 // welcomeTimeout bounds the background send. Nothing waits on it, so an

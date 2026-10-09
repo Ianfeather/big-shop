@@ -118,6 +118,29 @@ in `pages/index.tsx` is worth keeping. It isn't, as-is; replace it with
 something optional and re-openable rather than a one-time gate nobody
 revisits.
 
+**Update (2026-10-09): the vehicle grows a second form.** The static
+illustrated walkthrough stays exactly as reasoned above — it's still what the
+Day 3 / Day 14 emails use, for the same reason: `html/template` runs no
+client-side JS, so a fixed sequence of frames is the only shape that works
+there. But an in-app surface has no such constraint, and is getting its own
+**animated** version, built for `pages/index.tsx` specifically. That page
+already is the "optional, re-openable" surface this section asked for without
+anything new being built: it never redirects a logged-in visitor away
+(`#58`), so it's reachable by someone three weeks in exactly as easily as by
+someone who's never signed up. See Stage 0 and Stage 2 below for where this
+lands in the flow.
+
+**This is a second, separate asset from Stage 0's Archive/Combine demo, not
+the same one doing double duty (decided 2026-10-09).** Both end up living on
+the same page, and both exist to let the marketing page show rather than
+promise, but they're answering different questions — "does this actually
+work on my recipes" versus "what does this become after I've used it a
+while" — and merging them into one reel was considered and rejected: the
+first is a live-feature demo the whole rest of this document argues should
+front-load real payoff, and the second is explicitly a non-real, labelled
+example. Collapsing them would blur that distinction on the one screen where
+it matters most.
+
 **Placement:** the Day 3 tips email (`specs/completed/email.md`) already
 promises "the list combining itself" and "sharing an Account" in prose — no
 new send needed, just an illustration for what's already there. Repertoire
@@ -245,6 +268,13 @@ That's a real loss for the persona-inference story above — there's no
 successful-import signal to promote into a seed — but a smaller one than
 shipping an unauthenticated LLM endpoint to get it.
 
+**Update (2026-10-09): the marketing page gets a second animation, kept
+separate from this one.** The Repertoire section below adds an in-app,
+animated version of its "sell the promise" walkthrough, also placed on
+`pages/index.tsx`. It is deliberately not folded into the demo above — two
+assets, each making one claim, rather than one reel making two. See the
+Repertoire section for why.
+
 ### Stage 1 — first landing on /list, and the collision this document flagged
 
 `useAccountSetup` upserts the User and Account on this first authenticated
@@ -335,11 +365,15 @@ live" for Archive ahead of Combine's "Session 1–2, live":
 
 Repertoire gets no CTA — there's no history yet to show — but the welcome
 carries one line naming what's coming ("recipes you haven't made in a while
-start showing up here too"), linking to the same illustrated walkthrough the
-Day 3 / Day 14 emails use once that asset exists. One asset, referenced from
-two places, keeps this optional and re-openable rather than a gate, per
-"skippable, not gating" above, without a second onboarding surface to
-maintain.
+start showing up here too"), linking onward to where that's shown.
+
+**Update (2026-10-09):** that link points at the marketing homepage's new
+animated Repertoire sequence (see the Repertoire section and Stage 0 above),
+not the static-frame asset the emails use. It costs nothing new to reach —
+the page is already un-gated and already reachable from a signed-in session —
+so this still keeps the walkthrough optional and re-openable without a second
+onboarding surface to build. The static asset is unaffected and still exists
+for Day 3 / Day 14, which can't link to or embed an in-app page.
 
 ### Stage 3 — the welcome retires itself
 
@@ -409,6 +443,16 @@ here.
 - The mechanics of hosting a static illustration asset for the email context
   (where it needs to live, how it's referenced from `html/template`), and
   building the walkthrough itself.
+- **As of 2026-10-09, two assets rather than one, neither built**: the
+  static-frame Repertoire walkthrough above, for the emails, and a separate
+  animated version for `pages/index.tsx`, decided independently from Stage
+  0's Archive/Combine demo. Both are marketing-page video/animation work with
+  no engineering plan written yet beyond "build it."
+- **The sample-seeded starter set changed again (2026-10-09)** — now the Day
+  8 email's three Recipes (43/112/300120), not 9/17/33 — and the new set's
+  `featured` status and ingredient overlap aren't confirmed against current
+  production. See `specs/sample-seeded-accounts.md`'s Phase 1 update and
+  Open Question 1.
 - Photo Import's real-world reliability on handwritten/low-quality sources,
   ahead of leaning on it as a headline moment in Stage 2.
 - Whether Share earns a mention inside the welcome now that `#46` has shipped,

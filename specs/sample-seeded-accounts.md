@@ -63,6 +63,29 @@ handler already knows exactly when a row was newly created (`AddUser`'s
 `service.CopyFeaturedRecipe(ctx, slug, caller, db)` once per starter slug —
 no new copy logic.
 
+**`created` is the wrong signal on its own — it only means "the `user` row is
+new," not "a new Account was minted."** Traced against the actual code
+(2026-10-09): `AddUser`'s `created` is `affected == 1` on the `user` table
+upsert alone (`service/user.go`), and `addUser`'s handler never looks at
+whether the `CreateAccount` call right after it actually minted anything —
+there is no such signal to look at today. For an ordinary new signup the two
+coincide, but not for someone accepting an invite: `acceptInvite`
+(`app/invites.go`) requires `service.GetUser` to already succeed, which means
+by the time anyone can accept an invite they've already called `POST /user`
+at least once, and `created` was already `true` on that first call — the
+*same* call this seed hangs off. In practice this doesn't pollute the shared
+Account they're joining — `CreateAccount` mints them a solo Account on that
+first login, seeding would land there, and `acceptInvite` disables that
+membership moments later when they accept — but it's not nothing either: a
+disabled, unreachable Account quietly holding three Recipe rows nobody will
+ever see.
+
+**The guard: skip seeding when a pending invite already exists for this
+email.** `service.GetInvites(ctx, db, email)` already exists and already
+answers exactly this — a non-empty result means this person is about to join
+someone else's Account, not keep whatever gets created here. Check it
+immediately before seeding, alongside the `created` check, not instead of it.
+
 **Open question this phase can't resolve on its own: synchronous, or
 best-effort background like the email?** Leaning synchronous — unlike the
 email this has no external dependency to fail against (no SendGrid call),
@@ -120,6 +143,29 @@ second look when it's hard-coded into the Go starter-slug slice and into
 whatever hits `POST /recipe/featured/{slug}`, since that character needs
 URL-encoding on the wire even though the stored slug carries it as-is.
 
+**Update (2026-10-09): superseded.** Changed to the three real Featured
+Recipes already live in production and already linked from the Day 8 email —
+the set this spec originally chose *against* — rather than the three above:
+
+| Recipe | Slug | Recipe id |
+|---|---|---|
+| Chicken Fricassee | `chicken-fricassee` | 43 |
+| Thai Green Curry | `thai-green-curry` | 112 |
+| Creamy Sausage Pasta | `creamy-sausage-pasta` | 300120 |
+
+Reusing the Day 8 set means these should already carry `featured = 1` —
+likely no flag-flip action pending, unlike the set above. **Not yet confirmed
+rather than assumed**: the only production data to hand while making this
+change is `docker/prod-dumps/prod-sync-1-20260708-*.sql`, which predates
+migration 042 entirely — no `featured` column existed on 2026-07-08 — and
+predates the ingredient/method curation `specs/completed/featured-recipes.md`
+Phase 6 did on these specific three for the Day 8 email. It confirms identity
+only (the id/name/slug triples above are correct); it says nothing about
+current `featured` status or whether any two of the three share a
+deliberately overlapping ingredient the way 9 and 17 were confirmed to.
+**Both need checking against current production before Phase 1 ships** —
+logged as the first open question below rather than assumed either way.
+
 ### Phase 2 — clearly marked, deletable in one action
 
 - **Marked**: a "Sample" badge wherever a Recipe is listed, driven by the same
@@ -173,9 +219,13 @@ URL-encoding on the wire even though the stored slug carries it as-is.
 
 ## Open questions
 
-1. ~~Which Recipes, and how many.~~ **Resolved 2026-09-20** — see Phase 1.
-   Flipping `featured` on the three in production is still an outstanding
-   action, not a decision.
+1. ~~Which Recipes, and how many.~~ **Resolved 2026-09-20, superseded
+   2026-10-09** — see Phase 1's update: now the Day 8 email's three
+   (43/112/300120), not 9/17/33. **Newly open**: confirm 43/112/300120 are
+   `featured = 1` in current production, and that at least two of the three
+   share a deliberately overlapping ingredient — neither checked against
+   anything newer than a 2026-07-08 dump that predates both the `featured`
+   column and the Day 8 curation pass on exactly these three.
 2. **Synchronous seeding vs. best-effort background**, per Phase 1 — a
    timing question, answerable by testing against a real database rather
    than by further discussion.

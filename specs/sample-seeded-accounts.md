@@ -153,18 +153,18 @@ the set this spec originally chose *against* — rather than the three above:
 | Thai Green Curry | `thai-green-curry` | 112 |
 | Creamy Sausage Pasta | `creamy-sausage-pasta` | 300120 |
 
-Reusing the Day 8 set means these should already carry `featured = 1` —
-likely no flag-flip action pending, unlike the set above. **Not yet confirmed
-rather than assumed**: the only production data to hand while making this
-change is `docker/prod-dumps/prod-sync-1-20260708-*.sql`, which predates
-migration 042 entirely — no `featured` column existed on 2026-07-08 — and
-predates the ingredient/method curation `specs/completed/featured-recipes.md`
-Phase 6 did on these specific three for the Day 8 email. It confirms identity
-only (the id/name/slug triples above are correct); it says nothing about
-current `featured` status or whether any two of the three share a
-deliberately overlapping ingredient the way 9 and 17 were confirmed to.
-**Both need checking against current production before Phase 1 ships** —
-logged as the first open question below rather than assumed either way.
+**`featured = 1` confirmed (2026-10-09).** All three carry the flag in
+production today — no flag-flip action pending, and
+`service.CopyFeaturedRecipe` can copy them as-is.
+
+**Ingredient overlap is still not confirmed.** The only production data to
+hand while making this change is `docker/prod-dumps/prod-sync-1-20260708-*.sql`,
+which predates both migration 042 and the ingredient/method curation
+`specs/completed/featured-recipes.md` Phase 6 did on these specific three for
+the Day 8 email — it says nothing about whether any two of the three share a
+deliberately overlapping ingredient the way 9 and 17 were. Needs a fresh
+check before Phase 1 ships, so the "2 tins" beat is confirmed to land rather
+than assumed.
 
 ### Phase 2 — clearly marked, deletable in one action
 
@@ -221,11 +221,11 @@ logged as the first open question below rather than assumed either way.
 
 1. ~~Which Recipes, and how many.~~ **Resolved 2026-09-20, superseded
    2026-10-09** — see Phase 1's update: now the Day 8 email's three
-   (43/112/300120), not 9/17/33. **Newly open**: confirm 43/112/300120 are
-   `featured = 1` in current production, and that at least two of the three
-   share a deliberately overlapping ingredient — neither checked against
-   anything newer than a 2026-07-08 dump that predates both the `featured`
-   column and the Day 8 curation pass on exactly these three.
+   (43/112/300120), not 9/17/33. `featured = 1` confirmed for all three
+   (2026-10-09). **Still open**: whether at least two of the three share a
+   deliberately overlapping ingredient the way 9 and 17 were — not checked
+   against anything newer than a 2026-07-08 dump that predates the Day 8
+   curation pass on exactly these three.
 2. **Synchronous seeding vs. best-effort background**, per Phase 1 — a
    timing question, answerable by testing against a real database rather
    than by further discussion.

@@ -128,7 +128,9 @@ already is the "optional, re-openable" surface this section asked for without
 anything new being built: it never redirects a logged-in visitor away
 (`#58`), so it's reachable by someone three weeks in exactly as easily as by
 someone who's never signed up. See Stage 0 and Stage 2 below for where this
-lands in the flow.
+lands in the flow. **Its actual design and production are deferred**
+(2026-10-09) — this pass builds the slot it lives in and ships a labelled
+placeholder there, not the finished animation; see "Not yet done."
 
 **This is a second, separate asset from Stage 0's Archive/Combine demo, not
 the same one doing double duty (decided 2026-10-09).** Both end up living on
@@ -273,7 +275,9 @@ separate from this one.** The Repertoire section below adds an in-app,
 animated version of its "sell the promise" walkthrough, also placed on
 `pages/index.tsx`. It is deliberately not folded into the demo above — two
 assets, each making one claim, rather than one reel making two. See the
-Repertoire section for why.
+Repertoire section for why. **Design of both is deferred** (2026-10-09): this
+pass builds the slot each lives in and ships a placeholder in it, not the
+finished asset — see "Not yet done."
 
 ### Stage 1 — first landing on /list, and the collision this document flagged
 
@@ -443,16 +447,20 @@ here.
 - The mechanics of hosting a static illustration asset for the email context
   (where it needs to live, how it's referenced from `html/template`), and
   building the walkthrough itself.
-- **As of 2026-10-09, two assets rather than one, neither built**: the
-  static-frame Repertoire walkthrough above, for the emails, and a separate
-  animated version for `pages/index.tsx`, decided independently from Stage
-  0's Archive/Combine demo. Both are marketing-page video/animation work with
-  no engineering plan written yet beyond "build it."
+- **As of 2026-10-09, three placeholder slots rather than zero, none
+  designed yet, and deliberately deferred.** Repertoire's walkthrough now has
+  two forms — the static-frame version for the emails, and a separate
+  animated in-app version for `pages/index.tsx` — plus Stage 0's own
+  Archive/Combine demo, kept independently separate from Repertoire's. All
+  three ship as labelled placeholders for this pass rather than finished
+  animations. The slots and the links to them are real; the design and
+  production of what fills them is picked up separately, once there's design
+  capacity for it.
 - **The sample-seeded starter set changed again (2026-10-09)** — now the Day
-  8 email's three Recipes (43/112/300120), not 9/17/33 — and the new set's
-  `featured` status and ingredient overlap aren't confirmed against current
-  production. See `specs/sample-seeded-accounts.md`'s Phase 1 update and
-  Open Question 1.
+  8 email's three Recipes (43/112/300120), not 9/17/33. `featured = 1` is
+  confirmed for all three; whether two of them share a deliberately
+  overlapping ingredient isn't. See `specs/sample-seeded-accounts.md`'s
+  Phase 1 update and Open Question 1.
 - Photo Import's real-world reliability on handwritten/low-quality sources,
   ahead of leaning on it as a headline moment in Stage 2.
 - Whether Share earns a mention inside the welcome now that `#46` has shipped,

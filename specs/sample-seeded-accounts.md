@@ -15,7 +15,10 @@ On a brand-new Account's first `POST /user`, copy a small, curated set of
 Featured Recipes into it automatically — the same operation the Day 8 email's
 link already performs, run for the user rather than waited on. The first
 thing a new signup's Recipe list holds is never nothing; it's two or three
-real, well-formed Recipes, clearly marked as samples, deletable in one action.
+real, well-formed Recipes. **Update (2026-10-09):** they carry no visible
+"sample" marking and no dedicated delete action — see Phase 2 — a deliberate
+cut from #42's original "clearly marked as samples, deletable in one action"
+framing.
 
 ## Why Phase 0 isn't about seeding at all
 
@@ -166,28 +169,26 @@ build from; the specific overlapping ingredient(s) between the three aren't
 recorded here, so anyone revisiting this later should ask rather than assume
 which pair does the "2 tins" work.
 
-### Phase 2 — clearly marked, deletable in one action
+### Phase 2 — no special handling, by design
 
-- **Marked**: a "Sample" badge wherever a Recipe is listed, driven by the same
-  `Sample` field Phase 0 exposes. No new signal.
-- **Deletable in one action, and this is cheaper than it looks**:
-  `deleteRecipeData` (`service/recipe.go`, the cascade `DeleteRecipe` calls)
-  already takes an optional `recipeIDs []int` and deletes every Recipe (and
-  its parts, tags, list items and shopping-list events) matching that set
-  scoped to the caller's Account — it's the same helper account deletion uses
-  with `recipeIDs == nil` for "all of them." A "clear sample recipes" action
-  is: look up the caller's Recipe ids where `Sample` is true, and call that
-  same cascade with them. No new deletion logic, only a new list-and-call
-  wrapper and a route to reach it.
+**Decided (2026-10-09): cut.** Starter Recipes get no "Sample" badge and no
+dedicated bulk-delete action. Someone who doesn't want one deletes it the
+same way they'd delete any Recipe — the existing per-Recipe edit form's
+delete, already built, nothing new to place in the UI or test. This departs
+deliberately from #42's original "clearly marked as samples, deletable in
+one action" — the simpler default, revisited only if real usage shows people
+actually need a labelled bulk way to clear them rather than deleting the two
+or three one at a time.
 
-  One consequence worth deciding rather than tripping over: this also deletes
-  a Recipe added via a Day 8 email click, which is featured-copy content by
-  the same test. That reads as consistent ("remove Big Shop's sample
-  content") rather than as a bug, but is worth confirming rather than
-  assuming.
+**This doesn't touch Phase 0.** The `Sample` field Phase 0 computes has
+nothing to do with a badge or a delete button — it's the internal signal
+`accountLinkOffer` and Stage 2's welcome need to tell "Recipes the Account
+actually added" from "Recipes on the Account," and that need is unchanged.
+Cutting the visible marking removes its only *other* consumer, not its
+reason to exist.
 
-  Where the action lives — `/recipes`, `/account`, or both — is open; see
-  below.
+This also retires the previous Open Question 3 (where a "clear samples"
+action would live) as moot — there's no such action to place.
 
 ## Explicitly out of scope
 
@@ -206,16 +207,17 @@ which pair does the "2 tins" work.
 
 - **Go**: Phase 0's `Sample` field on `GetAllRecipes`; Phase 1's seed running
   exactly once per new Account (mirroring `AddUser`'s own once-per-signup
-  guard for the welcome email) and being idempotent on a repeat call the way
-  `CopyFeaturedRecipe` already is; Phase 2's bulk delete removing every sample
-  and nothing else, in one transaction.
+  guard for the welcome email), being idempotent on a repeat call the way
+  `CopyFeaturedRecipe` already is, and skipping when `GetInvites` finds a
+  pending invite for the email.
 - **Vitest**: `accountLinkOffer` still firing for an Account holding only
-  samples (the case Phase 0 exists for); the Sample badge rendering only on
-  `Sample: true` Recipes.
+  samples (the case Phase 0 exists for), and no longer firing once a real
+  Recipe is added.
 - **Playwright**: a fresh signup lands on `/list` with the starter Recipes
-  already selectable, and "clear sample recipes" returns the Account to a
-  genuinely empty state — the two ends of the feature, exercised against a
-  real seeded database rather than mocked.
+  already selectable and already combining on a generated list — exercised
+  against a real seeded database rather than mocked. No separate coverage
+  needed for deleting one; it's the existing per-Recipe delete path, already
+  tested.
 
 ## Open questions
 
@@ -228,5 +230,5 @@ which pair does the "2 tins" work.
    2026-10-09: synchronous** — see Phase 1's update. What's left is
    implementation-time, not design-time: confirm the added latency is small
    against a real database.
-3. **Where the "clear samples" action lives** — `/recipes`, `/account`, or
-   both.
+3. ~~Where the "clear samples" action lives.~~ **Moot as of 2026-10-09** —
+   there is no dedicated action; see Phase 2. Nothing left open in this spec.

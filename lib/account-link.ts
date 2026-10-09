@@ -153,6 +153,21 @@ export function forgetPendingLink(): void {
 // recipe list and a user is not where you want to be asserting it.
 export type AccountLinkOffer = 'none' | 'start' | 'finish';
 
+// Recipes the Account actually added, not every Recipe it holds - a sample
+// seeded in automatically (specs/completed/sample-seeded-accounts.md), or
+// copied from a Day 8 email link, must not read as "this library has
+// something in it" for accountLinkOffer below, or for the onboarding welcome
+// that will key off the same count. `sample` is `recipe.featured_from IS NOT
+// NULL`: set on exactly those two cases, null on anything the Account
+// actually wrote or imported itself.
+//
+// Pulled out of pages/list.tsx for the same reason the rest of this
+// derivation lives here rather than there: it's the thing that regresses
+// silently, and the page is not where you want to be asserting it.
+export function ownRecipeCount(recipes: { sample?: boolean }[]): number {
+  return recipes.filter(({ sample }) => !sample).length;
+}
+
 export function accountLinkOffer(
   { recipesResolved, recipeCount, hasPendingLink }:
   { recipesResolved: boolean; recipeCount: number; hasPendingLink: boolean }

@@ -19,7 +19,7 @@ type Recipe struct {
 	// Featured Recipe, whether from sample-seeding or a Day 8 email click.
 	// `featured_from IS NOT NULL` is the existing provenance column from
 	// specs/completed/featured-recipes.md; this is a computed read of it, not
-	// a new signal. See specs/sample-seeded-accounts.md Phase 0 - callers that
+	// a new signal. See specs/completed/sample-seeded-accounts.md Phase 0 - callers that
 	// need to know whether an Account has actually added anything of its own
 	// (accountLinkOffer, the onboarding welcome) must count Recipes where this
 	// is false, not the raw Recipe count.

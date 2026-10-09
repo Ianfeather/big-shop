@@ -6,7 +6,7 @@ import (
 	"recipes/internal/pkg/common"
 )
 
-// The guard specs/sample-seeded-accounts.md's Phase 1 added: seeding must not
+// The guard specs/completed/sample-seeded-accounts.md's Phase 1 added: seeding must not
 // fire for someone whose first POST /user is actually the first step of
 // accepting an invite, since LinkOrCreateIdentity's "genuinely new person"
 // branch mints them a solo Account they are about to abandon the moment

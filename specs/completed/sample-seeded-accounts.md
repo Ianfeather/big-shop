@@ -1,0 +1,234 @@
+# Sample-seeded Accounts: never show an empty collection
+
+Implements the [bigshop board](https://app.notion.com/p/87fae8a2ed054f2c874201e827639bd8)'s
+**[#42 — Onboarding: the empty account, not the pitch, is what loses people](https://app.notion.com/p/3bfc724ecda181d9a6a2f4a6100d9ce2)**'s
+second concrete piece — see `specs/onboarding.md` for the framework this sits
+inside (Stage 2 of "The step-by-step flow"). [Featured Recipes](./featured-recipes.md)
+already answered part of #42's seeding question and said so explicitly: it
+"must not be given a second answer by it." This spec doesn't — it reuses
+`recipe.featured` and `service.CopyFeaturedRecipe` rather than inventing a
+second flag or a second copy path.
+
+## What this is
+
+On a brand-new Account's first `POST /user`, copy a small, curated set of
+Featured Recipes into it automatically — the same operation the Day 8 email's
+link already performs, run for the user rather than waited on. The first
+thing a new signup's Recipe list holds is never nothing; it's two or three
+real, well-formed Recipes. **Update (2026-10-09):** they carry no visible
+"sample" marking and no dedicated delete action — see Phase 2 — a deliberate
+cut from #42's original "clearly marked as samples, deletable in one action"
+framing.
+
+## Why Phase 0 isn't about seeding at all
+
+**Shipping the seed without first fixing what "empty" means elsewhere in the
+app breaks a feature that already shipped.** `accountLinkOffer`
+(`lib/account-link.ts`) offers account-linking recovery whenever
+`recipesResolved && recipeCount === 0` — see `specs/onboarding.md`'s Stage 1
+for the full reasoning, but the short version: the moment a new Account is
+created with sample Recipes already in it, `recipeCount` is never 0 on day
+one, for anyone — a genuine mismatched-identity return included. The
+condition built to say "this library is suspiciously empty" becomes
+permanently false the instant this feature ships, for every Account, seeded
+or not.
+
+So **Phase 0 has to land first, or in the same change**: change what "empty"
+means from "zero Recipes" to "zero Recipes the Account actually added."
+`recipe.featured_from` already carries this distinction — set on any copy of
+curated content, seeded or Day-8-clicked, and null on everything a user
+actually wrote or imported themselves.
+
+### Phase 0 — expose "own recipe count"
+
+- `service.Recipe` (`api/internal/pkg/service/recipes.go`) gains a field —
+  `Sample bool`, read as `featured_from IS NOT NULL` in `GetAllRecipes`'s
+  existing query. A computed expression, not a new column; no migration.
+- The frontend `Recipe` type and `useRecipes()` carry it through.
+- `pages/list.tsx` computes the count it passes to `accountLinkOffer` (and
+  the count Stage 2's welcome will key off) from Recipes where `!sample`,
+  not from the raw list length.
+- Done when a test proves the offer still fires for an Account holding only
+  sample Recipes, and stops firing the instant a real one is added — the
+  exact case that's silent today because nothing exercises it yet.
+
+This is useful independent of whether seeding ships at all: [the board item
+filed against the current headline-copy collision](https://app.notion.com/p/3e1c724ecda1815e8694e00ff1ba1eff)
+needs it too, since "how many Recipes does this Account really have" is the
+same question either way.
+
+### Phase 1 — the seed itself
+
+Hook alongside the welcome email, not inside `AddUser` itself: `app/user.go`'s
+handler already knows exactly when a row was newly created (`AddUser`'s
+`created` return) and already does one best-effort thing in that branch
+(`a.sendWelcomeEmail`). Seeding is a second, using the existing
+`service.CopyFeaturedRecipe(ctx, slug, caller, db)` once per starter slug —
+no new copy logic.
+
+**`created` is the wrong signal on its own — it only means "the `user` row is
+new," not "a new Account was minted."** Traced against the actual code
+(2026-10-09): `AddUser`'s `created` is `affected == 1` on the `user` table
+upsert alone (`service/user.go`), and `addUser`'s handler never looks at
+whether the `CreateAccount` call right after it actually minted anything —
+there is no such signal to look at today. For an ordinary new signup the two
+coincide, but not for someone accepting an invite: `acceptInvite`
+(`app/invites.go`) requires `service.GetUser` to already succeed, which means
+by the time anyone can accept an invite they've already called `POST /user`
+at least once, and `created` was already `true` on that first call — the
+*same* call this seed hangs off. In practice this doesn't pollute the shared
+Account they're joining — `CreateAccount` mints them a solo Account on that
+first login, seeding would land there, and `acceptInvite` disables that
+membership moments later when they accept — but it's not nothing either: a
+disabled, unreachable Account quietly holding three Recipe rows nobody will
+ever see.
+
+**The guard: skip seeding when a pending invite already exists for this
+email.** `service.GetInvites(ctx, db, email)` already exists and already
+answers exactly this — a non-empty result means this person is about to join
+someone else's Account, not keep whatever gets created here. Check it
+immediately before seeding, alongside the `created` check, not instead of it.
+
+**Decided (2026-10-09): synchronous.** `POST /user` waits for the seed to
+land before responding, rather than firing it best-effort in the background
+like the welcome email. Unlike the email, seeding has no flaky external
+dependency to fail against (no SendGrid call) — it's two or three fast local
+transactions — and returning before the seed has landed would reintroduce
+exactly the flash-of-empty-then-recipes-appear problem Stage 3 of the
+onboarding flow was designed to not need a flag for. Still worth timing
+against a real database during implementation, to confirm the added latency
+is as small as expected — but that's a performance check now, not an open
+design question.
+
+**A fixed Go slice of "starter" slugs, not "everything `featured = 1`"** —
+mirroring the Day 8 email's own pattern of hand-picking specific slugs rather
+than deriving from the flag (`specs/completed/featured-recipes.md` Phase 6:
+"the flag says eligible, the template says these three"). Onboarding's
+curation needs differ from Day 8's — at least one deliberately overlapping
+ingredient across the starter set, so the Combine aha's "2 tins" beat
+actually lands (`specs/onboarding.md`'s Motivations section), which an
+editorially-varied Day 8 pick has no reason to guarantee. A slice, not a new
+schema field: swapping the starter set later is a one-line change, no
+migration.
+
+**The starter set is decided (2026-09-20): three of the account holder's own
+existing Recipes**, not the Day 8 set — chosen and verified against a
+production dump (`docker/prod-dumps/prod-sync-1-20260920-183728.sql`) rather
+than assumed:
+
+| Recipe | Slug | Recipe id |
+|---|---|---|
+| Pasta with Beans and Kale | `pasta-with-beans-and-kale` | 9 |
+| Pea and Pancetta Pasta | `pea-&-pancetta-pasta` | 17 |
+| Apple Crumble | `apple-crumble` | 33 |
+
+**Overlap confirmed by ingredient id, not just by name**: recipe 9 and
+recipe 17 both use ingredient 4 (onion), 48 (pancetta) and 571179 (garlic),
+each at the same unit (no conversion needed for them to combine on a
+generated list — the "2 tins" beat doesn't strictly need a curated Unit Size
+here, just the same `unit_id` on both sides, which these already have).
+Onion is the one of the three already marked `curated = 1`, so it's the
+overlap to lean on if only one needs to be bulletproof. Their "pasta" lines
+do **not** overlap — `curly pasta` (id 50) on 9 and `fresh pasta` (id 159) on
+17 are different Ingredient rows, so they'll render as two separate lines
+rather than combining. Not a blocker, given onion/pancetta/garlic already
+deliver the beat, but worth knowing rather than discovering on the first demo
+list. Apple Crumble shares nothing with either, which is the point — it's the
+variety, not a second overlap.
+
+**Not yet flagged.** All three are `featured = 0` in the dump above — this
+list can't be copied by `service.CopyFeaturedRecipe` until an admin flips
+`featured` on each, via the existing checkbox in the recipe edit form
+(`specs/completed/featured-recipes.md` Phase 2). That's a production write
+this spec doesn't make on its own initiative; it's the concrete next action,
+separate from writing the Go slice of slugs.
+
+**One slug has a literal `&` in it** (`pea-&-pancetta-pasta`) — worth a
+second look when it's hard-coded into the Go starter-slug slice and into
+whatever hits `POST /recipe/featured/{slug}`, since that character needs
+URL-encoding on the wire even though the stored slug carries it as-is.
+
+**Update (2026-10-09): superseded.** Changed to the three real Featured
+Recipes already live in production and already linked from the Day 8 email —
+the set this spec originally chose *against* — rather than the three above:
+
+| Recipe | Slug | Recipe id |
+|---|---|---|
+| Chicken Fricassee | `chicken-fricassee` | 43 |
+| Thai Green Curry | `thai-green-curry` | 112 |
+| Creamy Sausage Pasta | `creamy-sausage-pasta` | 300120 |
+
+**`featured = 1` confirmed (2026-10-09).** All three carry the flag in
+production today — no flag-flip action pending, and
+`service.CopyFeaturedRecipe` can copy them as-is.
+
+**Ingredient overlap confirmed (2026-10-09), by the account holder directly
+rather than by an ingredient-id check against a dump** — unlike 9/17's
+verification above, which cited specific ingredient ids. Good enough to
+build from; the specific overlapping ingredient(s) between the three aren't
+recorded here, so anyone revisiting this later should ask rather than assume
+which pair does the "2 tins" work.
+
+### Phase 2 — no special handling, by design
+
+**Decided (2026-10-09): cut.** Starter Recipes get no "Sample" badge and no
+dedicated bulk-delete action. Someone who doesn't want one deletes it the
+same way they'd delete any Recipe — the existing per-Recipe edit form's
+delete, already built, nothing new to place in the UI or test. This departs
+deliberately from #42's original "clearly marked as samples, deletable in
+one action" — the simpler default, revisited only if real usage shows people
+actually need a labelled bulk way to clear them rather than deleting the two
+or three one at a time.
+
+**This doesn't touch Phase 0.** The `Sample` field Phase 0 computes has
+nothing to do with a badge or a delete button — it's the internal signal
+`accountLinkOffer` and Stage 2's welcome need to tell "Recipes the Account
+actually added" from "Recipes on the Account," and that need is unchanged.
+Cutting the visible marking removes its only *other* consumer, not its
+reason to exist.
+
+This also retires the previous Open Question 3 (where a "clear samples"
+action would live) as moot — there's no such action to place.
+
+## Explicitly out of scope
+
+- **The try-before-signup importer.** Deferred per `specs/onboarding.md`'s
+  Stage 0 (2026-09-20 update) in favour of a recorded demo; filed separately
+  as [`future feature`](https://app.notion.com/p/3e1c724ecda18138bd34d5b4ff71df2f).
+  Nothing here needs it.
+- **Curating new Ingredients for the starter set.** #42's own caution:
+  "whatever is chosen should use Ingredients that are already well-curated
+  rather than introducing new ones" is a constraint on which slugs get chosen
+  in Phase 1, not new work here.
+- **An admin UI for picking the starter set.** A Go slice is enough for one
+  admin and a handful of slugs; revisit if that stops being true.
+
+## Testing
+
+- **Go**: Phase 0's `Sample` field on `GetAllRecipes`; Phase 1's seed running
+  exactly once per new Account (mirroring `AddUser`'s own once-per-signup
+  guard for the welcome email), being idempotent on a repeat call the way
+  `CopyFeaturedRecipe` already is, and skipping when `GetInvites` finds a
+  pending invite for the email.
+- **Vitest**: `accountLinkOffer` still firing for an Account holding only
+  samples (the case Phase 0 exists for), and no longer firing once a real
+  Recipe is added.
+- **Playwright**: a fresh signup lands on `/list` with the starter Recipes
+  already selectable and already combining on a generated list — exercised
+  against a real seeded database rather than mocked. No separate coverage
+  needed for deleting one; it's the existing per-Recipe delete path, already
+  tested.
+
+## Open questions
+
+1. ~~Which Recipes, and how many.~~ **Resolved 2026-09-20, superseded
+   2026-10-09** — see Phase 1's update: now the Day 8 email's three
+   (43/112/300120), not 9/17/33. `featured = 1` and ingredient overlap both
+   confirmed (2026-10-09, the latter by the account holder rather than an
+   ingredient-id check — see Phase 1). Nothing left open here.
+2. ~~Synchronous seeding vs. best-effort background.~~ **Resolved
+   2026-10-09: synchronous** — see Phase 1's update. What's left is
+   implementation-time, not design-time: confirm the added latency is small
+   against a real database.
+3. ~~Where the "clear samples" action lives.~~ **Moot as of 2026-10-09** —
+   there is no dedicated action; see Phase 2. Nothing left open in this spec.

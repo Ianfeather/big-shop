@@ -9,7 +9,7 @@ import useAuth0 from '@hooks/use-auth';
 import useRecipes from '@hooks/use-recipes';
 import AccountLinkButton from '@components/account-link';
 import Button from '@components/button';
-import { accountLinkOffer, readPendingLink } from '../lib/account-link';
+import { accountLinkOffer, ownRecipeCount, readPendingLink } from '../lib/account-link';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api-client';
 import type { ListIngredient } from '../types/models';
 import { shoppingListGenerated } from '../lib/analytics/events';
@@ -241,16 +241,9 @@ const List = () => {
   useEffect(() => {
     setHasPendingLink(readPendingLink() !== null); // eslint-disable-line react-hooks/set-state-in-effect
   }, []);
-  // Recipes the Account actually added, not every Recipe it holds - a sample
-  // seeded in automatically (specs/sample-seeded-accounts.md) must not read as
-  // "this library has something in it" for this offer. `sample` is
-  // `recipe.featured_from IS NOT NULL`: set on a seeded Recipe and on a Day 8
-  // email copy, null on anything the Account actually wrote or imported
-  // itself.
-  const ownRecipeCount = accountRecipes.filter(({ sample }) => !sample).length;
   const linkOffer = accountLinkOffer({
     recipesResolved,
-    recipeCount: ownRecipeCount,
+    recipeCount: ownRecipeCount(accountRecipes),
     hasPendingLink
   });
 

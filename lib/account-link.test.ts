@@ -5,6 +5,7 @@ import {
   readPendingLink,
   forgetPendingLink,
   providerLabel,
+  ownRecipeCount,
   accountLinkOffer,
   linkRefusalMessage
 } from './account-link';
@@ -120,6 +121,28 @@ describe('providerLabel', () => {
 
   it('falls back to something true when there is not', () => {
     expect(providerLabel('')).toBe('the way you just signed in');
+  });
+});
+
+// specs/completed/sample-seeded-accounts.md's whole reason to exist: a
+// seeded or Day-8-copied Recipe must not count as "this Account has
+// something in it" for accountLinkOffer, or for the onboarding welcome that
+// will key off the same count.
+describe('ownRecipeCount', () => {
+  it('is zero for an Account holding only samples', () => {
+    expect(ownRecipeCount([{ sample: true }, { sample: true }])).toBe(0);
+  });
+
+  it('counts only the Recipes that are not samples', () => {
+    expect(ownRecipeCount([{ sample: true }, { sample: false }, { sample: false }])).toBe(2);
+  });
+
+  it('treats a missing sample flag as not a sample', () => {
+    expect(ownRecipeCount([{}, { sample: false }])).toBe(2);
+  });
+
+  it('is zero for an empty library', () => {
+    expect(ownRecipeCount([])).toBe(0);
   });
 });
 

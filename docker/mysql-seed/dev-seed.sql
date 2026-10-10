@@ -192,3 +192,37 @@ JOIN `ingredient` i ON i.name = x.ingredient_name
 JOIN `unit` u ON u.name = x.unit_name;
 
 INSERT INTO `recipe_tag` (recipe_id, tag_name) VALUES (@featured_id, 'Vegetarian');
+
+-- The three starter Recipes specs/completed/sample-seeded-accounts.md's
+-- Phase 1 copies into every new Account (production ids 43/112/300120 - a Go
+-- slice of slugs, not the flag, so only the slug needs to match here). Same
+-- Account (2) as the fixture above, for the same reason: a fixture scoped
+-- only to account 1 would pass even if the featured lookup forgot to ignore
+-- account_id. Local fixtures, not production content - the spec records the
+-- real recipes' overlap as confirmed by the account holder directly, so this
+-- doesn't claim to reproduce it, only to exercise the same mechanism with an
+-- Ingredient this seed already curates.
+INSERT INTO `recipe` (name, slug, account_id, featured, method) VALUES
+  ('Chicken Fricassee', 'chicken-fricassee', 2, TRUE,
+   'Local fixture. Brown the chicken, soften the onion, simmer in stock and cream.');
+SET @chicken_id = LAST_INSERT_ID();
+
+INSERT INTO `recipe` (name, slug, account_id, featured, method) VALUES
+  ('Thai Green Curry', 'thai-green-curry', 2, TRUE,
+   'Local fixture. Fry the paste, add coconut milk, simmer with the vegetables.');
+SET @curry_id = LAST_INSERT_ID();
+
+INSERT INTO `recipe` (name, slug, account_id, featured, method) VALUES
+  ('Creamy Sausage Pasta', 'creamy-sausage-pasta', 2, TRUE,
+   'Local fixture. Brown the sausage, soften the onion, stir through cream and pasta.');
+SET @pasta_id = LAST_INSERT_ID();
+
+-- Onion on two of the three, same curated Ingredient and Unit as the fixture
+-- above - the deliberate overlap the Combine aha needs to land on a freshly
+-- seeded Account's first generated list.
+INSERT INTO `part` (recipe_id, ingredient_id, unit_id, quantity)
+SELECT @chicken_id, i.id, u.id, '1' FROM `ingredient` i JOIN `unit` u ON u.name = 'whole' WHERE i.name = 'Onion';
+INSERT INTO `part` (recipe_id, ingredient_id, unit_id, quantity)
+SELECT @curry_id, i.id, u.id, '400' FROM `ingredient` i JOIN `unit` u ON u.name = 'gram' WHERE i.name = 'Chopped Tomatoes';
+INSERT INTO `part` (recipe_id, ingredient_id, unit_id, quantity)
+SELECT @pasta_id, i.id, u.id, '1' FROM `ingredient` i JOIN `unit` u ON u.name = 'whole' WHERE i.name = 'Onion';

@@ -473,6 +473,8 @@ components:
           type: integer
         name:
           type: string
+        sample:
+          type: boolean
         tags:
           items:
             type: string
@@ -483,6 +485,7 @@ components:
         - name
         - id
         - tags
+        - sample
       type: object
     ShoppingList:
       additionalProperties: false

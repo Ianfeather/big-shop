@@ -9,7 +9,7 @@ import useAuth0 from '@hooks/use-auth';
 import useRecipes from '@hooks/use-recipes';
 import AccountLinkButton from '@components/account-link';
 import Button from '@components/button';
-import { accountLinkOffer, readPendingLink } from '../lib/account-link';
+import { accountLinkOffer, ownRecipeCount, readPendingLink } from '../lib/account-link';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api-client';
 import type { ListIngredient } from '../types/models';
 import { shoppingListGenerated } from '../lib/analytics/events';
@@ -243,7 +243,7 @@ const List = () => {
   }, []);
   const linkOffer = accountLinkOffer({
     recipesResolved,
-    recipeCount: accountRecipes.length,
+    recipeCount: ownRecipeCount(accountRecipes),
     hasPendingLink
   });
 

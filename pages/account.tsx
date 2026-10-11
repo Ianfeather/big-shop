@@ -320,7 +320,7 @@ const List = () => {
               empty account. You can join it to your original one by signing in the way you did
               the first time.
             </p>
-            <AccountLinkButton>Link an existing account</AccountLinkButton>
+            <AccountLinkButton style="primary">Link an existing account</AccountLinkButton>
           </div>
 
           {/* Deletion lives here rather than behind a settings sub-page: this is

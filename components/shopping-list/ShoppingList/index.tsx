@@ -52,9 +52,15 @@ interface ShoppingListProps {
   // page's business, and one route rendering one thing does not need this
   // component to know what that thing is.
   notice?: ReactNode;
+  // Replaces the default "your shopping list is empty, tick a recipe" copy
+  // below when the list has nothing on it. Same reasoning as `notice`: the
+  // onboarding welcome (specs/onboarding.md Stage 2) is the one caller that
+  // needs this, and it is the page's business what that content is, not this
+  // component's.
+  emptyState?: ReactNode;
 }
 
-const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList, notice }: ShoppingListProps) => {
+const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList, notice, emptyState }: ShoppingListProps) => {
   const user = useUser();
   const { getAccessTokenSilently } = useAuth();
   const queryClient = useQueryClient();
@@ -111,7 +117,7 @@ const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList, notice }
         Your shopping list
       </PageHeading>
       { notice }
-      { !hasListItems && (
+      { !hasListItems && (emptyState || (
           <EmptyState
             illustration={EmptyBasketIllustration}
             illustrationLabel="Empty shopping basket"
@@ -120,7 +126,7 @@ const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList, notice }
             Tick a recipe and its ingredients land here &mdash; added up across everything
             you&rsquo;ve picked, in the order you walk the shop.
           </EmptyState>
-      )}
+      ))}
       <ul className={styles.shoppingList}>
         { ingredients.map((name, i) => (
           <Item type='ingredient' name={name} item={shoppingList[name]} bought={false} handleClick={buyIngredient} key={i}/>

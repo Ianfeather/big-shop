@@ -3,6 +3,7 @@ import Form from '@components/recipe-form/Form';
 import Layout, { MainContent } from '@components/layout'
 import PageHeading from '@components/page-heading';
 import styles from './index.module.css';
+import { useRouter } from 'next/router';
 import { ChangeEvent, useState, useRef, useEffect } from 'react';
 import Button from '@components/button';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -67,7 +68,22 @@ function normalizeParsedIngredients(ingredients?: ParsedIngredient[]): RecipeMod
 
 const NewRecipe = () => {
   const title = 'Add New Recipe';
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<'url' | 'camera' | 'manual'>('url');
+  // Lets a caller land straight on a specific Import Source rather than always
+  // starting on the tab picker - specifically the onboarding welcome's Archive
+  // CTA (/recipes/new?source=camera), which the whole point of is skipping a
+  // step rather than adding a redirect through the default tab. An effect
+  // rather than reading router.query in useState's initializer: on a hard
+  // load router.isReady is false on the first render, so query is still
+  // empty - this corrects itself the moment it populates, same as a client
+  // navigation already has it available immediately.
+  useEffect(() => {
+    const source = router.query.source;
+    if (source === 'url' || source === 'camera' || source === 'manual') {
+      setActiveTab(source); // eslint-disable-line react-hooks/set-state-in-effect
+    }
+  }, [router.query.source]);
   const [APIError, setAPIError] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [parsedRecipe, setParsedRecipe] = useState<Partial<RecipeModel> | null>(null);

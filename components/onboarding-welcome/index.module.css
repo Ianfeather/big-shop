@@ -72,32 +72,6 @@
   color: var(--spot);
 }
 
-.accountLink {
-  font-size: var(--text-sm);
-  color: var(--ink-soft);
-  margin: 0;
-}
-
-/* Doubled selector: specificity has to beat Button's own .button (one class),
-   and no `style` prop is passed here (see components/account-link), so there
-   is no .primary/.danger class competing for the same properties - only the
-   base look to override into something that reads as a text link, not a
-   button, for specs/onboarding.md Stage 1's "quiet secondary line". */
-.accountLinkButton.accountLinkButton {
-  display: inline;
-  padding: 0;
-  border: none;
-  font-size: inherit;
-  font-weight: 400;
-  color: var(--spot);
-  text-decoration: underline;
-}
-
-.accountLinkButton.accountLinkButton:hover {
-  background: none;
-  color: var(--ink);
-}
-
 @media (max-width: 640px) {
   .intro {
     flex-direction: column;

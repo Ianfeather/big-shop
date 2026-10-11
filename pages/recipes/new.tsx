@@ -72,18 +72,30 @@ const NewRecipe = () => {
   const [activeTab, setActiveTab] = useState<'url' | 'camera' | 'manual'>('url');
   // Lets a caller land straight on a specific Import Source rather than always
   // starting on the tab picker - specifically the onboarding welcome's Archive
-  // CTA (/recipes/new?source=camera), which the whole point of is skipping a
-  // step rather than adding a redirect through the default tab. An effect
-  // rather than reading router.query in useState's initializer: on a hard
-  // load router.isReady is false on the first render, so query is still
-  // empty - this corrects itself the moment it populates, same as a client
-  // navigation already has it available immediately.
+  // CTA (/recipes/new?source=camera), which specs/onboarding.md's Stage 2
+  // describes as "skipping the intermediate 'add a recipe' menu for this one
+  // action". Interpreted here as zero required clicks to reach the camera
+  // UI, not as removing the picker from the page: SOURCE_TABS below still
+  // renders and stays switchable, deliberately, so someone who arrives this
+  // way but whose cookbook page won't photograph well can still reach URL or
+  // Manual without a dead end. "Skip the menu" and "the menu no longer
+  // exists for anyone arriving this way" aren't the same claim; this is the
+  // first, not the second.
+  //
+  // Same shape as pages/account.tsx's ?invite= and pages/recipes/[id]/index.
+  // tsx's ?stored=: gated on router.isReady rather than read in useState's
+  // initializer, since query is still empty on a hard load's first render;
+  // and stripped via router.replace once consumed, so a reload doesn't need
+  // the tab bar's own visible state to disagree with an address bar nobody
+  // asked to keep.
   useEffect(() => {
+    if (!router.isReady) return;
     const source = router.query.source;
     if (source === 'url' || source === 'camera' || source === 'manual') {
       setActiveTab(source); // eslint-disable-line react-hooks/set-state-in-effect
+      router.replace('/recipes/new', undefined, { shallow: true });
     }
-  }, [router.query.source]);
+  }, [router.isReady]); // eslint-disable-line react-hooks/exhaustive-deps
   const [APIError, setAPIError] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [parsedRecipe, setParsedRecipe] = useState<Partial<RecipeModel> | null>(null);

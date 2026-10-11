@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import Button from '@components/button';
-import AccountLinkButton from '@components/account-link';
 import OpenBookIllustration from '@components/svg/open-book';
 import styles from './index.module.css';
 
@@ -13,10 +12,6 @@ interface WelcomeProps {
   // Ticks every starter Recipe and lets the existing shopping-list effect in
   // pages/list.tsx do the rest - this component owns no Recipe ids itself.
   onCombine: () => void;
-  // accountLinkOffer === 'start': specs/onboarding.md's Stage 1 resolution.
-  // The 'finish' case is unaffected by any of this and keeps its own full-
-  // prominence notice in pages/list.tsx - it never reaches this component.
-  showAccountLink: boolean;
 }
 
 // specs/onboarding.md's Stage 2: the welcome a brand-new /list shows in place
@@ -26,7 +21,16 @@ interface WelcomeProps {
 // Combine, a fixed order rather than a persona-dependent one (deferred -
 // https://app.notion.com/p/3f6c724ecda1816ebed8ffb46e93204a). Repertoire
 // gets a line, not a CTA: there's no usage history yet to show one.
-const Welcome = ({ starterRecipeCount, onCombine, showAccountLink }: WelcomeProps) => (
+//
+// Deliberately carries no opinion on account-linking recovery - that quiet
+// secondary line (specs/onboarding.md Stage 1) lives in pages/list.tsx's
+// notice slot instead, gated purely on accountLinkOffer's own 'start' case
+// rather than on whether this component happens to be showing. Nesting it
+// here was tried first: gating it on the same condition as this component
+// made it disappear the moment someone used this component's own Combine
+// CTA, silencing the offer rather than just demoting it - exactly what
+// Stage 1 exists to prevent.
+const Welcome = ({ starterRecipeCount, onCombine }: WelcomeProps) => (
   <div className={styles.welcome}>
     <div className={styles.intro}>
       <OpenBookIllustration className={styles.illustration} role="img" aria-label="An open recipe book" />
@@ -57,12 +61,6 @@ const Welcome = ({ starterRecipeCount, onCombine, showAccountLink }: WelcomeProp
     <p className={styles.repertoire}>
       The longer you use it, the smarter it gets &mdash; <Link href="/">see how</Link>.
     </p>
-    { showAccountLink && (
-      <p className={styles.accountLink}>
-        Signed in before?{' '}
-        <AccountLinkButton className={styles.accountLinkButton}>Link that account</AccountLinkButton>
-      </p>
-    )}
   </div>
 );
 

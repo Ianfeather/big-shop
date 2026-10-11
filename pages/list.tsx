@@ -8,8 +8,10 @@ import ShoppingList from '@components/shopping-list/ShoppingList';
 import Welcome from '@components/onboarding-welcome';
 import useAuth0 from '@hooks/use-auth';
 import useRecipes from '@hooks/use-recipes';
+import AccountLinkButton from '@components/account-link';
 import Button from '@components/button';
-import { accountLinkOffer, ownRecipeCount, readPendingLink } from '../lib/account-link';
+import { accountLinkOffer, ownRecipeCount, sampleRecipes, readPendingLink } from '../lib/account-link';
+import { hasListItems } from '../lib/shopping-list';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api-client';
 import type { ListIngredient } from '../types/models';
 import { shoppingListGenerated } from '../lib/analytics/events';
@@ -249,23 +251,16 @@ const List = () => {
 
   // specs/onboarding.md Stage 2: the welcome replaces ShoppingList's generic
   // empty-state copy while the Account holds no Recipe it actually added
-  // itself. Mirrors ShoppingList's own `hasListItems` so the two conditions
-  // can't silently diverge - there is only one list, this page just also
-  // needs to know whether it is empty to decide what goes above it.
+  // itself, and nothing is currently ticked - once something is ticked, the
+  // populated list is the payoff and a welcome banner above it would be
+  // redundant. Shares ShoppingList's own hasListItems (lib/shopping-list.ts)
+  // rather than a second, hand-copied computation that could silently drift.
   //
-  // Bound to `!hasListItems` as well as the own-Recipe count, not just the
-  // count alone: once something is ticked, the populated list is the payoff
-  // and a welcome banner above it would be redundant. One consequence worth
-  // naming - someone who ticks the starter Recipes but has added nothing of
-  // their own loses the quiet account-link line along with the welcome it
-  // lives in, since nothing currently surfaces it outside this component.
-  // Accepted for now: `accountLinkOffer`'s own "currently zero, eventually
-  // small" mismatched-identity minority makes this a narrow edge case, in
-  // the same "decide if it's observed to matter" spirit as Stage 3's
-  // delete-then-reseen-welcome edge case. Revisit if it ever is.
-  const hasListItems = !!Object.keys(shoppingList).length || !!Object.keys(extras).length;
-  const starterRecipes = accountRecipes.filter(({ sample }) => sample);
-  const showWelcome = recipesResolved && ownRecipeCount(accountRecipes) === 0 && !hasListItems;
+  // The account-link quiet line does NOT live inside this condition - see
+  // the notice prop below for why, and the bug it would otherwise be.
+  const listHasItems = hasListItems(shoppingList, extras);
+  const starterRecipes = sampleRecipes(accountRecipes);
+  const showWelcome = recipesResolved && ownRecipeCount(accountRecipes) === 0 && !listHasItems;
 
   function combineStarterRecipes() {
     setRecipeList(starterRecipes.reduce<Record<string, boolean>>((acc, { id }) => {
@@ -283,7 +278,7 @@ const List = () => {
             shoppingList={shoppingList}
             extras={extras}
             buyIngredient={buyIngredient}
-            notice={linkOffer === 'finish' && (
+            notice={linkOffer !== 'none' && (
               /* The one surface account linking recovery is offered from, and
                  the only screen an affected person is guaranteed to reach: the
                  Auth0 callback lands here (lib/app-origin.ts's
@@ -294,26 +289,39 @@ const List = () => {
                  sharply, but one surface is one thing to get right, and a
                  message that can appear twice in a session reads as a bug.
 
-                 This is the only linkOffer case rendered here now - 'finish'
-                 is what a person sees if they came back from Auth0 without
-                 the navigation that should have carried them to
+                 'finish' is what a person sees if they came back from Auth0
+                 without the navigation that should have carried them to
                  /link/confirm, and it keeps full prominence whatever their
                  recipe count, because by then they are signed in as the
-                 account that *has* the recipes. 'start' moved into the
-                 welcome below (specs/onboarding.md Stage 1: "drops from a
-                 headline prompt to one quiet secondary line") - it is a
-                 question for the large genuinely-new majority too, not a
-                 claim about them, so it no longer opens on it. */
-              <div className={styles.linkPrompt}>
-                <p className={styles.linkPromptCopy}>You have a sign-in waiting to be linked.</p>
-                <Button style="primary" href="/link/confirm">Finish linking</Button>
-              </div>
+                 account that *has* the recipes.
+
+                 'start' is specs/onboarding.md Stage 1's quiet secondary
+                 line - rendered here, in this always-present slot, rather
+                 than nested inside the welcome below. That was tried first
+                 and was wrong: the welcome (and therefore the line) was
+                 gated on !listHasItems, so ticking the welcome's own Combine
+                 CTA made the line disappear - exactly the harm Stage 1 was
+                 written to prevent ("doesn't just mislabel the recovery
+                 offer... it silences it"), reproduced by this page rather
+                 than by seeding. accountLinkOffer's 'start' means "recipeCount
+                 is 0", full stop; nothing about whether the list is ticked
+                 enters into it, so neither should this. */
+              linkOffer === 'finish' ? (
+                <div className={styles.linkPrompt}>
+                  <p className={styles.linkPromptCopy}>You have a sign-in waiting to be linked.</p>
+                  <Button style="primary" href="/link/confirm">Finish linking</Button>
+                </div>
+              ) : (
+                <p className={styles.quietAccountLink}>
+                  Signed in before?{' '}
+                  <AccountLinkButton className={styles.quietAccountLinkButton}>Link that account</AccountLinkButton>
+                </p>
+              )
             )}
             emptyState={showWelcome && (
               <Welcome
                 starterRecipeCount={starterRecipes.length}
                 onCombine={combineStarterRecipes}
-                showAccountLink={linkOffer === 'start'}
               />
             )}
           />

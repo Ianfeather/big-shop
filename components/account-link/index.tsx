@@ -11,12 +11,12 @@ interface AccountLinkButtonProps {
   // behaviour in it: the click, the in-flight state, and what to say when
   // starting fails.
   children: ReactNode;
-  // Pass-through to the underlying Button, with no default of its own - both
-  // existing call sites pass `style="primary"` explicitly, and the
-  // onboarding welcome's demoted line (specs/onboarding.md's Stage 1: "drops
-  // from a headline prompt to one quiet secondary line") deliberately passes
+  // Pass-through to the underlying Button, with no default of its own.
+  // pages/account.tsx passes `style="primary"` explicitly; pages/list.tsx's
+  // quiet secondary line (specs/onboarding.md's Stage 1: "drops from a
+  // headline prompt to one quiet secondary line") deliberately passes
   // neither, relying on its own className instead. A default here would make
-  // that one caller unable to opt out of it.
+  // that second caller unable to opt out of it.
   style?: 'primary' | 'danger';
   className?: string;
 }

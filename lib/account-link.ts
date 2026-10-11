@@ -168,6 +168,15 @@ export function ownRecipeCount(recipes: { sample?: boolean }[]): number {
   return recipes.filter(({ sample }) => !sample).length;
 }
 
+// The inverse filter - the Recipes a seed or Day 8 click put there, not the
+// Account's own. Generic rather than the same minimal `{ sample?: boolean }`
+// shape as ownRecipeCount: the onboarding welcome's Combine CTA needs the
+// `id` on what comes back, not just a count, so this has to preserve the
+// caller's actual Recipe type rather than narrow it away.
+export function sampleRecipes<T extends { sample?: boolean }>(recipes: T[]): T[] {
+  return recipes.filter(({ sample }) => sample);
+}
+
 export function accountLinkOffer(
   { recipesResolved, recipeCount, hasPendingLink }:
   { recipesResolved: boolean; recipeCount: number; hasPendingLink: boolean }

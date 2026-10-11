@@ -31,10 +31,10 @@
   border-bottom-color: var(--color-primary);
 }
 
-/* The account-linking recovery panel, shown only when the account has no
-   recipes at all - see pages/list.tsx. A bordered aside rather than a banner:
-   it is an offer to somebody who may be alarmed, not an alert, and the page
-   underneath it is still perfectly usable if they are simply new. */
+/* The account-linking recovery panel for the 'finish' case only - someone
+   returning mid-link, see pages/list.tsx. A bordered aside rather than a
+   banner: it is an offer to somebody who may be alarmed, not an alert, and
+   the page underneath it is still perfectly usable either way. */
 .linkPrompt {
   border: 1px solid var(--rule);
   border-radius: var(--radius-md);
@@ -46,4 +46,38 @@
 .linkPromptCopy {
   margin-top: 0;
   margin-bottom: var(--space-3);
+}
+
+/* The 'start' case's quiet secondary line (specs/onboarding.md Stage 1) -
+   deliberately the opposite treatment from .linkPrompt above: no border, no
+   weight, reads as an aside rather than a panel. */
+.quietAccountLink {
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+  margin: 0 0 var(--space-5);
+}
+
+/* Two classes, not a `style="primary"` AccountLinkButton with this added:
+   .button's own base rule (padding, border) still has to be beaten, and it
+   is a single-class selector, so matching it with one class of our own would
+   tie for specificity and depend on which stylesheet the bundler happens to
+   place later - unrelated to anything about this page. Repeating the class
+   gives this rule two classes' worth of specificity against .button's one,
+   deterministically, regardless of bundle order. Not a pattern used
+   elsewhere in this codebase (its other selectors combine two genuinely
+   different classes), just the smallest fix that doesn't depend on
+   build-order luck. */
+.quietAccountLinkButton.quietAccountLinkButton {
+  display: inline;
+  padding: 0;
+  border: none;
+  font-size: inherit;
+  font-weight: 400;
+  color: var(--spot);
+  text-decoration: underline;
+}
+
+.quietAccountLinkButton.quietAccountLinkButton:hover {
+  background: none;
+  color: var(--ink);
 }

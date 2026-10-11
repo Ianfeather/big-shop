@@ -11,6 +11,7 @@ import useUser from '@hooks/use-user';
 import useAuth from '@hooks/use-auth';
 import { apiPatch } from '../../../lib/api-client';
 import { queryKeys } from '../../../lib/query-keys';
+import { hasListItems } from '../../../lib/shopping-list';
 import type { ListIngredient, User } from '../../../types/models';
 
 // Per User, not per Account: the Shopping List itself is shared - you and
@@ -89,7 +90,7 @@ const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList, notice, 
 
   const boughtItems = Object.keys(shoppingList).filter((name => shoppingList[name].isBought));
   const boughtExtras = Object.keys(extras).filter((name => extras[name].isBought));
-  const hasListItems = !!Object.keys(shoppingList).length || !!Object.keys(extras).length;
+  const listHasItems = hasListItems(shoppingList, extras);
   const hasBoughtItems = !!boughtItems.length || !!boughtExtras.length;
 
   // Pantry staples split out of the main list rather than being filtered away.
@@ -113,11 +114,11 @@ const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList, notice, 
       {/* Clear list sits up here on the masthead rather than at the foot of the
           list: it used to be the page's only footer, stranded below however many
           items you had, and this is where the (now deleted) item count was. */}
-      <PageHeading action={hasListItems ? <ClearList onClick={clearList} /> : undefined}>
+      <PageHeading action={listHasItems ? <ClearList onClick={clearList} /> : undefined}>
         Your shopping list
       </PageHeading>
       { notice }
-      { !hasListItems && (emptyState || (
+      { !listHasItems && (emptyState || (
           <EmptyState
             illustration={EmptyBasketIllustration}
             illustrationLabel="Empty shopping basket"

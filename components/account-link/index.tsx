@@ -11,6 +11,14 @@ interface AccountLinkButtonProps {
   // behaviour in it: the click, the in-flight state, and what to say when
   // starting fails.
   children: ReactNode;
+  // Pass-through to the underlying Button, with no default of its own.
+  // pages/account.tsx passes `style="primary"` explicitly; pages/list.tsx's
+  // quiet secondary line (specs/onboarding.md's Stage 1: "drops from a
+  // headline prompt to one quiet secondary line") deliberately passes
+  // neither, relying on its own className instead. A default here would make
+  // that second caller unable to opt out of it.
+  style?: 'primary' | 'danger';
+  className?: string;
 }
 
 // The one control that starts account linking recovery, wherever it is offered.
@@ -25,13 +33,14 @@ interface AccountLinkButtonProps {
 // up ten seconds ago, whether a given address already exists here - which is
 // the account-enumeration oracle `specs/completed/account-linking-recovery.md` refuses to
 // build, and the same reason the server's refusals never name a provider.
-const AccountLinkButton = ({ children }: AccountLinkButtonProps) => {
+const AccountLinkButton = ({ children, style, className }: AccountLinkButtonProps) => {
   const start = useStartAccountLink();
 
   return (
     <>
       <Button
-        style="primary"
+        style={style}
+        className={className}
         onClick={() => start.mutate()}
         disabled={start.isPending}
       >

@@ -3,6 +3,7 @@ import Form from '@components/recipe-form/Form';
 import Layout, { MainContent } from '@components/layout'
 import PageHeading from '@components/page-heading';
 import styles from './index.module.css';
+import { useRouter } from 'next/router';
 import { ChangeEvent, useState, useRef, useEffect } from 'react';
 import Button from '@components/button';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -67,7 +68,34 @@ function normalizeParsedIngredients(ingredients?: ParsedIngredient[]): RecipeMod
 
 const NewRecipe = () => {
   const title = 'Add New Recipe';
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<'url' | 'camera' | 'manual'>('url');
+  // Lets a caller land straight on a specific Import Source rather than always
+  // starting on the tab picker - specifically the onboarding welcome's Archive
+  // CTA (/recipes/new?source=camera), which specs/onboarding.md's Stage 2
+  // describes as "skipping the intermediate 'add a recipe' menu for this one
+  // action". Interpreted here as zero required clicks to reach the camera
+  // UI, not as removing the picker from the page: SOURCE_TABS below still
+  // renders and stays switchable, deliberately, so someone who arrives this
+  // way but whose cookbook page won't photograph well can still reach URL or
+  // Manual without a dead end. "Skip the menu" and "the menu no longer
+  // exists for anyone arriving this way" aren't the same claim; this is the
+  // first, not the second.
+  //
+  // Same shape as pages/account.tsx's ?invite= and pages/recipes/[id]/index.
+  // tsx's ?stored=: gated on router.isReady rather than read in useState's
+  // initializer, since query is still empty on a hard load's first render;
+  // and stripped via router.replace once consumed, so a reload doesn't need
+  // the tab bar's own visible state to disagree with an address bar nobody
+  // asked to keep.
+  useEffect(() => {
+    if (!router.isReady) return;
+    const source = router.query.source;
+    if (source === 'url' || source === 'camera' || source === 'manual') {
+      setActiveTab(source); // eslint-disable-line react-hooks/set-state-in-effect
+      router.replace('/recipes/new', undefined, { shallow: true });
+    }
+  }, [router.isReady]); // eslint-disable-line react-hooks/exhaustive-deps
   const [APIError, setAPIError] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [parsedRecipe, setParsedRecipe] = useState<Partial<RecipeModel> | null>(null);

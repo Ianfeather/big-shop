@@ -5,11 +5,13 @@ import { ChangeEvent, useState, useEffect, useRef } from 'react';
 import Layout, { MainContent, Sidebar } from '@components/layout'
 import RecipeSidebar from '@components/shopping-list/Recipes';
 import ShoppingList from '@components/shopping-list/ShoppingList';
+import Welcome from '@components/onboarding-welcome';
 import useAuth0 from '@hooks/use-auth';
 import useRecipes from '@hooks/use-recipes';
 import AccountLinkButton from '@components/account-link';
 import Button from '@components/button';
-import { accountLinkOffer, ownRecipeCount, readPendingLink } from '../lib/account-link';
+import { accountLinkOffer, ownRecipeCount, sampleRecipes, readPendingLink } from '../lib/account-link';
+import { hasListItems } from '../lib/shopping-list';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api-client';
 import type { ListIngredient } from '../types/models';
 import { shoppingListGenerated } from '../lib/analytics/events';
@@ -247,6 +249,26 @@ const List = () => {
     hasPendingLink
   });
 
+  // specs/onboarding.md Stage 2: the welcome replaces ShoppingList's generic
+  // empty-state copy while the Account holds no Recipe it actually added
+  // itself, and nothing is currently ticked - once something is ticked, the
+  // populated list is the payoff and a welcome banner above it would be
+  // redundant. Shares ShoppingList's own hasListItems (lib/shopping-list.ts)
+  // rather than a second, hand-copied computation that could silently drift.
+  //
+  // The account-link quiet line does NOT live inside this condition - see
+  // the notice prop below for why, and the bug it would otherwise be.
+  const listHasItems = hasListItems(shoppingList, extras);
+  const starterRecipes = sampleRecipes(accountRecipes);
+  const showWelcome = recipesResolved && ownRecipeCount(accountRecipes) === 0 && !listHasItems;
+
+  function combineStarterRecipes() {
+    setRecipeList(starterRecipes.reduce<Record<string, boolean>>((acc, { id }) => {
+      acc[String(id)] = true;
+      return acc;
+    }, {}));
+  }
+
   return (
     <Layout>
       <Tabs buttonsClassName={styles.tabButtons} maxWidth={800}>
@@ -267,24 +289,40 @@ const List = () => {
                  sharply, but one surface is one thing to get right, and a
                  message that can appear twice in a session reads as a bug.
 
-                 The `finish` case is the one that is easy to leave out: it is
-                 what a person sees if they came back from Auth0 without the
-                 navigation that should have carried them to /link/confirm. It
-                 is offered whatever their recipe count, because by then they
-                 are signed in as the account that *has* the recipes. */
-              <div className={styles.linkPrompt}>
-                { linkOffer === 'finish' ? (
-                  <>
-                    <p className={styles.linkPromptCopy}>You have a sign-in waiting to be linked.</p>
-                    <Button style="primary" href="/link/confirm">Finish linking</Button>
-                  </>
-                ) : (
-                  <>
-                    <p className={styles.linkPromptCopy}>Expected to see your recipes here?</p>
-                    <AccountLinkButton>Link an existing account</AccountLinkButton>
-                  </>
-                )}
-              </div>
+                 'finish' is what a person sees if they came back from Auth0
+                 without the navigation that should have carried them to
+                 /link/confirm, and it keeps full prominence whatever their
+                 recipe count, because by then they are signed in as the
+                 account that *has* the recipes.
+
+                 'start' is specs/onboarding.md Stage 1's quiet secondary
+                 line - rendered here, in this always-present slot, rather
+                 than nested inside the welcome below. That was tried first
+                 and was wrong: the welcome (and therefore the line) was
+                 gated on !listHasItems, so ticking the welcome's own Combine
+                 CTA made the line disappear - exactly the harm Stage 1 was
+                 written to prevent ("doesn't just mislabel the recovery
+                 offer... it silences it"), reproduced by this page rather
+                 than by seeding. accountLinkOffer's 'start' means "recipeCount
+                 is 0", full stop; nothing about whether the list is ticked
+                 enters into it, so neither should this. */
+              linkOffer === 'finish' ? (
+                <div className={styles.linkPrompt}>
+                  <p className={styles.linkPromptCopy}>You have a sign-in waiting to be linked.</p>
+                  <Button style="primary" href="/link/confirm">Finish linking</Button>
+                </div>
+              ) : (
+                <p className={styles.quietAccountLink}>
+                  Signed in before?{' '}
+                  <AccountLinkButton className={styles.quietAccountLinkButton}>Link that account</AccountLinkButton>
+                </p>
+              )
+            )}
+            emptyState={showWelcome && (
+              <Welcome
+                starterRecipeCount={starterRecipes.length}
+                onCombine={combineStarterRecipes}
+              />
             )}
           />
         </MainContent>

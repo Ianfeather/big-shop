@@ -3,14 +3,14 @@
 Working notes toward a spec for the [bigshop board](https://app.notion.com/p/87fae8a2ed054f2c874201e827639bd8)'s
 **[#42 — Onboarding: the empty account, not the pitch, is what loses people](https://app.notion.com/p/3bfc724ecda181d9a6a2f4a6100d9ce2)**.
 This is still a brief, not a finished spec: it captures the diagnosis, the
-aha-moment/motivation framework a first design pass landed on, and — as of
-this pass — a first sequencing of the actual step-by-step flow. What's still
-missing is listed in full at the bottom; the short version is that the flow
-below documents a *design*, not something live today, because the one
-mechanism it still depends on — sample-seeded Accounts, `specs/sample-seeded-
-accounts.md` — is unbuilt. The other mechanism #42 originally floated
-(try-before-signup import) is deliberately deferred rather than pending; see
-below.
+aha-moment/motivation framework a first design pass landed on, and a first
+sequencing of the actual step-by-step flow. What's still missing is listed in
+full at the bottom. **Update (2026-10-11):** the one mechanism the flow
+depended on being unbuilt — sample-seeded Accounts,
+`specs/completed/sample-seeded-accounts.md` — has shipped, which is what
+makes Stage 1 and Stage 2 below buildable for real rather than degrading to
+half the flow. The other mechanism #42 originally floated (try-before-signup
+import) is deliberately deferred rather than pending; see below.
 
 ## The diagnosis (from #42, unchanged here)
 
@@ -207,6 +207,15 @@ from existing/seeded recipes). If CTA-based inference later proves too
 coarse — e.g. seed recipes needing finer targeting than a two-way split —
 that's a case for revisiting, not a default to build toward now.
 
+**Decided (2026-10-11): building the plumbing to carry this signal is
+over-optimisation for this pass, not merely undesigned.** Stage 2 works
+correctly with one fixed ordering and doesn't need the signal to ship — see
+Stage 0 and Stage 2 below, both updated to a flat default rather than a
+signal-dependent one. Filed on its own so it isn't re-discovered: [Carry
+marketing-page CTA as a persona signal through signup into
+/list](https://app.notion.com/p/3f6c724ecda1816ebed8ffb46e93204a)
+(`future feature`).
+
 ## Explicit data capture: not in v1
 
 Raised as an open thought, not a decision, and it's worth carrying forward as
@@ -250,12 +259,16 @@ job, upstream of signup: which CTA someone clicks is the only persona signal
 available before an Account exists at all, per the "infer, don't ask" table
 above (Family weekly shop vs. Dinner party host).
 
-Not designed here, and not a blocker on the rest of this section: carrying
-that signal through the Auth0 round trip and into `/list`'s first render (a
-query param, or a value written before the redirect and read after — the
-shape `lib/return-to.ts` already uses for navigation state). Until it exists,
-Stage 2 below defaults to one fixed ordering and works correctly either way —
-the signal reorders which aha leads, it doesn't gate anything.
+**Deferred, not merely undesigned (2026-10-11)**: carrying that signal
+through the Auth0 round trip and into `/list`'s first render (a query param,
+or a value written before the redirect and read after — the shape
+`lib/return-to.ts` already uses for navigation state) is filed separately as
+[its own backlog
+row](https://app.notion.com/p/3f6c724ecda1816ebed8ffb46e93204a), judged
+over-optimisation ahead of any evidence the fixed ordering costs anything.
+Stage 2 below ships with one fixed ordering and nothing else depends on this
+landing first — the signal would only reorder which aha leads, never gate
+one.
 
 **The try-before-signup importer is deliberately not part of this pass** —
 see the diagnosis section above for why, and the linked backlog row for when.
@@ -350,23 +363,24 @@ one](https://app.notion.com/p/3e1c724ecda1815e8694e00ff1ba1eff).
 
 ### Stage 2 — the welcome itself
 
-Ordered by whatever persona signal Stage 0 supplies, defaulting to Archive
-first when there isn't one — matching the motivations table's own "Session 1,
-live" for Archive ahead of Combine's "Session 1–2, live":
+**Update (2026-10-11): both CTAs ship now, in a fixed order.** Sample-seeded
+Accounts landed (`specs/completed/sample-seeded-accounts.md`), which is what
+Combine below was waiting on, and persona-based reordering is deliberately
+deferred (see the Personas section and Stage 0 above) — so there is no signal
+to order by, and none needed. Fixed order, matching the motivations table's
+own "Session 1, live" for Archive ahead of Combine's "Session 1–2, live":
 
 1. **Archive** — a single CTA straight into Photo Import, skipping the
    intermediate "add a recipe" menu for this one action, since the entire
    point is minimising steps to the first payoff. Live today, using Photo
    Import as it already exists.
-2. **Combine** — "see it combine two recipes," using sample Recipes so the
-   moment doesn't depend on the visitor having a physical recipe to
-   photograph, or on Photo Import's still-untested reliability against a
-   handwritten card. **This needs the sample-seeding mechanism #42 already
-   names, and it doesn't exist in production** — see
-   `specs/completed/sample-seeded-accounts.md` for the build plan. Until it
-   lands, Stage 2 ships with one working CTA rather than two half-working ones:
-   Archive alone, with Combine added the moment seeding lands — never a
-   button that leads nowhere useful.
+2. **Combine** — "see it combine two recipes," using the sample-seeded
+   starter Recipes so the moment doesn't depend on the visitor having a
+   physical recipe to photograph, or on Photo Import's still-untested
+   reliability against a handwritten card. Live now that seeding is: a
+   brand-new Account already holds the three starter Recipes (never zero, per
+   `specs/completed/sample-seeded-accounts.md`), so this CTA has real content
+   to point at from the moment someone lands.
 
 Repertoire gets no CTA — there's no history yet to show — but the welcome
 carries one line naming what's coming ("recipes you haven't made in a while
@@ -404,11 +418,13 @@ Share — shipped since this document was first drafted. Nothing above changes
 as a result: Share still gets no onboarding step of its own, for the same
 Kano reasoning. What changes is that the Day 3 email's existing one-line
 mention is no longer describing a feature that 400s on every call, so nothing
-here still blocks that copy. Whether Share deserves the same quiet-secondary-
-line treatment given to account-linking in Stage 1 — surfaced somewhere in the
-welcome rather than left entirely to Day 3 — is a fair question and an open
-one; `#46` shipping is a precondition for asking it, not an argument for
-either answer.
+here still blocks that copy.
+
+**Decided (2026-10-11): stays confined to the Day 3 email, no welcome
+mention.** `#46` shipping was a precondition for asking whether Share earns a
+line in the Stage 2 welcome, not an argument for either answer — asked, and
+answered no. The welcome's two CTAs (Archive, Combine) stay the only content
+in it; Share keeps the exact proportion it already has.
 
 ## Adjacent work, logged separately
 
@@ -421,49 +437,43 @@ here.
 
 ## Not yet done
 
-- **Sample-seeded Accounts, the one mechanism this pass still leans on.** Not
-  built yet, but no longer blocked on an open design question —
-  `specs/completed/sample-seeded-accounts.md` has the build plan and, as of
-  2026-09-20, the actual starter set (three of the account holder's own
-  Recipes, verified to overlap where it matters), reusing the Featured
-  Recipes machinery rather than inventing anything new. Stage 2 above
-  degrades to one working CTA (Archive) until it lands. What's still
-  outstanding is an action, not a decision: those three Recipes need
-  `featured` flipped on in production before anything can copy them.
+- ~~Sample-seeded Accounts.~~ **Shipped (2026-10-10)**, via
+  `specs/completed/sample-seeded-accounts.md`, including the Phase 0 count
+  fix the next item depends on. Stage 2's Combine CTA no longer degrades.
 - **The try-before-signup importer is out of scope for this pass**, replaced
   by a recorded demo per Stage 0's 2026-09-20 update. Filed on its own so
   it isn't re-discovered:
   [Let someone import a recipe before they have an account](https://app.notion.com/p/3e1c724ecda18138bd34d5b4ff71df2f)
   (`future feature`).
-- **The account-link recovery prompt's collision with a new signup**, and its
-  sharper second form once seeding ships (the trigger going silent rather than
-  just mislabelled) — both found and resolved on paper in Stage 1 above.
-  [Tracked on the board](https://app.notion.com/p/3e1c724ecda1815e8694e00ff1ba1eff),
-  and sequenced in `specs/completed/sample-seeded-accounts.md` as Phase 0 — a
-  prerequisite of seeding, not a follow-on.
-- Whether the CTA-based (or first-action) persona inference is granular
-  enough in practice, or needs revisiting per the explicit-capture test
-  above — and the mechanics of actually carrying that signal through the
-  Auth0 round trip, sketched but not designed in Stage 0.
+- **The account-link recovery prompt's collision with a new signup** —
+  resolved on paper in Stage 1, and the count-fix half of it shipped with
+  sample-seeded Accounts, but the UI change itself (demoting the offer to a
+  secondary line, building the Stage 2 welcome as the primary content) is
+  **the active build this pass is for** — see
+  [the board item](https://app.notion.com/p/3e1c724ecda1815e8694e00ff1ba1eff),
+  still open.
+- ~~Whether CTA-based persona inference is granular enough, and the mechanics
+  of carrying it through the Auth0 round trip.~~ **Decided (2026-10-11):
+  deferred as over-optimisation**, filed separately as [its own
+  item](https://app.notion.com/p/3f6c724ecda1816ebed8ffb46e93204a). Stage 2
+  ships with one fixed order instead.
 - The mechanics of hosting a static illustration asset for the email context
   (where it needs to live, how it's referenced from `html/template`), and
   building the walkthrough itself.
-- **As of 2026-10-09, three placeholder slots rather than zero, none
-  designed yet, and deliberately deferred.** Repertoire's walkthrough now has
-  two forms — the static-frame version for the emails, and a separate
-  animated in-app version for `pages/index.tsx` — plus Stage 0's own
-  Archive/Combine demo, kept independently separate from Repertoire's. All
-  three ship as labelled placeholders for this pass rather than finished
-  animations. The slots and the links to them are real; the design and
-  production of what fills them is picked up separately, once there's design
-  capacity for it.
-- **The sample-seeded starter set changed again (2026-10-09)** — now the Day
-  8 email's three Recipes (43/112/300120), not 9/17/33. `featured = 1` is
-  confirmed for all three; whether two of them share a deliberately
-  overlapping ingredient isn't. See
+- **Three placeholder slots, none designed yet, deliberately deferred.**
+  Repertoire's walkthrough has two forms — the static-frame version for the
+  emails, and a separate animated in-app version for `pages/index.tsx` — plus
+  Stage 0's own Archive/Combine demo, kept independently separate from
+  Repertoire's. All three ship as labelled placeholders for this pass rather
+  than finished animations. The slots and the links to them are real; the
+  design and production of what fills them is picked up separately, once
+  there's design capacity for it.
+- The sample-seeded starter set's ingredient overlap between two of the three
+  Recipes is recorded as confirmed by the account holder, not independently
+  re-verified against production data. See
   `specs/completed/sample-seeded-accounts.md`'s Phase 1 update and Open
   Question 1.
 - Photo Import's real-world reliability on handwritten/low-quality sources,
   ahead of leaning on it as a headline moment in Stage 2.
-- Whether Share earns a mention inside the welcome now that `#46` has shipped,
-  or stays confined to the Day 3 email — raised, not answered, in Stage 4.
+- ~~Whether Share earns a mention inside the welcome.~~ **Decided
+  (2026-10-11): no — stays confined to the Day 3 email.** See Stage 4.

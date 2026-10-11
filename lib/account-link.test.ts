@@ -6,6 +6,7 @@ import {
   forgetPendingLink,
   providerLabel,
   ownRecipeCount,
+  sampleRecipes,
   accountLinkOffer,
   linkRefusalMessage
 } from './account-link';
@@ -143,6 +144,22 @@ describe('ownRecipeCount', () => {
 
   it('is zero for an empty library', () => {
     expect(ownRecipeCount([])).toBe(0);
+  });
+});
+
+describe('sampleRecipes', () => {
+  it('is the exact complement of ownRecipeCount’s filter', () => {
+    const recipes = [{ id: 1, sample: true }, { id: 2, sample: false }, { id: 3, sample: true }];
+    expect(sampleRecipes(recipes)).toEqual([{ id: 1, sample: true }, { id: 3, sample: true }]);
+  });
+
+  it('preserves the caller’s Recipe shape rather than narrowing it', () => {
+    const recipes = [{ id: 1, name: 'Chicken Fricassee', sample: true }];
+    expect(sampleRecipes(recipes)).toEqual([{ id: 1, name: 'Chicken Fricassee', sample: true }]);
+  });
+
+  it('is empty when nothing is a sample', () => {
+    expect(sampleRecipes([{ sample: false }])).toEqual([]);
   });
 });
 

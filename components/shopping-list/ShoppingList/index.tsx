@@ -11,6 +11,7 @@ import useUser from '@hooks/use-user';
 import useAuth from '@hooks/use-auth';
 import { apiPatch } from '../../../lib/api-client';
 import { queryKeys } from '../../../lib/query-keys';
+import { hasListItems } from '../../../lib/shopping-list';
 import type { ListIngredient, User } from '../../../types/models';
 
 // Per User, not per Account: the Shopping List itself is shared - you and
@@ -52,9 +53,15 @@ interface ShoppingListProps {
   // page's business, and one route rendering one thing does not need this
   // component to know what that thing is.
   notice?: ReactNode;
+  // Replaces the default "your shopping list is empty, tick a recipe" copy
+  // below when the list has nothing on it. Same reasoning as `notice`: the
+  // onboarding welcome (specs/onboarding.md Stage 2) is the one caller that
+  // needs this, and it is the page's business what that content is, not this
+  // component's.
+  emptyState?: ReactNode;
 }
 
-const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList, notice }: ShoppingListProps) => {
+const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList, notice, emptyState }: ShoppingListProps) => {
   const user = useUser();
   const { getAccessTokenSilently } = useAuth();
   const queryClient = useQueryClient();
@@ -83,7 +90,7 @@ const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList, notice }
 
   const boughtItems = Object.keys(shoppingList).filter((name => shoppingList[name].isBought));
   const boughtExtras = Object.keys(extras).filter((name => extras[name].isBought));
-  const hasListItems = !!Object.keys(shoppingList).length || !!Object.keys(extras).length;
+  const listHasItems = hasListItems(shoppingList, extras);
   const hasBoughtItems = !!boughtItems.length || !!boughtExtras.length;
 
   // Pantry staples split out of the main list rather than being filtered away.
@@ -107,11 +114,11 @@ const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList, notice }
       {/* Clear list sits up here on the masthead rather than at the foot of the
           list: it used to be the page's only footer, stranded below however many
           items you had, and this is where the (now deleted) item count was. */}
-      <PageHeading action={hasListItems ? <ClearList onClick={clearList} /> : undefined}>
+      <PageHeading action={listHasItems ? <ClearList onClick={clearList} /> : undefined}>
         Your shopping list
       </PageHeading>
       { notice }
-      { !hasListItems && (
+      { !listHasItems && (emptyState || (
           <EmptyState
             illustration={EmptyBasketIllustration}
             illustrationLabel="Empty shopping basket"
@@ -120,7 +127,7 @@ const ShoppingList = ({ shoppingList, extras, buyIngredient, clearList, notice }
             Tick a recipe and its ingredients land here &mdash; added up across everything
             you&rsquo;ve picked, in the order you walk the shop.
           </EmptyState>
-      )}
+      ))}
       <ul className={styles.shoppingList}>
         { ingredients.map((name, i) => (
           <Item type='ingredient' name={name} item={shoppingList[name]} bought={false} handleClick={buyIngredient} key={i}/>

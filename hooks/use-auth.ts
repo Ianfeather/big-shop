@@ -1,4 +1,4 @@
-import { useAuth0, RedirectLoginOptions, LogoutOptions } from '@auth0/auth0-react';
+import { useAuth0, RedirectLoginOptions, LogoutOptions, GetTokenSilentlyOptions } from '@auth0/auth0-react';
 
 export const authDisabled = process.env.NEXT_PUBLIC_DISABLE_AUTH === 'true';
 
@@ -31,7 +31,9 @@ interface UseAuthResult {
   // the SDK now, with the mock returning promises to match.
   loginWithRedirect: (options?: RedirectLoginOptions) => Promise<void>;
   logout: (options?: LogoutOptions) => Promise<void>;
-  getAccessTokenSilently: () => Promise<string>;
+  // Options are taken so components/session-guard can force a fresh token
+  // with `cacheMode: 'off'` when the API refuses the cached one.
+  getAccessTokenSilently: (options?: GetTokenSilentlyOptions) => Promise<string>;
 }
 
 const useAuth: () => UseAuthResult = authDisabled ? useMockAuth0 : useAuth0;

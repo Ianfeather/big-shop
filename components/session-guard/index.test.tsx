@@ -13,7 +13,7 @@ import { consumeReturnTo } from '../../lib/return-to';
 
 const loginWithRedirect = vi.hoisted(() => vi.fn(async () => {}));
 const logout = vi.hoisted(() => vi.fn(async () => {}));
-const getAccessTokenSilently = vi.hoisted(() => vi.fn<() => Promise<string>>());
+const getAccessTokenSilently = vi.hoisted(() => vi.fn<(options?: { cacheMode?: string }) => Promise<string>>());
 vi.mock('@hooks/use-auth', () => ({
   default: () => ({ isAuthenticated: true, loginWithRedirect, logout, getAccessTokenSilently }),
 }));
@@ -66,13 +66,61 @@ describe('SessionGuard', () => {
     expect(consumeReturnTo()).toBe('/recipes/42');
   });
 
-  it('does the same when the API refuses the token it was given', async () => {
-    getAccessTokenSilently.mockResolvedValue('stale-token');
-    apiGet.mockRejectedValue(new ApiError('GET /recipes failed with status 401', 401));
+  // Layer 1: a 401 means the cached token was refused. Get a new one and
+  // refetch before involving the user at all.
+  describe('when the API refuses the token it was given', () => {
+    const unauthorized = () => new ApiError('GET /recipes failed with status 401', 401);
 
-    renderWithGuard();
+    it('silently fetches a fresh token and refetches, without a redirect', async () => {
+      getAccessTokenSilently.mockResolvedValue('token');
+      apiGet.mockRejectedValueOnce(unauthorized()).mockResolvedValue([{ id: 1, name: 'Pie', tags: [] }]);
 
-    await waitFor(() => expect(loginWithRedirect).toHaveBeenCalledTimes(1));
+      renderWithGuard();
+
+      await waitFor(() => expect(getAccessTokenSilently).toHaveBeenCalledWith({ cacheMode: 'off' }));
+      await waitFor(() => expect(apiGet).toHaveBeenCalledTimes(2));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(loginWithRedirect).not.toHaveBeenCalled();
+      expect(logout).not.toHaveBeenCalled();
+    });
+
+    it('redirects to log in if the fresh token is refused too', async () => {
+      getAccessTokenSilently.mockResolvedValue('token');
+      apiGet.mockRejectedValue(unauthorized());
+
+      renderWithGuard();
+
+      await waitFor(() => expect(loginWithRedirect).toHaveBeenCalledTimes(1));
+      expect(getAccessTokenSilently).toHaveBeenCalledWith({ cacheMode: 'off' });
+      expect(apiGet).toHaveBeenCalledTimes(2);
+    });
+
+    it('redirects to log in if a fresh token cannot be had', async () => {
+      getAccessTokenSilently.mockImplementation(async (options?: { cacheMode?: string }) => {
+        if (options?.cacheMode === 'off') throw invalidGrant();
+        return 'stale-token';
+      });
+      apiGet.mockRejectedValue(unauthorized());
+
+      renderWithGuard();
+
+      await waitFor(() => expect(loginWithRedirect).toHaveBeenCalledTimes(1));
+    });
+
+    it('stays put if the refresh fails for some other reason, such as the network', async () => {
+      getAccessTokenSilently.mockImplementation(async (options?: { cacheMode?: string }) => {
+        if (options?.cacheMode === 'off') throw new TypeError('Failed to fetch');
+        return 'stale-token';
+      });
+      apiGet.mockRejectedValue(unauthorized());
+
+      renderWithGuard();
+
+      await waitFor(() => expect(getAccessTokenSilently).toHaveBeenCalledWith({ cacheMode: 'off' }));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(loginWithRedirect).not.toHaveBeenCalled();
+      expect(logout).not.toHaveBeenCalled();
+    });
   });
 
   it('catches it on a mutation too, for a page whose data loaded before the session lapsed', async () => {

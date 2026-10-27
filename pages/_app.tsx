@@ -222,6 +222,21 @@ export default function App({ Component, pageProps, router }: AppProps) {
       }}
       useRefreshTokens={true}
       cacheLocation="localstorage"
+      // When the refresh token has expired or been revoked, try a hidden
+      // iframe against the Auth0 login cookie before giving up, so a user whose
+      // Auth0 login is still alive gets new tokens without seeing anything.
+      // Without it the SDK throws invalid_grant and components/session-guard
+      // has to redirect. It works in production because auth.bigshop.life
+      // is the same site as www.bigshop.life, so Safari's tracking prevention
+      // leaves the cookie alone. On a *.netlify.app deploy preview the cookie
+      // is cross-site, the iframe answers login_required, and the redirect
+      // takes over as before. It needs the origin in Auth0's Allowed Web
+      // Origins, which refresh tokens already require (docs/deploy-previews.md).
+      useRefreshTokensFallback={true}
+      // The SDK waits 60s by default for the iframe to answer. A blocked
+      // iframe never answers, and that would be a minute of empty lists before
+      // the redirect. A healthy silent login takes well under this.
+      authorizeTimeoutInSeconds={10}
     >
       {wrappedContent}
     </Auth0Provider>

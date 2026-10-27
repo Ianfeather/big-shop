@@ -11,8 +11,10 @@ import { requireEnv } from '../lib/env';
 import { loginRedirectUri } from '../lib/app-origin';
 import { identifyUser, setupFaro, setView } from '../lib/telemetry/faro';
 import { rememberReturnTo, consumeReturnTo } from '../lib/return-to';
+import { isSessionExpiredError } from '../lib/session-expiry';
 import { ConsentProvider } from '@components/consent-banner';
 import ConsentSync from '@components/consent-sync';
+import SessionGuard from '@components/session-guard';
 import Analytics from '@components/analytics';
 
 // Started here rather than at module scope so it runs in the browser only, and
@@ -99,6 +101,9 @@ const InnerApp = ({ Component, pageProps }: Pick<AppProps, 'Component' | 'pagePr
           ask the question on a logged-out page; this carries the answer to the
           server once there is an account to attach it to. Renders nothing. */}
       <ConsentSync />
+      {/* Re-login when the session lapses under an open app, rather than
+          rendering every list empty. See lib/session-expiry.ts. */}
+      <SessionGuard />
       <Component {...pageProps} />
     </>
   );
@@ -136,7 +141,15 @@ export default function App({ Component, pageProps, router }: AppProps) {
   // relying on a shared request interceptor (use-http's old FetchProvider,
   // now removed).
   const [queryClient] = useState(() => new QueryClient({
-    defaultOptions: { queries: { refetchOnWindowFocus: false } }
+    defaultOptions: {
+      queries: {
+        refetchOnWindowFocus: false,
+        // An ended session will not recover on retry, and the default three
+        // retries with backoff hold the empty page up for several seconds
+        // before SessionGuard hears about it. Anything else keeps the default.
+        retry: (failureCount, error) => !isSessionExpiredError(error) && failureCount < 3
+      }
+    }
   }));
 
   const content = behindAuth ? (

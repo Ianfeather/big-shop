@@ -11,8 +11,10 @@ import { requireEnv } from '../lib/env';
 import { loginRedirectUri } from '../lib/app-origin';
 import { identifyUser, setupFaro, setView } from '../lib/telemetry/faro';
 import { rememberReturnTo, consumeReturnTo } from '../lib/return-to';
+import { isSessionExpiredError } from '../lib/session-expiry';
 import { ConsentProvider } from '@components/consent-banner';
 import ConsentSync from '@components/consent-sync';
+import SessionGuard from '@components/session-guard';
 import Analytics from '@components/analytics';
 
 // Started here rather than at module scope so it runs in the browser only, and
@@ -99,6 +101,9 @@ const InnerApp = ({ Component, pageProps }: Pick<AppProps, 'Component' | 'pagePr
           ask the question on a logged-out page; this carries the answer to the
           server once there is an account to attach it to. Renders nothing. */}
       <ConsentSync />
+      {/* Re-login when the session lapses under an open app, rather than
+          rendering every list empty. See lib/session-expiry.ts. */}
+      <SessionGuard />
       <Component {...pageProps} />
     </>
   );
@@ -136,7 +141,15 @@ export default function App({ Component, pageProps, router }: AppProps) {
   // relying on a shared request interceptor (use-http's old FetchProvider,
   // now removed).
   const [queryClient] = useState(() => new QueryClient({
-    defaultOptions: { queries: { refetchOnWindowFocus: false } }
+    defaultOptions: {
+      queries: {
+        refetchOnWindowFocus: false,
+        // An ended session will not recover on retry, and the default three
+        // retries with backoff hold the empty page up for several seconds
+        // before SessionGuard hears about it. Anything else keeps the default.
+        retry: (failureCount, error) => !isSessionExpiredError(error) && failureCount < 3
+      }
+    }
   }));
 
   const content = behindAuth ? (
@@ -209,6 +222,21 @@ export default function App({ Component, pageProps, router }: AppProps) {
       }}
       useRefreshTokens={true}
       cacheLocation="localstorage"
+      // When the refresh token has expired or been revoked, try a hidden
+      // iframe against the Auth0 login cookie before giving up, so a user whose
+      // Auth0 login is still alive gets new tokens without seeing anything.
+      // Without it the SDK throws invalid_grant and components/session-guard
+      // has to redirect. It works in production because auth.bigshop.life
+      // is the same site as www.bigshop.life, so Safari's tracking prevention
+      // leaves the cookie alone. On a *.netlify.app deploy preview the cookie
+      // is cross-site, the iframe answers login_required, and the redirect
+      // takes over as before. It needs the origin in Auth0's Allowed Web
+      // Origins, which refresh tokens already require (docs/deploy-previews.md).
+      useRefreshTokensFallback={true}
+      // The SDK waits 60s by default for the iframe to answer. A blocked
+      // iframe never answers, and that would be a minute of empty lists before
+      // the redirect. A healthy silent login takes well under this.
+      authorizeTimeoutInSeconds={10}
     >
       {wrappedContent}
     </Auth0Provider>
